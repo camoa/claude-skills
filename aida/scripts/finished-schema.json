@@ -280,10 +280,11 @@
       "required": ["unit", "kind", "text"],
       "properties": {
         "unit": { "type": "string", "pattern": "^wo[1-9][0-9]*$", "description": "The order whose review record holds this decision." },
-        "kind": { "type": "string", "enum": ["ruling", "departure"], "description": "`ruling` for a finding with an empty fix scope, `departure` for a departure from the design." },
+        "kind": { "type": "string", "enum": ["ruling", "departure"], "description": "`ruling` for a finding marked pending, `departure` for a departure from the design." },
         "finding": { "type": "string", "pattern": "^f[1-9][0-9]*$", "description": "The finding's own id, present on a ruling only." },
         "severity": { "type": "string", "enum": ["high", "medium", "low"], "description": "What the reviewer called the finding, present on a ruling only." },
-        "text": { "type": "string", "description": "The finding's evidence, or the departure and the file it was found in, copied verbatim." }
+        "text": { "type": "string", "description": "The finding's evidence, or the departure and the file it was found in, copied verbatim." },
+        "because": { "type": "string", "description": "Why a ruling waits, present on a ruling only: a verifier answered and a person decides, its fix scope is empty, or a light task allows one fix round, and it is spent (gap row 305)." }
       }
     },
     "deferredRow": {

@@ -469,8 +469,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the same gap at `close`, by which point both rounds are already spent.
 #  63  `close` found the code repository at a commit other than the one the last record for this
 #      order was written at: the build record when no fix round ran, the last fix record otherwise.
-#      The range this would write would name work nothing in this stage judged. A light task's
-#      compromises log commits after that record do not count (gap row 305).
+#      The range this would write would name work nothing in this stage judged.
 #
 # The exit codes the checkpoint, the finish, the grant and the restart add.
 #  64  `tests-freeze`'s own `--row` flags and this order's tests do not correspond: a
@@ -8867,8 +8866,7 @@ ICC_PATHS
 # the commit is order $4's, "other <sha>" when it is not. A commit is the order's when a range one
 # of its records names holds it: the build record's, or a fix round's. Or when im_commit_claim
 # reads it as the order's, which is how an earlier attempt is found. Another order's freeze or
-# build changes a file this order does not own, so it reads as other. A compromises log commit is
-# neither, and prints nothing (gap row 305).
+# build changes a file this order does not own, so it reads as other.
 # $4 the frozen work order, $5 the folder holding the order's build and fix records.
 im_order_commits() {
   local repo="$1" from="$2" to="$3" unit_json="$4" dir="$5" id recorded="" taken f r c paths
@@ -8885,7 +8883,6 @@ $(find "$dir" -mindepth 1 -maxdepth 1 -name "fix-$id-*.json" 2>/dev/null | sort)
 IOC_RECORDS
   for c in $(git -C "$repo" rev-list --reverse "$from..$to" 2>/dev/null); do
     if printf '%s' "$recorded" | grep -Fqx "$c"; then echo "own $c"; continue; fi
-    ! compromise_log_commit "$TASK_PATH" "$repo" "$c" || continue
     paths="$(git -C "$repo" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
     if [ "$(im_commit_claim "$paths" "$unit_json" "$c" "$taken")" = "own" ]; then echo "own $c"; else echo "other $c"; fi
   done
@@ -9005,7 +9002,7 @@ rv_actionable_for() {
 
 # Turns one raw entry from a findings file into the record shape, deciding its own actionability
 # against the frozen contract. $1 the raw entry, $2 the frozen contract, $3 where it came from,
-# either "review" or "round<N>".
+# "review", "round<N>", "repair" or "check".
 rv_finding_record() {
   local raw="$1" alignment="$2" origin="$3" linked
   linked="$(printf '%s' "$raw" | jq -r '.linkedTo // ""')"
@@ -10223,13 +10220,8 @@ RV_SCOPE
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$scope_list" ]; then
     halt_why="a fixer reported its scope too small and nobody is present to rule on it: ${scope_list%, }"
   fi
-  if [ "$all_met" != "true" ] && [ "$round_number" -ge "$FIX_ROUNDS_ALLOWED" ]; then
-    if [ -n "$halt_why" ]; then
-      halt_why="$halt_why. The fix rounds are also spent: $round_number of $FIX_ROUNDS_ALLOWED, and the last was stopped by $first_stopper"
-    else
-      halt_why="fix rounds spent: $round_number of $FIX_ROUNDS_ALLOWED, and the last was stopped by $first_stopper"
-    fi
-  fi
+  # A check that stopped the round, at the cap too, does not halt here. verify-record opens a
+  # finding for it, and the cap rules there decide: a ruling, a halt, or pending (gap row 305).
   local new_ledger
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
@@ -10264,15 +10256,12 @@ RV_SCOPE
     echo "FIX-RECORD: round $round_number of $unit_id left every finding open. It was stopped by $first_stopper" >&2
   fi
   [ -z "$halt_why" ] || echo "FIX-RECORD: $unit_id is halted. $halt_why" >&2
-  if [ "$all_met" != "true" ] && [ "$round_number" -ge "$FIX_ROUNDS_ALLOWED" ] && task_is_light "$TASK_PATH"; then
-    light_log_fix_rounds "$unit_id" "the round's checks" >&2
-  fi
   exit 0
 }
 
-# The compromises log row for the fix rounds a light task skips. The halt at the one-round cap in
-# fix-record calls it, and close calls it for the findings the one round left. $1 the order, $2
-# what was still open.
+# The compromises log row for the fix rounds a light task skips. close calls it for the findings
+# the one round left, a failed check among them (gap row 305). $1 the order, $2 what was still
+# open.
 light_log_fix_rounds() {
   log_compromise "$TASK_PATH" implement "fix rounds after the first on $1, with $2 still open" \
     "run a second fix round, then take a person's ruling on each finding still open"
@@ -10323,15 +10312,16 @@ do_verify_brief() {
   # The open findings are the ones the fixer received: nothing has closed one since, because this
   # round's verification is what closes findings and it has not run. A scope report the fixer made
   # rides on the finding it names, so the verifier sees it beside the finding rather than in prose.
+  # A check finding is left out: verify-record judges it from the fix record's checks (gap row 305).
   local open_json brief_file brief_json
   open_json="$(printf '%s' "$RV_REVIEW_DOC" | jq -c '
-    [ (.findings // [])[] | select(.actionable == true and .status == "open") ]
+    [ (.findings // [])[] | select(.actionable == true and .status == "open" and .origin != "check") ]
     | sort_by(if .severity == "high" then 0 elif .severity == "medium" then 1 else 2 end)
     | map({id, severity, file, lines, linkedTo, evidence, fixScope, origin}
           + (if has("scopeInsufficientInRound") then {scopeInsufficientInRound, scopeInsufficientBecause} else {} end)
           + (if .origin == "repair" then {question: ("Does the cited failure arise in " + .file + "? Answer defectInFile yes or no.")} else {} end)
           + (if has("departureFrom") then {departureFrom, question: ("Is the departure from " + .departureFrom + " gone? Answer departureCured yes or no.")} else {} end))')"
-  [ "$(printf '%s' "$open_json" | jq 'length')" -gt 0 ] 2>/dev/null \
+  [ "$(rv_open_actionable_count "$RV_REVIEW_DOC")" -gt 0 ] 2>/dev/null \
     || die 53 "verify-brief: $unit_id has no open actionable finding, so there is nothing to verify."
   brief_file="$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json"
   brief_json="$(jq -n --arg unit "$unit_id" --argjson round "$rounds_used" --argjson findings "$open_json" \
@@ -10493,7 +10483,7 @@ do_verify_record() {
   # a list this order does not hold.
   local open_ids verdict_ids missing extra vcount vi vrow vid vverdict vorigin vfrom
   open_ids="$(printf '%s' "$RV_REVIEW_DOC" | jq -c \
-    '[ (.findings // [])[] | select(.actionable == true and .status == "open") | .id ]')"
+    '[ (.findings // [])[] | select(.actionable == true and .status == "open" and .origin != "check") | .id ]')"
   vcount="$(printf '%s' "$verdict_rows" | jq 'length')"
   vi=0
   while [ "$vi" -lt "$vcount" ]; do
@@ -10581,14 +10571,20 @@ do_verify_record() {
     bi=$((bi + 1))
   done
 
-  # Gap row 305. A check that stopped this round opens one finding, on the order's first criterion
-  # and its owned files. Every other finding may read addressed, and then nothing open would route
-  # the failed check: no further round, no ruling, no pending decision. The cap rules apply to it.
-  # Its severity is low when coding-standards alone stopped the round, a style line, and medium
-  # for any other check, so a light task's cap leaves only a style failure for the review.
+  # Gap row 305. A check that stopped this round opens one finding, origin check, on the order's
+  # first criterion and its owned files. Every other finding may read addressed, and then nothing
+  # open would route the failed check. The cap rules apply to it. Its severity is low when
+  # coding-standards alone stopped the round, a style line, and medium for any other check, so a
+  # light task's cap leaves only a style failure for the review. The script, not the verifier,
+  # judges it: a round whose checks pass addresses it, and one that fails again keeps it open.
   local fix_checks check_stop check_severity
   fix_checks="$(jq -c '.checks // []' "$fix_file" 2>/dev/null)"
-  if [ "$(br_checks_pass "${fix_checks:-[]}" "")" != "true" ]; then
+  if [ "$(br_checks_pass "${fix_checks:-[]}" "")" = "true" ]; then
+    updated_findings="$(printf '%s' "$updated_findings" | jq -c --argjson r "$rounds_used" --arg f "$fix_file" '
+      map(if .origin == "check" and .status == "open"
+          then . + {status: "addressed", addressedInRound: $r, addressedEvidence: ("every check passed in " + $f)}
+          else . end)')"
+  elif [ "$(printf '%s' "$updated_findings" | jq '[ .[] | select(.origin == "check" and .status == "open") ] | length')" = "0" ]; then
     check_stop="$(br_first_stopper "${fix_checks:-[]}" "")"
     check_severity="$(printf '%s' "${fix_checks:-[]}" | jq -r "$BR_STOPPERS_JQ"'
       if (stoppers | length > 0) and (stoppers - ["coding-standards"] | length == 0) then "low" else "medium" end')"
@@ -10598,7 +10594,7 @@ do_verify_record() {
       {id: $id, severity: $severity, file: "", lines: "",
        linkedTo: (((.criteriaOwned // []) + (.criteriaServed // []))[0] // ""),
        evidence: $evidence, fixScope: (.ownedFiles // [])}')"
-    bbuilt="$(rv_finding_record "$braw" "$alignment" "round$rounds_used")"
+    bbuilt="$(rv_finding_record "$braw" "$alignment" check)"
     updated_findings="$(printf '%s' "$updated_findings" | jq -c --argjson f "$bbuilt" '. + [$f]')"
     echo "VERIFY-RECORD: $new_id opens for the check that stopped round $rounds_used: $check_stop" >&2
   fi
@@ -10869,11 +10865,9 @@ do_close() {
   # about what is in the repository. So the tree has to be clean, and HEAD has to be the commit the
   # last record for this order was written at: the build record when no round ran, the last fix
   # record otherwise. Without both, the range names commits that do not hold the work, which is the
-  # same gap the record steps close with exit 61. A compromises log commit after the record is
-  # AIDA's own, so HEAD may sit past the record on those alone, and the range ends at the record
-  # (gap row 305).
+  # same gap the record steps close with exit 61.
   br_require_clean_tree "close" "$RV_RANGE_REPO" "" "" "" "" "$RV_RANGE_PATHS"
-  local last_record last_commit c moved=""
+  local last_record last_commit
   if [ "$rounds_used" -gt 0 ] 2>/dev/null; then
     last_record="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
   else
@@ -10885,13 +10879,7 @@ do_close() {
   [ -n "$last_commit" ] \
     || die 3 "close: $last_record holds no commit, though the step that wrote it records one."
   [ "$last_commit" = "$head_now" ] \
-    || git -C "$RV_RANGE_REPO" merge-base --is-ancestor "$last_commit" "$head_now" 2>/dev/null || moved=yes
-  for c in $(git -C "$RV_RANGE_REPO" rev-list "$last_commit..$head_now" 2>/dev/null); do
-    compromise_log_commit "$TASK_PATH" "$RV_RANGE_REPO" "$c" || moved=yes
-  done
-  [ -z "$moved" ] \
     || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged."
-  head_now="$last_commit"
 
   local new_ledger
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
@@ -11002,7 +10990,7 @@ CLOSE_FAKES
   # from the order's mark, because a person may have set the task interactive to rule. A finding
   # with a fix scope left pending or ruled is one the light cap left, unless a fixer reported it
   # out of its scope or the verifier placed it outside its file (gap row 296). A light round that
-  # failed its own checks is logged by fix-record, not here.
+  # failed its own checks left a check finding, so it is logged here too (gap row 305).
   if [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq '.lightRounds // false')" = "true" ]; then
     local skipped
     skipped="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ .findings[]
@@ -11277,7 +11265,10 @@ FN_RECIPES
       # What an unattended run left for the person, which review puts to them (gap row 279).
       pending_json="$(jq -cn --argjson have "$pending_json" --argjson doc "$one_review" --arg unit "$one_id" '
           $have + [ ($doc.findings // [])[] | select(.status == "pending")
-                    | {unit: $unit, kind: "ruling", finding: .id, severity: .severity, text: (.pendingBecause // .evidence // "")} ]
+                    | {unit: $unit, kind: "ruling", finding: .id, severity: .severity, text: (.pendingBecause // .evidence // ""),
+                       because: (if has("pendingBecause") then "a verifier answered and a person decides"
+                                 elif ((.fixScope // []) | length) == 0 then "its fix scope is empty"
+                                 else "a light task allows one fix round, and it is spent" end)} ]
                 + [ $doc.deviationPending // empty
                     | {unit: $unit, kind: "departure", text: (.departure + ", in " + .file)} ]')"
     fi

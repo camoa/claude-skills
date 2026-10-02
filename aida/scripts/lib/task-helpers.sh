@@ -29,9 +29,6 @@
 #   log_compromise <folder> <stage> <skipped> <normal>
 #                                         adds one row to COMPROMISES.md in the task's tree and
 #                                         commits that file alone
-#   compromise_log_commit <folder> <tree> <commit>
-#                                         true when the task is light and the commit changes
-#                                         COMPROMISES.md alone
 #   task_env_recipe_change <folder> <path> <tree> <commit>
 #                                         true when `environment up` recorded the path and the
 #                                         commit still holds that content
@@ -445,14 +442,6 @@ log_compromise() {
   { git -C "$tree" add -- "$COMPROMISES_FILE" && git -C "$tree" commit -q -m "Log a light-run compromise: $2" -- "$COMPROMISES_FILE"; } >/dev/null 2>&1 \
     || printf 'task-helpers: %s was written and not committed. Commit it before the next step.\n' "$file" >&2
   printf 'compromise: %s: %s\n' "$2" "$3"
-}
-
-# True when the commit $3 in the tree $2 is a commit log_compromise made for the light task $1: it
-# changes COMPROMISES.md and nothing else. That commit is AIDA's own and no order's work, so
-# implementation's close and its order commits set it aside (gap row 305).
-compromise_log_commit() {
-  task_is_light "$1" \
-    && [ "$(git -C "$2" diff-tree --no-commit-id --name-only -r --no-renames "$3" 2>/dev/null)" = "$COMPROMISES_FILE" ]
 }
 
 # True when $2, a changed path, is one `task environment up` recorded in worktree.recipeChanges of

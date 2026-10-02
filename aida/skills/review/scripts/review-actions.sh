@@ -1991,7 +1991,7 @@ RW_RESEARCH_FILES
     | ("decision-" + .unit + "-" + (.finding // "departure")) as $id
     | {id: $id, verdict: "unknown", answeredBy: "nobody",
        detail: ((if .kind == "ruling"
-                 then .unit + " finding " + .finding + " (" + .severity + ") waits for a ruling, because its fix scope is empty and nobody was present: " + .text + ". The person rules it with --row " + $id + "=wrong|deferred|load-bearing|test-wrong."
+                 then .unit + " finding " + .finding + " (" + .severity + ") waits for a ruling, because " + (.because // "its fix scope is empty") + ", and nobody was present: " + .text + ". The person rules it with --row " + $id + "=wrong|deferred|load-bearing|test-wrong."
                  else .unit + " departs from the design, found while nobody was present: " + .text + ". The person answers with --row " + $id + "=keep|rebuild." end))}' >>"$rows_file"
   # --- the done-when clauses the tests step routed here, one verdict each ------------------------
   # Such a clause asserts the change added nothing of a named kind, and no test of it can be watched

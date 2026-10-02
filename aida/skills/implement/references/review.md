@@ -261,20 +261,21 @@ This re-runs seven of the eight checks, with the same order-tests floor build.md
 order's range, tree and diff read from the project folder, as build.md says. Undeclared or unknown there still spends the
 round, even when every other check is undeclared. Not
 interface-record: a fix round does not rewrite that record. A check answering unmet or unknown
-spends the round and leaves every finding open. At the round cap, the script halts the order
-itself, naming the check that stopped it. `review-brief` is never run again for this order.
-`verify-record` then opens one finding for that check, on the order's first criterion and its
-owned files. It reads low when coding-standards alone stopped the round, and medium otherwise.
-The next round fixes it, or at the cap it takes a ruling like any other finding.
+spends the round and leaves every finding open. `review-brief` is never run again for this order.
+`verify-record` then opens one finding for that check, with origin `check`, on the order's first
+criterion and its owned files. It reads low when coding-standards alone stopped the round, and
+medium otherwise. The verifier does not see it. The next round's checks decide it: all met
+addresses it, and a failure keeps it open. At the cap it follows the same rules as any other
+finding: a ruling, a halt, or pending on a light task.
 
 A repeat call at a commit this round already recorded finishes the write when the ledger never
 moved past it, a crash between the two, rather than spending a round twice; otherwise it refuses
 (exit 45). A commit unchanged since the round before it always refuses (exit 45): a round spent on
 unchanged code is a round nobody worked.
 
-**When `fix-record` halted the order this way, stop here.** Do not dispatch the reviewer in verify
-mode: `verify-record` refuses on a halted order. Report the halt instead, naming the check it
-stopped on, the same way a halt at the build step is reported. A person clears it with
+**When `fix-record` halted the order, stop here.** Do not dispatch the reviewer in verify
+mode: `verify-record` refuses on a halted order. Report the halt instead, the same way a halt at
+the build step is reported. A person clears it with
 `clear-halt` and then rules on the open findings through `verify-record`.
 
 Open a dispatch record for the reviewer again, the same way review mode did, with nothing denied

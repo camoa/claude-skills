@@ -215,7 +215,8 @@ it proves. What light skips:
 - **Implementation** writes no tests for each order and runs no checker over test rows. It gives
   each order one fix round. A low finding still open after that round waits for the person at
   review, who rules it there. An order with a medium or high finding still open after that round
-  halts, and so does an order whose fix round fails its own checks. After that round the order
+  halts. A fix round that fails its own checks opens a finding for that check. It reads low for
+  coding-standards alone, and medium for any other check. After that round the order
   keeps its one-round cap even if you set the task interactive, so you rule at once. The
   implementer may build a fake off the demo path, marked in the code with `AIDA-FAKE:`.
 - **Review** runs no visual regression.
