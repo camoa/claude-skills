@@ -12840,11 +12840,12 @@ do_dispatch_close() {
   # dispatch-open stores the file the role's brief pins under `reportPath` (gap rows 228 and 250).
   # One block checks it for every role that has one. A missing file, or one written before the
   # record's `openedAt`, is a previous run's or none. The file's own time is not read: a close that
-  # keeps the record open rewrites it, and a finished report then read as older (gap row 307). A
+  # keeps the record open rewrites it, and a finished report reads as older (gap row 307). A
   # fixer and a test author also end theirs with `completionLine` as their last act, after at least
-  # one line of report. A fixer's also needs a clean tree in the code path, because it commits
-  # every change before it returns. The order of its commit and its line is not read: a fixer that
-  # wrote the line and then committed has finished (gap row 307). A test author's is read by the
+  # one line of report. A fixer's also needs a clean tree in the code path, read as
+  # dispatch-open's leftover scan reads it, because it commits every change before it returns.
+  # The order of its commit and its line is not read: a fixer that wrote the line and then
+  # committed has finished (gap row 307). A test author's is read by the
   # line alone. The reviewer's file refuses at 111. The other two take the --no-report path unasked,
   # so a cut-off role never closes as finished. A record from before the key existed names no file,
   # and nothing is checked.
@@ -12860,7 +12861,7 @@ do_dispatch_close() {
     elif [ ! -f "$rp_path" ]; then
       rp_cause="$rp_path is missing"
     elif [ "$rp_written" -lt "$rp_opened" ]; then
-      rp_cause="$rp_path is older than its dispatch: written $(jq -rn --argjson t "$rp_written" '$t | todate'), dispatch opened $(jq -rn --argjson t "$rp_opened" '$t | todate')"
+      rp_cause="$rp_path is older than its dispatch: written $(im_iso_of "$rp_written"), dispatch opened $(im_iso_of "$rp_opened")"
     elif [ -n "$rp_line" ]; then
       rp_last="$(grep -v '^[[:space:]]*$' "$rp_path" | tail -n 1 | sed 's/[[:space:]]*$//')"
       if [ "$rp_last" != "$rp_line" ]; then
@@ -12868,9 +12869,10 @@ do_dispatch_close() {
       elif [ "$(grep -v '^[[:space:]]*$' "$rp_path" | grep -c -v -x -F -e "$rp_line")" -eq 0 ]; then
         rp_cause="$rp_path holds nothing but the line '$rp_line'"
       elif [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "fixer" ]; then
-        rp_dirty="$(git_status_of "$(jq -r '.codePath // ""' "$dispatch_file")" | grep -c .)"
-        [ "$rp_dirty" -eq 0 ] \
-          || rp_cause="$rp_path ends with the line, and $rp_dirty paths in its code path are uncommitted, so the fixer stopped before its commit"
+        im_scan_leftovers "$(jq -r '.codePath // ""' "$dispatch_file")" '[]'
+        rp_dirty="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq 'length')"
+        if [ "$rp_dirty" -eq 1 ]; then rp_cause="1 uncommitted path is in the code path"
+        elif [ "$rp_dirty" -gt 1 ]; then rp_cause="$rp_dirty uncommitted paths are in the code path"; fi
       fi
     fi
     if [ -n "$rp_cause" ] && [ -z "$rp_line" ]; then
