@@ -4,6 +4,134 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.13] - 2026-10-02
+
+Changes from the supporting taxonomies site test and the periplus
+light-mode and task-chain test, on 6.0.12. Most of them remove a stop
+that only a person could clear, so an unattended run goes further. Two
+are new for light mode: a command can be the end to end surface, and a
+task can build on the task before it.
+
+### Added
+
+- `task create --after <task-id>` names the task that a new task builds
+  on. The new tree is cut from that task's branch once its build is
+  finished. Until then no tree is made and `start` refuses. `next` shows
+  the link. With `--in-tree`, the new task takes over that task's tree on
+  a new branch, once its review has closed. A chain then pays one
+  checkout and one dependency sync.
+- `surfaces register --command <line>` makes a command the end to end
+  surface, for a project with no page. Review runs it in the task's tree
+  without a shell, and exit 0 reads met. A command that the build
+  changed or deleted, or that holds a shell character, reads unknown.
+- `add-owned-file --shared` lets several orders own a file that each only
+  adds to, such as the list of enabled modules. So a module can be
+  enabled in the order that builds it. The new `unattributed` action
+  lists the commits that no order accounts for, and review names them.
+- A builder that finds a defect in a closed order's file stops with
+  `Stop: closed-order-defect: <file>: <what fails>`. The closed order
+  reopens for one repair round with its own fixer and verify, and the
+  stopped order waits. No person decides, so this runs unattended too.
+- `recipe-refresh --check-recipe` adopts a changed review recipe when
+  every tool row of it reads met or undeclared on the current tree.
+  Otherwise it refuses (exit 73), names each row, and writes nothing.
+- `build-recheck` runs a fix round's checks again when the stop came from
+  outside the fix range, such as a broken environment. A pass addresses
+  the check finding. When every finding that the unattended cap halt
+  names is a check finding, a pass also clears that halt, and the ledger
+  records it. The next line offers the re-check.
+- A hook sends the implementer back once when its answers file lacks the
+  stop or deviation line. The builder writes the line, and no resume is
+  needed.
+
+### Changed
+
+- Preconditions check the tools that the build's own checks run, from the
+  review recipe's `requires_tooling`. This holds on a task with no
+  automated tests too. An absent tool stops the run before any order is
+  built. A build check whose tool the recipe does not name is listed as
+  not checked.
+- When `show <tool>` or preconditions find no tooling recipe, the message
+  says to dispatch the catalog identifier with `tooling: <tool>` and then
+  pass `--tooling`.
+- A light task runs one distiller, at the design close, over scope,
+  research and design. The catalog identifier answers several points in
+  one dispatch. One interface dispatch names every reuse candidate.
+- The distiller reports every gap in one pass. It reads an existing
+  sidecar before it writes a new one.
+- An unattended design close refuses (exit 8) while a disposition made
+  unattended has no confirmer verdict that agrees with it. One confirmer
+  judges every candidate of an order. Asking again never clears a
+  disagreement.
+- The build brief lists the declared interface names, and the
+  implementer repeats each one in backticks. The check accepts a
+  shortened name that ends exactly one declared name. The design check
+  warns on a declared name that holds `<` or `{`.
+- A large order's builder may be resumed twice at its turn limit. Design
+  numbers a large order's parts, and the builder commits after each part.
+- On a task with no automated tests, an order that froze no test can
+  have a recipe departure that names only test files. That departure is
+  recorded not applicable. The reviewer's words reach the task review as
+  a catalog note.
+- A recipe departure that a fix can cure opens a fix round in both run
+  modes. The reviewer names the finding under `finding`, or the script
+  pairs the one candidate. Verify confirms that the departure is gone.
+- An information item marked `departsFromDesign` halts nothing, in either
+  run mode. It waits for the person at the task review, who answers keep
+  or rebuild. One departure waits per review record. With a declared or
+  recipe departure, a departing information item is not put to the
+  person.
+- A light order keeps its one fix round when the person sets the task
+  interactive to rule. Unattended at that cap, a low finding waits for
+  the review. A medium or high finding still halts.
+- A check that stops a fix round becomes a finding. Coding standards
+  alone reads low. A light task logs its skipped rounds after the order's
+  range, so `close` no longer refuses on AIDA's own log commit.
+- `set-run-mode light` says that the run ends at review and a person
+  closes the task. The run modes page says so too. No page says that the
+  path script runs in a browser.
+- Every project action takes the project folder path as well as the name
+  or the code path. A path that names two projects is refused (exit 3).
+
+### Fixed
+
+- A `{project}` token inside a gate argument, such as `gate-{project}`,
+  is now filled. A token with no value refuses before any check runs, so
+  no attempt is spent. The gate's put-back block runs on its own.
+- A stop or deviation line of `none` followed by more text is refused
+  (exit 106). Nothing is recorded and no attempt is spent. Write the line
+  alone and put a note on its own line.
+- `verify-record` numbers a new breakage itself. It no longer refuses the
+  id that the reviewer wrote.
+- `dispatch-close` no longer reports a finished fixer as stopped. A fresh
+  dispatch deletes the old report, so a fixer's or test author's report
+  is not tested for age, also after a resume. A reviewer's file is
+  compared with the time the dispatch opened, not the record file's
+  time. A finished report on a clean code path closes the dispatch, even
+  with `--no-report`. The message names the test that failed.
+
+### Known limits
+
+- Orders that an older version already halted or logged stay as they
+  are. There is no migration.
+- A review-checks recipe that declares no `requires_tooling` gets "not
+  checked" at preconditions. `python_cli_review_checks` 0.3.2 is one. An
+  ask was sent to the catalog.
+- The catalog step for a tool with no recipe is advice in the failing
+  call's output. Only a live run shows that it is followed.
+- AIDA does not check that a change to a shared file only adds lines.
+- A resume after a normal close closes at once on the old report.
+- Uncommitted work in the project folder is not seen by the fixer's
+  clean-tree test.
+- A distiller sidecar written while an edit lands can read current for
+  the old record. The check compares times, not content.
+- That the hook on the implementer fires, also at the turn limit, only a
+  live run shows.
+- The catalog holds no end to end setup or worktree environment recipe
+  for a Python command-line project. The Drupal implement recipe cannot
+  make Drupal rewrite a file whose data already matches. Asks were sent
+  for both.
+
 ## [6.0.12] - 2026-10-01
 
 Seven changes from the event archive task's second review and the
