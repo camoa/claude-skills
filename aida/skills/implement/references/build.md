@@ -432,6 +432,12 @@ only, beside `recheckedAt`. The
 attempt counter does not move. The order goes to `checks-passed` when the checks pass and stays
 at `code-written` otherwise. The summary has `build-record`'s shape plus a `recheck:` line.
 
+After a fix round, it runs that round's seven checks again over the fix record's range.
+`references/review.md` says when. The same refusals apply to the fix record, with owned-files in
+place of interface-record. A test or a suite that failed is the fixer's work, so the route is the
+next round or a ruling. It rewrites the fix record the same way, and the order stays at `fixed`.
+A pass addresses the open check finding. A check that fails again stays a finding.
+
 ## Read the eight checks to the person
 
 This step runs all eight deciding checks. The record holds every one.

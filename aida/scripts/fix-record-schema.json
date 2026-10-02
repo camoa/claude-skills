@@ -97,6 +97,26 @@
           "description": "The `id` of each check in `checks`, in the same order, copied rather than re-derived."
         }
       }
+    },
+    "recheckedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "Present only after `build-recheck` ran this round's seven checks again over its own range, with no fixer dispatched and no round spent (gap row 310): the UTC date of that run, YYYY-MM-DD. `checks`, `executed` and `decidingChecks` then hold the re-check's answers; `round`, `startedAt`, `commit` and `takenAt` stay the round's own."
+    },
+    "checksBefore": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "verdict"],
+        "properties": {
+          "id": { "type": "string" },
+          "verdict": { "type": "string" }
+        }
+      },
+      "description": "Present with `recheckedAt`: the checks the re-check replaced, id and verdict only, as build-record-schema.json keeps them."
     }
   },
   "$defs": {

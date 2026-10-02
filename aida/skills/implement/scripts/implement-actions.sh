@@ -620,7 +620,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      check stopped the attempt, so it passed and the order is past the build. Or a path the
 #      interface check named does not exist at the recorded commit, so no amended record can
 #      answer it (gap row 253). A halted order refuses at exit 49 like every step-five action, and
-#      `grant-attempt` is its route.
+#      `grant-attempt` is its route. After a fix round the same facts are read from that round's
+#      record, with owned-files in place of interface-record, and the route is the next round or
+#      a ruling (gap row 310).
 #
 # The code the support files added (live-run row 90).
 #  89  `tests-freeze` was given a --support whose path does not exist on disk, or whose path
@@ -7681,7 +7683,9 @@ br_first_stopper() {
 # tool rows and interface-record. A re-check answers an attempt only those rows stopped (live-run
 # row 87): a tool refusing a path is the plugin's fault, and an interface record is a record file
 # the builder amends without moving the code (gap row 253). A test or a suite failing is the
-# implementer's work.
+# implementer's work. `outside_fix_recheck` is the same over a fix round, which has no interface
+# record. There owned-files may stop it too: the code is unchanged, so only a design that gave the
+# order the file, or a person's allowance, can make it pass (gap row 310).
 BR_STOPPERS_JQ='def stoppers:
   [ .[] | select(.verdict == "unmet"
                  or (.verdict == "unknown" and .id != "interface-record")
@@ -7689,6 +7693,7 @@ BR_STOPPERS_JQ='def stoppers:
                  or (.id == "confirm-at-review" and .verdict != "deferred"))
     | .id ];
 def outside_recheck: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security" and . != "interface-record"));
+def outside_fix_recheck: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security" and . != "owned-files"));
 '
 
 # The interface record's path, for `build-record` and `build-recheck`. $1 the action, $2 the unit
@@ -7812,6 +7817,13 @@ br_require_check_count() {
   die 84 "$who: the record would hold ${have:-0} checks, and the schema requires $want. Absent: ${absent:-none by name, so one is repeated}. Nothing was written."
 }
 
+# The paths a person allowed for one fix round, from the brief fix-brief wrote for it, into
+# BRC_ALLOWED_JSON. A round with no brief on disk allows nothing. $1 the unit id, $2 the round.
+br_round_allowed() {
+  BRC_ALLOWED_JSON="$(jq -c '.allowedFiles // []' "$IMPL_DIR/brief-$1-fix-$2.json" 2>/dev/null)"
+  [ -n "$BRC_ALLOWED_JSON" ] || BRC_ALLOWED_JSON="[]"
+}
+
 # The check half of `build-record`, shared with `build-recheck` so a re-check runs exactly what the
 # attempt ran (live-run row 87). Seven checks come from the function a fix round calls too, so the
 # steps cannot drift into checking different things. The eighth, the interface record, is the build
@@ -7820,7 +7832,8 @@ br_require_check_count() {
 # Reads the BRC_* globals the caller set, and CR_TEST_RECIPES and CR_CHECK_RECIPES. Every commanded
 # check runs a command the recipe declares, resolved here rather than retyped by the caller, and the
 # selected-tests row runs this order's own frozen test files. $1 the interface the order declares,
-# $2 the text the builder wrote.
+# $2 the text the builder wrote. $3, when 7, leaves the eighth out, for a fix round's re-check
+# (gap row 310).
 #
 # Sets BR_CHECKS_FILE, a temporary file holding the eight checks, which the caller reads into its
 # record and then removes. The checks carry whole tool outputs, so they travel by file: a
@@ -7829,8 +7842,8 @@ br_require_check_count() {
 # and BR_EXECUTED, how many of them ran a command, a diff or a hash.
 BR_CHECKS_FILE=""; BR_CHECKS_JSON=""; BR_EXECUTED=0
 br_eight_checks() {
-  local declared="$1" record_text="$2"
-  local unit_id seven_file interface_check_json
+  local declared="$1" record_text="$2" want="${3:-8}"
+  local unit_id seven_file interface_check_json="null"
   unit_id="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')"
   BRC_SELECTED_JSON="$(br_frozen_test_paths "$(printf '%s' "$BRC_TESTS_DOC" | jq -c '.rows // []')")"
   CR_WHO="$BRC_WHO"
@@ -7838,9 +7851,11 @@ br_eight_checks() {
   cr_require_baseline_recipes "$BRC_WHO" "$BRC_BASELINE_FILE"
   BRC_RECIPES="$CR_DOC"
 
-  interface_check_json="$(br_interface_check "$declared" "$record_text")"
-  [ -n "$interface_check_json" ] \
-    || die 3 "$BRC_WHO: the interface-record check produced nothing for $unit_id."
+  if [ "$want" = 8 ]; then
+    interface_check_json="$(br_interface_check "$declared" "$record_text")"
+    [ -n "$interface_check_json" ] \
+      || die 3 "$BRC_WHO: the interface-record check produced nothing for $unit_id."
+  fi
 
   br_require_gate_tokens
   br_require_site_up
@@ -7849,9 +7864,9 @@ br_eight_checks() {
   [ -s "$seven_file" ] \
     || { rm -f "$seven_file"; die 3 "$BRC_WHO: the seven computable checks produced nothing for $unit_id."; }
   BR_CHECKS_FILE="$(mktemp)" || { rm -f "$seven_file"; die 3 "$BRC_WHO: could not create a temporary file"; }
-  jq -c --argjson eighth "$interface_check_json" '. + [$eighth]' "$seven_file" >"$BR_CHECKS_FILE"
+  jq -c --argjson eighth "$interface_check_json" 'if $eighth == null then . else . + [$eighth] end' "$seven_file" >"$BR_CHECKS_FILE"
   rm -f "$seven_file"
-  br_require_check_count "$BRC_WHO" "$BR_CHECKS_FILE" 8
+  br_require_check_count "$BRC_WHO" "$BR_CHECKS_FILE" "$want"
   BR_CHECKS_JSON="$(cat "$BR_CHECKS_FILE" 2>/dev/null)"
   BR_EXECUTED="$(br_executed_count "$BR_CHECKS_JSON")"
   case "$BR_EXECUTED" in ''|*[!0-9]*) BR_EXECUTED=0 ;; esac
@@ -8512,6 +8527,11 @@ do_build_record() {
 # interface-record stopped is answered by amending that file, which moves no code (gap row 253).
 # It is not a free retry: an attempt a test or a suite stopped is the implementer's work, and it
 # refuses (exit 88).
+# On an order whose last step is a fix round, it runs that round's seven checks again over the
+# round's own range instead (gap row 310). A round stopped by a broken environment, or by a file
+# the design later gave the order, otherwise had no route but a person's ruling. The tool rows and
+# owned-files may stop it; the same code can answer them differently only when something outside
+# the range changed. A pass addresses the open check finding verify-record opened.
 # ------------------------------------------------------------------------------------------------
 do_build_recheck() {
   local task_arg="" unit_id="" interface_path=""
@@ -8581,14 +8601,26 @@ do_build_recheck() {
   rv_load_state "build-recheck" "$unit_id"
 
   # --- exit 88, one: no attempt was recorded, so there is nothing to run the checks over again ----
-  local record_file="$IMPL_DIR/build-$unit_id.json"
-  [ -f "$record_file" ] \
-    || die 88 "build-recheck: $record_file does not exist, so no attempt at $unit_id was recorded and there is no range to run the checks over. The route is build."
-  rv_load_build_record "build-recheck" "$unit_id"
+  # After a fix round, the record is that round's own (gap row 310).
+  local record_file="$IMPL_DIR/build-$unit_id.json" record_doc fix_round=0 record_name
+  if [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')" = "fixed" ]; then
+    fix_round="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
+    record_file="$IMPL_DIR/fix-$unit_id-$fix_round.json"
+    record_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
+    [ -n "$record_doc" ] \
+      || die 3 "build-recheck: $record_file is missing or not JSON, though the ledger records round $fix_round of $unit_id. Run fix-record on it again."
+  else
+    [ -f "$record_file" ] \
+      || die 88 "build-recheck: $record_file does not exist, so no attempt at $unit_id was recorded and there is no range to run the checks over. The route is build."
+    rv_load_build_record "build-recheck" "$unit_id"
+    record_doc="$RV_BUILD_DOC"
+  fi
   local record_started_at record_commit record_attempt
-  record_started_at="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')"
-  record_commit="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
-  record_attempt="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.attempt // 0')"
+  record_started_at="$(printf '%s' "$record_doc" | jq -r '.startedAt // ""')"
+  record_commit="$(printf '%s' "$record_doc" | jq -r '.commit // ""')"
+  record_attempt="$(printf '%s' "$record_doc" | jq -r '.attempt // 0')"
+  record_name="attempt $record_attempt"
+  [ "$fix_round" = 0 ] || record_name="fix round $fix_round"
   [ -n "$record_started_at" ] && [ -n "$record_commit" ] \
     || die 3 "build-recheck: $record_file holds no startedAt or no commit, so its range cannot be read. Repair or remove it by hand before running this again."
 
@@ -8600,19 +8632,26 @@ do_build_recheck() {
   current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
     || die 3 "build-recheck: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
+  # A fix round's own work is answered by the next round, or by a ruling at the cap.
+  local route="build" outside_def="outside_recheck" allowed_rows="the three tool rows or interface-record"
+  if [ "$fix_round" != 0 ]; then
+    route="the next fix round, or a ruling"
+    outside_def="outside_fix_recheck"
+    allowed_rows="the three tool rows or owned-files"
+  fi
   [ "$current_commit" = "$record_commit" ] \
-    || die 88 "build-recheck: $RV_RANGE_NAME is at $current_commit and the record holds attempt $record_attempt at $record_commit, so the code has moved since that attempt. A re-check runs over the recorded range alone; the route is build."
+    || die 88 "build-recheck: $RV_RANGE_NAME is at $current_commit and the record holds $record_name at $record_commit, so the code has moved since that ${record_name% *}. A re-check runs over the recorded range alone; the route is $route."
 
   # --- exit 88, three: a check outside the tool rows and interface-record stopped the attempt,
   # which is the implementer's work to answer, so a re-check would be a free retry. An attempt
   # nothing stopped is past the build, and there is nothing to run again -------------------------
   local stoppers outside
-  stoppers="$(printf '%s' "$RV_BUILD_DOC" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | stoppers | join(", ")')"
+  stoppers="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | stoppers | join(", ")')"
   [ -n "$stoppers" ] \
-    || die 88 "build-recheck: attempt $record_attempt at $unit_id passed its checks, so there is nothing to run again. The order is past the build."
-  outside="$(printf '%s' "$RV_BUILD_DOC" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | outside_recheck | join(", ")')"
+    || die 88 "build-recheck: $record_name at $unit_id passed its checks, so there is nothing to run again."
+  outside="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | '"$outside_def"' | join(", ")')"
   [ -z "$outside" ] \
-    || die 88 "build-recheck: attempt $record_attempt at $unit_id was stopped by $outside, which is not one of the three tool rows or interface-record. A re-check answers only an attempt those rows alone stopped; the route is build."
+    || die 88 "build-recheck: $record_name at $unit_id was stopped by $outside, which is not one of $allowed_rows. A re-check answers only a run those rows alone stopped; the route is $route."
 
   # --- exit 88, four: a path the interface check named is not in the code at the recorded commit.
   # An amended record can name a path the code never had, and the check would pass on words
@@ -8620,6 +8659,7 @@ do_build_recheck() {
   # out, read as paths by `ifacePath` ---------------------------------------------------------
   local unit_interface_declared missing_paths="" named_path
   unit_interface_declared="$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')"
+  [ "$fix_round" = 0 ] || unit_interface_declared=""
   while IFS= read -r named_path; do
     [ -n "$named_path" ] || continue
     git -C "$codepath" cat-file -e "$record_commit:$named_path" 2>/dev/null \
@@ -8641,10 +8681,18 @@ EOF_PATHS
 
   br_require_clean_tree "build-recheck" "$codepath" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 
-  br_interface_path "build-recheck" "$unit_id" "$interface_path"
-  br_interface_text "build-recheck" "$unit_id" "$unit_interface_declared"
+  # A fix round reads no interface record, and its owned-files check reads the paths a person
+  # allowed for the round.
+  local checks_total=8
+  if [ "$fix_round" = 0 ]; then
+    br_interface_path "build-recheck" "$unit_id" "$interface_path"
+    br_interface_text "build-recheck" "$unit_id" "$unit_interface_declared"
+  else
+    checks_total=7
+    br_round_allowed "$unit_id" "$fix_round"
+  fi
 
-  # --- the eight deciding checks, the same half build-record runs, over the recorded range --------
+  # --- the deciding checks, the same half build-record runs, over the recorded range --------------
   BRC_WHO="build-recheck"
   BRC_CODEPATH="$codepath"
   BRC_SCOPE="$RV_RANGE_SCOPE"
@@ -8661,7 +8709,7 @@ EOF_PATHS
   BRC_GATE_RECIPES="$gate_recipes"
   # The observed record the build step accepted, at the path it names (live-run row 104).
   BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
-  br_eight_checks "$unit_interface_declared" "$BR_INTERFACE_TEXT"
+  br_eight_checks "$unit_interface_declared" "$BR_INTERFACE_TEXT" "$checks_total"
 
   # The record keeps the attempt, its range and its date, and takes the new checks and the interface
   # record's text as read now. When that text changed, the attempt's own text stays under
@@ -8671,14 +8719,15 @@ EOF_PATHS
   local today record_json
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -c --arg recheckedAt "$today" --argjson executed "$BR_EXECUTED" \
-    --arg interfaceRecord "$BR_INTERFACE_TEXT" --slurpfile before "$record_file" '
+    --arg interfaceRecord "$BR_INTERFACE_TEXT" --argjson fix "$fix_round" --slurpfile before "$record_file" '
     . as $new
     | $before[0]
     | .checksBefore = ((.checks // []) | map({id, verdict}))
     | .checks = $new
-    | (if $interfaceRecord != (.interfaceRecord // "")
-       then .interfaceRecordBefore = (.interfaceRecordBefore // .interfaceRecord // "") else . end)
-    | .interfaceRecord = $interfaceRecord
+    | if $fix > 0 then . else
+        (if $interfaceRecord != (.interfaceRecord // "")
+         then .interfaceRecordBefore = (.interfaceRecordBefore // .interfaceRecord // "") else . end)
+        | .interfaceRecord = $interfaceRecord end
     | .executed = $executed
     | .decidingChecks = { total: 8, ranHere: [ $new[] | .id ] }
     | .recheckedAt = $recheckedAt' "$BR_CHECKS_FILE")"
@@ -8687,31 +8736,48 @@ EOF_PATHS
   write_atomic "$record_file" "$record_json"
 
   # No attempt is spent: nobody worked. The step moves to checks-passed when the checks pass, and
-  # stays at code-written otherwise, with no halt, because the counter did not move.
-  local all_met first_stopper new_ledger_doc
+  # stays at code-written otherwise, with no halt, because the counter did not move. A fix round
+  # stays at fixed, and a pass addresses its open check finding, the rule verify-record applies to a
+  # round whose checks pass. A round not yet verified has none, and verify-record reads the pass.
+  local all_met first_stopper new_ledger_doc addressed=""
   all_met="$(br_checks_pass "$BR_CHECKS_JSON" "interface-record")"
   first_stopper="$(br_first_stopper "$BR_CHECKS_JSON" "interface-record")"
   new_ledger_doc="$RV_LEDGER_DOC"
-  if [ "$all_met" = "true" ]; then
+  if [ "$fix_round" != 0 ]; then
+    if [ "$all_met" = "true" ]; then
+      rv_load_review_record "build-recheck" "$unit_id"
+      addressed="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.origin == "check" and .status == "open") | .id ] | join(", ")')"
+      [ -z "$addressed" ] || write_atomic "$RV_REVIEW_FILE" "$(printf '%s' "$RV_REVIEW_DOC" | jq -c \
+        --argjson r "$fix_round" --arg f "$record_file" '
+        .findings = (.findings | map(if .origin == "check" and .status == "open"
+          then . + {status: "addressed", addressedInRound: $r, addressedEvidence: ("every check passed in " + $f + ", run again by build-recheck")}
+          else . end))')"
+    fi
+  elif [ "$all_met" = "true" ]; then
     new_ledger_doc="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
       '.orders = (.orders | map(if .id == $id then .lastStep = "checks-passed" else . end))')"
     [ -n "$new_ledger_doc" ] || die 3 "build-recheck: the ledger update for $unit_id failed."
     write_atomic "$RV_LEDGER_FILE" "$new_ledger_doc"
   fi
 
-  local br_state br_next attempts_allowed
-  attempts_allowed="$(attempts_allowed_for "$RV_ORDER_ENTRY")"
+  local br_state br_next br_count
+  br_count="{\"attempt\": \"$record_attempt of $(attempts_allowed_for "$RV_ORDER_ENTRY")\"}"
   if [ "$all_met" = "true" ]; then br_state="checks-passed"; else br_state="code-written, stopped by $first_stopper"; fi
+  if [ "$fix_round" != 0 ]; then
+    br_count="{\"round\": \"$fix_round of $FIX_ROUNDS_ALLOWED\"}"
+    if [ "$all_met" = "true" ]; then br_state="fixed, every check met${addressed:+, addressed $addressed}"
+    else br_state="fixed, stopped by $first_stopper"; fi
+  fi
   br_next="$(im_next_step "$new_ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")"
   im_print_summary "build-recheck" "$(printf '%s' "$record_json" | jq -c \
-    --arg attempts "$record_attempt of $attempts_allowed" --arg state "$br_state" \
-    --arg record "$record_file" --arg next "$br_next" '
-    {order: .unit,
-     attempt: $attempts,
-     recheck: "attempt \(.attempt), checks replaced",
+    --argjson count "$br_count" --arg state "$br_state" --arg name "$record_name" \
+    --arg record "$record_file" --arg next "$br_next" --argjson total "$checks_total" '
+    {order: .unit}
+    + $count
+    + {recheck: "\($name), checks replaced",
      range: "\(.startedAt)..\(.commit)",
      check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
-     executed: "\(.executed) of 8 ran a command, a diff or a hash",
+     executed: "\(.executed) of \($total) ran a command, a diff or a hash",
      state: $state,
      halt: "none",
      record: $record,
@@ -10127,11 +10193,9 @@ RV_SCOPE
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
   BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
-  # The paths a person allowed for this round, from the brief fix-brief wrote for it. The
-  # owned-files check reads them beside the order's own, so an allowed change passes (live-run
-  # row 116). A round with no brief on disk allows nothing.
-  BRC_ALLOWED_JSON="$(jq -c '.allowedFiles // []' "$IMPL_DIR/brief-$unit_id-fix-$round_number.json" 2>/dev/null)"
-  [ -n "$BRC_ALLOWED_JSON" ] || BRC_ALLOWED_JSON="[]"
+  # The owned-files check reads the paths allowed for this round beside the order's own, so an
+  # allowed change passes (live-run row 116).
+  br_round_allowed "$unit_id" "$round_number"
   local selected_tests_json
   selected_tests_json="$(br_frozen_test_paths "$(printf '%s' "$tests_doc" | jq -c '.rows // []')")"
   # shellcheck disable=SC2034 # read by the sourced library
@@ -10278,11 +10342,11 @@ RV_SCOPE
 }
 
 # The compromises log row for the fix rounds a light task skips. close calls it for the findings
-# the one round left, a failed check among them (gap row 305). $1 the order, $2 what was still
-# open.
+# the one round left, a failed check among them (gap row 305). $1 the order, $2 the findings it
+# left pending or ruled, so none of them reads as still open (gap row 310).
 light_log_fix_rounds() {
-  log_compromise "$TASK_PATH" implement "fix rounds after the first on $1, with $2 still open" \
-    "run a second fix round, then take a person's ruling on each finding still open"
+  log_compromise "$TASK_PATH" implement "fix rounds after the first on $1, which left $2 to a ruling" \
+    "run a second fix round on $2, then take a person's ruling on what it leaves open"
 }
 
 # ------------------------------------------------------------------------------------------------

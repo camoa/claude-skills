@@ -277,6 +277,12 @@ medium otherwise. The verifier does not see it. The next round's checks decide i
 addresses it, and a failure keeps it open. At the cap it follows the same rules as any other
 finding: a ruling, a halt, or pending on a light task.
 
+A check can stop the round for a cause outside the fix range. Examples are a broken environment,
+or a file the design later gave the order. Repair that cause, then run `build-recheck` with
+`fix-record`'s recipe flags. It runs the round's checks again over the unchanged range, as
+references/build.md says. Run it before `verify-brief` when you can, so no check finding opens.
+After `verify-record`, a pass addresses the open check finding.
+
 A repeat call at a commit this round already recorded finishes the write when the ledger never
 moved past it, a crash between the two, rather than spending a round twice; otherwise it refuses
 (exit 45). A commit unchanged since the round before it always refuses (exit 45): a round spent on
