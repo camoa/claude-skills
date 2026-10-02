@@ -768,8 +768,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The code the completion line added (gap row 250).
 # 112  a plain `dispatch-close` on a fixer's or a test author's record found the report its brief
 #      pins missing, not ending with the line `Report: complete`, or holding nothing but that
-#      line. The message names the test that failed. A fixer's code path must also hold no uncommitted
-#      path, because the fixer commits every change. A test author commits nothing, so its report
+#      line. The message names the test that failed. A fixer's code path must also hold no
+#      uncommitted path, because the fixer commits every change. A test author commits nothing, so its report
 #      is read by the line alone (gap row 307). The role stopped before its last act, so
 #      the close runs as `--no-report` does: the record stays open and takes `resumedAt`. A second
 #      such close halts the order at exit 110, and the halt names the cause. `dispatch-open`
@@ -12845,20 +12845,14 @@ do_dispatch_close() {
   # and another task's stays open (live-run row 139).
   local dispatch_file="$TASK_PATH/implementation/dispatch.json"
   # dispatch-open stores the file the role's brief pins under `reportPath` (gap rows 228 and 250).
-  # One block checks it for every role that has one. A missing file, or a reviewer's file written
-  # before the record's `openedAt`, is a previous run's or none. The file's own time is not read: a
-  # close that keeps the record open rewrites it, and a finished report reads as older (gap row
-  # 307). A fixer's and a test author's report has no time test: a fresh dispatch-open removes it,
-  # so one that exists was written in this dispatch. A resume writes a new `openedAt`, and a report
-  # written before the resume is still this agent's (gap row 309). Those two roles also end theirs
-  # with `completionLine` as their last act, after at least one line of report. A fixer's also
-  # needs a clean tree in the code path, read as dispatch-open's leftover scan reads it, because it
-  # commits every change before it returns. The order of its commit and its line is not read: a
-  # fixer that wrote the line and then committed has finished (gap row 307). A test author's is
-  # read by the line alone. The reviewer's file refuses at 111. The other two take the --no-report path unasked,
-  # so a cut-off role never closes as finished. A record from before the key existed names no file,
-  # and nothing is checked. A --no-report close of those two runs the same test. The runtime can
-  # mark a role stopped after its last act, and a complete report then closes it (gap row 309).
+  # One block checks it for every role that has one; exit codes 111 and 112 in the list above say
+  # what each role's file must pass. A reviewer's file is read against the record's `openedAt`,
+  # never the file's own time: a close that keeps the record open rewrites it (gap row 307). A
+  # fixer's clean tree is read as dispatch-open's leftover scan reads it. The order of its commit
+  # and its line is not read: a fixer that wrote the line and then committed has finished (gap row
+  # 307). A --no-report close of a fixer or a test author runs the same test, because the runtime
+  # can mark a role stopped after its last act (gap row 309). A record from before the key existed
+  # names no file, and nothing is checked.
   local cut_off="" rp_path="" rp_line="" rp_cause="" rp_last rp_dirty rp_written rp_opened
   if [ -f "$dispatch_file" ]; then
     rp_path="$(jq -r '.reportPath // ""' "$dispatch_file" 2>/dev/null)"

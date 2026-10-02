@@ -209,7 +209,8 @@ that line takes the step below itself (exit 112). After a 112, do not close agai
 agent. A `--no-report` close after a 112 spends a resume. For the row-checker only the mark tells,
 so watch for it. Close with `--no-report` added. A fixer or a test author can finish before the
 runtime marks it stopped. If its report is complete, the close says so and removes the record, and
-the role is not resumed. Otherwise the record stays open, so both hooks keep applying. Then send one message to the same agent: finish the work and write the report. Do not
+the role is not resumed. Otherwise the record stays open, so both hooks keep applying. Then send
+one message to the same agent: finish the work and write the report. Do not
 dispatch a fresh role. The brief is unchanged and the work is unfinished, and a fresh role meets
 the half-written files. This differs from a row a person rejects, where the brief changes and the
 role is dispatched fresh. When the resumed role returns, close again, with `--no-report` if it
