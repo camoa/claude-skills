@@ -280,8 +280,10 @@ finding: a ruling, a halt, or pending on a light task.
 A check can stop the round for a cause outside the fix range. Examples are a broken environment,
 or a file the design later gave the order. Repair that cause, then run `build-recheck` with
 `fix-record`'s recipe flags. It runs the round's checks again over the unchanged range, as
-references/build.md says. Run it before `verify-brief` when you can, so no check finding opens.
-After `verify-record`, a pass addresses the open check finding.
+references/build.md says. The `next:` line offers it when only those rows stopped the round.
+Run it before `verify-brief` when you can, so no check finding opens. After `verify-record`, a
+pass addresses the check finding, open or pending. When the cap halt names only check findings,
+a pass also clears that halt. A check that fails again leaves both in place.
 
 A repeat call at a commit this round already recorded finishes the write when the ledger never
 moved past it, a crash between the two, rather than spending a round twice; otherwise it refuses

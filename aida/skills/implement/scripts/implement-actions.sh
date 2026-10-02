@@ -1094,6 +1094,19 @@ halt_refuse_separator() {
   esac
 }
 
+# The halt verify-record writes at an unattended cap (exit 56), and its one other reader.
+# build-recheck answers it when it is the order's only halt and every finding it names is an open
+# check finding: a pass then removes the fact the halt stands on (gap row 310). Prints yes or no
+# for halt reason $1 and review document $2.
+CAP_HALT_PREFIX="a fix round cap reached with findings still open, and nobody is present to rule on them: "
+cap_halt_rechecks() {
+  printf '%s' "$1" | jq -Rr --arg p "$CAP_HALT_PREFIX" --argjson r "${2:-null}" '
+    if (startswith($p) | not) or contains("; earlier: ") then "no"
+    else (ltrimstr($p) | split(", ")) as $ids
+      | if all($ids[]; . as $i | any(($r.findings // [])[]; .id == $i and .origin == "check" and .status == "open"))
+        then "yes" else "no" end end'
+}
+
 halt_order_in() {
   printf '%s' "$1" | jq -c --arg id "$2" --arg why "$3" "$HALT_MERGE_JQ
     .orders = (.orders | map(if .id == \$id then (.haltedBecause = halt_merge(.haltedBecause; \$why)) else . end))"
@@ -1395,7 +1408,7 @@ im_next_step() {
 # retake's freezeCommit until the freeze after the retake rewrites it, the predicate the
 # freeze's own exemption reads, so the line names the author and not a build against the
 # wrong test (live-run row 110).
-  local opens ids count i id file n recheck_route retake_pending
+  local opens ids count i id file n recheck_route retake_pending entry halt
   opens='{}'
   recheck_route='{}'
   retake_pending='{}'
@@ -1427,6 +1440,16 @@ im_next_step() {
         *) n="" ;;
       esac
     fi
+    # After a fix round the same route reads that round's record, with owned-files in place of
+    # interface-record. A halted order keeps it only when build-recheck answers the halt (gap row 310).
+    entry="$(printf '%s' "$ledger" | jq -c --arg id "$id" '.orders[] | select(.id == $id)')"
+    if [ "$(printf '%s' "$entry" | jq -r '.lastStep // ""')" = "fixed" ]; then
+      file="$impl/fix-$id-$(printf '%s' "$entry" | jq -r '.roundsUsed // 0').json"
+      n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | if (stoppers | length > 0) and (outside_fix_recheck | length == 0)
+        then "build-recheck" else "" end' "$file" 2>/dev/null)"
+      halt="$(printf '%s' "$entry" | jq -r '.haltedBecause // ""')"
+      [ -z "$halt" ] || [ "$(cap_halt_rechecks "$halt" "$(jq -c '.' "$impl/review-$id.json" 2>/dev/null)")" = "yes" ] || n=""
+    fi
     recheck_route="$(printf '%s' "$recheck_route" | jq -c --arg id "$id" --arg n "$n" '. + {($id): $n}')"
     n="$(im_retake_pending "$ledger" "$impl" "$id")"
     retake_pending="$(printf '%s' "$retake_pending" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
@@ -1455,9 +1478,12 @@ im_next_step() {
     | ([ $orders[] | select((.haltedBecause // "") | (contains("attempts spent") or contains("budget spent"))) ] | .[0]) as $spent
     | ([ $orders[] | select((.haltedBecause // "") | startswith("test wrong: ")) ] | .[0]) as $testwrong
     | ([ $orders[] | select((.haltedBecause // "") != "") ] | length) as $halted
+    | ([ $orders[] | select((.haltedBecause // "") != "" and (($recheck_route[.id] // "") != "")) ] | .[0]) as $caphalt
     | if ($precon | not) and ($rv != null or $bd != null or ($ts != null and $removed == null)) then "preconditions"
       elif $rv != null then
         (if $rv.lastStep == "checks-passed" then "review \($rv.id): review the order"
+         elif (($opens[$rv.id] // 0) > 0) and (($recheck_route[$rv.id] // "") != "") then
+           "review \($rv.id): build-recheck \($rv.id) once a cause outside the fix range is repaired, or verify"
          elif (($opens[$rv.id] // 0) > 0) then "review \($rv.id): fix, then verify"
          else "review \($rv.id): close the order" end)
       elif $bd != null then
@@ -1473,6 +1499,7 @@ im_next_step() {
       elif $drift != null then "finish: offer the restart, \($drift.id) is halted for design drift"
       elif $spent != null then "finish: offer the grant, \($spent.id) is halted with its attempts or its budget spent"
       elif $testwrong != null then "review: offer retake-tests \($testwrong.id), a frozen test is ruled wrong, and the retake sends the order back to its tests"
+      elif $caphalt != null then "review \($caphalt.id): build-recheck \($caphalt.id) once a cause outside the fix range is repaired, which clears the halt on a pass, or offer clear-halt"
       elif $halted > 0 then "finish: offer clear-halt, every order that is not closed is halted for a reason a person clears"
       else "none: nothing is ready, and every remaining order waits on a dependency that is not closed" end'
 }
@@ -8598,7 +8625,7 @@ do_build_recheck() {
   # The step-five state: the ledger, the frozen order, and the halt refusal (exit 49). A halted
   # order's route is `grant-attempt` or `clear-halt`, never a re-check. No step is required here:
   # the record's own checks say whether the attempt is one a re-check answers.
-  rv_load_state "build-recheck" "$unit_id"
+  rv_load_state "build-recheck" "$unit_id" "[\"$CAP_HALT_PREFIX\"]"
 
   # --- exit 88, one: no attempt was recorded, so there is nothing to run the checks over again ----
   # After a fix round, the record is that round's own (gap row 310).
@@ -8621,6 +8648,16 @@ do_build_recheck() {
   record_attempt="$(printf '%s' "$record_doc" | jq -r '.attempt // 0')"
   record_name="attempt $record_attempt"
   [ "$fix_round" = 0 ] || record_name="fix round $fix_round"
+
+  # Exit 49 for every halt but verify-record's cap halt on check findings alone, which a pass here
+  # clears (gap row 310).
+  local halt
+  halt="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.haltedBecause // ""')"
+  if [ -n "$halt" ]; then
+    [ "$fix_round" != 0 ] && rv_load_review_record "build-recheck" "$unit_id" \
+      && [ "$(cap_halt_rechecks "$halt" "$RV_REVIEW_DOC")" = "yes" ] \
+      || die 49 "build-recheck: $unit_id is halted, so this step refuses. The ledger records the reason: $halt"
+  fi
   [ -n "$record_started_at" ] && [ -n "$record_commit" ] \
     || die 3 "build-recheck: $record_file holds no startedAt or no commit, so its range cannot be read. Repair or remove it by hand before running this again."
 
@@ -8737,8 +8774,9 @@ EOF_PATHS
 
   # No attempt is spent: nobody worked. The step moves to checks-passed when the checks pass, and
   # stays at code-written otherwise, with no halt, because the counter did not move. A fix round
-  # stays at fixed, and a pass addresses its open check finding, the rule verify-record applies to a
-  # round whose checks pass. A round not yet verified has none, and verify-record reads the pass.
+  # stays at fixed, and a pass addresses its check finding, the rule verify-record applies to a
+  # round whose checks pass, pending on a light task too. A round not yet verified has none, and
+  # verify-record reads the pass. A pass also clears the cap halt that named only check findings.
   local all_met first_stopper new_ledger_doc addressed=""
   all_met="$(br_checks_pass "$BR_CHECKS_JSON" "interface-record")"
   first_stopper="$(br_first_stopper "$BR_CHECKS_JSON" "interface-record")"
@@ -8746,12 +8784,20 @@ EOF_PATHS
   if [ "$fix_round" != 0 ]; then
     if [ "$all_met" = "true" ]; then
       rv_load_review_record "build-recheck" "$unit_id"
-      addressed="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.origin == "check" and .status == "open") | .id ] | join(", ")')"
+      addressed="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.origin == "check" and (.status == "open" or .status == "pending")) | .id ] | join(", ")')"
       [ -z "$addressed" ] || write_atomic "$RV_REVIEW_FILE" "$(printf '%s' "$RV_REVIEW_DOC" | jq -c \
         --argjson r "$fix_round" --arg f "$record_file" '
-        .findings = (.findings | map(if .origin == "check" and .status == "open"
-          then . + {status: "addressed", addressedInRound: $r, addressedEvidence: ("every check passed in " + $f + ", run again by build-recheck")}
+        .findings = (.findings | map(if .origin == "check" and (.status == "open" or .status == "pending")
+          then del(.pendingBecause) + {status: "addressed", addressedInRound: $r, addressedEvidence: ("every check passed in " + $f + ", run again by build-recheck")}
           else . end))')"
+      if [ -n "$halt" ]; then
+        new_ledger_doc="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" --arg reason "$halt" \
+          --arg today "$(date -u +%Y-%m-%d)" --arg because "every check passed in $record_file, run again by build-recheck" '
+          .orders = (.orders | map(if .id == $id then del(.haltedBecause) else . end))
+          | .haltsCleared = ((.haltsCleared // []) + [{id: $id, reason: $reason, clearedAt: $today, because: $because}])')"
+        [ -n "$new_ledger_doc" ] || die 3 "build-recheck: the ledger update for $unit_id failed."
+        write_atomic "$RV_LEDGER_FILE" "$new_ledger_doc"
+      fi
     fi
   elif [ "$all_met" = "true" ]; then
     new_ledger_doc="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
@@ -8768,10 +8814,13 @@ EOF_PATHS
     if [ "$all_met" = "true" ]; then br_state="fixed, every check met${addressed:+, addressed $addressed}"
     else br_state="fixed, stopped by $first_stopper"; fi
   fi
+  local br_halt="none"
+  if [ -n "$halt" ] && [ "$all_met" = "true" ]; then br_halt="cleared: $halt"
+  elif [ -n "$halt" ]; then br_halt="$halt"; fi
   br_next="$(im_next_step "$new_ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")"
   im_print_summary "build-recheck" "$(printf '%s' "$record_json" | jq -c \
     --argjson count "$br_count" --arg state "$br_state" --arg name "$record_name" \
-    --arg record "$record_file" --arg next "$br_next" --argjson total "$checks_total" '
+    --arg record "$record_file" --arg next "$br_next" --argjson total "$checks_total" --arg halt "$br_halt" '
     {order: .unit}
     + $count
     + {recheck: "\($name), checks replaced",
@@ -8779,7 +8828,7 @@ EOF_PATHS
      check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
      executed: "\(.executed) of \($total) ran a command, a diff or a hash",
      state: $state,
-     halt: "none",
+     halt: $halt,
      record: $record,
      next: $next}')"
   exit 0
@@ -10707,7 +10756,7 @@ do_verify_record() {
     local open_list
     open_list="$(printf '%s' "$updated_findings" | jq -r '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
     rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
-      "a fix round cap reached with findings still open, and nobody is present to rule on them: $open_list"
+      "$CAP_HALT_PREFIX$open_list"
     echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
     die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
   fi

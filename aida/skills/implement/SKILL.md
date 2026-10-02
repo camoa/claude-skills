@@ -74,6 +74,7 @@ derivation, kept here so a person can check the line against the state the other
 | An `order(...)` line whose halt holds any other `design drift...` segment, a person present | Offer the restart. A segment about the order's own design file also clears when the design is put back and `start` runs again | `finish` |
 | An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
 | An `order(...)` line whose halt begins `test wrong`, a person present | Offer `retake-tests`, which sends the order back to its tests | `review` |
+| An `order(...)` line at `fixed` whose only halt is the fix round cap, naming only check findings | Repair the cause outside the fix range, then run `build-recheck`, which clears the halt on a pass. Or offer `clear-halt` | `review` |
 | An `order(...)` line whose halt holds none of those segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |
 
 A refusal writes no halt, so no row above routes it. Its message names the route. Take that route.
