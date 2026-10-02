@@ -85,7 +85,7 @@
       "items": {
         "$ref": "#/$defs/pendingRow"
       },
-      "description": "What an unattended build left for a person, copied from each order's review record (gap row 279): a finding marked pending, and a departure held as deviationPending. The review stage writes one check per entry, and each reads unknown until the person answers it at close."
+      "description": "What a build left for a person, copied from each order's review record (gap row 279): a finding marked pending, and a departure held as deviationPending. The review stage writes one check per entry, and each reads unknown until the person answers it at close."
     },
     "rowsJudgedByModel": {
       "type": "integer",

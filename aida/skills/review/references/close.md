@@ -14,7 +14,7 @@ pass, and ask for each one only once.
 Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. A lens
 check names the low findings of one lens. The person confirms them, met, or rejects them, unmet.
 
-A check whose id begins `decision-` is a decision an unattended build left. Ask it in the
+A check whose id begins `decision-` is a decision a build left. Ask it in the
 words of `references/review.md` under the implement skill, under Rulings for a finding and under
 the departure halt for a departure. The answer decides what happens next:
 

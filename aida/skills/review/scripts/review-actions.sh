@@ -1985,14 +1985,14 @@ RW_RESEARCH_FILES
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff at $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')." >>"$rows_file"
     fi
   done
-  # What an unattended build left for a person, one check each, which reads unknown until the
+  # What a build left for a person, one check each, which reads unknown until the
   # person answers it with close --row (gap row 279). Nobody present leaves it unknown.
   printf '%s' "$RW_FINISHED_DOC" | jq -c '(.pendingDecisions // [])[]
     | ("decision-" + .unit + "-" + (.finding // "departure")) as $id
     | {id: $id, verdict: "unknown", answeredBy: "nobody",
        detail: ((if .kind == "ruling"
                  then .unit + " finding " + .finding + " (" + .severity + ") waits for a ruling, because " + (.because // "its fix scope is empty") + ", and nobody was present: " + .text + ". The person rules it with --row " + $id + "=wrong|deferred|load-bearing|test-wrong."
-                 else .unit + " departs from the design, found while nobody was present: " + .text + ". The person answers with --row " + $id + "=keep|rebuild." end))}' >>"$rows_file"
+                 else .unit + " departs from the design, and nobody has ruled on it yet: " + .text + ". The person answers with --row " + $id + "=keep|rebuild." end))}' >>"$rows_file"
   # --- the done-when clauses the tests step routed here, one verdict each ------------------------
   # Such a clause asserts the change added nothing of a named kind, and no test of it can be watched
   # failing, so the reviewer judges it against the diff (live-run row 184). The verdicts ride in the

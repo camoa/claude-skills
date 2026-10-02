@@ -100,25 +100,34 @@ act on one outside this task.
 
 A departure the builder declared never closes clean, whatever the review holds. The script scans
 the latest attempt's report and the interface record in its build record, the way `build-record`
-does. An information item the reviewer marks `departsFromDesign` true is a hit too. So is a
-recipe the reviewer answers `departed`, unless its `finding` names an actionable finding with a
-fix scope. That departure opens a fix round like any finding, in both run modes. The verifier
+does. A recipe the reviewer answers `departed` is a hit too, unless its `finding` names an
+actionable finding with a fix scope. That departure opens a fix round like any finding, in both run modes. The verifier
 answers `departureCured`, and a `no` waits for the person. With no `finding`, the script pairs the
 one such finding on a file the evidence names, and prints a `paired:` line. Exit 52 refuses a
 `finding` on another verdict, or one that names no finding in the file. It also refuses a finding
 on a file the evidence does not name, and two candidates for one answer. The findings file answers each item of the brief's
 `recipes` once. Otherwise the script refuses (exit 108): run `review-brief` again for this order,
 then dispatch the reviewer again. On a hit it refuses (exit 107), writes no review record, and
-halts the order for design drift. The halt names the file and the line number, the item, or the
-recipe. What is wrong is the design, or a recipe it relies on, so no fixer can repair it. Put it to the person, opening with: "What was built departs from the design of
-this unit of work. Only you can say which one stands. Change the design and the unit is built
-again. Keep the departure and the review goes on." Then say what that line or item says. To
+halts the order for design drift. The halt names the file and the line number, or the recipe.
+What is wrong is the design, or a recipe it relies on, so no fixer can repair it. Put it to the
+person, opening with: "What was built departs from the design of this unit of work. Only you can
+say which one stands. Change the design and the unit is built again. Keep the departure and the
+review goes on." Then say what that line or that recipe answer says. To
 change the design, amend the order in design and close design, then offer the
 restart in `references/finish.md`. To keep the departure, run `review-record` again with
 `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger hold the
 reason, and the order goes on as below. Unattended, the flag refuses (exit 68). There nothing
 halts: `review-record` writes the record with the departure as `deviationPending`, prints a
 `departurePending:` line, and the order goes on as below.
+
+An information item the reviewer marks `departsFromDesign` true is a note, not a finding. It never
+halts the order or the orders after it, in either run mode. `review-record` holds it as
+`deviationPending` and prints a `departurePending:` line. The person decides it at the task
+review: keep it or rebuild. It waits only when no departure above was found, so it never hides one.
+The record holds one departure. So when a departure above was found, the item is not put to the
+person; it stays in the record's `information` list only. A person present may keep the item at
+once with `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger
+hold the reason, though the order never halted.
 
 Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
 clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,

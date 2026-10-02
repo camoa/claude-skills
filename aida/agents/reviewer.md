@@ -72,9 +72,9 @@ next order needs that cites no criterion the diff fails is not a finding. A froz
 against a schema the site does not have. A function that returns one result per occurrence, so
 the next order must deduplicate. Write one sentence per item, with the file and lines. No severity
 and no fix scope. Every item carries `departsFromDesign`: true when it names a departure from the
-order's design or interface, which sends the order back to design, and false otherwise. The record
-keeps it, and the next order's briefs carry it. Your return text says
-only the file path and the two counts, findings and information.
+order's design or interface, which puts it to the person at the task review, and false otherwise.
+The record keeps it, and the next order's briefs carry it. Your return text says only the file
+path and the two counts, findings and information.
 
 **Read the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Report one finding per play the diff contradicts, in the shape

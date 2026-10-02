@@ -739,7 +739,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      row 225). Unattended, nothing halts: the record holds the departure as deviationPending,
 #      and the person decides it at the task review (gap row 279). A departed recipe answer whose
 #      `finding` names an actionable finding with a fix scope halts nothing in either mode: the
-#      fix round cures it and verify confirms the cure (gap row 303).
+#      fix round cures it and verify confirms the cure (gap row 303). An information item marked
+#      departsFromDesign halts nothing in either mode: it waits as deviationPending (gap row 308).
 #
 # The code the reviewer's recipe answers added (gap row 225).
 # 108  `review-record` found the findings file's `recipes` list does not answer the review
@@ -9531,8 +9532,8 @@ do_review_record() {
   # review holds: the design, or a recipe it relies on, is what is wrong, so no fixer can repair
   # it. The scan is build-record's own, over the latest attempt's report and the interface record
   # its build record holds. A build record written before that scan existed reaches review with
-  # one in it. The reviewer's information item with departsFromDesign true is the same fact, and so
-  # is a recipe it answers departed (gap row 225); those halts carry the reviewer's own front. The
+  # one in it. A recipe the reviewer answers departed is the same fact (gap row 225), and that halt
+  # carries the reviewer's own front. The
   # halt names the file and the line, never the builder's text, which may hold the halt separator.
   # The recipe reader already refused that separator, and a line break, in the reviewer's evidence.
   local departure departure_file departure_line="" iface_file halt_why=""
@@ -9553,13 +9554,6 @@ do_review_record() {
   build_accepted="$(printf '%s' "$RV_BUILD_DOC" | jq -c '.deviationAccepted // null')"
   [ -z "$departure" ] || [ "$departure" != "$(printf '%s' "$build_accepted" | jq -r '.departure // ""')" ] || departure=""
   [ -z "$departure" ] || halt_why="$RR_DEPARTURE_PREFIX, at line $departure_line of $departure_file"
-  if [ -z "$departure" ]; then
-    departure="$(printf '%s' "$information_json" | jq -r \
-      '[ .[] | select(.departsFromDesign) ] | .[0] // empty | "information item \(.id): \(.summary)"')"
-    departure_file="$findings_path"
-    [ -z "$departure" ] \
-      || halt_why="$RR_REVIEWER_PREFIX the design, marked departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"
-  fi
   # Gap row 303. A recipe the reviewer answers departed, paired by `finding` with an actionable
   # finding that has a fix scope, is one a fix round cures, so it opens that round and halts
   # nothing. The paired finding sits on a file the departed evidence names, so an unrelated finding
@@ -9591,16 +9585,27 @@ do_review_record() {
     map(. as $x | ([ $r[] | select(.verdict == "departed" and .finding == $x.id) ][0].ref) as $ref
         | if $ref != null and $x.actionable and ($x.fixScope | length) > 0 then $x + {departureFrom: $ref} else $x end)')"
   if [ -z "$departure" ]; then
+    departure_file="$findings_path"
     departure="$(printf '%s' "$RV_RECIPE_ANSWERS" | jq -r --argjson f "$findings_json" '
       [ $f[] | select(.actionable and (.fixScope | length) > 0) | .id ] as $cures
       | [ .[] | select(.verdict == "departed" and ((.finding // "") as $id | $cures | index($id)) == null) ]
       | .[0] // empty | "\(.ref): \(.evidence)"')"
     [ -z "$departure" ] || halt_why="$RR_REVIEWER_PREFIX $departure"
   fi
+  # Gap row 308. An information item marked departsFromDesign is a note, not a finding, so it
+  # halts neither the order nor its dependents, in either mode. It waits as deviationPending, and
+  # the person decides it at the task review. It is read last, so it never hides a departure that halts.
+  local departure_waits=""
+  if [ -z "$departure" ]; then
+    departure="$(printf '%s' "$information_json" | jq -r \
+      '[ .[] | select(.departsFromDesign) ] | .[0] // empty | "information item \(.id): \(.summary)"')"
+    [ -z "$departure" ] \
+      || { departure_waits=yes; halt_why="$RR_REVIEWER_PREFIX the design, marked departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"; }
+  fi
   if [ -z "$departure" ]; then
     [ -z "$accept" ] \
       || die 3 "review-record: --accept-deviation was given, and neither the report, the interface record nor the review of $unit_id names a departure. Nothing is written."
-  elif [ -z "$accept" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
+  elif [ -z "$accept" ] && { [ "$RV_RUN_MODE" = "autonomous" ] || [ -n "$departure_waits" ]; }; then
     # Gap row 279. Unattended, the departure waits for the person at the task review, and the
     # record below holds it as deviationPending. Nothing halts.
     :
@@ -9682,7 +9687,7 @@ do_review_record() {
      state: "reviewed",
      halt: $halt}
     + (if has("deviationAccepted") then {departureAccepted: .deviationAccepted.because} else {} end)
-    + (if has("deviationPending") then {departurePending: (.deviationPending.departure + ": the person decides at the task review")} else {} end)
+    + (if has("deviationPending") then {departurePending: ("the person decides at the task review, " + .deviationPending.departure)} else {} end)
     + {record: $record, next: $next}')"
   # Live-run row 96. A finding that cites no id never reaches a fixer, and nothing between here and
   # the close reads it. Interactive, the ones of medium or higher severity print after the summary,
@@ -11273,7 +11278,7 @@ FN_RECIPES
           $have + [ ($doc.findings // [])[] | select(.ruling == "deferred")
                     | {unit: $unit, finding: .id, severity: .severity, linkedTo: (.linkedTo // ""),
                        evidence: (.evidence // ""), reason: (.rulingReason // "")} ]')"
-      # What an unattended run left for the person, which review puts to them (gap row 279).
+      # What a build left for the person, which review puts to them (gap rows 279 and 308).
       pending_json="$(jq -cn --argjson have "$pending_json" --argjson doc "$one_review" --arg unit "$one_id" '
           $have + [ ($doc.findings // [])[] | select(.status == "pending")
                     | {unit: $unit, kind: "ruling", finding: .id, severity: .severity, text: (.pendingBecause // .evidence // ""),

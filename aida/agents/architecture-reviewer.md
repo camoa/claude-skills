@@ -33,7 +33,7 @@ The brief holds the criteria and the non-goals from the frozen contract. Every w
 to the diff file. The research records, and the paths they cite. The results of checks 4 to 8,
 including every tool row and every mutation survivor. The findings implementation ruled deferred at
 its fix round cap, each with its reason and the id it cited. It holds `pendingDecisions`: the
-findings and departures an unattended build left for the person. It holds `absenceClauses`: the
+findings and departures a build left for the person. It holds `absenceClauses`: the
 done-when clauses the tests step routed to you, each with the order it belongs to.
 
 Open the diff file, the paths the research records cite, and the playbook record `playbooksPath`

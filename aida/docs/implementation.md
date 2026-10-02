@@ -446,8 +446,7 @@ their briefs.
 A departure the builder declared never closes clean. The builder names one with a `Deviation:`
 line, or a heading that starts with "Deviation", in its report or its interface record. The build
 already stops on one. The review runs the same scan over the latest attempt, because a build
-record from an earlier version can carry one. A reviewer that sees a departure marks its
-information item `departsFromDesign`, and that is a hit too. The reviewer also answers each
+record from an earlier version can carry one. The reviewer also answers each
 implement recipe: followed, departed, or not applicable with a reason. A departed answer is a
 hit, and a missing or extra answer is refused. A departure that a fix can cure is not a hit when
 it is paired with a finding that has a fix scope, on a file the evidence names. The fix round
@@ -455,7 +454,9 @@ cures it, and the verify step confirms the cure. A hit halts the order for desig
 else the reviewer wrote. What is wrong is the design, or a recipe it relies on, so no fixer can
 repair it. You change the design and restart the order, or you keep the departure with a reason.
 The review record and the ledger keep that reason. Unattended, nothing halts: the departure waits
-for you at the task review.
+for you at the task review. A reviewer that sees a departure can also mark its information item
+`departsFromDesign`. That is a note, not a finding, so it never halts the build in either mode. It
+waits for you at the task review too.
 
 ## Fixing what the review found
 

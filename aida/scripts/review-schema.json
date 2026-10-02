@@ -244,7 +244,7 @@
         "answeredBy": {
           "type": "string",
           "enum": ["person", "nobody"],
-          "description": "Present only on a check a person decides rather than the script: a lens check whose findings are all low (gap row 274), or a `decision-` check, one per decision an unattended build left in finished.json `pendingDecisions` (gap row 279). `nobody` before the person answers, when the check reads unknown. A low-findings lens check on a run with nobody present reads met with `nobody`. `person` once `close --row` took the answer."
+          "description": "Present only on a check a person decides rather than the script: a lens check whose findings are all low (gap row 274), or a `decision-` check, one per decision a build left in finished.json `pendingDecisions` (gap row 279). `nobody` before the person answers, when the check reads unknown. A low-findings lens check on a run with nobody present reads met with `nobody`. `person` once `close --row` took the answer."
         },
         "answer": {
           "type": "string",
