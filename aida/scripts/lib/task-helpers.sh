@@ -23,6 +23,8 @@
 #   version_at_least <have> <want>        true when <have> is <want> or later
 #   warn_newer_installed                  one stderr line when a newer copy of this plugin sits
 #                                         beside PLUGIN_ROOT; runs once when this file is sourced
+#   warn_session_version                  one stderr line when the session loaded another version
+#                                         of this plugin; runs once when this file is sourced
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
@@ -76,9 +78,9 @@
 #   IFACE_PATH_JQ                         a jq definition, `ifacePath`, a backticked interface
 #                                         token as a repository path, or empty
 #
-# Every script that sources this file runs warn_newer_installed. These never source it, so
-# they never warn: tool-actions.sh, next's legacy-tasks.sh, the scripts in scripts/ other than
-# check-design.sh, and every hook but session-start.sh, which discards the line.
+# Every script that sources this file runs warn_newer_installed and warn_session_version. These
+# never source it, so they never warn: tool-actions.sh, next's legacy-tasks.sh, the scripts in
+# scripts/ other than check-design.sh, and every hook but session-start.sh, which discards the line.
 # project-actions.sh sources it in check-machine alone.
 #
 # task_worktree and resolve_task_folder both take resolve_project_folder, project_code_path_value
@@ -359,6 +361,25 @@ warn_newer_installed() {
     | "AIDA \($top) is installed, and this script runs from \($me.version). Run /reload-plugins, load the skill again, then restart the current step on \($top)."
   ' "$@" 2>/dev/null)"
   [ -z "$found" ] || printf '%s\n' "$found" >&2
+  return 0
+}
+
+# The other direction (gap row 311): this script is not the version the session loaded. The
+# session keeps the agents and hooks it loaded at start, so a role can lack a tool this step needs,
+# and the first sign is a record that never appears. A script run through Bash cannot see the
+# session's plugin root (the mirror's plugins reference, "Environment variables"). The
+# session-start hook exports the loaded version as AIDA_SESSION_PLUGIN_VERSION, which this reads.
+# Unset, nothing is known and nothing is said. /reload-plugins reloads agents and hooks but does
+# not run that hook again, so the repair named is a new session. The export marks the check done.
+warn_session_version() {
+  local own
+  [ -z "${AIDA_SESSION_CHECKED:-}" ] || return 0
+  export AIDA_SESSION_CHECKED=1
+  [ -n "${AIDA_SESSION_PLUGIN_VERSION:-}" ] || return 0
+  own="$(plugin_version)"
+  [ "$own" != "unknown" ] && [ "$own" != "$AIDA_SESSION_PLUGIN_VERSION" ] || return 0
+  printf 'This session loaded AIDA %s, and this script runs from %s. The agents and hooks are still %s. Start a new session, then restart the current step.\n' \
+    "$AIDA_SESSION_PLUGIN_VERSION" "$own" "$AIDA_SESSION_PLUGIN_VERSION" >&2
   return 0
 }
 
@@ -1005,3 +1026,4 @@ active_tree_for() {
 }
 
 warn_newer_installed
+warn_session_version
