@@ -85,6 +85,8 @@ exactly one contract id in `linkedTo`, or none, under the rule below.
 **The builder's report is a claim, never proof.** A reason it gives never lowers a finding's
 severity. A departure the builder names, in its report or its interface record, that no answer
 under `recipes` covers is a high finding linked to the criterion the order owns.
+Mark that finding `"declaredDeparture": true`. Unattended, it then waits with the departure for
+the person, and no fixer undoes the departure. Do not mark a finding about anything else.
 
 **Answer each recipe.** The brief's `recipes` lists each recipe the builder follows. Open each
 one and judge the diff against its rules. Write one entry per item under `recipes`, in the shape

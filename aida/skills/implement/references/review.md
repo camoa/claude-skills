@@ -118,7 +118,10 @@ restart in `references/finish.md`. To keep the departure, run `review-record` ag
 `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger hold the
 reason, and the order goes on as below. Unattended, the flag refuses (exit 68). There nothing
 halts: `review-record` writes the record with the departure as `deviationPending`, prints a
-`departurePending:` line, and the order goes on as below.
+`departurePending:` line, and the order goes on as below. A finding the reviewer marks
+`declaredDeparture` is that same departure. It goes `pending` and waits with the departure, so no
+fixer undoes it. The task review lists it in the departure's decision. A `rebuild` answer there
+answers it too. The other findings take the fix round.
 
 An information item the reviewer marks `departsFromDesign` true is a note, not a finding. It never
 halts the order or the orders after it, in either run mode. `review-record` holds it as

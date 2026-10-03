@@ -84,7 +84,13 @@
       "required": ["departure", "file"],
       "properties": {
         "departure": { "type": "string", "minLength": 1 },
-        "file": { "type": "string", "minLength": 1 }
+        "file": { "type": "string", "minLength": 1 },
+        "findings": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Unattended, the ids of the open actionable findings the reviewer marked declaredDeparture. Each one is pending and waits with this departure, not as a ruling of its own, and `finish` names them in the decision's text (gap row 316)."
+        }
       },
       "description": "A departure no person has ruled on yet (gap row 279). Unattended, `review-record` halts nothing on a departure: `departure` is what the scan or the reviewer found, and `file` where. `finish` carries it to finished.json, and the review stage puts it to the person before its verdict. An information item marked departsFromDesign is held here in both modes (gap row 308). Present only on a review that found one and that no person accepted."
     }
@@ -180,6 +186,11 @@
           "enum": ["yes", "no"],
           "description": "On a finding with origin `repair` only: the verifier's answer to whether the cited failure arises in the finding's file. The stopped builder named the file, and no other role had checked it. A no makes the finding pending for the person (gap row 286)."
         },
+        "declaredDeparture": {
+          "type": "boolean",
+          "const": true,
+          "description": "The reviewer's mark: this finding is the departure the builder declared in its report or its interface record. Unattended, `review-record` makes the finding pending and lists it under deviationPending.findings, so no fixer undoes the departure before the person rules on it (gap row 316). Present only when the reviewer marked it."
+        },
         "departureFrom": {
           "type": "string",
           "minLength": 1,
@@ -193,7 +204,7 @@
         "pendingBecause": {
           "type": "string",
           "minLength": 1,
-          "description": "Why a finding waits for the person, when a verification set it pending: a repair finding whose failure the verifier says does not arise in its file. `finish` carries it to finished.json as the decision's text (gap row 286)."
+          "description": "Why a finding waits for the person, when a verification set it pending: a repair finding whose failure the verifier says does not arise in its file. `finish` carries it to finished.json as the decision's text (gap row 286). `review-record` also sets it on a finding marked declaredDeparture, which waits in the departure's decision instead (gap row 316)."
         },
         "scopeInsufficientBecause": {
           "type": "string",

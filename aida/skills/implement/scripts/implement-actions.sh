@@ -1691,7 +1691,7 @@ do_read() {
           one_open="$(jq '[ (.findings // [])[] | select(.actionable == true and .status == "open") ] | length' "$one_file" 2>/dev/null)"
           case "$one_open" in ''|*[!0-9]*) one_open=0 ;; esac
           # What waits for the person at the task review (gap row 279).
-          one_pending="$(jq '([ (.findings // [])[] | select(.status == "pending") ] | length) + (if has("deviationPending") then 1 else 0 end)' "$one_file" 2>/dev/null)"
+          one_pending="$(jq '((.deviationPending.findings // []) as $w | [ (.findings // [])[] | select(.status == "pending" and (.id as $i | $w | index($i) | not)) ] | length) + (if has("deviationPending") then 1 else 0 end)' "$one_file" 2>/dev/null)"
           case "$one_pending" in ''|*[!0-9]*) one_pending=0 ;; esac
           one_note="ok"
         else
@@ -9180,7 +9180,8 @@ rv_finding_record() {
       actionableBecause: $because,
       status: "open",
       origin: $origin
-    }'
+    }
+    + (if .declaredDeparture == true then {declaredDeparture: true} else {} end)'
 }
 
 # Sets RV_INFORMATION_ARRAY to the `information` list of the findings file $1, checked item by
@@ -9726,7 +9727,8 @@ do_review_record() {
   local build_accepted
   build_accepted="$(printf '%s' "$RV_BUILD_DOC" | jq -c '.deviationAccepted // null')"
   [ -z "$departure" ] || [ "$departure" != "$(printf '%s' "$build_accepted" | jq -r '.departure // ""')" ] || departure=""
-  [ -z "$departure" ] || halt_why="$RR_DEPARTURE_PREFIX, at line $departure_line of $departure_file"
+  local declared=""
+  [ -z "$departure" ] || { declared=yes; halt_why="$RR_DEPARTURE_PREFIX, at line $departure_line of $departure_file"; }
   # Gap row 303. A recipe the reviewer answers departed, paired by `finding` with an actionable
   # finding that has a fix scope, is one a fix round cures, so it opens that round and halts
   # nothing. The paired finding sits on a file the departed evidence names, so an unrelated finding
@@ -9768,7 +9770,7 @@ do_review_record() {
   # Gap row 308. An information item marked departsFromDesign is a note, not a finding, so it
   # halts neither the order nor its dependents, in either mode. It waits as deviationPending, and
   # the person decides it at the task review. It is read last, so it never hides a departure that halts.
-  local departure_waits=""
+  local departure_waits="" waiting_json='[]'
   if [ -z "$departure" ]; then
     departure="$(printf '%s' "$information_json" | jq -r \
       '[ .[] | select(.departsFromDesign) ] | .[0] // empty | "information item \(.id): \(.summary)"')"
@@ -9780,8 +9782,16 @@ do_review_record() {
       || die 3 "review-record: --accept-deviation was given, and neither the report, the interface record nor the review of $unit_id names a departure. Nothing is written."
   elif [ -z "$accept" ] && { [ "$RV_RUN_MODE" = "autonomous" ] || [ -n "$departure_waits" ]; }; then
     # Gap row 279. Unattended, the departure waits for the person at the task review, and the
-    # record below holds it as deviationPending. Nothing halts.
-    :
+    # record below holds it as deviationPending. Nothing halts. Gap row 316: an open actionable
+    # finding the reviewer marks declaredDeparture is that same departure, so a fixer must not undo
+    # it. It goes pending and waits with the departure; the other findings take the fix round.
+    if [ -n "$declared" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
+      findings_json="$(printf '%s' "$findings_json" | jq -c 'map(
+        if .declaredDeparture == true and .actionable and .status == "open"
+        then . + {status: "pending", pendingBecause: "it is the departure the builder declared, which the person decides at the task review"}
+        else . end)')"
+      waiting_json="$(printf '%s' "$findings_json" | jq -c '[ .[] | select(.declaredDeparture == true and .status == "pending") | .id ]')"
+    fi
   elif [ -z "$accept" ]; then
     local departure_ledger
     departure_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$halt_why")"
@@ -9798,7 +9808,7 @@ do_review_record() {
     --arg findingsPath "$findings_path" --argjson findings "$findings_json" \
     --argjson information "$information_json" --argjson recipes "$RV_RECIPE_ANSWERS" \
     --arg accept "$accept" --arg departure "$departure" \
-    --arg departureFile "$departure_file" --argjson carried "$build_accepted" '
+    --arg departureFile "$departure_file" --argjson carried "$build_accepted" --argjson waiting "$waiting_json" '
     {
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -9812,7 +9822,8 @@ do_review_record() {
     + (if ($recipes | length) == 0 then {} else {recipes: $recipes} end)
     + (if $accept != "" then {deviationAccepted: {departure: $departure, file: $departureFile, because: $accept}}
        elif $carried != null then {deviationAccepted: $carried} else {} end)
-    + (if $accept == "" and $departure != "" then {deviationPending: {departure: $departure, file: $departureFile}} else {} end)')"
+    + (if $accept == "" and $departure != "" then {deviationPending: ({departure: $departure, file: $departureFile}
+         + (if ($waiting | length) == 0 then {} else {findings: $waiting} end))} else {} end)')"
   write_atomic "$review_file" "$record_json"
 
   # Decision 11. Unattended, a finding that hits a non-goal halts the order with the non-goal
@@ -9860,7 +9871,9 @@ do_review_record() {
      state: "reviewed",
      halt: $halt}
     + (if has("deviationAccepted") then {departureAccepted: .deviationAccepted.because} else {} end)
-    + (if has("deviationPending") then {departurePending: ("the person decides at the task review, " + .deviationPending.departure)} else {} end)
+    + (if has("deviationPending") then {departurePending: ("the person decides at the task review, "
+         + (if .deviationPending | has("findings") then "with findings " + (.deviationPending.findings | join(", ")) + ", which are this departure, " else "" end)
+         + .deviationPending.departure)} else {} end)
     + {record: $record, next: $next}')"
   # Live-run row 96. A finding that cites no id never reaches a fixer, and nothing between here and
   # the close reads it. Interactive, the ones of medium or higher severity print after the summary,
@@ -11496,13 +11509,15 @@ FN_RECIPES
                        evidence: (.evidence // ""), reason: (.rulingReason // "")} ]')"
       # What a build left for the person, which review puts to them (gap rows 279 and 308).
       pending_json="$(jq -cn --argjson have "$pending_json" --argjson doc "$one_review" --arg unit "$one_id" '
-          $have + [ ($doc.findings // [])[] | select(.status == "pending")
+          (($doc.deviationPending.findings // [])) as $withDeparture
+          | $have + [ ($doc.findings // [])[] | select(.status == "pending" and (.id as $i | $withDeparture | index($i) | not))
                     | {unit: $unit, kind: "ruling", finding: .id, severity: .severity, text: (.pendingBecause // .evidence // ""),
                        because: (if has("pendingBecause") then "a verifier answered and a person decides"
                                  elif ((.fixScope // []) | length) == 0 then "its fix scope is empty"
                                  else "a light task allows one fix round, and it is spent" end)} ]
                 + [ $doc.deviationPending // empty
-                    | {unit: $unit, kind: "departure", text: (.departure + ", in " + .file)} ]')"
+                    | {unit: $unit, kind: "departure", text: (.departure + ", in " + .file
+                        + (if has("findings") then "; the review findings " + (.findings | join(", ")) + " are this departure, and a rebuild answers them" else "" end))} ]')"
     fi
     oi=$((oi + 1))
   done
