@@ -1389,7 +1389,9 @@ do_read_projects_base() {
 
 do_check_machine() {
   local cwd version plugin git_dir common_dir match code name rows listed recorded gone unnamed row id wt
-  # version_at_least and plugin_version live in the task-helper library.
+  # version_at_least and plugin_version live in the task-helper library. The flag keeps its
+  # session-version line quiet, because the "Changed since this session started" line says it.
+  export AIDA_SESSION_CHECKED=1
   # shellcheck source=/dev/null
   source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" \
     || die3 "check-machine: the library failed to load: task-helpers.sh"

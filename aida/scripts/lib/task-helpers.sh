@@ -79,8 +79,9 @@
 #                                         token as a repository path, or empty
 #
 # Every script that sources this file runs warn_newer_installed and warn_session_version. These
-# never source it, so they never warn: tool-actions.sh, next's legacy-tasks.sh, the scripts in
-# scripts/ other than check-design.sh, and every hook but session-start.sh, which discards the line.
+# never source it, so they never warn: next's legacy-tasks.sh, the scripts in scripts/ other than
+# check-design.sh and check-research.sh, and every hook but session-start.sh, which discards the
+# line. tool-actions.sh sources it in `require` alone.
 # project-actions.sh sources it in check-machine alone.
 #
 # task_worktree and resolve_task_folder both take resolve_project_folder, project_code_path_value
@@ -370,7 +371,9 @@ warn_newer_installed() {
 # session's plugin root (the mirror's plugins reference, "Environment variables"). The
 # session-start hook exports the loaded version as AIDA_SESSION_PLUGIN_VERSION, which this reads.
 # Unset, nothing is known and nothing is said. /reload-plugins reloads agents and hooks but does
-# not run that hook again, so the repair named is a new session. The export marks the check done.
+# not run that hook again, so after a reload the export is stale and the line says "may". A new
+# session clears both. The export marks the check done; check-machine sets it first, because it
+# reports the same change itself.
 warn_session_version() {
   local own
   [ -z "${AIDA_SESSION_CHECKED:-}" ] || return 0
@@ -378,8 +381,8 @@ warn_session_version() {
   [ -n "${AIDA_SESSION_PLUGIN_VERSION:-}" ] || return 0
   own="$(plugin_version)"
   [ "$own" != "unknown" ] && [ "$own" != "$AIDA_SESSION_PLUGIN_VERSION" ] || return 0
-  printf 'This session loaded AIDA %s, and this script runs from %s. The agents and hooks are still %s. Start a new session, then restart the current step.\n' \
-    "$AIDA_SESSION_PLUGIN_VERSION" "$own" "$AIDA_SESSION_PLUGIN_VERSION" >&2
+  printf 'This session started on AIDA %s, and this script runs from %s. The agents and hooks loaded at start may still be %s. A new session loads %s for both; then restart the current step.\n' \
+    "$AIDA_SESSION_PLUGIN_VERSION" "$own" "$AIDA_SESSION_PLUGIN_VERSION" "$own" >&2
   return 0
 }
 
