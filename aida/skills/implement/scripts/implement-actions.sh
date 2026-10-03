@@ -1411,7 +1411,7 @@ im_next_step() {
 # retake's freezeCommit until the freeze after the retake rewrites it, the predicate the
 # freeze's own exemption reads, so the line names the author and not a build against the
 # wrong test (live-run row 110).
-  local opens ids count i id file n recheck_route retake_pending entry halt
+  local opens ids count i id file n route recheck_route retake_pending entry halt
   opens='{}'
   recheck_route='{}'
   retake_pending='{}'
@@ -1429,17 +1429,23 @@ im_next_step() {
     opens="$(printf '%s' "$opens" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
     # The re-check route, when the recheck rows alone stopped the attempt. An attempt that
     # interface-record stopped is answered by amending the record first, so the route names its
-    # file, the brief's interfacePath (gap row 253).
+    # file, the brief's interfacePath (gap row 253). One that owned-files stopped is answered by a
+    # design that gives the order the file, taken in by start (gap row 315).
     file="$impl/build-$id.json"
     n=""
     if [ -f "$file" ]; then
       n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | if (stoppers | length > 0) and (outside_recheck | length == 0)
-        then (if (stoppers | index("interface-record")) != null then "interface" else "tools" end) else "" end' "$file" 2>/dev/null)"
+        then "recheck" + (if (stoppers | index("owned-files")) != null then " owned" else "" end)
+          + (if (stoppers | index("interface-record")) != null then " interface" else "" end) else "" end' "$file" 2>/dev/null)"
       case "$n" in
-        tools) n="build-recheck" ;;
-        interface)
-          n="$(jq -r '.interfacePath // ""' "$impl/brief-$id-build.json" 2>/dev/null)"
-          n="amend ${n:-the interface record} with the elements interface-record names, then build-recheck" ;;
+        recheck*)
+          route="build-recheck"
+          case "$n" in *owned*) route="add-owned-file, close design and start, then $route" ;; esac
+          case "$n" in *interface*)
+            n="$(jq -r '.interfacePath // ""' "$impl/brief-$id-build.json" 2>/dev/null)"
+            route="amend ${n:-the interface record} with the elements interface-record names, then $route" ;;
+          esac
+          n="$route" ;;
         *) n="" ;;
       esac
     fi
@@ -1448,7 +1454,7 @@ im_next_step() {
     entry="$(printf '%s' "$ledger" | jq -c --arg id "$id" '.orders[] | select(.id == $id)')"
     if [ "$(printf '%s' "$entry" | jq -r '.lastStep // ""')" = "fixed" ]; then
       file="$impl/fix-$id-$(printf '%s' "$entry" | jq -r '.roundsUsed // 0').json"
-      n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | if (stoppers | length > 0) and (outside_fix_recheck | length == 0)
+      n="$(jq -r "$BR_STOPPERS_JQ"'(.checks // []) | if (stoppers | length > 0) and (outside_recheck | length == 0)
         then "build-recheck" else "" end' "$file" 2>/dev/null)"
       halt="$(printf '%s' "$entry" | jq -r '.haltedBecause // ""')"
       [ -z "$halt" ] || [ "$(cap_halt_rechecks "$halt" "$(jq -c '.' "$impl/review-$id.json" 2>/dev/null)")" = "yes" ] || n=""
@@ -7710,20 +7716,19 @@ br_first_stopper() {
 # The checks that stopped a build attempt, as a jq function two readers prepend to their own
 # program: the selection br_first_stopper makes, with interface-record's unknown exempt, over a
 # record's own `checks`. `stoppers` is their ids; `outside_recheck` is those ids minus the three
-# tool rows and interface-record. A re-check answers an attempt only those rows stopped (live-run
-# row 87): a tool refusing a path is the plugin's fault, and an interface record is a record file
-# the builder amends without moving the code (gap row 253). A test or a suite failing is the
-# implementer's work. `outside_fix_recheck` is the same over a fix round, which has no interface
-# record. There owned-files may stop it too: the code is unchanged, so only a design that gave the
-# order the file, or a person's allowance, can make it pass (gap row 310).
+# tool rows, owned-files and interface-record. A re-check answers an attempt or a fix round only
+# those rows stopped (live-run row 87): a tool refusing a path is the plugin's fault, and an
+# interface record is a record file the builder amends without moving the code (gap row 253).
+# Owned-files on unchanged code passes only when a design gave the order the file, or a person
+# allowed it for a fix round, so a re-check is never a free retry (gap rows 310 and 315). A test or
+# a suite failing is the implementer's work. A fix round has no interface record.
 BR_STOPPERS_JQ='def stoppers:
   [ .[] | select(.verdict == "unmet"
                  or (.verdict == "unknown" and .id != "interface-record")
                  or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met")
                  or (.id == "confirm-at-review" and .verdict != "deferred"))
     | .id ];
-def outside_recheck: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security" and . != "interface-record"));
-def outside_fix_recheck: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security" and . != "owned-files"));
+def outside_recheck: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security" and . != "owned-files" and . != "interface-record"));
 '
 
 # The interface record's path, for `build-record` and `build-recheck`. $1 the action, $2 the unit
@@ -8556,7 +8561,8 @@ do_build_record() {
 # and its --interface, and none of its other record flags: the range and the report path are the
 # record's own. The interface record is read again from its file, because an attempt that
 # interface-record stopped is answered by amending that file, which moves no code (gap row 253).
-# It is not a free retry: an attempt a test or a suite stopped is the implementer's work, and it
+# An attempt owned-files stopped is answered by a design that gives the order the file, which
+# start takes into the snapshot this action reads (gap row 315). It is not a free retry: an attempt a test or a suite stopped is the implementer's work, and it
 # refuses (exit 88).
 # On an order whose last step is a fix round, it runs that round's seven checks again over the
 # round's own range instead (gap row 310). A round stopped by a broken environment, or by a file
@@ -8674,23 +8680,22 @@ do_build_recheck() {
   [ -n "$current_commit" ] \
     || die 3 "build-recheck: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
   # A fix round's own work is answered by the next round, or by a ruling at the cap.
-  local route="build" outside_def="outside_recheck" allowed_rows="the three tool rows or interface-record"
+  local route="build" allowed_rows="the three tool rows, owned-files or interface-record"
   if [ "$fix_round" != 0 ]; then
     route="the next fix round, or a ruling"
-    outside_def="outside_fix_recheck"
     allowed_rows="the three tool rows or owned-files"
   fi
   [ "$current_commit" = "$record_commit" ] \
     || die 88 "build-recheck: $RV_RANGE_NAME is at $current_commit and the record holds $record_name at $record_commit, so the code has moved since that ${record_name% *}. A re-check runs over the recorded range alone; the route is $route."
 
-  # --- exit 88, three: a check outside the tool rows and interface-record stopped the attempt,
+  # --- exit 88, three: a check outside the tool rows, owned-files and interface-record stopped the attempt,
   # which is the implementer's work to answer, so a re-check would be a free retry. An attempt
   # nothing stopped is past the build, and there is nothing to run again -------------------------
   local stoppers outside
   stoppers="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | stoppers | join(", ")')"
   [ -n "$stoppers" ] \
     || die 88 "build-recheck: $record_name at $unit_id passed its checks, so there is nothing to run again."
-  outside="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | '"$outside_def"' | join(", ")')"
+  outside="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | outside_recheck | join(", ")')"
   [ -z "$outside" ] \
     || die 88 "build-recheck: $record_name at $unit_id was stopped by $outside, which is not one of $allowed_rows. A re-check answers only a run those rows alone stopped; the route is $route."
 
