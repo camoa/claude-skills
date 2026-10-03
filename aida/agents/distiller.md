@@ -97,6 +97,10 @@ A sidecar from an earlier pass may exist. Read it before you write it, because t
 refuses to replace a file you have not read. A refused write leaves the old sidecar, and the
 stage then reads it as stale. Never report a write the tool refused.
 
+Write every sidecar the dispatch names, also when your judgement matches the old one. The stage
+dates your judgement by the time of that write. A sidecar you leave in place still reads as
+stale, however often the stage dispatches you.
+
 ## What you never do
 
 Edit the record, or write any file but the sidecars. Block anything: a gap is one advisory line the

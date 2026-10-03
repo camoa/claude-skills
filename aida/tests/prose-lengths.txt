@@ -3,7 +3,7 @@ agents/architecture-reviewer.md 186
 agents/catalog-identifier.md 126
 agents/design-critic.md 127
 agents/disposition-confirmer.md 61
-agents/distiller.md 106
+agents/distiller.md 110
 agents/split-advisor.md 66
 agents/fixer.md 74
 agents/implementer.md 126

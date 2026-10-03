@@ -712,7 +712,7 @@ distill_read() {
   [ -n "$stale" ] || stale="$(distill_stale "$task_folder" "$stage")" || exit $?
   if [ "$stale" = "yes" ]; then
     echo "standsAlone: stale"
-    echo "stale: $sidecar was written before the last change to the $stage records, so its gaps are not current. Dispatch the distiller for stage $stage again, then run this call again"
+    echo "stale: $sidecar was written before the last change to the $stage records, so its gaps are not current. Dispatch the distiller for stage $stage again. It writes the sidecar also when its judgement is unchanged, because only a new write clears this. Then run this call again"
     return 0
   fi
   sidecar_hash="$(distill_sha256 <"$sidecar")" || exit $?
