@@ -153,8 +153,8 @@ Repair that and the next attempt continues. Leave it and this unit of work stays
 say in plain words
 what the builder's report names. The person, or design, adds a file the unit needs:
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
-halt a started order. When `build-record` ran before `start`, owned-files read the old list.
-Run `build-recheck` after `start`. Unattended, run `build-record` as after any return. It halts the order
+halt a started order. `build-record` refuses while the order's owned or shared files in the
+design differ from the snapshot (exit 117), and spends no attempt. Run `start` first. Unattended, run `build-record` as after any return. It halts the order
 itself, so do not halt it again. A halted order records no attempt: `build-record` refuses it
 (exit 49) until the halt is cleared, except the deviation halt `--accept-deviation` answers. The next `start` sets aside what was left.
 
@@ -415,7 +415,8 @@ so an amended record is what the check reads. No implementer is dispatched and n
 spent. The `next:` line offers this route beside `build` when the last attempt was stopped by
 the tool rows, owned-files or interface-record alone. When interface-record is among them, the
 line names the record's file to amend first. When owned-files is among them, the line names
-`add-owned-file`, design `close` and `start` first. The re-check reads the order's owned files
+the steps still left before the re-check: `add-owned-file`, design `close` and `start`. It drops
+the steps the design or the snapshot already took after the attempt. The re-check reads the order's owned files
 from the snapshot that `start` refreshed. The same code fails again until the design gives the
 order the file.
 

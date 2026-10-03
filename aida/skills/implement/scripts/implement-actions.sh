@@ -804,6 +804,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      from. A build starts from tests-frozen, or from code-written to rebuild a failed attempt. The
 #      message names the step and what to run instead. Nothing is written.
 #
+# 117  `build-record` found the order's ownedFiles or sharedFiles in design/<id>.json different
+#      from the snapshot's copy. The route is design close, then start. No attempt is spent.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -1430,7 +1433,9 @@ im_next_step() {
     # The re-check route, when the recheck rows alone stopped the attempt. An attempt that
     # interface-record stopped is answered by amending the record first, so the route names its
     # file, the brief's interfacePath (gap row 253). One that owned-files stopped is answered by a
-    # design that gives the order the file, taken in by start (gap row 315).
+    # design that gives the order the file, taken in by start (gap row 315). build-record refuses
+    # a stale snapshot (exit 117), so the route names only the steps left after the record: none
+    # when the snapshot moved since, start when the design moved, all three otherwise.
     file="$impl/build-$id.json"
     n=""
     if [ -f "$file" ]; then
@@ -1440,7 +1445,16 @@ im_next_step() {
       case "$n" in
         recheck*)
           route="build-recheck"
-          case "$n" in *owned*) route="add-owned-file, close design and start, then $route" ;; esac
+          case "$n" in *owned*)
+            if [ "$(jq -r '.snapshotHash // ""' "$file")" = "$(printf '%s' "$snapshot" | jq -r '.hash // ""')" ]; then
+              if [ "$(jq -c '[(.ownedFiles // []), (.sharedFiles // [])]' "$impl/../design/$id.json" 2>/dev/null)" \
+                = "$(printf '%s' "$snapshot" | jq -c --arg id "$id" '.workOrders[] | select(.id == $id) | [(.ownedFiles // []), (.sharedFiles // [])]')" ]; then
+                route="add-owned-file, close design and start, then $route"
+              else
+                route="close design and start, then $route"
+              fi
+            fi ;;
+          esac
           case "$n" in *interface*)
             n="$(jq -r '.interfacePath // ""' "$impl/brief-$id-build.json" 2>/dev/null)"
             route="amend ${n:-the interface record} with the elements interface-record names, then $route" ;;
@@ -8285,6 +8299,16 @@ do_build_record() {
   [ -z "$accept" ] || br_halted="$(halt_segments_matching "$br_halted" "$(jq -cn --arg p "$BR_DEVIATION_PREFIX" '[$p]')" drop)"
   [ -z "$br_halted" ] \
     || die 49 "build-record: $unit_id is halted, so this step refuses. The ledger records the reason: $br_halted"
+  # Exit 117. The owned-files check reads the snapshot, so a design that widened the order after
+  # start would spend an attempt on a stale list (gap row 315). Only ownedFiles and sharedFiles
+  # are compared: findings and reasoning may grow mid-build (gap rows 226 and 227).
+  local br_live_files br_snap_files
+  if [ -f "$TASK_PATH/design/$unit_id.json" ]; then
+    br_live_files="$(jq -c '[(.ownedFiles // []), (.sharedFiles // [])]' "$TASK_PATH/design/$unit_id.json" 2>/dev/null)"
+    br_snap_files="$(printf '%s' "$UNIT_JSON" | jq -c '[(.ownedFiles // []), (.sharedFiles // [])]')"
+    [ -z "$br_live_files" ] || [ "$br_live_files" = "$br_snap_files" ] \
+      || die 117 "build-record: design/$unit_id.json lists other owned or shared files than the snapshot, so the owned-files check would read a stale list. Close design, run start, then run build-record again. No attempt was spent."
+  fi
 
   # --- the task's own project, through the one reader every step-five action already uses ---------
   # The range lives in the code worktree, or in the project folder for an order whose proof is
@@ -8460,6 +8484,7 @@ do_build_record() {
     --arg commit "$current_commit" --argjson attempt "$attempt_number" \
     --arg interfaceRecord "$interface_text" --arg reportPath "$report_path" \
     --argjson executed "$executed_count" --argjson accepted "${accepted_json:-null}" \
+    --arg snapshotHash "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash // ""')" \
     '{
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -8467,6 +8492,7 @@ do_build_record() {
       startedAt: $startedAt,
       commit: $commit,
       attempt: $attempt,
+      snapshotHash: $snapshotHash,
       interfaceRecord: $interfaceRecord,
       reportPath: $reportPath,
       checks: .,
@@ -8562,8 +8588,8 @@ do_build_record() {
 # record's own. The interface record is read again from its file, because an attempt that
 # interface-record stopped is answered by amending that file, which moves no code (gap row 253).
 # An attempt owned-files stopped is answered by a design that gives the order the file, which
-# start takes into the snapshot this action reads (gap row 315). It is not a free retry: an attempt a test or a suite stopped is the implementer's work, and it
-# refuses (exit 88).
+# start takes into the snapshot this action reads (gap row 315). It is not a free retry: an
+# attempt a test or a suite stopped is the implementer's work, and it refuses (exit 88).
 # On an order whose last step is a fix round, it runs that round's seven checks again over the
 # round's own range instead (gap row 310). A round stopped by a broken environment, or by a file
 # the design later gave the order, otherwise had no route but a person's ruling. The tool rows and
@@ -8688,9 +8714,9 @@ do_build_recheck() {
   [ "$current_commit" = "$record_commit" ] \
     || die 88 "build-recheck: $RV_RANGE_NAME is at $current_commit and the record holds $record_name at $record_commit, so the code has moved since that ${record_name% *}. A re-check runs over the recorded range alone; the route is $route."
 
-  # --- exit 88, three: a check outside the tool rows, owned-files and interface-record stopped the attempt,
-  # which is the implementer's work to answer, so a re-check would be a free retry. An attempt
-  # nothing stopped is past the build, and there is nothing to run again -------------------------
+  # --- exit 88, three: a check outside the tool rows, owned-files and interface-record stopped
+  # the attempt, which is the implementer's work to answer, so a re-check would be a free retry.
+  # An attempt nothing stopped is past the build, and there is nothing to run again ---------------
   local stoppers outside
   stoppers="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | stoppers | join(", ")')"
   [ -n "$stoppers" ] \
@@ -8765,7 +8791,8 @@ EOF_PATHS
   local today record_json
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -c --arg recheckedAt "$today" --argjson executed "$BR_EXECUTED" \
-    --arg interfaceRecord "$BR_INTERFACE_TEXT" --argjson fix "$fix_round" --slurpfile before "$record_file" '
+    --arg interfaceRecord "$BR_INTERFACE_TEXT" --argjson fix "$fix_round" --slurpfile before "$record_file" \
+    --arg snapshotHash "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash // ""')" '
     . as $new
     | $before[0]
     | .checksBefore = ((.checks // []) | map({id, verdict}))
@@ -8773,7 +8800,7 @@ EOF_PATHS
     | if $fix > 0 then . else
         (if $interfaceRecord != (.interfaceRecord // "")
          then .interfaceRecordBefore = (.interfaceRecordBefore // .interfaceRecord // "") else . end)
-        | .interfaceRecord = $interfaceRecord end
+        | .interfaceRecord = $interfaceRecord | .snapshotHash = $snapshotHash end
     | .executed = $executed
     | .decidingChecks = { total: 8, ranHere: [ $new[] | .id ] }
     | .recheckedAt = $recheckedAt' "$BR_CHECKS_FILE")"
