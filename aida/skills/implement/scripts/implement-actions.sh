@@ -450,8 +450,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  57  `verify-record` reached the round cap with an open finding no --ruling names. Each one needs
 #      a ruling and a reason before the order may close. Before the cap a ruling is taken only on a
 #      finding a fixer reported out of its scope (`scopeInsufficientInRound`), or on one whose fix
-#      scope is empty (gap row 265); any other is exit 3 with the findings that may be ruled now
-#      named (live-run row 110).
+#      scope is empty (gap row 265), or on any finding once a person kept the departure with
+#      `review-record --accept-deviation` (gap row 318); any other is exit 3 with the findings that
+#      may be ruled now named (live-run row 110).
 #  58  `verify-record`'s verdict file and this order's open findings do not correspond: a verdict is
 #      missing for an open finding, or a verdict names something that is not open on this order.
 #  59  `close` found open actionable findings on this order. An order closes with nothing open.
@@ -10676,7 +10677,8 @@ do_verify_record() {
 
   rv_load_state "verify-record" "$unit_id"
   # Rulings alone also follow `reviewed`, before any round, for a finding with an empty fix scope
-  # (gap row 265). rv_apply_rulings refuses any other finding there.
+  # (gap row 265), or any finding once a person kept the departure (gap row 318).
+  # rv_apply_rulings refuses any other finding there.
   if [ -n "$rulings_raw" ] && [ -z "$verdicts_path" ]; then
     rv_require_step "verify-record" "$unit_id" "reviewed fixed"
   else
@@ -10728,7 +10730,7 @@ do_verify_record() {
       RV_LEDGER_DOC="$ruled_ledger"
     fi
     if [ "$rounds_used" = "0" ]; then
-      rv_print_verification 0 "ruled before any fix round, because no round can change a finding with an empty fix scope" "${RV_RULING_HALT:-none}"
+      rv_print_verification 0 "ruled before any fix round" "${RV_RULING_HALT:-none}"
     else
       rv_print_verification "$rounds_used" "verified: round $rounds_used was already on the record, so its verdicts stand and the rulings were applied" "${RV_RULING_HALT:-none}"
     fi
@@ -10978,17 +10980,22 @@ RV_RULINGS
   # evidence that no round can reach it, so a second dispatch bought to hear it again is spent on
   # nothing (live-run row 110). And one whose fix scope is empty: it asks for no code change, so
   # no round can reach it either (gap row 265). Any other finding waits for the cap, as before.
-  rulable_now="$(printf '%s' "$updated_findings" | jq -r \
-    '[ .[] | select(.actionable == true and .status == "open" and (has("scopeInsufficientInRound") or ((.fixScope // []) | length == 0))) | .id ] | join(", ")')"
+  # Gap row 318: once a person kept the departure (deviationAccepted), every open finding may be
+  # ruled now, because a finding the reviewer did not mark may be that departure, and a fixer
+  # would undo what the person kept. The caller refuses an unattended ruling (exit 55).
+  local kept
+  kept="$(printf '%s' "$RV_REVIEW_DOC" | jq 'has("deviationAccepted")')"
+  rulable_now="$(printf '%s' "$updated_findings" | jq -r --argjson kept "${kept:-false}" \
+    '[ .[] | select(.actionable == true and .status == "open" and ($kept or has("scopeInsufficientInRound") or ((.fixScope // []) | length == 0))) | .id ] | join(", ")')"
   if [ -n "$rulings_raw" ] && [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ]; then
     early_ids="$(printf '%s' "$rulings_json" | jq -r '[ .[].id ] | join(", ")')"
-    early_ok="$(printf '%s' "$updated_findings" | jq -r --argjson r "$rulings_json" \
-      '[ $r[].id ] as $ids | [ .[] | select((has("scopeInsufficientInRound") or ((.fixScope // []) | length == 0)) and (.id as $i | $ids | index($i))) | .id ] | length == ($ids | length)')"
+    early_ok="$(printf '%s' "$updated_findings" | jq -r --argjson r "$rulings_json" --argjson kept "${kept:-false}" \
+      '[ $r[].id ] as $ids | [ .[] | select(($kept or has("scopeInsufficientInRound") or ((.fixScope // []) | length == 0)) and (.id as $i | $ids | index($i))) | .id ] | length == ($ids | length)')"
     if [ "$early_ok" != "true" ]; then
       if [ -n "$rulable_now" ]; then
-        die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. These findings may be ruled now, because a fixer reported them out of its scope or their fix scope is empty: $rulable_now. The ruling named: $early_ids."
+        die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. These findings may be ruled now, because a fixer reported them out of its scope, their fix scope is empty, or a person kept the departure: $rulable_now. The ruling named: $early_ids."
       fi
-      die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. No finding may be ruled now: no fixer has reported one out of its scope, and none has an empty fix scope."
+      die 3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. No finding may be ruled now: no fixer has reported one out of its scope, none has an empty fix scope, and no person kept a departure with review-record --accept-deviation."
     fi
   fi
   # A ruling with nothing left to rule on is refused rather than dropped. A caller who wrote one

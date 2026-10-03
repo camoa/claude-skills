@@ -127,9 +127,12 @@ reason.
 
 A departure that waits as `deviationPending` has its review record already. A person who keeps
 it before `finish` does not wait for the task review. Set the task interactive, then run
-`review-record` again with `--accept-deviation <their reason>`. The script writes the keep into
-that record and rules each marked finding `wrong`. Nothing is reviewed again, and no fix round
-runs. After `finish`, the script refuses (exit 50), and the task review takes the answer.
+`review-record` again with the same `--findings` and `--accept-deviation <their reason>`. The
+script writes the keep into that record and rules each marked finding `wrong`. Nothing is reviewed
+again. A finding the reviewer did not mark stays open. Once the record holds the keep, the person
+may rule any open finding with `verify-record --ruling`, before any fix round. Unattended, that
+ruling refuses (exit 55). Without a kept departure, it refuses a finding that has a fix scope
+(exit 3). After `finish`, the keep refuses (exit 50), and the task review takes the answer.
 
 An information item the reviewer marks `departsFromDesign` true is a note, not a finding. It never
 halts the order or the orders after it, in either run mode. `review-record` holds it as
