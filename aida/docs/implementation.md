@@ -486,7 +486,9 @@ An order has two fix rounds. At the cap, each finding still open needs a ruling 
 `wrong`, `deferred`, `load-bearing` or `test-wrong`, with a reason. The first two let the order
 close with the finding recorded, and the review stage judges a deferred one again. The third
 halts the order with the finding as the reason. It reaches you as an escalation, not a question
-with an obvious answer. Autonomous, the order halts instead.
+with an obvious answer. Autonomous, the order halts instead. A light task's order has one
+round, plus one repair round for that round's own breakage or for a scope you widen. The light
+section of `docs/run-modes.md` says how.
 
 A finding the fixer reported out of its scope may be ruled before the cap, at that round's
 verification. The fixer's report is the evidence that no round can reach it, so no second round

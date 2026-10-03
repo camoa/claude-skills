@@ -217,7 +217,10 @@ it proves. What light skips:
   review, who rules it there. An order with a medium or high finding still open after that round
   halts. A fix round that fails its own checks opens a finding for that check. It reads low for
   coding-standards alone, and medium for any other check. After that round the order
-  keeps its one-round cap even if you set the task interactive, so you rule at once. The
+  keeps its one-round cap even if you set the task interactive, so you rule at once. One
+  exception: the order gets one repair round, once. It takes new breakage that the fix round
+  made, unattended too. With you present, it also takes a finding the fixer reported out of its
+  scope, when you grant the files with `fix-brief --allow`. The
   implementer may build a fake off the demo path, marked in the code with `AIDA-FAKE:`.
 - **Review** runs no visual regression.
 

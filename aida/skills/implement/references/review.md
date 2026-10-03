@@ -201,14 +201,17 @@ file this order does not own. Only you can allow that. Allow the file and the fi
 it. Withhold it and the fixer reports the finding, and you rule on it after the round." Then
 name the finding and the files.
 
-**The repair round.** At the cap, an order gets one more round, once, for two kinds of open
+**The repair round.** At the cap, a light order gets one more round, once, for two kinds of open
 finding. The first is new breakage that the last round made. The fix caused it, so the order's own
 scope can repair it, and the round opens unattended too. The second is a finding that the last
 fixer reported scope-insufficient, when a person is present and grants paths with `--allow`. In
 that round `--allow` may name a path that no fix scope names, because the fixer's report names
-it. A path the order owns then joins the scope with no grant. `fix-brief` opens the round only when the round can take every open finding. The ledger
-records it, and the order's allowed rounds rise by one. Otherwise `fix-brief` refuses (exit 54),
-and the message names what to rule or allow first. A second repair round never opens.
+it. A path the order owns then joins the scope with no grant. A path another order owns
+refuses (exit 3). `fix-brief` opens the round only when the round can take every open finding.
+The ledger records it, and the order's allowed rounds rise by one. Otherwise `fix-brief`
+refuses (exit 54), and the message names what to rule or allow first. A second `fix-brief` call
+reuses the open repair round, so a mistyped `--allow` can be corrected. A second repair round
+never opens.
 
 Open the dispatch record before dispatching:
 ```

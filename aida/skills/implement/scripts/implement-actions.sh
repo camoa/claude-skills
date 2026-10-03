@@ -9370,9 +9370,11 @@ rv_require_round_verified() {
 # no ruling should have to settle. New breakage its last round made: the fix diff caused it, so
 # its own scope can repair it, and no person is needed. And, with a person present, a finding its
 # last fixer reported scope-insufficient: the person widens the scope with `fix-brief --allow`.
-# Prints the ids, comma-separated, or nothing once the order has had that round. $1 the findings
-# array, $2 the last round.
+# Light alone: a normal order's two rounds stay the cap, because rounds that repair the last
+# round's breakage do not converge. Prints the ids, comma-separated, or nothing once the order has
+# had that round. $1 the findings array, $2 the last round.
 rv_repair_round_ids() {
+  task_is_light "$TASK_PATH" || [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq '.lightRounds // false')" = "true" ] || return 0
   [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq '[ (.repairs // [])[] | select(has("round")) ] | length')" = "0" ] || return 0
   printf '%s' "$1" | jq -r --arg origin "round$2" --argjson r "$2" --arg mode "$RV_RUN_MODE" '
     [ .[] | select(.actionable == true and .status == "open"
@@ -9935,8 +9937,12 @@ do_fix_brief() {
   case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
   # Gap row 314. At the cap, the order's one repair round opens when it can take every open
   # finding. A finding the fixer reported scope-insufficient joins only with a person's --allow.
-  local findings_json repair_all="" repair_ids="" repair_rest repair_why
-  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
+  # A repair round already opened for this round keeps its findings, so a second call may correct
+  # a mistyped --allow.
+  local findings_json repair_all="" repair_ids repair_rest repair_why repair_new=""
+  repair_ids="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r --argjson r "$((rounds_used + 1))" \
+    '[ (.repairs // [])[] | select(.round == $r) | .findings[] ] | join(", ")')"
+  if [ -z "$repair_ids" ] && [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
     findings_json="$(printf '%s' "$RV_REVIEW_DOC" | jq -c '.findings // []')"
     repair_all="$(rv_repair_round_ids "$findings_json" "$rounds_used")"
     repair_ids="$repair_all"
@@ -9954,6 +9960,7 @@ do_fix_brief() {
       die 54 "fix-brief: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. $repair_why"
     fi
     FIX_ROUNDS_ALLOWED=$((FIX_ROUNDS_ALLOWED + 1))
+    repair_new=yes
   fi
   rv_require_round_verified "fix-brief" "$unit_id" "$rounds_used"
 
@@ -10002,7 +10009,7 @@ do_fix_brief() {
   # unless a person allows it here. An allow is a person's grant, so unattended refuses it
   # (exit 100). A path already owned needs no grant. A frozen test or a support file may never
   # be granted. A path no open finding names is a grant for nothing (exit 3, each).
-  local allowed_json='[]' granted_json='[]' ap ap_abs ap_owned tf fp frozen_list frozen_hit named
+  local allowed_json='[]' granted_json='[]' ap ap_abs ap_owned other tf fp frozen_list frozen_hit named
   [ -z "$allow_raw" ] || [ "$RV_RUN_MODE" != "autonomous" ] \
     || die 100 "fix-brief: --allow is a person's grant, and this run is unattended. Nobody is present to allow a path outside $unit_id's own files."
   # Every frozen test and support path of the task, the list the write hook reads.
@@ -10020,6 +10027,15 @@ do_fix_brief() {
     [ -n "$(rv_scope_outside "$(jq -nc --arg p "$ap" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] || ap_owned=yes
     [ -z "$ap_owned" ] || [ -n "$repair_ids" ] \
       || die 3 "fix-brief: --allow names $ap, which $unit_id already owns. A grant is for a path outside the order's own files."
+    if [ -n "$repair_ids" ]; then
+      while IFS= read -r other; do
+        [ -n "$other" ] || continue
+        [ -z "$(im_path_claim "${ap_abs#"$RV_CODEPATH"/}" "$other")" ] \
+          || die 3 "fix-brief: --allow names $ap, which $(printf '%s' "$other" | jq -r '.id') owns. A repair round may not change another order's file."
+      done <<FB_OTHERS
+$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" '.workOrders[] | select(.id != $u)')
+FB_OTHERS
+    fi
     frozen_hit=""
     while IFS= read -r fp; do
       [ -n "$fp" ] || continue
@@ -10062,7 +10078,7 @@ FB_ALLOW
   done
   scope_json="$(printf '%s' "$open_json" | jq -c --argjson a "$granted_json" '[ .[] | (.fixScope // [])[] as $p | select(.withheld | index($p) | not) | $p ] + $a | unique')"
 
-  if [ -n "$repair_ids" ]; then
+  if [ -n "$repair_new" ]; then
     local repair_ledger
     repair_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" --argjson round "$((rounds_used + 1))" \
       --arg ids "$repair_ids" --arg at "$(date -u +%Y-%m-%d)" '
@@ -11526,7 +11542,7 @@ FN_RECIPES
       commitRange: $range,
       suite: $suite,
       orders: [ ($ledger.orders // [])[] | {id: .id, commitRange: (.commitRange // ""), roundsUsed: (.roundsUsed // 0)}
-                + (if ((.repairs // []) | length) > 0 then {closedRanges: [ .repairs[] | .closedRange // empty ]} else {} end) ],
+                + (if ([ (.repairs // [])[] | select(has("by")) ] | length) > 0 then {closedRanges: [ .repairs[] | .closedRange // empty ]} else {} end) ],
       criteria: [ ($ledger.criteria // [])[] | . as $c
                   | {id: $c.id,
                      verifiedBy: (([ $kinds[] | select(.id == $c.id) ][0].verifiedBy) // ""),
