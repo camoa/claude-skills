@@ -716,10 +716,10 @@ distill_stale() {
 # calls it on a current sidecar. Review's close calls it for scope, when scope read current before
 # the close wrote its verdicts into the contract. $1 the task folder, $2 the stage.
 distill_stamp() {
-  local sidecar_hash records_hash
-  sidecar_hash="$(distill_sha256 <"$1/records/$2-distill.json")" || exit $?
-  records_hash="$(distill_records_hash "$1" "$2")" || exit $?
-  write_atomic "$1/records/$2-distill.stamp" \
+  local task_folder="$1" stage="$2" sidecar_hash records_hash
+  sidecar_hash="$(distill_sha256 <"$task_folder/records/$stage-distill.json")" || exit $?
+  records_hash="$(distill_records_hash "$task_folder" "$stage")" || exit $?
+  write_atomic "$task_folder/records/$stage-distill.stamp" \
     "$(jq -n --arg s "$sidecar_hash" --arg r "$records_hash" '{sidecar: $s, records: $r}')"
 }
 
