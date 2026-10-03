@@ -189,7 +189,7 @@
         "declaredDeparture": {
           "type": "boolean",
           "const": true,
-          "description": "The reviewer's mark: this finding is the departure the builder declared in its report or its interface record. Unattended, `review-record` makes the finding pending and lists it under deviationPending.findings, so no fixer undoes the departure before the person rules on it (gap row 316). Present only when the reviewer marked it."
+          "description": "The reviewer's mark: this finding is the departure the builder declared in its report or its interface record. Unattended, `review-record` makes the finding pending and lists it under deviationPending.findings, so no fixer undoes the departure before the person rules on it. When a person kept the departure, with `--accept-deviation` or at `build-record`, it is ruled wrong with their reason instead (gap row 316). Present only when the reviewer marked it."
         },
         "departureFrom": {
           "type": "string",

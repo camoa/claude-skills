@@ -9724,9 +9724,12 @@ do_review_record() {
   fi
   # Gap row 266. A person kept this line at build-record, so the review carries that answer and
   # does not ask again. A departure the reviewer finds is a new fact, and it still halts.
-  local build_accepted
+  # Gap row 316: a declared departure a person kept, here or at --accept-deviation below, rules the
+  # findings marked declaredDeparture wrong with the person's reason, so no fixer undoes it.
+  local build_accepted kept=""
   build_accepted="$(printf '%s' "$RV_BUILD_DOC" | jq -c '.deviationAccepted // null')"
-  [ -z "$departure" ] || [ "$departure" != "$(printf '%s' "$build_accepted" | jq -r '.departure // ""')" ] || departure=""
+  [ -z "$departure" ] || [ "$departure" != "$(printf '%s' "$build_accepted" | jq -r '.departure // ""')" ] \
+    || { departure=""; kept="$(printf '%s' "$build_accepted" | jq -r '.because')"; }
   local declared=""
   [ -z "$departure" ] || { declared=yes; halt_why="$RR_DEPARTURE_PREFIX, at line $departure_line of $departure_file"; }
   # Gap row 303. A recipe the reviewer answers departed, paired by `finding` with an actionable
@@ -9785,7 +9788,7 @@ do_review_record() {
     # record below holds it as deviationPending. Nothing halts. Gap row 316: an open actionable
     # finding the reviewer marks declaredDeparture is that same departure, so a fixer must not undo
     # it. It goes pending and waits with the departure; the other findings take the fix round.
-    if [ -n "$declared" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
+    if [ -n "$declared" ]; then
       findings_json="$(printf '%s' "$findings_json" | jq -c 'map(
         if .declaredDeparture == true and .actionable and .status == "open"
         then . + {status: "pending", pendingBecause: "it is the departure the builder declared, which the person decides at the task review"}
@@ -9798,6 +9801,13 @@ do_review_record() {
     [ -n "$departure_ledger" ] || die 3 "review-record: the halt on $unit_id could not be written."
     write_atomic "$RV_LEDGER_FILE" "$departure_ledger"
     die 107 "review-record: $unit_id is halted for design drift. A departure from the design is named in $departure_file: $departure. What is wrong is the design, or a recipe it relies on, so no fixer can repair it, and no review record is written. Amend the order in design and close design, then run restart to rebuild the order. Or, interactive only, a person accepts the departure: run review-record again with --accept-deviation <their reason>."
+  fi
+
+  [ -z "$declared" ] || [ -z "$accept" ] || kept="$accept"
+  if [ -n "$kept" ]; then
+    findings_json="$(printf '%s' "$findings_json" | jq -c --arg why "the person kept the departure the builder declared: $kept" 'map(
+      if .declaredDeparture == true and .actionable and .status == "open"
+      then . + {status: "ruled", ruling: "wrong", rulingReason: $why} else . end)')"
   fi
 
   local today record_json
@@ -11262,7 +11272,8 @@ CLOSE_FAKES
                        judgedBy: ("judgedBy=" + (([ (.judgements // [])[] | .judgedBy ] | unique) | if length == 0 then "nobody" else join(",") end))} ],
        rowsJudgedByModel: (([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
                            + ([ (.orders // [])[] | select(.doneWhenJudgement.judgedBy == "model") ] | length)),
-       pendingForReview: ([ ($review.findings // [])[] | select(.status == "pending") | .id ]
+       pendingForReview: (($review.deviationPending.findings // []) as $w
+                          | [ ($review.findings // [])[] | select(.status == "pending" and (.id as $i | $w | index($i) | not)) | .id ]
                           + (if $review | has("deviationPending") then ["departure"] else [] end)),
        ledger: $ledger,
        next: $next}')"
@@ -11517,7 +11528,9 @@ FN_RECIPES
                                  else "a light task allows one fix round, and it is spent" end)} ]
                 + [ $doc.deviationPending // empty
                     | {unit: $unit, kind: "departure", text: (.departure + ", in " + .file
-                        + (if has("findings") then "; the review findings " + (.findings | join(", ")) + " are this departure, and a rebuild answers them" else "" end))} ]')"
+                        + (if has("findings") then "; the review findings that are this departure, which a rebuild answers: "
+                             + ([ ($doc.findings // [])[] | select(.id as $i | $withDeparture | index($i))
+                                  | "\(.id) (\(.severity)): \(.evidence)" ] | join("; ")) else "" end))} ]')"
     fi
     oi=$((oi + 1))
   done

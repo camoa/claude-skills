@@ -121,7 +121,9 @@ halts: `review-record` writes the record with the departure as `deviationPending
 `departurePending:` line, and the order goes on as below. A finding the reviewer marks
 `declaredDeparture` is that same departure. It goes `pending` and waits with the departure, so no
 fixer undoes it. The task review lists it in the departure's decision. A `rebuild` answer there
-answers it too. The other findings take the fix round.
+answers it too. The other findings take the fix round. When a person keeps the departure, with
+`--accept-deviation` here or at `build-record`, each marked finding is ruled `wrong` with their
+reason.
 
 An information item the reviewer marks `departsFromDesign` true is a note, not a finding. It never
 halts the order or the orders after it, in either run mode. `review-record` holds it as
