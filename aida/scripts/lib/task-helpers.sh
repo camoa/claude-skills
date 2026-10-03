@@ -53,6 +53,7 @@
 #                                         on stderr and returns when it cannot commit
 #   distill_read <folder> <stage>         reads the stage's distill sidecar and prints its verdict
 #   distill_deferred <stage>              prints the line a light task's scope or research distill shows
+#   distill_stamp <folder> <stage>        writes the stage's stamp: the sidecar and records hashes
 #   sidecar_set_aside <path>              moves a malformed sidecar aside, dated, and says where
 #   task_tree_from_git <folder> <code> <action>
 #                                         prints the registered worktree carrying the task's
@@ -687,6 +688,17 @@ distill_stale() {
   if [ -n "$newer" ]; then echo yes; else echo no; fi
 }
 
+# Writes records/<stage>-distill.stamp: the sidecar's sha256 and the records hash. distill_read
+# calls it on a current sidecar. Review's close calls it for scope, when scope read current before
+# the close wrote its verdicts into the contract. $1 the task folder, $2 the stage.
+distill_stamp() {
+  local sidecar_hash records_hash
+  sidecar_hash="$(distill_sha256 <"$1/records/$2-distill.json")" || exit $?
+  records_hash="$(distill_records_hash "$1" "$2")" || exit $?
+  write_atomic "$1/records/$2-distill.stamp" \
+    "$(jq -n --arg s "$sidecar_hash" --arg r "$records_hash" '{sidecar: $s, records: $r}')"
+}
+
 # Reads the sidecar the distiller wrote for one stage, records/<stage>-distill.json
 # (agents/distiller.md), and prints `standsAlone:` and one `gap:` line per gap. The check never
 # blocks, so every value exits 0. schema-check.sh is sourced here because no stage script sources
@@ -695,7 +707,7 @@ distill_stale() {
 # says. $1 the canonical task folder, $2 the stage, $3 optional, the answer distill_stale gave
 # before the caller wrote its records.
 distill_read() {
-  local task_folder="$1" stage="$2" stale="${3:-}" sidecar schema result faults sidecar_hash records_hash
+  local task_folder="$1" stage="$2" stale="${3:-}" sidecar schema result faults
   sidecar="$task_folder/records/$stage-distill.json"
   schema="${PLUGIN_ROOT}/scripts/distill-schema.json"
   [ -f "$sidecar" ] || die2 "distill: no sidecar at $sidecar. Dispatch the distiller first"
@@ -715,10 +727,7 @@ distill_read() {
     echo "stale: $sidecar was written before the last change to the $stage records, so its gaps are not current. Dispatch the distiller for stage $stage again. It writes the sidecar also when its judgement is unchanged, because only a new write clears this. Then run this call again"
     return 0
   fi
-  sidecar_hash="$(distill_sha256 <"$sidecar")" || exit $?
-  records_hash="$(distill_records_hash "$task_folder" "$stage")" || exit $?
-  write_atomic "$task_folder/records/$stage-distill.stamp" \
-    "$(jq -n --arg s "$sidecar_hash" --arg r "$records_hash" '{sidecar: $s, records: $r}')"
+  distill_stamp "$task_folder" "$stage"
   echo "standsAlone: $(jq -r '.standsAlone' "$sidecar")"
   jq -r '.gaps[] | "gap: " + .' "$sidecar"
 }

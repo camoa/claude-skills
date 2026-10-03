@@ -94,7 +94,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/records-hash.sh  sourced, for the one decision about which
 #                                                      sha256 tool exists.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh  sourced, for resolve_task_folder,
-#                                                      write_atomic, looks_like_flag and is_blank.
+#                                                      write_atomic, looks_like_flag, is_blank,
+#                                                      distill_stale and distill_stamp.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/schema-check.sh  sourced. Every record write is compared
 #                                                      against review-schema.json before it lands.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/surfaces.sh      sourced. The surface file reader the
@@ -2953,8 +2954,10 @@ RW_ROWS
 
   # The one field review writes into the contract. The hash covers the whole file, so the next
   # `start` reports the contract as changed; that drift is review's own, and the report says so.
-  local live_state written missing_ids new_alignment
+  # A scope sidecar that read current before this write keeps its stamp (gap row 313).
+  local live_state written missing_ids new_alignment scope_stale
   written=0; missing_ids=""
+  scope_stale="$(distill_stale "$TASK_PATH" scope)" || exit $?
   live_state="$(json_file_state "$ALIGNMENT_FILE")"
   if [ "$live_state" = "ok" ]; then
     new_alignment="$(jq -c --argjson rows "$criteria_json" '
@@ -2964,6 +2967,9 @@ RW_ROWS
     if [ -n "$new_alignment" ]; then
       write_atomic "$ALIGNMENT_FILE" "$new_alignment"
       written="$(printf '%s' "$new_alignment" | jq '[ (.criteria // [])[] ] | length')"
+      if [ "$scope_stale" = no ] && [ -f "$TASK_PATH/records/scope-distill.json" ]; then
+        distill_stamp "$TASK_PATH" scope
+      fi
     fi
     missing_ids="$(jq -nr --argjson rows "$criteria_json" --slurpfile live "$ALIGNMENT_FILE" '
       [ $rows[] | . as $r | select(((($live[0].criteria // []) | map(.id)) | index($r.id)) == null) | .id ] | join(", ")')"
