@@ -6,7 +6,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # commands that throw work away or publish it, before they run. The list is version 5's, from
 # block-dangerous-commands.sh. Any `git push`, a force push, a hard reset, `git clean`,
 # `git branch -D`, and a checkout or restore of the whole working tree. A recursive delete of
-# root, the home directory, the working directory, or a folder above them. Plain `git push` stays
+# root, the home directory, the working directory, or a folder above them. A recursive delete of
+# the session scratchpad, a folder above it, or a glob directly under it: the orchestrator and every
+# agent keep files there (live-run row 317). The platform's `scratchpad_dir` names it, and without
+# it this rule is off. A folder of an agent's own under the scratchpad passes. Plain `git push` stays
 # refused because version 6 never publishes: completion writes the pull request body and a person
 # pushes. `gh repo sync`, `gh pr merge`, and a `gh api` call that changes a ref or a file on a
 # branch publish too, so they are refused as well.
@@ -92,6 +95,9 @@ TOOL="$(jq -r '.tool_name // empty' <<<"$INPUT" 2>/dev/null)"
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
 CWD_REAL="$(cd "$CWD" 2>/dev/null && pwd -P)"
+SCRATCH="$(jq -r '.scratchpad_dir // empty' <<<"$INPUT" 2>/dev/null)"
+case "$SCRATCH" in /*) ;; *) SCRATCH="" ;; esac
+SCRATCH_REAL="$(cd "$SCRATCH" 2>/dev/null && pwd -P)"
 
 deny() {
   jq -nc --arg r "deny-destructive-commands: refused, because the command $1. Run it yourself if you mean it. AIDA_ALLOW_DANGEROUS=1 in the shell that launched this session turns this hook off." \
@@ -414,9 +420,10 @@ SEGMENTS
   return 1
 }
 
-# True when recursive-delete target $1 is root, home, the working directory, or above them.
+# True when recursive-delete target $1 is root, home, the working directory, the scratchpad, or
+# above them, or a glob directly under the scratchpad.
 deletes_home_or_cwd() {
-  local r="$1" abs real base
+  local r="$1" abs real base dir
   case "$r" in
     /|/\*|\~|\~/|\~/\*|.|./|./\*|\*|..|../) return 0 ;;
     '$HOME'|'$HOME/'|'$HOME/*'|'${HOME}'|'${HOME}/'|'$PWD'|'$PWD/'|'$(pwd)'|'$(pwd)/') return 0 ;;
@@ -429,11 +436,20 @@ deletes_home_or_cwd() {
     '$PWD'*) r="$CWD${r#\$PWD}" ;;
     '$(pwd)'*) r="$CWD${r#\$(pwd)}" ;;
   esac
+  if [ -n "$SCRATCH" ]; then
+    case "${r##*/}" in
+      *[\*\?\[]*)
+        case "$r" in */*) dir="${r%/*}" ;; *) dir=. ;; esac
+        dir="$(normalize_abs "$(resolve_against "${dir:-/}" "$CWD")")"
+        [ "$dir" = "$(normalize_abs "$SCRATCH")" ] && return 0
+        [ -z "$SCRATCH_REAL" ] || [ "$(cd "$dir" 2>/dev/null && pwd -P)" != "$SCRATCH_REAL" ] || return 0 ;;
+    esac
+  fi
   r="${r%/\*}"
   case "$r" in *'$'*|*'`'*|*'*'*|*'?'*|'') return 1 ;; esac
   abs="$(normalize_abs "$(resolve_against "$r" "$CWD")")"
   real="$(cd "$abs" 2>/dev/null && pwd -P)"
-  for base in "$HOME" "$CWD" "$CWD_REAL" "$(cd "$HOME" 2>/dev/null && pwd -P)"; do
+  for base in "$HOME" "$CWD" "$CWD_REAL" "$(cd "$HOME" 2>/dev/null && pwd -P)" "$SCRATCH" "$SCRATCH_REAL"; do
     [ -n "$base" ] || continue
     base="$(normalize_abs "$base")"
     is_under "$base" "$abs" && return 0
@@ -531,7 +547,7 @@ rules() {
 $(printf '%s\n' "$t" | grep -E -e "${GIT}restore$ARGS +(\.|\./|:/)$END")
 RESTORE
   if [ "$HAVE_TEXT" = true ] && recursive_delete "$q"; then
-    REASON="deletes root, the home directory, the working directory, or a folder above them, recursively"; return 0
+    REASON="deletes root, the home directory, the working directory, the session scratchpad, a folder above one of them, or a glob directly under the scratchpad, recursively. Make a folder of your own under the scratchpad and delete only that folder"; return 0
   fi
   hit "$t" "${GH}repo +sync$END" && { REASON="runs gh repo sync, which publishes to a remote branch"; return 0; }
   hit "$t" "${GH}pr +merge$END" && { REASON="runs gh pr merge, which publishes to the base branch"; return 0; }
