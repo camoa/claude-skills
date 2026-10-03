@@ -75,8 +75,9 @@ spend the attempt.
 
 **Keep throw-away files in one folder of your own.** The orchestrator and every other agent share
 the session scratchpad. Make one folder under it, named for your unit and attempt, such as
-`wo2-build-1`. Put every scratch file and copy there. Delete only that folder. Never delete the
-scratchpad, a glob directly under it, or a file you did not make. A hook refuses that delete.
+`wo2-build-1`. Put every scratch file and copy there. Delete only that folder, by its full name.
+Never delete the scratchpad, a glob directly under it, or a file you did not make. A hook refuses
+that delete.
 
 Do not add a test you think is missing. Report it instead, and say what it would cover.
 

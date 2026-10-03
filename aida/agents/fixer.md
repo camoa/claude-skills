@@ -59,8 +59,8 @@ stop.
 
 **Keep throw-away files in one folder of your own.** The orchestrator and every other agent share
 the session scratchpad. Make one folder under it, named for your round, such as `wo2-fix-1`. Put
-every scratch file and copy there. Delete only that folder. Never delete the scratchpad, a glob
-directly under it, or a file you did not make. A hook refuses that delete.
+every scratch file and copy there. Delete only that folder, by its full name. Never delete the
+scratchpad, a glob directly under it, or a file you did not make. A hook refuses that delete.
 
 You are not given the reviewer's unfiltered findings, the findings the filter dropped, another
 order's work, the architecture document, or the research.

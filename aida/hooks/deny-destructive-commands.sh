@@ -35,6 +35,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # - A git alias set in the same command, by `git config` in any scope or by an inline
 #   `-c alias.*=`. It is refused when its value is a refused command, or starts with push or
 #   clean, or is a bare reset. An alias set earlier is not read.
+# - A recursive delete that starts the text of `bash -c '...'`, or of another shell's `-c`.
 # - A command that runs a file: `bash`, `sh`, `zsh`, `dash`, `ksh`, `source` or `.` with a path,
 #   or a command word with a slash that names an executable file. The first 256 KiB of the file
 #   go through the same rules, three files deep. A file with a NUL byte is a binary, and is not
@@ -98,6 +99,7 @@ CWD_REAL="$(cd "$CWD" 2>/dev/null && pwd -P)"
 SCRATCH="$(jq -r '.scratchpad_dir // empty' <<<"$INPUT" 2>/dev/null)"
 case "$SCRATCH" in /*) ;; *) SCRATCH="" ;; esac
 SCRATCH_REAL="$(cd "$SCRATCH" 2>/dev/null && pwd -P)"
+SCRATCH_HIT=false
 
 deny() {
   jq -nc --arg r "deny-destructive-commands: refused, because the command $1. Run it yourself if you mean it. AIDA_ALLOW_DANGEROUS=1 in the shell that launched this session turns this hook off." \
@@ -421,9 +423,11 @@ SEGMENTS
 }
 
 # True when recursive-delete target $1 is root, home, the working directory, the scratchpad, or
-# above them, or a glob directly under the scratchpad.
+# above them, or a glob directly under the scratchpad. Sets SCRATCH_HIT to true when the scratchpad
+# is what it names.
 deletes_home_or_cwd() {
   local r="$1" abs real base dir
+  SCRATCH_HIT=false
   case "$r" in
     /|/\*|\~|\~/|\~/\*|.|./|./\*|\*|..|../) return 0 ;;
     '$HOME'|'$HOME/'|'$HOME/*'|'${HOME}'|'${HOME}/'|'$PWD'|'$PWD/'|'$(pwd)'|'$(pwd)/') return 0 ;;
@@ -441,8 +445,8 @@ deletes_home_or_cwd() {
       *[\*\?\[]*)
         case "$r" in */*) dir="${r%/*}" ;; *) dir=. ;; esac
         dir="$(normalize_abs "$(resolve_against "${dir:-/}" "$CWD")")"
-        [ "$dir" = "$(normalize_abs "$SCRATCH")" ] && return 0
-        [ -z "$SCRATCH_REAL" ] || [ "$(cd "$dir" 2>/dev/null && pwd -P)" != "$SCRATCH_REAL" ] || return 0 ;;
+        [ "$dir" = "$(normalize_abs "$SCRATCH")" ] && { SCRATCH_HIT=true; return 0; }
+        [ -z "$SCRATCH_REAL" ] || [ "$(cd "$dir" 2>/dev/null && pwd -P)" != "$SCRATCH_REAL" ] || { SCRATCH_HIT=true; return 0; } ;;
     esac
   fi
   r="${r%/\*}"
@@ -451,6 +455,8 @@ deletes_home_or_cwd() {
   real="$(cd "$abs" 2>/dev/null && pwd -P)"
   for base in "$HOME" "$CWD" "$CWD_REAL" "$(cd "$HOME" 2>/dev/null && pwd -P)" "$SCRATCH" "$SCRATCH_REAL"; do
     [ -n "$base" ] || continue
+    # The scratchpad's two forms come last, so a hit from here on names the scratchpad.
+    [ "$base" != "$SCRATCH" ] && [ "$base" != "$SCRATCH_REAL" ] || SCRATCH_HIT=true
     base="$(normalize_abs "$base")"
     is_under "$base" "$abs" && return 0
     [ -z "$real" ] || ! is_under "$base" "$real" || return 0
@@ -460,10 +466,25 @@ deletes_home_or_cwd() {
 
 # True when a segment of normalised text $1 is a recursive rm of a target deletes_home_or_cwd names.
 recursive_delete() {
-  local seg word recursive targets done_opts t
+  local seg word recursive targets done_opts t j
   while IFS= read -r seg; do
     set -f; read_words "$seg"; set +f
     skip_wrappers
+    # A shell's -c text is a command line of its own, so its first word is a command word. The
+    # options are skipped the way scan_runs skips them.
+    case "${w[$I]:-}" in
+      bash|sh|zsh|dash|ksh)
+        j=$((I + 1))
+        while [ "$j" -lt "${#w[@]}" ]; do
+          case "${w[$j]}" in
+            -o|+o) j=$((j + 2)) ;;
+            --*) j=$((j + 1)) ;;
+            -*c*) I=$((j + 1)); break ;;
+            -*) j=$((j + 1)) ;;
+            *) break ;;
+          esac
+        done ;;
+    esac
     [ "$I" -lt "${#w[@]}" ] || continue
     case "${w[$I]}" in rm|*/rm) ;; *) continue ;; esac
     recursive=false; targets=""; done_opts=false
@@ -547,7 +568,12 @@ rules() {
 $(printf '%s\n' "$t" | grep -E -e "${GIT}restore$ARGS +(\.|\./|:/)$END")
 RESTORE
   if [ "$HAVE_TEXT" = true ] && recursive_delete "$q"; then
-    REASON="deletes root, the home directory, the working directory, the session scratchpad, a folder above one of them, or a glob directly under the scratchpad, recursively. Make a folder of your own under the scratchpad and delete only that folder"; return 0
+    if [ "$SCRATCH_HIT" = true ]; then
+      REASON="deletes the session scratchpad, a folder above it, or a glob directly under it, recursively. Make one folder of your own under the scratchpad, and delete only that folder by its full name"
+    else
+      REASON="deletes root, the home directory, the working directory, or a folder above them, recursively"
+    fi
+    return 0
   fi
   hit "$t" "${GH}repo +sync$END" && { REASON="runs gh repo sync, which publishes to a remote branch"; return 0; }
   hit "$t" "${GH}pr +merge$END" && { REASON="runs gh pr merge, which publishes to the base branch"; return 0; }
