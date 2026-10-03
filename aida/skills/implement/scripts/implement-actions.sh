@@ -418,7 +418,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      halted order records no attempt; --accept-deviation lets the deviation's own halt through.
 #  50  a review record already exists for this order, and an order gets one review, ever
 #      (ideal/implementation.md, 'One review per order'). `review-brief` refuses to hand over a
-#      second brief and `review-record` refuses to write a second record.
+#      second brief and `review-record` refuses to write a second record. Interactive,
+#      `review-record --accept-deviation` on a record whose departure waits as deviationPending
+#      writes the person's keep into that record instead; after finish it refuses (gap row 318).
 #  51  `review-record` found the code repository is not where the build record left it: HEAD moved,
 #      or the working tree is dirty. The reviewer holds Write for one purpose, its own findings
 #      file under the task folder, and this is the check that enforces it. A probe test left inside
@@ -9629,6 +9631,35 @@ do_review_record() {
          state: "reviewed: the record was already written and the ledger had not moved, so nothing was reviewed twice",
          halt: "none", record: $record, next: $next}')"
       echo "REVIEW-RECORD: $review_file was already written at $rr_commit and the ledger had not moved. The ledger now reads reviewed; nothing was reviewed twice." >&2
+      exit 0
+    fi
+    # Gap row 318. A departure that waits as deviationPending already has its review record, so a
+    # person's keep lands in that record and nothing is reviewed again. The findings it lists are
+    # that departure, so each is ruled wrong with the person's reason. Once finish has carried the
+    # departure into finished.json, the task review answers it there.
+    if [ -n "$accept" ] && [ "$(printf '%s' "$rr_doc" | jq 'has("deviationPending")' 2>/dev/null)" = "true" ]; then
+      [ ! -f "$IMPL_DIR/finished.json" ] \
+        || die 50 "review-record: finish has carried the departure of $unit_id to the task review, so the person keeps it there, with close --row decision-$unit_id-departure=keep. Nothing is written."
+      local kept_doc kept_ledger
+      kept_doc="$(printf '%s' "$rr_doc" | jq -c --arg why "$accept" '
+        .deviationPending as $p
+        | .findings = [ .findings[] | if .status == "pending" and (.id as $i | ($p.findings // []) | index($i)) != null
+            then del(.pendingBecause) + {status: "ruled", ruling: "wrong", rulingReason: ("the person kept the departure the builder declared: " + $why)}
+            else . end ]
+        | .deviationAccepted = {departure: $p.departure, file: $p.file, because: $why}
+        | del(.deviationPending)')"
+      [ -n "$kept_doc" ] || die 3 "review-record: the kept departure of $unit_id could not be written."
+      kept_ledger="$(accept_deviation_in "$RV_LEDGER_DOC" "$unit_id" "$RR_DEPARTURE_PREFIXES" \
+        "the departure waited for the task review: $(printf '%s' "$rr_doc" | jq -r '.deviationPending.departure')" "$accept")"
+      [ -n "$kept_ledger" ] || die 3 "review-record: the ledger update for $unit_id failed."
+      write_atomic "$review_file" "$kept_doc"
+      write_atomic "$RV_LEDGER_FILE" "$kept_ledger"
+      im_print_summary "review-record" "$(printf '%s' "$kept_doc" | jq -c --arg record "$review_file" \
+        --argjson waited "$(printf '%s' "$rr_doc" | jq -c '.deviationPending.findings // []')" \
+        --arg next "$(im_next_step "$kept_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+        {order: .unit, departureAccepted: .deviationAccepted.because, ruledWrong: $waited,
+         openActionable: ([ .findings[] | select(.actionable == true and .status == "open") | .id ]),
+         record: $record, next: $next}')"
       exit 0
     fi
     die 50 "review-record: $review_file already exists, so $unit_id has been reviewed. One order gets one review, ever."

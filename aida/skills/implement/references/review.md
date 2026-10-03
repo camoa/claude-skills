@@ -125,14 +125,20 @@ answers it too. The other findings take the fix round. When a person keeps the d
 `--accept-deviation` here or at `build-record`, each marked finding is ruled `wrong` with their
 reason.
 
+A departure that waits as `deviationPending` has its review record already. A person who keeps
+it before `finish` does not wait for the task review. Set the task interactive, then run
+`review-record` again with `--accept-deviation <their reason>`. The script writes the keep into
+that record and rules each marked finding `wrong`. Nothing is reviewed again, and no fix round
+runs. After `finish`, the script refuses (exit 50), and the task review takes the answer.
+
 An information item the reviewer marks `departsFromDesign` true is a note, not a finding. It never
 halts the order or the orders after it, in either run mode. `review-record` holds it as
 `deviationPending` and prints a `departurePending:` line. The person decides it at the task
 review: keep it or rebuild. It waits only when no departure above was found, so it never hides one.
 The record holds one departure. So when a departure above was found, the item is not put to the
 person; it stays in the record's `information` list only. A person present may keep the item at
-once with `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger
-hold the reason, though the order never halted.
+once, by the route above. The review record and `haltsCleared` in the ledger hold the reason,
+though the order never halted.
 
 Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
 clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,
