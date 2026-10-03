@@ -354,6 +354,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      of one task is serial, so a task has at most one active dispatch. The message names the
 #      role and unit that hold it, and its age when it opened over a day ago (live-run row 139).
 #      Another task's open record does not refuse this one. `dispatch-close` clears it.
+#      `build-record` and `fix-record` refuse the same way while a record for their order is open:
+#      its role has not finished, and a later commit would leave the recorded range (gap row 312).
 #  38  `build-brief` was given a unit id that is not in the frozen snapshot. The same fact exit 22
 #      already names for `tests-brief` and `tests-freeze`; `build-brief` shares the number rather
 #      than minting a second one for the same meaning.
@@ -8241,6 +8243,7 @@ do_build_record() {
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
+  im_refuse_open_dispatch "build-record" "$unit_id"
   [ -z "$accept" ] || fn_require_interactive "build-record" "keeping a deviation the builder declared"
 
   tt_load_snapshot "build-record"
@@ -10109,6 +10112,7 @@ do_fix_record() {
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
+  im_refuse_open_dispatch "fix-record" "$unit_id"
 
   rv_load_state "fix-record" "$unit_id"
   rv_require_step "fix-record" "$unit_id" "reviewed fixed"
@@ -10304,16 +10308,6 @@ RV_SCOPE
   rm -f "$seven_file"
   [ -n "$record_json" ] || die 3 "fix-record: could not assemble the record for $unit_id."
   write_atomic "$record_file" "$record_json"
-
-  # This record accepts the report the open fixer record pins, so that fixer did return one. Its
-  # resume count goes, and a second dispatch-close cannot halt the order as a second stop (gap
-  # row 307). Another role's record, or one pinning another file, keeps its count.
-  local fr_dispatch="$IMPL_DIR/dispatch.json" fr_pinned
-  fr_pinned="$(jq -r --arg u "$unit_id" 'select((.role // "" | split(":") | last) == "fixer" and .unit == $u)
-    | .reportPath // ""' "$fr_dispatch" 2>/dev/null)"
-  if [ -n "$fr_pinned" ] && [ "$fr_pinned" -ef "$report_path" ]; then
-    write_atomic "$fr_dispatch" "$(jq -c 'del(.resumes, .resumedAt)' "$fr_dispatch")"
-  fi
 
   # A fixer does not widen its own scope. It reports instead, and the report is consumed here
   # (ideal/implementation.md, the unattended-answers table, "A fixer reporting its scope is too
@@ -12451,6 +12445,16 @@ im_refuse_unneeded_role() {
     *" $1 "*) ;;
     *) die 102 "dispatch-open: $2 is proved by its $(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$2" '[ .workOrders[] | select(.id == $u) ][0].proof // "tests"'), so it needs only these roles: $BR_ORDER_ROLES. A $1 here would have nothing to judge. Read the roles on the order's line in \`read\`." ;;
   esac
+}
+
+# Exit 37 at a record step. A record open for the order means its role has not finished: a resumed
+# role commits again, and the range a record wrote first no longer reaches HEAD (gap row 312). $1
+# the action's own name, $2 the order id. IMPL_DIR is set.
+im_refuse_open_dispatch() {
+  local od_role
+  od_role="$(jq -r --arg u "$2" 'select(.unit == $u) | .role // "" | split(":") | last' "$IMPL_DIR/dispatch.json" 2>/dev/null)"
+  [ -z "$od_role" ] \
+    || die 37 "$1: the $od_role record for $2 is still open in $IMPL_DIR/dispatch.json, so the $od_role has not finished. Resume it as dispatch-close said, run dispatch-close again, then run $1. Nothing is written."
 }
 
 do_dispatch_open() {
