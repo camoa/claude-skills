@@ -435,13 +435,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      exits 0: the person rules it at the task review (gap row 279).
 #  54  `fix-brief` or `fix-record` found this order's fix rounds already spent (roundsUsed at
 #      FIX_ROUNDS_ALLOWED). Every open finding needs a ruling now, not another round. The mirror of
-#      exit 41 for the build attempts.
+#      exit 41 for the build attempts. The one exception is the order's one repair round, which
+#      `fix-brief` opens when it can take every open finding, and the message names what blocks it
+#      (gap row 314).
 #  55  `verify-record` was given a --ruling on an unattended run. A ruling is a person's judgement,
 #      and an unattended run has none to offer (decision 12).
 #  56  `verify-record` reached the round cap on an unattended run with findings still open. The
 #      order is halted with them named, and the verification itself is recorded first, so a refusal
 #      never throws away the verdicts it already read. On a light task a low finding goes pending
-#      instead, and the person rules it at the task review (gap row 296).
+#      instead, and the person rules it at the task review (gap row 296). A finding the repair round
+#      may take neither halts here nor needs a ruling at exit 57 (gap row 314).
 #  57  `verify-record` reached the round cap with an open finding no --ruling names. Each one needs
 #      a ruling and a reason before the order may close. Before the cap a ruling is taken only on a
 #      finding a fixer reported out of its scope (`scopeInsufficientInRound`), or on one whose fix
@@ -942,7 +945,8 @@ FIX_ROUNDS_ALLOWED=2
 # The fix rounds one order is allowed. A light task gets one. So does an order whose rounds were
 # recorded on a light task: a person who sets the task interactive to rule is then not offered a
 # second round light never allows (gap row 296). Each repair a dependent order opened adds its one
-# round, so roundsUsed never goes down (gap row 286). $1 the order's ledger entry.
+# round, so roundsUsed never goes down (gap row 286). So does the order's own repair round at the
+# cap, which fix-brief records with a `round` key (gap row 314). $1 the order's ledger entry.
 order_fix_rounds_allowed() {
   local allowed="$FIX_ROUNDS_ALLOWED"
   if task_is_light "$TASK_PATH" || [ "$(printf '%s' "$1" | jq '.lightRounds // false')" = "true" ]; then
@@ -9362,6 +9366,20 @@ rv_require_round_verified() {
   die 62 "$who: $unit_id has used $rounds_used fix round(s) and the last one verified is $verified. Run verify-record on round $rounds_used before another one starts."
 }
 
+# Gap row 314. At the cap, an order gets one repair round of its own, for two kinds of open finding
+# no ruling should have to settle. New breakage its last round made: the fix diff caused it, so
+# its own scope can repair it, and no person is needed. And, with a person present, a finding its
+# last fixer reported scope-insufficient: the person widens the scope with `fix-brief --allow`.
+# Prints the ids, comma-separated, or nothing once the order has had that round. $1 the findings
+# array, $2 the last round.
+rv_repair_round_ids() {
+  [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq '[ (.repairs // [])[] | select(has("round")) ] | length')" = "0" ] || return 0
+  printf '%s' "$1" | jq -r --arg origin "round$2" --argjson r "$2" --arg mode "$RV_RUN_MODE" '
+    [ .[] | select(.actionable == true and .status == "open"
+                   and (.origin == $origin or ($mode != "autonomous" and .scopeInsufficientInRound == $r))) | .id ]
+    | join(", ")'
+}
+
 # ------------------------------------------------------------------------------------------------
 # review-brief: everything a reviewer may see, and nothing else.
 # ------------------------------------------------------------------------------------------------
@@ -9915,8 +9933,28 @@ do_fix_brief() {
     || die 53 "fix-brief: $unit_id has no open actionable finding, so there is nothing to hand a fixer."
   rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
   case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
-  [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ] \
-    || die 54 "fix-brief: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. Every open finding needs a ruling now, not another round."
+  # Gap row 314. At the cap, the order's one repair round opens when it can take every open
+  # finding. A finding the fixer reported scope-insufficient joins only with a person's --allow.
+  local findings_json repair_all="" repair_ids="" repair_rest repair_why
+  if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
+    findings_json="$(printf '%s' "$RV_REVIEW_DOC" | jq -c '.findings // []')"
+    repair_all="$(rv_repair_round_ids "$findings_json" "$rounds_used")"
+    repair_ids="$repair_all"
+    [ -n "$allow_raw" ] || repair_ids="$(printf '%s' "$findings_json" | jq -r --arg ids "$repair_all" --arg origin "round$rounds_used" '
+      ($ids | split(", ")) as $s | [ .[] | select(.origin == $origin and (.id as $i | $s | index($i))) | .id ] | join(", ")')"
+    repair_rest="$(printf '%s' "$findings_json" | jq -r --arg ids "$repair_ids" '
+      ($ids | split(", ")) as $s | [ .[] | select(.actionable == true and .status == "open" and (.id as $i | $s | index($i) | not)) | .id ] | join(", ")')"
+    if [ -z "$repair_ids" ] || [ -n "$repair_rest" ]; then
+      repair_why="Every open finding needs a ruling now, not another round."
+      if [ "$repair_all" != "$repair_ids" ]; then
+        repair_why="One repair round may take $repair_all. A finding the fixer reported scope-insufficient joins it only with --allow <path>, a person's grant. Otherwise rule $repair_rest."
+      elif [ -n "$repair_ids" ]; then
+        repair_why="One repair round may take $repair_ids alone. Rule these first: $repair_rest."
+      fi
+      die 54 "fix-brief: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. $repair_why"
+    fi
+    FIX_ROUNDS_ALLOWED=$((FIX_ROUNDS_ALLOWED + 1))
+  fi
   rv_require_round_verified "fix-brief" "$unit_id" "$rounds_used"
 
   rv_load_build_record "fix-brief" "$unit_id"
@@ -9964,7 +10002,7 @@ do_fix_brief() {
   # unless a person allows it here. An allow is a person's grant, so unattended refuses it
   # (exit 100). A path already owned needs no grant. A frozen test or a support file may never
   # be granted. A path no open finding names is a grant for nothing (exit 3, each).
-  local allowed_json='[]' ap ap_abs tf fp frozen_list frozen_hit named
+  local allowed_json='[]' granted_json='[]' ap ap_abs ap_owned tf fp frozen_list frozen_hit named
   [ -z "$allow_raw" ] || [ "$RV_RUN_MODE" != "autonomous" ] \
     || die 100 "fix-brief: --allow is a person's grant, and this run is unattended. Nobody is present to allow a path outside $unit_id's own files."
   # Every frozen test and support path of the task, the list the write hook reads.
@@ -9977,7 +10015,10 @@ do_fix_brief() {
   while IFS= read -r ap; do
     [ -n "$ap" ] || continue
     ap_abs="$(normalize_abs "$(resolve_against "$ap" "$RV_CODEPATH")")"
-    [ -n "$(rv_scope_outside "$(jq -nc --arg p "$ap" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] \
+    # In a repair round, an owned path outside every fix scope joins the scope and needs no grant.
+    ap_owned=""
+    [ -n "$(rv_scope_outside "$(jq -nc --arg p "$ap" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] || ap_owned=yes
+    [ -z "$ap_owned" ] || [ -n "$repair_ids" ] \
       || die 3 "fix-brief: --allow names $ap, which $unit_id already owns. A grant is for a path outside the order's own files."
     frozen_hit=""
     while IFS= read -r fp; do
@@ -9990,11 +10031,13 @@ FB_FROZEN
       || die 3 "fix-brief: --allow names $ap, a frozen test or a support file. A fixer never changes a test; rule the finding test-wrong at verify-record instead."
     named="$(printf '%s' "$open_json" | jq -r --arg p "$ap" --arg abs "$ap_abs" --arg code "$RV_CODEPATH" '
       [ .[] | (.fixScope // [])[] | select(. == $p or . == $abs or ($code + "/" + .) == $abs) ] | length')"
-    [ "$named" != "0" ] \
+    # A repair round's grant answers a fixer's scope report, which names paths no fixScope holds.
+    [ "$named" != "0" ] || [ -n "$repair_ids" ] \
       || die 3 "fix-brief: --allow names $ap, which no open finding's fixScope names. A grant is for a finding; the open findings name: $(printf '%s' "$open_json" | jq -r '[ .[] | (.fixScope // [])[] ] | unique | join(", ")')"
     # Stored resolved and relative to codePath, whatever form was typed: the withhold, the
     # owned-files check and the hook all read that one spelling.
-    allowed_json="$(printf '%s' "$allowed_json" | jq -c --arg p "${ap_abs#"$RV_CODEPATH"/}" '. + [$p] | unique')"
+    granted_json="$(printf '%s' "$granted_json" | jq -c --arg p "${ap_abs#"$RV_CODEPATH"/}" '. + [$p] | unique')"
+    [ -n "$ap_owned" ] || allowed_json="$(printf '%s' "$allowed_json" | jq -c --arg p "${ap_abs#"$RV_CODEPATH"/}" '. + [$p] | unique')"
   done <<FB_ALLOW
 $allow_raw
 FB_ALLOW
@@ -10017,7 +10060,18 @@ FB_ALLOW
     open_json="$(printf '%s' "$open_json" | jq -c --argjson i "$fn" --argjson f "$one" '.[$i] = $f')"
     fn=$((fn + 1))
   done
-  scope_json="$(printf '%s' "$open_json" | jq -c '[ .[] | (.fixScope // [])[] as $p | select(.withheld | index($p) | not) | $p ] | unique')"
+  scope_json="$(printf '%s' "$open_json" | jq -c --argjson a "$granted_json" '[ .[] | (.fixScope // [])[] as $p | select(.withheld | index($p) | not) | $p ] + $a | unique')"
+
+  if [ -n "$repair_ids" ]; then
+    local repair_ledger
+    repair_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" --argjson round "$((rounds_used + 1))" \
+      --arg ids "$repair_ids" --arg at "$(date -u +%Y-%m-%d)" '
+      .orders = (.orders | map(if .id == $id
+        then .repairs = ((.repairs // []) + [{round: $round, findings: ($ids | split(", ")), at: $at}]) else . end))')"
+    [ -n "$repair_ledger" ] || die 3 "fix-brief: the repair round of $unit_id could not be written to the ledger."
+    write_atomic "$RV_LEDGER_FILE" "$repair_ledger"
+    echo "FIX-BRIEF: round $((rounds_used + 1)) of $unit_id is its one repair round, for $repair_ids." >&2
+  fi
 
   local fb_head brief_file brief_json
   fb_head="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
@@ -10777,19 +10831,21 @@ do_verify_record() {
     updated_findings="$(printf '%s' "$updated_findings" | jq -c --argjson light "$light" '
       map(if .actionable == true and .status == "open" and (($light and .severity == "low") or ((.fixScope // []) | length == 0)) then .status = "pending" else . end)')"
   fi
-  local open_now unruled
-  open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
+  # A finding the repair round may take neither halts nor needs a ruling yet (gap row 314).
+  local open_now unruled repair_ids="" open_jq
+  [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ] || repair_ids="$(rv_repair_round_ids "$updated_findings" "$rounds_used")"
+  open_jq='($skip | split(", ")) as $s | [ .[] | select(.actionable == true and .status == "open" and (.id as $i | $s | index($i) | not)) ]'
+  open_now="$(printf '%s' "$updated_findings" | jq --arg skip "$repair_ids" "$open_jq | length")"
   if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null && [ "$RV_RUN_MODE" = "autonomous" ]; then
     local open_list
-    open_list="$(printf '%s' "$updated_findings" | jq -r '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
+    open_list="$(printf '%s' "$updated_findings" | jq -r --arg skip "$repair_ids" "$open_jq"' | [ .[].id ] | join(", ")')"
     rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" \
       "$CAP_HALT_PREFIX$open_list"
     echo "VERIFY-RECORD: $unit_id is halted. The fix rounds are spent and these findings are still open: $open_list" >&2
     die 56 "verify-record: this run is unattended, the fix rounds are spent, and these findings are still open: $open_list."
   fi
   if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
-    unruled="$(printf '%s' "$updated_findings" | jq -r \
-      '[ .[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
+    unruled="$(printf '%s' "$updated_findings" | jq -r --arg skip "$repair_ids" "$open_jq"' | [ .[].id ] | join(", ")')"
     [ -z "$unruled" ] \
       || die 57 "verify-record: the fix rounds are spent and these findings have no ruling: $unruled. Each one needs --ruling <id>=<wrong|deferred|load-bearing|test-wrong>::<reason>."
   fi
@@ -10803,6 +10859,8 @@ do_verify_record() {
   rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" "$halt_why"
 
   rv_print_verification "$rounds_used" "verified" "${halt_why:-none}"
+  [ -z "$repair_ids" ] \
+    || echo "VERIFY-RECORD: the fix rounds are spent, and one repair round may take $repair_ids. Run fix-brief; a finding the fixer reported scope-insufficient joins only with --allow, the paths a person grants. Or rule each one." >&2
   [ -z "$halt_why" ] || echo "VERIFY-RECORD: $unit_id is halted. $halt_why" >&2
   exit 0
 }

@@ -201,6 +201,15 @@ file this order does not own. Only you can allow that. Allow the file and the fi
 it. Withhold it and the fixer reports the finding, and you rule on it after the round." Then
 name the finding and the files.
 
+**The repair round.** At the cap, an order gets one more round, once, for two kinds of open
+finding. The first is new breakage that the last round made. The fix caused it, so the order's own
+scope can repair it, and the round opens unattended too. The second is a finding that the last
+fixer reported scope-insufficient, when a person is present and grants paths with `--allow`. In
+that round `--allow` may name a path that no fix scope names, because the fixer's report names
+it. A path the order owns then joins the scope with no grant. `fix-brief` opens the round only when the round can take every open finding. The ledger
+records it, and the order's allowed rounds rise by one. Otherwise `fix-brief` refuses (exit 54),
+and the message names what to rule or allow first. A second repair round never opens.
+
 Open the dispatch record before dispatching:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" fixer <order id> \
@@ -339,7 +348,9 @@ A ruling is a person's answer on an open finding, and there are three cases. At 
 rounds are spent, `verify-record` above refuses when a finding is still open and no ruling names
 it. Nothing is written yet, so this is a retry of that same call, not a new one, and each open
 finding needs a ruling. Once that round is on the record, the ruling is the same call with the
-rulings and no verdicts file. Before the cap: a finding the last fixer reported under
+rulings and no verdicts file. A finding the repair round above may take needs no ruling yet, and
+never halts the order. `verify-record` records the round and prints a line that names it. Put
+it to the person: run the repair round, or rule the finding. Before the cap: a finding the last fixer reported under
 `--scope-insufficient` may be ruled at that round's `verify-record`. The fixer's own report is
 the evidence that no round can reach it. When the round was verified first, the ruling is the
 same call with the rulings and no verdicts file, and the round's verdicts stand. With no round:
