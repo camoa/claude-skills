@@ -773,7 +773,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 112  a plain `dispatch-close` on a fixer's or a test author's record found the report its brief
 #      pins missing, not ending with the line `Report: complete`, or holding nothing but that
 #      line. The message names the test that failed. A fixer's code path must also hold no
-#      uncommitted path, because the fixer commits every change. A test author commits nothing, so its report
+#      uncommitted path, because the fixer commits every change. For an order proved by its record
+#      that is the order's owned files in the project folder (gap row 312). A test author commits nothing, so its report
 #      is read by the line alone (gap row 307). The role stopped before its last act, so
 #      the close runs as `--no-report` does: the record stays open and takes `resumedAt`. A second
 #      such close halts the order at exit 110, and the halt names the cause. `dispatch-open`
@@ -12454,7 +12455,7 @@ im_refuse_open_dispatch() {
   local od_role
   od_role="$(jq -r --arg u "$2" 'select(.unit == $u) | .role // "" | split(":") | last' "$IMPL_DIR/dispatch.json" 2>/dev/null)"
   [ -z "$od_role" ] \
-    || die 37 "$1: the $od_role record for $2 is still open in $IMPL_DIR/dispatch.json, so the $od_role has not finished. Resume it as dispatch-close said, run dispatch-close again, then run $1. Nothing is written."
+    || die 37 "$1: the $od_role record for $2 is still open in $IMPL_DIR/dispatch.json, so the $od_role has not finished. Run dispatch-close. If it keeps the record open, resume the role as it says, then run dispatch-close again. Then run $1. Nothing is written."
 }
 
 do_dispatch_open() {
@@ -12970,7 +12971,7 @@ do_dispatch_close() {
   # 307). A --no-report close of a fixer or a test author runs the same test, because the runtime
   # can mark a role stopped after its last act (gap row 309). A record from before the key existed
   # names no file, and nothing is checked.
-  local cut_off="" rp_path="" rp_line="" rp_cause="" rp_last rp_dirty rp_written rp_opened
+  local cut_off="" rp_path="" rp_line="" rp_cause="" rp_last rp_dirty rp_written rp_opened rp_unit rp_where rp_project rp_owned
   if [ -f "$dispatch_file" ]; then
     rp_path="$(jq -r '.reportPath // ""' "$dispatch_file" 2>/dev/null)"
     rp_line="$(jq -r '.completionLine // ""' "$dispatch_file" 2>/dev/null)"
@@ -12992,10 +12993,24 @@ do_dispatch_close() {
       elif [ "$(grep -v '^[[:space:]]*$' "$rp_path" | grep -c -v -x -F -e "$rp_line")" -eq 0 ]; then
         rp_cause="$rp_path holds nothing but the line '$rp_line'"
       elif [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "fixer" ]; then
-        im_scan_leftovers "$(jq -r '.codePath // ""' "$dispatch_file")" '[]'
-        rp_dirty="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq 'length')"
-        if [ "$rp_dirty" -eq 1 ]; then rp_cause="1 uncommitted path is in the code path"
-        elif [ "$rp_dirty" -gt 1 ]; then rp_cause="$rp_dirty uncommitted paths are in the code path"; fi
+        # A record order's fixer commits in the project folder, so its owned files there are read,
+        # never the whole folder, where other tasks' records change (gap row 312). An unreadable
+        # snapshot reads as a code order, so this adds no refusal.
+        rp_unit="$(jq -c --arg u "$(jq -r '.unit // ""' "$dispatch_file")" \
+          '[ .workOrders[]? | select(.id == $u) ][0] // {}' "$TASK_PATH/implementation/snapshot.json" 2>/dev/null)"
+        br_order_facts "$rp_unit"
+        rp_where="the code path"
+        if [ "$BR_ORDER_RANGE" = "project" ] && rp_project="$(resolve_project_folder "$TASK_PATH")"; then
+          rp_where="the order's files in the project folder"
+          rp_owned="$(printf '%s' "$rp_unit" | jq -r '(.ownedFiles // [])[]')"
+          rp_dirty=0
+          [ -z "$rp_owned" ] || rp_dirty="$(git_status_of "$rp_project" "$rp_owned" | grep -c .)"
+        else
+          im_scan_leftovers "$(jq -r '.codePath // ""' "$dispatch_file")" '[]'
+          rp_dirty="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq 'length')"
+        fi
+        if [ "$rp_dirty" -eq 1 ]; then rp_cause="1 uncommitted path is in $rp_where"
+        elif [ "$rp_dirty" -gt 1 ]; then rp_cause="$rp_dirty uncommitted paths are in $rp_where"; fi
       fi
     fi
     if [ -n "$rp_cause" ] && [ -z "$rp_line" ]; then
