@@ -51,8 +51,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # - A Write, Edit or MultiEdit to a `.claude` settings file whose new text holds `disableAllHooks`.
 #
 # False positives. A heredoc body that goes to `cat` or `tee`, or to `git commit -F -`, is not
-# read. The exception is a command line that also starts a shell or runs a file. A shell comment
-# is not read (live-run row 321). Two rules find a
+# read. The exception is a command line that also starts a shell or runs a file. The unreadable-verb
+# rule does not read a shell comment (live-run row 321). Two rules find a
 # command word: a command word from a variable, and a recursive delete. They read a quoted string
 # that opens and closes on one line as part of one word. So the message in `detail="$d $fw: ..."`
 # is not a command (live-run row 254). A string that spans lines is read as commands. On a line
@@ -229,7 +229,10 @@ BSNL=$'\\\n'
 MAX_BYTES=262144
 MAX_DEPTH=3
 
-hit() { grep -Eq -e "$2" <<<"$1"; }
+# A here-string, not a pipe: under pipefail, grep -q quitting early can kill printf, and a match
+# then reads as none. A large here-string needs a writable temp folder. When grep cannot run, the
+# count is empty, so the text reads as a match.
+hit() { [ "$(grep -Ec -e "$2" <<<"$1")" != 0 ]; }
 normalise() { printf '%s' "$1" | tr -d "'\"\\\\" | tr -s ' \t' ' '; }
 # Prints text $1 with one command segment per line. tr, not sed, so BSD and GNU agree.
 segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
@@ -549,15 +552,18 @@ SEGMENTS
 }
 
 # The command rules, on normalised text $1, and on $2, the same text normalised after quoted_words.
+# The unreadable-verb rule reads $3, the same text with its comments dropped, so a backticked verb
+# in a comment passes (live-run row 321). The comment reader can take code for a comment, so every
+# other rule reads the comments too.
 # Sets REASON and returns 0 on the first rule that hits.
 rules() {
-  local t="$1" q="$2" line
+  local t="$1" q="$2" c="$3" line
   hit "$t" "${GIT}push$ARGS +(-[a-zA-Z]*[fd][a-zA-Z]*|$FORCE|$MIRROR|$DELETE|\+[^ ;&|]+|:[^ ;&|]+)$END" \
     && { REASON="is a force push, a mirror push, or a delete of a remote branch"; return 0; }
   if ! push_gate_open; then
     hit "$t" "${GIT}push$END" && { REASON="is a git push, and version 6 never publishes: a person pushes. To let this session push, the person opens the gate: sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push"; return 0; }
   fi
-  hit "$t" "${GIT}([\$\`]|[^- ;&|][^ ;&|]*[\$\`{])" && { REASON="puts a variable, a brace or a command substitution in the git verb, so this hook cannot read the verb"; return 0; }
+  hit "$c" "${GIT}([\$\`]|[^- ;&|][^ ;&|]*[\$\`{])" && { REASON="puts a variable, a brace or a command substitution in the git verb, so this hook cannot read the verb"; return 0; }
   if [ "$HAVE_TEXT" = true ] && variable_command "$q"; then
     REASON="takes its command word from a variable or a substitution, followed by $VAR_VERB, so this hook cannot read the command"; return 0
   fi
@@ -609,19 +615,20 @@ GHAPI
 
 # Checks command text $1, read $2 files deep. Sets REASON and returns 0 when it is refused.
 check_text() {
-  local text="$1" depth="$2" stripped n n0="" line val f p runs runs0="" need_x
-  # A comment never runs. It goes before the lines join, because a comment ends at its line.
-  text="$(quoted_words "$text" strip)"
+  local text="$1" depth="$2" stripped n n0="" line val f p runs runs0="" need_x code
+  # The comments go before the lines join, because a comment ends at its line.
+  code="$(quoted_words "$text" strip)"
+  code="${code//"$BSNL"/}"
   text="${text//"$BSNL"/}"
   if [ "$HAVE_TEXT" = true ]; then
     stripped="$(strip_heredocs "$text" "$HD_TO_FILE")"
     n0="$(normalise "$stripped")"
     scan_runs "$n0"
     runs0="$RUNS"
-    [ "$SHELLISH" = true ] || text="$stripped"
+    [ "$SHELLISH" = true ] || { text="$stripped"; code="$(strip_heredocs "$code" "$HD_TO_FILE")"; }
   fi
   n="$(normalise "$text")"
-  rules "$n" "$(normalise "$(quoted_words "$text")")" && return 0
+  rules "$n" "$(normalise "$(quoted_words "$text")")" "$(normalise "$code")" && return 0
   [ "$depth" -lt "$MAX_DEPTH" ] || return 1
   while IFS= read -r line; do
     [ -n "$line" ] || continue
