@@ -36,7 +36,7 @@ strip_heredocs() {
     case "$line" in
       *'<<<'*) ;;
       *'<<'*)
-        [ -z "$pattern" ] || printf '%s' "$line" | grep -Eq -e "$pattern" || continue
+        [ -z "$pattern" ] || grep -Eq -e "$pattern" <<<"$line" || continue
         word="$(printf '%s' "$line" | sed -n "s/.*<<-\{0,1\}[[:space:]]*[$q]\{0,1\}\([^[:space:]$q;|&)<]*\).*/\1/p")"
         dash=false; case "$line" in *'<<-'*) dash=true ;; esac ;;
     esac

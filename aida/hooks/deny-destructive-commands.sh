@@ -51,7 +51,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # - A Write, Edit or MultiEdit to a `.claude` settings file whose new text holds `disableAllHooks`.
 #
 # False positives. A heredoc body that goes to `cat` or `tee`, or to `git commit -F -`, is not
-# read. The exception is a command line that also starts a shell or runs a file. Two rules find a
+# read. The exception is a command line that also starts a shell or runs a file. A shell comment
+# is not read (live-run row 321). Two rules find a
 # command word: a command word from a variable, and a recursive delete. They read a quoted string
 # that opens and closes on one line as part of one word. So the message in `detail="$d $fw: ..."`
 # is not a command (live-run row 254). A string that spans lines is read as commands. On a line
@@ -228,7 +229,7 @@ BSNL=$'\\\n'
 MAX_BYTES=262144
 MAX_DEPTH=3
 
-hit() { printf '%s' "$1" | grep -Eq -e "$2"; }
+hit() { grep -Eq -e "$2" <<<"$1"; }
 normalise() { printf '%s' "$1" | tr -d "'\"\\\\" | tr -s ' \t' ' '; }
 # Prints text $1 with one command segment per line. tr, not sed, so BSD and GNU agree.
 segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
@@ -240,13 +241,16 @@ segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
 # string is joined, because a shell runs its text. The shell runs the text of each `$(...)` and
 # each backtick pair outside single quotes, also inside a double-quoted string. So that text
 # follows its line again, as lines of its own.
+# With $2 set to strip, it prints the text with each comment dropped and nothing else changed. A
+# `#` starts a comment at the start of a word, outside a string, a backtick pair and `${...}`. A
+# `$'...'` string takes backslash escapes. A comment ends at its line, also after a backslash.
 quoted_words() {
-  printf '%s\n' "$1" | LC_ALL=C awk '
-    function close_at(s, k, c,   d, depth) {
+  printf '%s\n' "$1" | LC_ALL=C awk -v strip="${2:+1}" '
+    function close_at(s, k, c, e,   d, depth) {
       depth = 0
       while (k <= length(s)) {
         d = substr(s, k, 1)
-        if (c == "\"" && d == "\\") { k += 2; continue }
+        if ((c == "\"" || e) && d == "\\") { k += 2; continue }
         if (c == "\"" && substr(s, k, 2) == "$(") { depth++; k += 2; continue }
         if (depth > 0 && d == ")") { depth--; k++; continue }
         if (d == c && depth == 0) return k
@@ -276,18 +280,21 @@ quoted_words() {
       return r
     }
     {
-      line = $0; n = length(line)
-      if (hd != "") { t = line; sub(/^\t+/, "", t); if (t == hd) hd = ""; print line subs(line); next }
+      line = $0; n = length(line); pc = cont; cont = 0; dol = 0
+      if (hd != "") { t = line; sub(/^\t+/, "", t); if (t == hd) hd = ""; print (strip ? line : line subs(line)); next }
       out = ""; i = 1; pend = ""; code = n
       if (q != "") {
-        j = close_at(line, 1, q)
-        if (j == 0) { print line subs(line); next }
+        j = close_at(line, 1, q, qe)
+        if (j == 0) { print (strip ? line : line subs(line)); next }
         out = substr(line, 1, j); i = j + 1; q = ""
       }
       while (i <= n) {
         c = substr(line, i, 1)
-        if (c == "\\") { out = out substr(line, i, 2); i += 2; continue }
-        if (c == "#" && (i == 1 || substr(line, i - 1, 1) ~ /[ \t;&|(]/)) { out = out substr(line, i); code = i - 1; break }
+        if (c == "\\") { cont = (i == n); out = out substr(line, i, 2); i += 2; continue }
+        if (c == "#" && !bt && !br && (i == 1 ? !pc : substr(line, i - 1, 1) ~ /[ \t;&|(]/)) {
+          if (!strip) out = out substr(line, i)
+          code = i - 1; break
+        }
         if (substr(line, i, 3) == "<<<") { out = out "<<<"; i += 3; continue }
         if (substr(line, i, 2) == "<<") {
           m = substr(line, i + 2); match(m, /^-?[ \t]*["\047]?[^ \t"\047;&|)<>]*["\047]?/)
@@ -296,15 +303,19 @@ quoted_words() {
           continue
         }
         if (c == "\047" || c == "\"") {
-          j = close_at(line, i + 1, c)
-          if (j == 0) { out = out substr(line, i); q = c; break }
+          e = (c == "\047" && dol == i - 1)
+          j = close_at(line, i + 1, c, e)
+          if (j == 0) { out = out substr(line, i); q = c; qe = e; break }
           s = substr(line, i, j - i + 1)
-          if (substr(line, 1, i - 1) !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</) gsub(/[ \t;&|]/, "\037", s)
+          if (!strip && substr(line, 1, i - 1) !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</) gsub(/[ \t;&|]/, "\037", s)
           out = out s; i = j + 1; continue
         }
+        if (c == "`") bt = !bt
+        else if (c == "$") { dol = i; if (substr(line, i + 1, 1) == "{") br++ }
+        else if (c == "}" && br) br--
         out = out c; i++
       }
-      print out subs(substr(line, 1, code))
+      print (strip ? out : out subs(substr(line, 1, code)))
       hd = pend
     }'
 }
@@ -580,7 +591,7 @@ RESTORE
   # gh api sends a POST by default once a field is given.
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    if printf '%s' "$line" | grep -Eiq -e '(-X|--method)( +|=)?(POST|PATCH|PUT|DELETE)' \
+    if grep -Eiq -e '(-X|--method)( +|=)?(POST|PATCH|PUT|DELETE)' <<<"$line" \
       || { ! hit "$line" '(-X|--method)' && hit "$line" ' (-f|-F|--field|--raw-field|--input)( |=)'; }; then
       REASON="calls the GitHub API to change a git ref or a file on a branch"; return 0
     fi
@@ -599,6 +610,8 @@ GHAPI
 # Checks command text $1, read $2 files deep. Sets REASON and returns 0 when it is refused.
 check_text() {
   local text="$1" depth="$2" stripped n n0="" line val f p runs runs0="" need_x
+  # A comment never runs. It goes before the lines join, because a comment ends at its line.
+  text="$(quoted_words "$text" strip)"
   text="${text//"$BSNL"/}"
   if [ "$HAVE_TEXT" = true ]; then
     stripped="$(strip_heredocs "$text" "$HD_TO_FILE")"
