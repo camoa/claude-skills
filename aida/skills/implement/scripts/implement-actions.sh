@@ -1067,7 +1067,7 @@ HALT_MERGE_JQ='def halt_merge($old; $new):
 
 # Every segment of halt reason $1, one per line. Empty prints nothing.
 halt_segments() {
-  printf '%s' "$1" | jq -r 'if . == "" then empty else split("; earlier: ")[] end' 2>/dev/null
+  printf '%s' "$1" | jq -Rr 'if . == "" then empty else split("; earlier: ")[] end' 2>/dev/null
 }
 
 # The two drift reasons a later `start` can re-derive: both compare the snapshot's own copy of one
@@ -2033,8 +2033,11 @@ do_start() {
       || die 17 "start: $SNAPSHOT_FILE's own hash field ($snapshot_hash_on_disk) disagrees with a hash re-derived from its own alignment and workOrders fields ($self_hash). The snapshot file was edited after it was written; restore it from git history, or remove it and accept that the frozen state is lost. Never edit it by hand."
 
     if [ "$live_hash" != "$snapshot_hash_on_disk" ]; then
+      # A criterion's verdict is review's answer, written into the live contract at review's close.
+      # No test was written from it, so it is not a contract change (gap row 319).
       contract_changed="$(jq -n --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" \
-        'if $a == $b then false else true end')"
+        'def nv: .criteria = [ (.criteria // [])[] | del(.verdict) ];
+         if ($a | nv) == ($b | nv) then false else true end')"
       # Every drift halt reason begins with "design drift: ", which is what `restart` reads to tell
       # an order halted by a design change from one halted for a spent attempt counter or a
       # load-bearing finding. A prefix rather than a field of its own, the same way the attempt cap
@@ -2061,8 +2064,8 @@ do_start() {
       # the file and the criterion keeps the order halted when only the file goes back.
       if [ "$contract_changed" = "true" ]; then
         changed_criteria_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
-            (($b.criteria // []) | map({(.id): .}) | add // {}) as $liveMap
-            | [ ($a.criteria // [])[] | select($liveMap[.id] != .) | .id ]')"
+            (($b.criteria // []) | map({(.id): del(.verdict)}) | add // {}) as $liveMap
+            | [ ($a.criteria // [])[] | del(.verdict) | select($liveMap[.id] != .) | .id ]')"
         drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" "$HALT_MERGE_JQ"'
             [ $snap[] | . as $s
               | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null) ]) as $hits
@@ -2389,28 +2392,43 @@ do_start() {
       # build. So a dependent segment this run did not write again clears when no order it names
       # still holds a drift segment other than a dependent one. The names are read from the
       # segment's own text, which the dependent halt above writes.
-      local dep_stale_json
-      dep_stale_json="$(printf '%s' "$final_orders_json" | jq -c --argjson drifted "$drift_halts_json" '
+      local dep_id dep_halt dep_prefix dep_seg dep_names dep_name dep_own dep_held dep_stale_json dep_stale_names dep_rest
+      for dep_id in $(printf '%s' "$final_orders_json" | jq -r --argjson drifted "$drift_halts_json" '
           ($drifted | map(.id)) as $bad
-          | (map({(.id): ((.haltedBecause // "") | if . == "" then [] else split("; earlier: ") end)}) | add // {}) as $segs
-          | def own_drift($n): [ ($segs[$n] // [])[] | select(startswith("design drift: ") and (startswith("design drift: " + $n + " depends on ") | not)) ] | length > 0;
-            [ .[] | .id as $id | select(($bad | index($id)) == null)
-              | ("design drift: " + $id + " depends on ") as $p
-              | def named: ltrimstr($p) | split(", directly or through another order")[0];
-                [ $segs[$id][] | select(startswith($p) and ([ named | split(", ")[] | own_drift(.) ] | any | not)) ] as $stale
-              | select(($stale | length) > 0)
-              | {id: $id, halt: .haltedBecause, names: ($stale | map(named) | join(", ")),
-                 rest: ($segs[$id] - $stale | join("; earlier: "))} ]')"
-      final_orders_json="$(printf '%s' "$final_orders_json" | jq -c --argjson stale "$dep_stale_json" '
-          map(. as $o | ([ $stale[] | select(.id == $o.id) ][0]) as $s
-              | if $s == null then $o elif $s.rest == "" then ($o | del(.haltedBecause)) else ($o + {haltedBecause: $s.rest}) end)')"
-      halts_cleared_json="$(printf '%s' "$halts_cleared_json" | jq -c --argjson stale "$dep_stale_json" --arg today "$cleared_today" '
-          . + [ $stale[] | {id, reason: .halt, clearedAt: $today,
-                because: ("start: this resumed run found no drift for " + .id + ", and " + .names
-                          + " holds no drift of its own, so the design drift segment naming " + .names + " cleared"
-                          + (if .rest == "" then "" else "; the order stays halted for what is left" end))} ]')"
-      drift_cleared_ids_json="$(jq -cn --argjson have "$drift_cleared_ids_json" --argjson stale "$dep_stale_json" \
-        '$have + [ $stale[].id | . as $i | select(($have | index($i)) == null) ]')"
+          | [ .[] | . as $o | select(($bad | index($o.id)) == null) | select(($o.haltedBecause // "") != "") | $o.id ][]'); do
+        dep_halt="$(printf '%s' "$final_orders_json" | jq -r --arg id "$dep_id" '.[] | select(.id == $id) | .haltedBecause')"
+        dep_prefix="design drift: $dep_id depends on "
+        dep_stale_json='[]'; dep_stale_names=""
+        while IFS= read -r dep_seg; do
+          case "$dep_seg" in "$dep_prefix"*) ;; *) continue ;; esac
+          dep_names="${dep_seg#"$dep_prefix"}"
+          dep_names="${dep_names%%, directly or through another order*}"
+          dep_held=false
+          for dep_name in $(printf '%s' "$dep_names" | tr ',' ' '); do
+            dep_own="$(halt_segments_matching "$(printf '%s' "$final_orders_json" | jq -r --arg id "$dep_name" '.[] | select(.id == $id) | .haltedBecause // ""')" '["design drift: "]' keep)"
+            dep_own="$(halt_segments_matching "$dep_own" "$(jq -cn --arg p "design drift: $dep_name depends on " '[$p]')" drop)"
+            [ -z "$dep_own" ] || dep_held=true
+          done
+          [ "$dep_held" = false ] || continue
+          dep_stale_json="$(printf '%s' "$dep_stale_json" | jq -c --arg s "$dep_seg" '. + [$s]')"
+          dep_stale_names="${dep_stale_names:+$dep_stale_names, }$dep_names"
+        done <<DEP_SEGMENTS
+$(halt_segments "$dep_halt")
+DEP_SEGMENTS
+        [ -n "$dep_stale_names" ] || continue
+        dep_rest="$(halt_segments_matching "$dep_halt" "$dep_stale_json" drop)"
+        final_orders_json="$(printf '%s' "$final_orders_json" | jq -c --arg id "$dep_id" --arg rest "$dep_rest" '
+            map(if .id == $id then
+                  (if $rest == "" then del(.haltedBecause) else .haltedBecause = $rest end)
+                else . end)')"
+        halts_cleared_json="$(printf '%s' "$halts_cleared_json" | jq -c --arg id "$dep_id" --arg reason "$dep_halt" \
+          --arg today "$cleared_today" --arg rest "$dep_rest" --arg names "$dep_stale_names" '
+          . + [{id: $id, reason: $reason, clearedAt: $today,
+                because: ("start: this resumed run found no drift for " + $id + ", and " + $names
+                          + " holds no drift of its own, so the design drift segment naming " + $names + " cleared"
+                          + (if $rest == "" then "" else "; the order stays halted for what is left" end))}]')"
+        drift_cleared_ids_json="$(printf '%s' "$drift_cleared_ids_json" | jq -c --arg id "$dep_id" 'if index($id) then . else . + [$id] end')"
+      done
     fi
     # The list follows the snapshot's criteria, which a contract change just refreshed: an entry
     # the ledger holds is kept with its judgements, a new criterion opens as not judged, and one

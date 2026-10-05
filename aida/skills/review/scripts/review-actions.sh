@@ -2952,8 +2952,8 @@ RW_ROWS
     '.verdict = $v | .pluginVersion = $pv')"
   rw_write_record "close" "$updated"
 
-  # The one field review writes into the contract. The hash covers the whole file, so the next
-  # `start` reports the contract as changed; that drift is review's own, and the report says so.
+  # The one field review writes into the contract. The hash covers the whole file, but `start`
+  # compares the contract without verdicts, so this write halts no order (gap row 319).
   # A scope sidecar that read current before this write keeps its stamp (gap row 313).
   local live_state written missing_ids new_alignment scope_stale
   written=0; missing_ids=""
@@ -2988,7 +2988,7 @@ RW_ROWS
   note_count="$(printf '%s' "$updated" | jq '(.catalogNotes // []) | length')"
   echo "CLOSE: the review $verdict_word. ${failing:+What caused it: $failing.} Checks nothing declared: ${undeclared_list:-none}. Checks nobody could read: ${unknown_list:-none}. Checks awaiting the person: ${awaiting_list:-none}. Criteria reading unanswered: $unanswered. Catalog notes: $note_count." >&2
   case "$live_state" in
-    ok) echo "CLOSE: review wrote one verdict per criterion into $ALIGNMENT_FILE, across $written criteria. That write moves the contract hash, so the next start reports the contract as changed; the drift is review's own and it halts no order.${missing_ids:+ These criteria are in the frozen contract and not in the live one, so nothing was written for them: $missing_ids.}" >&2 ;;
+    ok) echo "CLOSE: review wrote one verdict per criterion into $ALIGNMENT_FILE, across $written criteria. That write moves the contract hash, but start compares the contract without verdicts, so it halts no order.${missing_ids:+ These criteria are in the frozen contract and not in the live one, so nothing was written for them: $missing_ids.}" >&2 ;;
     *)  echo "CLOSE: $ALIGNMENT_FILE is $live_state, so no criterion verdict was written into the contract. The record holds them." >&2 ;;
   esac
   exit 0

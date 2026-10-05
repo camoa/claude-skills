@@ -86,7 +86,9 @@ order's shape, not its file list. The route is the change, then `check`, `close`
 `design-closed.json` records, and `distill`. A reopen that creates or merges an order, removes
 one with `remove --id --reason`, or changes an order's interface, criteria or dependencies, reads
 as a first run does. Recording an old merge with `remove --merged-into` changes no order, so it
-takes the cheap route above.
+takes the cheap route above. Once implementation has a snapshot, `create` refuses, because
+implementation builds only the orders the snapshot froze. A defect that a review found is fixed
+on the task branch, and implementation's `finish` runs again.
 
 Four changes do not halt an order that implementation already started: an added owned file, an
 `account` call, a reason added with `update --append-reasoning`, and a row marked with

@@ -186,7 +186,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      entry with no run or no pass, a pass or a kind outside its three forms, a run line carrying
 #      a shell character, or a --run or --check with no --cite; or `close` was given
 #      --approve-runs unattended; or `account` was given a --finding not shaped <search>#<n>, or a
-#      blank --set-aside.
+#      blank --set-aside; or `create` found implementation/snapshot.json, so no new order would be
+#      built.
 #   4  `check` ran and found a work order file, or the guides-read record, that cannot be read as
 #      its format: not valid JSON, not an object, or a missing, malformed or unknown field
 #      (check-design.sh's own exit 1, remapped here so it never collides with this script's own
