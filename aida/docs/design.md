@@ -372,7 +372,8 @@ commits the task folder at that moment; the order edits before it commit nothing
 holds a hash over the contract and every order together, the run mode, and who was present,
 `person` or `nobody`. It also holds the recipe verdict and the critique files with their count
 and your outcome line. Those files are in the same commit, so the paths the record cites open
-for a reader who has only the branch.
+for a reader who has only the branch. A later close over the same critique keeps your outcome
+line, and names the close where you gave it and the design you answered over.
 
 Implementation reads this record on its first run, before it freezes anything, and refuses to
 start on a contract or an order that no longer matches the hash. That is what catches an order

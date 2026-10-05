@@ -864,6 +864,8 @@ changed an order and how many were left with a reason. Pass it as `--critique-ou
 record holds it as `critique.outcome` beside the files and the count, and `close` prints it as
 `critiqueOutcome:`. Autonomous: pass none; the flag is refused unattended, and the record says
 `none`, because nobody answered the findings. A count alone said nothing about what changed.
+A re-close after a reopen, with no new critique file, needs no flag in either mode. `close`
+keeps the last record's answer and prints `critiqueCarriedFrom:`, naming the close that gave it.
 
 This runs the design check again. It writes `design-closed.json` only when that check exits clean.
 The record is committed when the stage closes: `close` commits the task folder, and the work order
