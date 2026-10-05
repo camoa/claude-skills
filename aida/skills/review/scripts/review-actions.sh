@@ -63,7 +63,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the plugin root or a library that could not be resolved, a project or task folder that could
 #      not be resolved, a record or a frozen file that is present but unreadable, a record that does
 #      not match scripts/review-schema.json, a framework nothing was said about, or a code
-#      repository whose HEAD is not the commit implementation's own range ends at.
+#      repository whose HEAD is not the commit implementation's own range ends at, or that commit
+#      with the files `task environment up` changed put back.
 #   5  the recorded codePath exists and is not a git repository.
 #  14  the project's own project.json exists and is not valid JSON.
 #  15  the recorded codePath does not exist on disk.
@@ -1345,7 +1346,7 @@ rw_check_suite() {
 do_checks() {
   local task_arg="" recipes="" check_recipes="" failures="" values="" catalog_recipes=""
   local frameworks fw lookup recipes_json rows_file parts_file catalog stale
-  local range base head_end head_now coverage cov_verdict cov_detail
+  local range base head_end head_now end_commit restored past coverage cov_verdict cov_detail
   local mut_verdict tool_count ti one frozen_row frozen_findings mutation_file record_json today floor_id
   local upstream empty_range
 
@@ -1508,8 +1509,18 @@ RW_REVIEWS
   head_now="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
   [ -n "$head_now" ] \
     || die 3 "checks: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
-  [ "$head_now" = "$(git -C "$RV_CODEPATH" rev-parse "$head_end^{commit}" 2>/dev/null)" ] \
-    || die 3 "checks: $RV_CODEPATH is at $head_now, and the range in $FINISHED_FILE ends at $head_end. Checks 5 to 8 run over the files on disk, so a tree that is not the final commit would answer about different code than the diff describes. Check that commit out, or run the implement skill's finish step again."
+  end_commit="$(git -C "$RV_CODEPATH" rev-parse "$head_end^{commit}" 2>/dev/null)"
+  # Gap row 325. Before a merge, the files `task environment up` changed go back to their fork point
+  # content, by completion or by a person first. A head past the range by that restore alone holds
+  # the same task code. So git decides: the head descends from the range end, and every file changed
+  # since then is one task_env_restore_commit reads as back.
+  if [ "$head_now" != "$end_commit" ]; then
+    restored="$(task_env_restore_commit "$TASK_PATH" "$RV_CODEPATH" | cut -f2 | awk '{ gsub(/, /, "\n"); print }')"
+    past="$(git -C "$RV_CODEPATH" diff --no-renames --name-only "$end_commit" HEAD 2>/dev/null \
+      | grep -vxF -- "$restored")"
+    git -C "$RV_CODEPATH" merge-base --is-ancestor "$end_commit" HEAD 2>/dev/null && [ -z "$past" ] \
+      || die 3 "checks: $RV_CODEPATH is at $head_now, and the range in $FINISHED_FILE ends at $head_end. Checks 5 to 8 run over the files on disk, so a tree that is not the final commit would answer about different code than the diff describes. Only a commit that puts back the files \`task environment up\` changed may follow the range. Check that commit out, or run the implement skill's finish step again."
+  fi
   RW_RANGE="$range"; RW_HEAD="$head_now"
 
   mark_task_in_progress "$TASK_PATH" "review started" review
@@ -1518,7 +1529,7 @@ RW_REVIEWS
     || die 3 "checks: could not write the diff for $range to $DIFF_FILE"
   rw_load_changed "$base" "$head_end"
   empty_range="no"
-  [ "$base" = "$RW_HEAD" ] && empty_range="yes"
+  [ "$base" = "$head_end" ] && empty_range="yes"
   upstream="$(git -C "$RV_CODEPATH" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"
 
   rw_load_test_rows "checks"
