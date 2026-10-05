@@ -1527,7 +1527,10 @@ RW_REVIEWS
   fi
   RW_RANGE="$range"
 
-  mark_task_in_progress "$TASK_PATH" "review started" review
+  # A task marked complete by hand before its review is reviewed as it stands. Review moves no
+  # task state, so the task stays complete and close names no completion (gap row 324).
+  [ "$(jq -r '.state // ""' "$TASK_PATH/task.json" 2>/dev/null)" = complete ] \
+    || mark_task_in_progress "$TASK_PATH" "review started" review
   mkdir -p "$REVIEW_DIR" || die 3 "checks: could not create $REVIEW_DIR"
   git -C "$RV_CODEPATH" diff --no-renames "$base" "$head_end" >"$DIFF_FILE" 2>/dev/null \
     || die 3 "checks: could not write the diff for $range to $DIFF_FILE"
@@ -3006,6 +3009,8 @@ RW_ROWS
     ok) echo "CLOSE: review wrote one verdict per criterion into $ALIGNMENT_FILE, across $written criteria. That write moves the contract hash, but start compares the contract without verdicts, so it halts no order.${missing_ids:+ These criteria are in the frozen contract and not in the live one, so nothing was written for them: $missing_ids.}" >&2 ;;
     *)  echo "CLOSE: $ALIGNMENT_FILE is $live_state, so no criterion verdict was written into the contract. The record holds them." >&2 ;;
   esac
+  [ "$(jq -r '.state // ""' "$TASK_PATH/task.json" 2>/dev/null)" != complete ] \
+    || echo "CLOSE: $(jq -r '.id' "$TASK_PATH/task.json") was marked complete before this review, and it stays complete. The verdict is in $RECORD_FILE, beside the completion in task.md. Completion does not run, so name no next command." >&2
   exit 0
 }
 

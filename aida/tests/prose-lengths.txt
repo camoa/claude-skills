@@ -27,9 +27,9 @@ skills/next/SKILL.md 199
 skills/playbooks/SKILL.md 96
 skills/project/SKILL.md 588
 skills/research/SKILL.md 574
-skills/review/SKILL.md 233
+skills/review/SKILL.md 234
 skills/review/references/checks.md 134
-skills/review/references/close.md 99
+skills/review/references/close.md 102
 skills/review/references/reviewer.md 146
 skills/review/references/surfaces.md 95
 skills/scope/SKILL.md 471

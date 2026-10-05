@@ -97,3 +97,6 @@ never invoke it yourself. Autonomous: invoke `aida:completion` through the Skill
 the task id, and stop if it refuses. Invoke it only when the mode covers completion too; otherwise
 end as interactive does, naming the command. Each stage refuses to start without the previous
 stage's record, so a stage cannot run out of order. That is why this chain is safe.
+
+When close says the task was marked complete before this review, completion does not run in
+either mode. Name the review record for the person, and stop.

@@ -20,7 +20,8 @@ round finds new things forever. The reference here is the frozen contract and th
 
 **Review is not completion.** It never marks the task complete, writes no pull request body, and
 repairs no finding. The task stays in progress, and the completion stage is what moves it. A person
-may run their own reviews in between.
+may run their own reviews in between. A task a person marked complete before its review stays
+complete, and review still runs on it and records its verdict.
 
 ## Find the task
 
