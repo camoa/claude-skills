@@ -162,5 +162,6 @@ waits for the person.
 You may not extend the loop by adding a round of your own. You are not given the original full
 diff, the contract beyond what the findings already cite, or an earlier round's verdicts.
 
-Stop and say so, rather than guessing. Do this when the fix report has no covering test, no
-command, or no output for a finding you must verify.
+Do not guess. When the fix report has no covering test, no command, or no output for a finding
+you must verify, write that finding as `not-addressed`. Its `evidence` names what is missing. Write
+the verdict file on every return. With no file, the close reads your return as a stop.
