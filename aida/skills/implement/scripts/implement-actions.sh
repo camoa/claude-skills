@@ -2354,12 +2354,12 @@ do_start() {
     # `clear-halt` still refuses a drift halt (exit 85). `start` is the one action that computes
     # drift, and a second computation there would be a second producer for one fact.
     #
-    # Two drift reasons are left for `restart`, because this comparison cannot re-derive either.
-    # A criterion halt is written in the same run that replaces the snapshot's alignment with the
-    # live contract, so the next comparison finds no difference while the order's frozen tests
-    # still assert the old sentence. Clearing it would let that order build against them. And a
-    # halt that names another order stands on that order's state, not on this comparison, so it
-    # waits for the restart that takes the order it names fresh.
+    # A criterion halt is left for `restart`, because this comparison cannot re-derive it. It is
+    # written in the same run that replaces the snapshot's alignment with the live contract, so the
+    # next comparison finds no difference while the order's frozen tests still assert the old
+    # sentence. Clearing it would let that order build against them. A halt that names another
+    # order stands on that order's state, so the second pass below clears it once no order it
+    # names is still halted for a drift of its own.
     halts_cleared_json="$(printf '%s' "$ledger_doc" | jq -c '.haltsCleared // []')"
     if [ "$drift_checked" = "true" ]; then
       local cleared_id cleared_halt cleared_rest cleared_today
@@ -2383,6 +2383,34 @@ do_start() {
                           + (if $rest == "" then "" else "; the order stays halted for what is left" end))}]')"
         drift_cleared_ids_json="$(printf '%s' "$drift_cleared_ids_json" | jq -c --arg id "$cleared_id" '. + [$id]')"
       done
+      # The second pass (gap row 319). When the design goes back, the pass above clears the order
+      # that drifted, but a closed order that depends on it keeps the segment naming it. Nothing
+      # else clears that segment: `clear-halt` refuses a drift halt, and `restart` reverts a closed
+      # build. So a dependent segment this run did not write again clears when no order it names
+      # still holds a drift segment other than a dependent one. The names are read from the
+      # segment's own text, which the dependent halt above writes.
+      local dep_stale_json
+      dep_stale_json="$(printf '%s' "$final_orders_json" | jq -c --argjson drifted "$drift_halts_json" '
+          ($drifted | map(.id)) as $bad
+          | (map({(.id): ((.haltedBecause // "") | if . == "" then [] else split("; earlier: ") end)}) | add // {}) as $segs
+          | def own_drift($n): [ ($segs[$n] // [])[] | select(startswith("design drift: ") and (startswith("design drift: " + $n + " depends on ") | not)) ] | length > 0;
+            [ .[] | .id as $id | select(($bad | index($id)) == null)
+              | ("design drift: " + $id + " depends on ") as $p
+              | def named: ltrimstr($p) | split(", directly or through another order")[0];
+                [ $segs[$id][] | select(startswith($p) and ([ named | split(", ")[] | own_drift(.) ] | any | not)) ] as $stale
+              | select(($stale | length) > 0)
+              | {id: $id, halt: .haltedBecause, names: ($stale | map(named) | join(", ")),
+                 rest: ($segs[$id] - $stale | join("; earlier: "))} ]')"
+      final_orders_json="$(printf '%s' "$final_orders_json" | jq -c --argjson stale "$dep_stale_json" '
+          map(. as $o | ([ $stale[] | select(.id == $o.id) ][0]) as $s
+              | if $s == null then $o elif $s.rest == "" then ($o | del(.haltedBecause)) else ($o + {haltedBecause: $s.rest}) end)')"
+      halts_cleared_json="$(printf '%s' "$halts_cleared_json" | jq -c --argjson stale "$dep_stale_json" --arg today "$cleared_today" '
+          . + [ $stale[] | {id, reason: .halt, clearedAt: $today,
+                because: ("start: this resumed run found no drift for " + .id + ", and " + .names
+                          + " holds no drift of its own, so the design drift segment naming " + .names + " cleared"
+                          + (if .rest == "" then "" else "; the order stays halted for what is left" end))} ]')"
+      drift_cleared_ids_json="$(jq -cn --argjson have "$drift_cleared_ids_json" --argjson stale "$dep_stale_json" \
+        '$have + [ $stale[].id | . as $i | select(($have | index($i)) == null) ]')"
     fi
     # The list follows the snapshot's criteria, which a contract change just refreshed: an entry
     # the ledger holds is kept with its judgements, a new criterion opens as not judged, and one

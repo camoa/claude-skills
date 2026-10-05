@@ -139,15 +139,15 @@ over; every other order keeps what it has.
 
 A halt about an order's own design file clears itself when the drift does. Put the design back
 to what the snapshot holds, then run `start` again: it compares, finds no drift for that order,
-and removes that segment. Any other segment stays and the order stays halted with it. The
-clearing is recorded under `haltsCleared` in the ledger, with the halt text as it stood. Two
-drift reasons never clear this way and always take the restart. One names a changed criterion.
-The run that wrote it replaced the snapshot's contract, so no later comparison sees the change.
-The order's frozen tests still assert the old sentence. One reopen that changed the design file
-and a criterion together writes both segments. The criterion one then holds the order when only
-the file goes back. The other names another order that
-drifted, and it waits for the restart of the order it names. Offer the restart when the new
-design is the one to build, and for either of those two reasons.
+and removes that segment. A segment that names another order that drifted clears in the same run,
+once no order it names holds a drift of its own. This holds for a closed order too. Any other
+segment stays and the order stays halted with it. The clearing is recorded under `haltsCleared`
+in the ledger, with the halt text as it stood. A segment that names a changed criterion never
+clears this way and always takes the restart. The run that wrote it replaced the snapshot's
+contract, so no later comparison sees the change. The order's frozen tests still assert the old
+sentence. One reopen that changed the design file and a criterion together writes both segments.
+The criterion one then holds the order when only the file goes back. Offer the restart when the
+new design is the one to build, and for a changed criterion.
 
 Put that to the person, opening with: "The design changed after this unit of work was started, so
 what was built no longer matches it. Only you can say the new design is the one to build.
