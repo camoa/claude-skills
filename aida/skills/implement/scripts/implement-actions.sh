@@ -116,12 +116,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. A
 # fixer or test author whose pinned report lacks its completion line takes that path unasked (112).
-# One whose report is complete closes as finished, even with --no-report (gap row 309). The
+# A role whose file passes the close's test closes as finished, even with --no-report (gap rows 309
+# and 322). Otherwise, the
 # first time, the record stays open and takes `resumedAt`, and the role is resumed once by message.
 # The second time, the order halts and the record is removed (exit 110, gap row 228). An
 # implementer whose order's diff budget starts with `large` carries `resumesAllowed` 2, so it is
 # resumed twice and the third time halts (gap row 301). For a
-# reviewer, a plain close also refuses when its brief's findings or verdicts file is missing (111).
+# reviewer or a row-checker, a plain close also refuses when its file is missing (111).
 # `dispatch-open --resume` reopens a record already closed for that one resume. It skips the
 # leftover check `dispatch-open` otherwise runs (exit 104) and writes `resumedAt` at once.
 #   implement-actions.sh step <name>
@@ -772,9 +773,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      report again. The order halts with a reason naming
 #      the role and its `maxTurns`, and the record is removed. A person runs clear-halt, then
 #      start, then dispatches again.
-# 111  a plain `dispatch-close` on a reviewer's record found the file its brief names missing, or
+# 111  a plain `dispatch-close` on a reviewer's or a row-checker's record found its file missing, or
 #      written before the record's `openedAt`: `findingsPath` in review mode, `verdictsPath` in
-#      verify mode after the ledger's `fixed`. The record stays open. The message names `--no-report`.
+#      verify mode after the ledger's `fixed`, `row-check-<order>.json` for the row-checker (gap row
+#      322). The record stays open. The message names `--no-report`.
 # The code the completion line added (gap row 250).
 # 112  a plain `dispatch-close` on a fixer's or a test author's record found the report its brief
 #      pins missing, not ending with the line `Report: complete`, or holding nothing but that
@@ -13073,13 +13075,16 @@ TG_ROOTS
   # reviewer's findings or verdicts, the fixer's and the test author's report. The last two end
   # theirs with IM_REPORT_DONE, so their record carries that line too. A fresh dispatch removes an
   # earlier report of theirs, so a complete one from before cannot close this one. A resume keeps it.
+  # The row-checker has no brief. Its verdict file has the one name tests-freeze reads (gap row 322).
   local report_brief="" report_path="" report_extra='{}'
   case "$role_bare" in
     fixer) report_brief="$fx_brief" ;;
     test-author) report_brief="$TASK_PATH/implementation/brief-$unit_id-tests.json" ;;
     reviewer) report_brief="$rv_brief" ;;
   esac
-  if [ "$role_bare" = "reviewer" ]; then
+  if [ "$role_bare" = "row-checker" ]; then
+    report_path="$IMPL_DIR/row-check-$unit_id.json"
+  elif [ "$role_bare" = "reviewer" ]; then
     report_path="$(jq -r '.findingsPath // .verdictsPath // ""' "$report_brief" 2>/dev/null)"
   elif [ -n "$report_brief" ]; then
     report_path="$(jq -r '.reportPath // ""' "$report_brief" 2>/dev/null)"
@@ -13186,15 +13191,13 @@ do_dispatch_close() {
   # never the file's own time: a close that keeps the record open rewrites it (gap row 307). A
   # fixer's clean tree is read as dispatch-open's leftover scan reads it. The order of its commit
   # and its line is not read: a fixer that wrote the line and then committed has finished (gap row
-  # 307). A --no-report close of a fixer or a test author runs the same test, because the runtime
-  # can mark a role stopped after its last act (gap row 309). A record from before the key existed
-  # names no file, and nothing is checked.
+  # 307). A --no-report close runs the same test, because the runtime can mark a role stopped after
+  # its last act (gap rows 309 and 322). A record from before the key existed names no file, and
+  # nothing is checked.
   local cut_off="" rp_path="" rp_line="" rp_cause="" rp_last rp_dirty rp_written rp_opened rp_unit rp_where rp_project rp_owned
   if [ -f "$dispatch_file" ]; then
     rp_path="$(jq -r '.reportPath // ""' "$dispatch_file" 2>/dev/null)"
     rp_line="$(jq -r '.completionLine // ""' "$dispatch_file" 2>/dev/null)"
-  fi
-  if [ -f "$dispatch_file" ] && { [ "$no_report" = false ] || [ -n "$rp_line" ]; }; then
     rp_opened="$(jq -r '(.openedAt // "") | fromdateiso8601? // ""' "$dispatch_file" 2>/dev/null)"
     [ -n "$rp_opened" ] || rp_opened="$(im_mtime "$dispatch_file")"
     rp_written="$(im_mtime "$rp_path" 2>/dev/null)"
@@ -13231,12 +13234,12 @@ do_dispatch_close() {
         elif [ "$rp_dirty" -gt 1 ]; then rp_cause="$rp_dirty uncommitted paths are in $rp_where"; fi
       fi
     fi
-    if [ -n "$rp_cause" ] && [ -z "$rp_line" ]; then
+    if [ -n "$rp_cause" ] && [ -z "$rp_line" ] && [ "$no_report" = false ]; then
       die 111 "dispatch-close: the $(jq -r '.role // "" | split(":") | last' "$dispatch_file") on $(jq -r '.unit // ""' "$dispatch_file") returned, and $rp_cause. The record stays open. If it stopped at its turn limit, run dispatch-close again with --no-report."
     fi
     if [ -n "$rp_cause" ]; then
       [ "$no_report" = true ] || { cut_off="$rp_cause"; no_report=true; }
-    elif [ "$no_report" = true ]; then
+    elif [ "$no_report" = true ] && [ -n "$rp_path" ]; then
       no_report=false
       echo "DISPATCH-CLOSE: $rp_path is complete, so the role finished before the runtime stopped it."
     fi

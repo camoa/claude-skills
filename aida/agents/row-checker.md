@@ -64,6 +64,12 @@ observe its effect, such as a bare time() against a fixed clock. Confirm only a 
 can run. A rejection's note names what a test would observe, or the behaviour to split out of the
 clause. A dispatch that holds only absence rows names no recipe. Answer those from the clause.
 
+**A record row names a done-when line and a document, not a test.** An order proved by its record
+delivers a document in the project folder, and nothing runs a document. The test-authoring recipe
+has no rule for this row. Answer one question: could a reader confirm the line from the document
+alone? Reject a line that does not say what an output must read. Reject a line that names a thing
+the reader cannot find in the document. A rejection's note names the words the line must add.
+
 For each row, answer confirmed or rejected, with a note. Reject when a test does not test what the
 clause asks. Reject when a test is missing for part of the clause. Reject when the test's name does
 not match what its body checks. Reject when a test breaks a rule the recipe states. Reject when a
