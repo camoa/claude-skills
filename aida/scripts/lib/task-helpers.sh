@@ -23,6 +23,8 @@
 #   version_at_least <have> <want>        true when <have> is <want> or later
 #   warn_newer_installed                  one stderr line when a newer copy of this plugin sits
 #                                         beside PLUGIN_ROOT; runs once when this file is sourced
+#   warn_session_version                  one stderr line when the session loaded another version
+#                                         of this plugin; runs once when this file is sourced
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
@@ -53,6 +55,7 @@
 #                                         on stderr and returns when it cannot commit
 #   distill_read <folder> <stage>         reads the stage's distill sidecar and prints its verdict
 #   distill_deferred <stage>              prints the line a light task's scope or research distill shows
+#   distill_stamp <folder> <stage>        writes the stage's stamp: the sidecar and records hashes
 #   sidecar_set_aside <path>              moves a malformed sidecar aside, dated, and says where
 #   task_tree_from_git <folder> <code> <action>
 #                                         prints the registered worktree carrying the task's
@@ -75,9 +78,10 @@
 #   IFACE_PATH_JQ                         a jq definition, `ifacePath`, a backticked interface
 #                                         token as a repository path, or empty
 #
-# Every script that sources this file runs warn_newer_installed. These never source it, so
-# they never warn: tool-actions.sh, next's legacy-tasks.sh, the scripts in scripts/ other than
-# check-design.sh, and every hook but session-start.sh, which discards the line.
+# Every script that sources this file runs warn_newer_installed and warn_session_version. These
+# never source it, so they never warn: next's legacy-tasks.sh, the scripts in scripts/ other than
+# check-design.sh and check-research.sh, and every hook but session-start.sh, which discards the
+# line. tool-actions.sh sources it in `require` alone.
 # project-actions.sh sources it in check-machine alone.
 #
 # task_worktree and resolve_task_folder both take resolve_project_folder, project_code_path_value
@@ -358,6 +362,27 @@ warn_newer_installed() {
     | "AIDA \($top) is installed, and this script runs from \($me.version). Run /reload-plugins, load the skill again, then restart the current step on \($top)."
   ' "$@" 2>/dev/null)"
   [ -z "$found" ] || printf '%s\n' "$found" >&2
+  return 0
+}
+
+# The other direction (gap row 311): this script is not the version the session loaded. The
+# session keeps the agents and hooks it loaded at start, so a role can lack a tool this step needs,
+# and the first sign is a record that never appears. A script run through Bash cannot see the
+# session's plugin root (the mirror's plugins reference, "Environment variables"). The
+# session-start hook exports the loaded version as AIDA_SESSION_PLUGIN_VERSION, which this reads.
+# Unset, nothing is known and nothing is said. /reload-plugins reloads agents and hooks but does
+# not run that hook again, so after a reload the export is stale and the line says "may". A new
+# session clears both. The export marks the check done; check-machine sets it first, because it
+# reports the same change itself.
+warn_session_version() {
+  local own
+  [ -z "${AIDA_SESSION_CHECKED:-}" ] || return 0
+  export AIDA_SESSION_CHECKED=1
+  [ -n "${AIDA_SESSION_PLUGIN_VERSION:-}" ] || return 0
+  own="$(plugin_version)"
+  [ "$own" != "unknown" ] && [ "$own" != "$AIDA_SESSION_PLUGIN_VERSION" ] || return 0
+  printf 'This session started on AIDA %s, and this script runs from %s. The agents and hooks loaded at start may still be %s. A new session loads %s for both; then restart the current step.\n' \
+    "$AIDA_SESSION_PLUGIN_VERSION" "$own" "$AIDA_SESSION_PLUGIN_VERSION" "$own" >&2
   return 0
 }
 
@@ -687,6 +712,17 @@ distill_stale() {
   if [ -n "$newer" ]; then echo yes; else echo no; fi
 }
 
+# Writes records/<stage>-distill.stamp: the sidecar's sha256 and the records hash. distill_read
+# calls it on a current sidecar. Review's close calls it for scope, when scope read current before
+# the close wrote its verdicts into the contract. $1 the task folder, $2 the stage.
+distill_stamp() {
+  local task_folder="$1" stage="$2" sidecar_hash records_hash
+  sidecar_hash="$(distill_sha256 <"$task_folder/records/$stage-distill.json")" || exit $?
+  records_hash="$(distill_records_hash "$task_folder" "$stage")" || exit $?
+  write_atomic "$task_folder/records/$stage-distill.stamp" \
+    "$(jq -n --arg s "$sidecar_hash" --arg r "$records_hash" '{sidecar: $s, records: $r}')"
+}
+
 # Reads the sidecar the distiller wrote for one stage, records/<stage>-distill.json
 # (agents/distiller.md), and prints `standsAlone:` and one `gap:` line per gap. The check never
 # blocks, so every value exits 0. schema-check.sh is sourced here because no stage script sources
@@ -695,7 +731,7 @@ distill_stale() {
 # says. $1 the canonical task folder, $2 the stage, $3 optional, the answer distill_stale gave
 # before the caller wrote its records.
 distill_read() {
-  local task_folder="$1" stage="$2" stale="${3:-}" sidecar schema result faults sidecar_hash records_hash
+  local task_folder="$1" stage="$2" stale="${3:-}" sidecar schema result faults
   sidecar="$task_folder/records/$stage-distill.json"
   schema="${PLUGIN_ROOT}/scripts/distill-schema.json"
   [ -f "$sidecar" ] || die2 "distill: no sidecar at $sidecar. Dispatch the distiller first"
@@ -712,13 +748,10 @@ distill_read() {
   [ -n "$stale" ] || stale="$(distill_stale "$task_folder" "$stage")" || exit $?
   if [ "$stale" = "yes" ]; then
     echo "standsAlone: stale"
-    echo "stale: $sidecar was written before the last change to the $stage records, so its gaps are not current. Dispatch the distiller for stage $stage again, then run this call again"
+    echo "stale: $sidecar was written before the last change to the $stage records, so its gaps are not current. Dispatch the distiller for stage $stage again. It writes the sidecar also when its judgement is unchanged, because only a new write clears this. Then run this call again"
     return 0
   fi
-  sidecar_hash="$(distill_sha256 <"$sidecar")" || exit $?
-  records_hash="$(distill_records_hash "$task_folder" "$stage")" || exit $?
-  write_atomic "$task_folder/records/$stage-distill.stamp" \
-    "$(jq -n --arg s "$sidecar_hash" --arg r "$records_hash" '{sidecar: $s, records: $r}')"
+  distill_stamp "$task_folder" "$stage"
   echo "standsAlone: $(jq -r '.standsAlone' "$sidecar")"
   jq -r '.gaps[] | "gap: " + .' "$sidecar"
 }
@@ -996,3 +1029,4 @@ active_tree_for() {
 }
 
 warn_newer_installed
+warn_session_version

@@ -153,7 +153,8 @@ Repair that and the next attempt continues. Leave it and this unit of work stays
 say in plain words
 what the builder's report names. The person, or design, adds a file the unit needs:
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
-halt a started order. Unattended, run `build-record` as after any return. It halts the order
+halt a started order. `build-record` refuses while the order's owned or shared files in the
+design differ from the snapshot (exit 117), and spends no attempt. Run `start` first. Unattended, run `build-record` as after any return. It halts the order
 itself, so do not halt it again. A halted order records no attempt: `build-record` refuses it
 (exit 49) until the halt is cleared, except the deviation halt `--accept-deviation` answers. The next `start` sets aside what was left.
 
@@ -412,13 +413,17 @@ The recipe flags and `--interface` are `build-record`'s. The range and the repor
 from the build record, so neither is passed. The interface record is read again from its file,
 so an amended record is what the check reads. No implementer is dispatched and no attempt is
 spent. The `next:` line offers this route beside `build` when the last attempt was stopped by
-the tool rows or interface-record alone. When interface-record is among them, the line names
-the record's file to amend first.
+the tool rows, owned-files or interface-record alone. When interface-record is among them, the
+line names the record's file to amend first. When owned-files is among them, the line names
+the steps still left before the re-check: `add-owned-file`, design `close` and `start`. It drops
+the steps the design or the snapshot already took after the attempt. The re-check reads the order's owned files
+from the snapshot that `start` refreshed. The same code fails again until the design gives the
+order the file.
 
 It refuses (exit 88) in five cases, each with its own message. No build record exists for the
 order. The code repository's HEAD is not the record's own commit, because the code moved, and
-the route is `build`. Or a check outside the three tool rows and interface-record stopped the
-attempt. A test or a suite that failed is the implementer's work, so a re-check is not a free
+the route is `build`. Or a check outside the three tool rows, owned-files and interface-record
+stopped the attempt. A test or a suite that failed is the implementer's work, so a re-check is not a free
 retry, and the route is `build`. Or no check stopped the attempt, so it passed and the order is
 past the build. Or a path the interface check named does not exist at the recorded commit, so
 no amended record can answer it. A halted order refuses (exit 49), and `references/finish.md`

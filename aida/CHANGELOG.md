@@ -4,6 +4,62 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.14] - 2026-10-05
+
+Changes from the supporting taxonomies site test and the periplus
+light-mode test, on 6.0.13. A declared departure no longer stops an
+unattended chain, and a person can keep it later with one call. Record
+steps refuse in the states that left no route, and say what to run.
+
+### Added
+
+- A stage script prints one line when the session started on another
+  AIDA version. The agents and hooks loaded at start may still be that
+  version, and a new session loads the script's version for both.
+- `build-recheck` answers a build attempt that the owned-files check
+  stopped, as it already did for a fix round. The re-check reads the
+  refreshed snapshot, so no attempt is spent.
+- On a light task, an order at its fix-round cap gets one repair round of
+  its own. It opens for new breakage from the last round. With a person
+  present and `--allow`, it opens for a finding the fixer reported as
+  out of scope too.
+- The reviewer marks a finding that restates the builder's declared
+  departure with `declaredDeparture`. Unattended, such a finding waits
+  with the departure, and other orders go on. The task review asks keep
+  or rebuild once, and lists each marked finding.
+- Interactive, `review-record --accept-deviation` writes the person's
+  keep into a review record whose departure waits. The marked findings
+  are ruled wrong, and no fix round runs. After finish, it refuses (exit
+  50) and names the task review row.
+- The hook refuses a recursive delete of the session scratchpad, a folder
+  above it, or a glob directly under it. The implementer and fixer work
+  in one folder of their own there, and delete only that folder.
+
+### Changed
+
+- The distiller writes every sidecar that the dispatch names, also when
+  it judges the old one still true. Only a new write clears a stale
+  sidecar.
+- A review close keeps the scope stamp current when scope read current
+  before the close. Before, every reviewed task read scope stale.
+- `fix-record` and `build-record` refuse (exit 37) while the order's
+  dispatch record is open, and say to run `dispatch-close` first.
+- For a record order, `dispatch-close` checks the order's owned files in
+  the project folder, not the code worktree.
+- `build-record` refuses (exit 117), with no attempt spent, when the
+  order's owned files in the design differ from the snapshot. The
+  message names `start`.
+- Once a departure is kept, `verify-record --ruling` may rule any open
+  finding before a fix round. So a finding the reviewer did not mark
+  does not force a fix round.
+- A kept departure rules its marked findings wrong, so the fix brief
+  never gets them.
+
+### Removed
+
+- The `fix-record` block that cleared a fixer's resume count. 6.0.13 removed
+  the report-age test that made it needed, so it could no longer run.
+
 ## [6.0.13] - 2026-10-02
 
 Changes from the supporting taxonomies site test and the periplus

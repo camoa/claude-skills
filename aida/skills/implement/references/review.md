@@ -118,7 +118,21 @@ restart in `references/finish.md`. To keep the departure, run `review-record` ag
 `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger hold the
 reason, and the order goes on as below. Unattended, the flag refuses (exit 68). There nothing
 halts: `review-record` writes the record with the departure as `deviationPending`, prints a
-`departurePending:` line, and the order goes on as below.
+`departurePending:` line, and the order goes on as below. A finding the reviewer marks
+`declaredDeparture` is that same departure. It goes `pending` and waits with the departure, so no
+fixer undoes it. The task review lists it in the departure's decision. A `rebuild` answer there
+answers it too. The other findings take the fix round. When a person keeps the departure, with
+`--accept-deviation` here or at `build-record`, each marked finding is ruled `wrong` with their
+reason.
+
+A departure that waits as `deviationPending` has its review record already. A person who keeps
+it before `finish` does not wait for the task review. Set the task interactive, then run
+`review-record` again with the same `--findings` and `--accept-deviation <their reason>`. The
+script writes the keep into that record and rules each marked finding `wrong`. Nothing is reviewed
+again. A finding the reviewer did not mark stays open. Once the record holds the keep, the person
+may rule any open finding with `verify-record --ruling`, before any fix round. Unattended, that
+ruling refuses (exit 55). Without a kept departure, it refuses a finding that has a fix scope
+(exit 3). After `finish`, the keep refuses (exit 50), and the task review takes the answer.
 
 An information item the reviewer marks `departsFromDesign` true is a note, not a finding. It never
 halts the order or the orders after it, in either run mode. `review-record` holds it as
@@ -126,8 +140,8 @@ halts the order or the orders after it, in either run mode. `review-record` hold
 review: keep it or rebuild. It waits only when no departure above was found, so it never hides one.
 The record holds one departure. So when a departure above was found, the item is not put to the
 person; it stays in the record's `information` list only. A person present may keep the item at
-once with `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger
-hold the reason, though the order never halted.
+once, by the route above. The review record and `haltsCleared` in the ledger hold the reason,
+though the order never halted.
 
 Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
 clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,
@@ -200,6 +214,18 @@ to the person before running `fix-brief`. Open with: "A review finding wants a c
 file this order does not own. Only you can allow that. Allow the file and the fixer may change
 it. Withhold it and the fixer reports the finding, and you rule on it after the round." Then
 name the finding and the files.
+
+**The repair round.** At the cap, a light order gets one more round, once, for two kinds of open
+finding. The first is new breakage that the last round made. The fix caused it, so the order's own
+scope can repair it, and the round opens unattended too. The second is a finding that the last
+fixer reported scope-insufficient, when a person is present and grants paths with `--allow`. In
+that round `--allow` may name a path that no fix scope names, because the fixer's report names
+it. A path the order owns then joins the scope with no grant. A path another order owns
+refuses (exit 3). `fix-brief` opens the round only when the round can take every open finding.
+The ledger records it, and the order's allowed rounds rise by one. Otherwise `fix-brief`
+refuses (exit 54), and the message names what to rule or allow first. A second `fix-brief` call
+reuses the open repair round, so a mistyped `--allow` can be corrected. A second repair round
+never opens.
 
 Open the dispatch record before dispatching:
 ```
@@ -339,7 +365,9 @@ A ruling is a person's answer on an open finding, and there are three cases. At 
 rounds are spent, `verify-record` above refuses when a finding is still open and no ruling names
 it. Nothing is written yet, so this is a retry of that same call, not a new one, and each open
 finding needs a ruling. Once that round is on the record, the ruling is the same call with the
-rulings and no verdicts file. Before the cap: a finding the last fixer reported under
+rulings and no verdicts file. A finding the repair round above may take needs no ruling yet, and
+never halts the order. `verify-record` records the round and prints a line that names it. Put
+it to the person: run the repair round, or rule the finding. Before the cap: a finding the last fixer reported under
 `--scope-insufficient` may be ruled at that round's `verify-record`. The fixer's own report is
 the evidence that no round can reach it. When the round was verified first, the ruling is the
 same call with the rulings and no verdicts file, and the round's verdicts stand. With no round:

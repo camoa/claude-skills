@@ -192,9 +192,9 @@
         "repairs": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/repair"
+            "oneOf": [{"$ref": "#/$defs/repair"}, {"$ref": "#/$defs/ownRepair"}]
           },
-          "description": "One entry per repair a dependent order opened on this order after it closed, in the order they were opened. Present only when one was. `build-record` writes it when a builder stops with `Stop: closed-order-defect: <file>: <what fails>` and the file is this order's. It adds one finding to this order's review record, sends the order back to `reviewed` or `fixed`, and adds one fix round to its allowance, so roundsUsed never goes down. The order's fixer repairs it and its reviewer verifies the round, and `close` writes the range again (gap row 286)."
+          "description": "One entry per repair a dependent order opened on this order after it closed, in the order they were opened, and the order's own repair round when it had one. Present only when one was. `build-record` writes it when a builder stops with `Stop: closed-order-defect: <file>: <what fails>` and the file is this order's. It adds one finding to this order's review record, sends the order back to `reviewed` or `fixed`, and adds one fix round to its allowance, so roundsUsed never goes down. The order's fixer repairs it and its reviewer verifies the round, and `close` writes the range again (gap row 286)."
         },
         "doneWhenJudgement": {
           "type": "object",
@@ -397,6 +397,16 @@
         "report": {"type": "string", "minLength": 1, "description": "The stopped builder's report, which holds the evidence."},
         "at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date the repair opened. Set by the script, never typed."},
         "closedRange": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$", "description": "The commitRange this order held when the repair reopened it. `close` writes the range again, so this keeps the first one."}
+      }
+    },
+    "ownRepair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["round", "findings", "at"],
+      "properties": {
+        "round": {"type": "integer", "minimum": 2, "description": "The fix round `fix-brief` opened past a light order's cap, once per order. It adds one round to the allowance (gap row 314)."},
+        "findings": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^f[1-9][0-9]*$"}, "description": "The open findings the round takes: new breakage from the last round, or a finding its fixer reported scope-insufficient that a person widened with --allow."},
+        "at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date the round opened. Set by the script, never typed."}
       }
     },
     "grant": {

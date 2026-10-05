@@ -199,6 +199,7 @@ dispatch, and a second task of the same project builds beside it. A close reache
 record only. An open record refuses the next dispatch (exit 37), naming the role and the unit
 that hold it. The refusal names the record's age when it opened over a day ago, because a role
 that never returned leaves one.
+`build-record` and `fix-record` refuse too while a record for their order is open.
 
 **A role the runtime stops at its turn limit is resumed once.** This holds for every role this
 skill dispatches. An implementer whose order's diff budget starts with `large` is resumed twice.
