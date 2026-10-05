@@ -539,6 +539,21 @@ critique_findings_of() {
   printf '%s' "$n"
 }
 
+# The order ids, one per line and sorted, of the close commit whose design-closed.json holds the
+# hash $1. Exit 1 when no commit of the project holds it. The project folder is two levels up, as
+# in commit_stage_close.
+answered_order_ids() {
+  local project rel c
+  project="$(dirname -- "$(dirname -- "$TASK_PATH")")"
+  rel="tasks/$(jq -r '.id' "$TASK_PATH/task.json")"
+  while IFS= read -r c; do
+    [ "$(git -C "$project" show "$c:$rel/design-closed.json" 2>/dev/null | jq -r '.hash' 2>/dev/null)" = "$1" ] || continue
+    git -C "$project" ls-tree --name-only "$c" "$rel/design/" | sed -n 's|.*/\(wo[0-9]*\)\.json$|\1|p' | sort
+    return 0
+  done < <(git -C "$project" log --format=%H -- "$rel/design-closed.json" 2>/dev/null)
+  return 1
+}
+
 # The orders implementation closed, from the ledger's `lastStep`, comma-joined, or nothing when
 # no ledger exists or none closed (gap row 227). The critics judge only the others: an answer to a
 # finding on a closed order edits a finished order.
@@ -2253,6 +2268,18 @@ $unaccounted"
         and (.critique.files | names) == ($now.files | names) and .critique.findings == $now.findings)
       | {outcome: .critique.outcome, carriedFrom: (.critique.carriedFrom // {closedAt, closedBy, hash})}' \
       "$CLOSED_FILE" 2>/dev/null)"
+  fi
+  # An order added, removed or merged since the answer is one the critics never read. The order
+  # ids the answered close held come from its own commit, so an uncommitted close carries nothing.
+  if [ -n "$carried" ]; then
+    local answered_ids now_ids
+    answered_ids="$(answered_order_ids "$(printf '%s' "$carried" | jq -r '.carriedFrom.hash')")" || answered_ids="unknown"
+    now_ids="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sed 's|.*/||; s|\.json$||' | sort)"
+    if [ "$answered_ids" != "$now_ids" ]; then
+      printf 'close: the critique answer is not carried: the orders are %s, and the answered close held %s. Critique the design again\n' \
+        "$(printf '%s' "$now_ids" | tr '\n' ' ')" "$(printf '%s' "$answered_ids" | tr '\n' ' ')" >&2
+      carried=""
+    fi
   fi
   if [ -n "$carried" ]; then
     doc="$(printf '%s' "$doc" | jq --argjson c "$carried" '.critique += $c')"

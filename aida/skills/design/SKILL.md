@@ -859,13 +859,16 @@ Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recip
 Unattended, `close` exits 8 on a disposition no confirmer agreed with. "The reuse decision" says
 what to do.
 
-Interactive, when critique files exist: ask the person for one line. It names how many findings
-changed an order and how many were left with a reason. Pass it as `--critique-outcome`. The
-record holds it as `critique.outcome` beside the files and the count, and `close` prints it as
-`critiqueOutcome:`. Autonomous: pass none; the flag is refused unattended, and the record says
-`none`, because nobody answered the findings. A count alone said nothing about what changed.
+On a first close, interactive, when critique files exist: ask the person for one line. It names
+how many findings changed an order and how many were left with a reason. Pass it as
+`--critique-outcome`. The record holds it as `critique.outcome` beside the files and the count,
+and `close` prints it as `critiqueOutcome:`. Autonomous: pass none; the flag is refused
+unattended, and the record says `none`, because nobody answered the findings. A count alone said
+nothing about what changed.
 A re-close after a reopen, with no new critique file, needs no flag in either mode. `close`
 keeps the last record's answer and prints `critiqueCarriedFrom:`, naming the close that gave it.
+When an order was added, removed or merged since that close, `close` records `none` and says so
+on stderr. Run "Critique the design" again, then close again.
 
 This runs the design check again. It writes `design-closed.json` only when that check exits clean.
 The record is committed when the stage closes: `close` commits the task folder, and the work order
