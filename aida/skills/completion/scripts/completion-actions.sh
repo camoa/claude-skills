@@ -423,7 +423,9 @@ do_follow_ups() {
   done
   cp_paths "follow-ups" "$task_arg"
   cp_load "follow-ups"
-  cp_refuse_complete "follow-ups"
+  # A task marked complete by hand writes no completion record, and its review still offers follow
+  # up tasks (gap row 324). Only a close through completion forecloses them.
+  [ "$CP_RECORD_STATE" = missing ] || cp_refuse_complete "follow-ups"
 
   # Unattended, every finding still without a task is created: a task changes the contract least,
   # and the fixed id means nobody has to name it. A person names each one through --create.

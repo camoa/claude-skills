@@ -99,4 +99,8 @@ end as interactive does, naming the command. Each stage refuses to start without
 stage's record, so a stage cannot run out of order. That is why this chain is safe.
 
 When close says the task was marked complete before this review, completion does not run in
-either mode. Name the review record for the person, and stop.
+either mode. Run this once, then name the review record for the person, and stop:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/completion/scripts/completion-actions.sh follow-ups "<task_folder>"
+```
+Unattended, it creates the task for each follow up finding that has none.

@@ -231,7 +231,7 @@ rw_paths() {
 }
 
 RW_FINISHED_DOC=""; RW_SNAPSHOT_DOC=""; RW_RECORD_DOC=""
-RW_RUN_MODE="interactive"; RW_PROJECT_DOC=""; RW_TASK_ID=""
+RW_RUN_MODE="interactive"; RW_PROJECT_DOC=""; RW_TASK_ID=""; RW_TASK_STATE=""
 # What the snapshot's proof kinds mean for a check about to answer, from br_proof_facts. A check
 # reads one of these two and never re-derives a proof kind of its own.
 RW_COMMITS_IN_CODE="yes"; RW_OWNS_IN_CODE="yes"
@@ -264,6 +264,7 @@ rw_require_frozen() {
   RW_SNAPSHOT_DOC="$(jq -c '.' "$SNAPSHOT_FILE")"
   RW_TASK_ID="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"
   [ -n "$RW_TASK_ID" ] || die 3 "$who: $TASK_PATH/task.json has no usable id field."
+  RW_TASK_STATE="$(jq -r '.state // ""' "$TASK_PATH/task.json" 2>/dev/null)"
   local facts
   facts="$(br_proof_facts "$RW_SNAPSHOT_DOC")"
   RW_COMMITS_IN_CODE="${facts%%	*}"
@@ -1529,7 +1530,7 @@ RW_REVIEWS
 
   # A task marked complete by hand before its review is reviewed as it stands. Review moves no
   # task state, so the task stays complete and close names no completion (gap row 324).
-  [ "$(jq -r '.state // ""' "$TASK_PATH/task.json" 2>/dev/null)" = complete ] \
+  [ "$RW_TASK_STATE" = complete ] \
     || mark_task_in_progress "$TASK_PATH" "review started" review
   mkdir -p "$REVIEW_DIR" || die 3 "checks: could not create $REVIEW_DIR"
   git -C "$RV_CODEPATH" diff --no-renames "$base" "$head_end" >"$DIFF_FILE" 2>/dev/null \
@@ -3009,8 +3010,8 @@ RW_ROWS
     ok) echo "CLOSE: review wrote one verdict per criterion into $ALIGNMENT_FILE, across $written criteria. That write moves the contract hash, but start compares the contract without verdicts, so it halts no order.${missing_ids:+ These criteria are in the frozen contract and not in the live one, so nothing was written for them: $missing_ids.}" >&2 ;;
     *)  echo "CLOSE: $ALIGNMENT_FILE is $live_state, so no criterion verdict was written into the contract. The record holds them." >&2 ;;
   esac
-  [ "$(jq -r '.state // ""' "$TASK_PATH/task.json" 2>/dev/null)" != complete ] \
-    || echo "CLOSE: $(jq -r '.id' "$TASK_PATH/task.json") was marked complete before this review, and it stays complete. The verdict is in $RECORD_FILE, beside the completion in task.md. Completion does not run, so name no next command." >&2
+  [ "$RW_TASK_STATE" != complete ] \
+    || echo "CLOSE: $RW_TASK_ID was marked complete before this review, and it stays complete. The verdict is in $RECORD_FILE, beside the completion in task.md. Completion does not run, and follow-ups still makes one task per follow up finding." >&2
   exit 0
 }
 
