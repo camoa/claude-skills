@@ -198,7 +198,7 @@ One number never means two things, and these keep the meanings implementation ga
 | Code | What it says |
 |---|---|
 | 1 | the given path holds no `task.json`, so it is not a task folder |
-| 3 | the script could not do its job: a missing argument, a tool not on PATH, a folder or a record it could not resolve or read, or a head that is not where the range ends, or past it by more than putting back what `task environment up` changed |
+| 3 | the script could not do its job: a missing argument, a tool not on PATH, a folder or a record it could not resolve or read, or a head that is not where the range ends, or past it by more than removing the files `task environment up` added |
 | 5 | the recorded code path exists and is not a git repository |
 | 14 | the project's own `project.json` exists and is not valid JSON |
 | 15 | the recorded code path does not exist on disk |

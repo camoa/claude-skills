@@ -50,7 +50,7 @@
     "reviewedAt": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The commit the review read, which is the code repository's HEAD when `checks` ran and the right-hand end of the range above. `checks` refuses a dirty working tree (exit 61), so this value describes a tree nothing uncommitted changes. Every later action refuses when the code path has moved off it or gone dirty (exit 51), because a finding about code that is no longer there is not a finding."
+      "description": "The commit the review read, which is the code repository's HEAD when `checks` ran. It is the right-hand end of the range above, or a descendant whose only later change puts back files `task environment up` added, which the fork point lacks. `checks` refuses a dirty working tree (exit 61), so this value describes a tree nothing uncommitted changes. Every later action refuses when the code path has moved off it or gone dirty (exit 51), because a finding about code that is no longer there is not a finding."
     },
     "hasUpstream": {
       "type": "boolean",

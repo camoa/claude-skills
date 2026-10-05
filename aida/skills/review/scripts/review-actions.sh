@@ -64,7 +64,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      not be resolved, a record or a frozen file that is present but unreadable, a record that does
 #      not match scripts/review-schema.json, a framework nothing was said about, or a code
 #      repository whose HEAD is not the commit implementation's own range ends at, or that commit
-#      with the files `task environment up` changed put back.
+#      with the files `task environment up` added removed.
 #   5  the recorded codePath exists and is not a git repository.
 #  14  the project's own project.json exists and is not valid JSON.
 #  15  the recorded codePath does not exist on disk.
@@ -716,7 +716,7 @@ rw_worse() {
   br_worst_verdict "$(jq -nc --arg a "$1" --arg b "$2" '[$a, $b]')"
 }
 
-RW_CHANGED_JSON="[]"; RW_CHANGED_COUNT=0; RW_RANGE=""; RW_HEAD=""
+RW_CHANGED_JSON="[]"; RW_CHANGED_COUNT=0; RW_RANGE=""
 RW_VALUES=""; RW_CATALOG_NOTES="[]"
 
 # The files the range $1..$2 changed, into RW_CHANGED_JSON and RW_CHANGED_COUNT. One producer:
@@ -1346,7 +1346,7 @@ rw_check_suite() {
 do_checks() {
   local task_arg="" recipes="" check_recipes="" failures="" values="" catalog_recipes=""
   local frameworks fw lookup recipes_json rows_file parts_file catalog stale
-  local range base head_end head_now end_commit restored past coverage cov_verdict cov_detail
+  local range base head_end head_now end_commit tab said restored past coverage cov_verdict cov_detail
   local mut_verdict tool_count ti one frozen_row frozen_findings mutation_file record_json today floor_id
   local upstream empty_range
 
@@ -1513,15 +1513,19 @@ RW_REVIEWS
   # Gap row 325. Before a merge, the files `task environment up` changed go back to their fork point
   # content, by completion or by a person first. A head past the range by that restore alone holds
   # the same task code. So git decides: the head descends from the range end, and every file changed
-  # since then is one task_env_restore_commit reads as back.
+  # since then is one task_env_restore_commit reads as back. When one of them is a file the fork
+  # point has, the check rows' site commands can reach the main checkout's site, so checks refuses.
   if [ "$head_now" != "$end_commit" ]; then
-    restored="$(task_env_restore_commit "$TASK_PATH" "$RV_CODEPATH" | cut -f2 | awk '{ gsub(/, /, "\n"); print }')"
+    tab="$(printf '\t')"
+    said="$(task_env_restore_commit "$TASK_PATH" "$RV_CODEPATH")" \
+      && die 3 "checks: $RV_CODEPATH holds the files \`task environment up\` changed at their content where the branch started: ${said#*"$tab"}. A site command a check row runs now can reach the main checkout's site through the name that content puts back. Nothing was written. Run git revert ${said%%"$tab"*} in $RV_CODEPATH, run checks again, and put the files back after the review."
+    restored="$(printf '%s' "${said#*"$tab"}" | awk '{ gsub(/, /, "\n"); print }')"
     past="$(git -C "$RV_CODEPATH" diff --no-renames --name-only "$end_commit" HEAD 2>/dev/null \
       | grep -vxF -- "$restored")"
     git -C "$RV_CODEPATH" merge-base --is-ancestor "$end_commit" HEAD 2>/dev/null && [ -z "$past" ] \
       || die 3 "checks: $RV_CODEPATH is at $head_now, and the range in $FINISHED_FILE ends at $head_end. Checks 5 to 8 run over the files on disk, so a tree that is not the final commit would answer about different code than the diff describes. Only a commit that puts back the files \`task environment up\` changed may follow the range. Check that commit out, or run the implement skill's finish step again."
   fi
-  RW_RANGE="$range"; RW_HEAD="$head_now"
+  RW_RANGE="$range"
 
   mark_task_in_progress "$TASK_PATH" "review started" review
   mkdir -p "$REVIEW_DIR" || die 3 "checks: could not create $REVIEW_DIR"
@@ -1994,7 +1998,7 @@ RW_RESEARCH_FILES
     elif [ -n "$body_floor" ] && { [ "$lens_word" = "guides" ] || { [ "$lens_word" = "practices" ] && [ -z "$practices_body" ]; }; }; then
       rw_check_row "$check_id" "unknown" "$body_floor" >>"$rows_file"
     else
-      rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff at $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')." >>"$rows_file"
+      rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff of $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange')." >>"$rows_file"
     fi
   done
   # What a build left for a person, one check each, which reads unknown until the
