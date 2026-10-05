@@ -47,6 +47,15 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/deny-destructive-commands.sh"
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/deny-named-role-dispatch.sh"
+          }
+        ]
       }
     ],
     "SubagentStop": [
