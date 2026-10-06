@@ -31,14 +31,24 @@ person can rule a finding that fails a criterion.
 
 ### Changed
 
-- `design create` refuses (exit 3) once implementation has a snapshot,
-  because implementation builds only the orders the snapshot froze.
-  The message names the route: a fix on the task branch and `finish`
-  again, or a follow up task.
+- An order that design adds after the build started is built in the
+  same task. Once design closed over it, `start` takes it into the
+  snapshot and the ledger as not started, and prints `added:`.
+- `start` removes the finished record when an order is not closed or is
+  halted. The `finished:` line says why, and `finish` writes the record
+  again.
+- A review whose range differs from the finished build's range counts
+  as no review. The next step names review, and completion refuses
+  (exit 1) and names both ranges. A task that builds on another task
+  still reads that task's recorded verdict as it is.
+- For a criterion that no order serves, `finish` now names `start`
+  after a design close with a new order, not `restart`.
 - A design close with no `--critique-outcome` keeps the last answer to
   the critique when the critique and the orders are unchanged.
   `critique.carriedFrom` names the close that gave it. A changed set of
-  orders carries nothing and asks for a new critique.
+  orders carries nothing and asks for a new critique. An unattended
+  close after the orders changed still names the old critique files,
+  with the outcome `none`.
 - `dispatch-open` refuses an implementer whose order has no build
   brief (exit 115). `dispatch-close` refuses (exit 111) while the
   builder's answers file is missing or holds no stop line. Searchers
