@@ -25,6 +25,12 @@ project's frameworks only for the project's own folders below, and for a `point:
 line. For each name that matched nothing, copy the `framework` and `unavailable` values of its
 report. They are the bound of that negative.
 
+Name the framework of each match from its `url`. A recipe's framework is the path segment after
+`agentic-recipes/` or `tooling-recipes/`. A guide's framework is its first path segment when that
+segment names a recipe's framework, for example `drupal/`. A guide under a topic such as `css/` has
+none. Mark a match "another framework" when its framework is not one of the project's frameworks.
+Return it all the same. The mark tells the reader the match may not fit this project.
+
 **A project's own agentic recipes are named too.** Do this when the message carries no `point:`
 line, which is the message that asks what covers some words. Research names the project folder
 and the project's frameworks on it. Run this once per framework, before you answer:

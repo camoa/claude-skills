@@ -353,7 +353,7 @@ is already in that file. Do not pay for it twice.
 For a name that was not searched, look in this order, and stop at the first answer:
 
 1. This project's own code. Dispatch `internal-searcher` with the words to search.
-2. The catalog. Ask the navigator to identify guides and recipes covering it. Identify only. It
+2. The catalog. Dispatch `catalog-identifier` with the words to search. It identifies only. It
    returns names and never resolves a body, so one name costs one lookup. Read a body only when
    a match is worth reading.
 3. When no guide or recipe covers it, what reputable sources recommend. Dispatch

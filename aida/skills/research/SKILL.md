@@ -195,7 +195,8 @@ Typical search subjects, named by what they read, not by a fixed roster:
   the plain three-part test and say the recipe is missing (see "A missing process recipe" below).
 - **Guides and recipes.** Ask the navigator's identify mode what covers this criterion, and
   search any source this project configured itself. Name what is found and say which kind it is:
-  a guide, a tooling recipe, or an agentic recipe. Do not open any of them. Identifying is the
+  a guide, a tooling recipe, or an agentic recipe. Keep the mark "another framework" where the
+  agent put one. Do not open any of them. Identifying is the
   whole job and design is the reader. The identify report says which catalogs it searched and
   which it could not reach; a catalog it could not reach is not a catalog that held nothing, and
   the finding says so.
