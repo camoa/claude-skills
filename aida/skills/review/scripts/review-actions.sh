@@ -898,13 +898,21 @@ RW_CHANGED
   hand="$(cd "$RV_CODEPATH" && bash "$PLUGIN_ROOT/skills/implement/scripts/implement-actions.sh" unattributed "$TASK_PATH" 2>/dev/null \
     | sed -n 's/^unattributed: //p' | grep -vx none | paste -sd ';' - | sed 's/;/; /g')"
   [ -z "$hand" ] || aside_line="$aside_line These commits lie outside every order's records, so no order's review read them, and a person says whether each belongs: $hand."
-  if [ -n "$unmatched" ]; then
+  # Before gap row 334 a light run committed its compromises log on the task branch, at any stage,
+  # so the whole branch from its fork point is read. The commit subject tells AIDA's log from a
+  # project's own file of that name. A branch that no longer holds the file is repaired.
+  local fork old_log=""
+  fork="$(task_fork_point "$TASK_PATH" "$RV_CODEPATH")"
+  if [ -n "$fork" ] && git -C "$RV_CODEPATH" cat-file -e "${RW_RANGE##*..}:$COMPROMISES_FILE" 2>/dev/null \
+    && git -C "$RV_CODEPATH" log --format=%s "$fork..${RW_RANGE##*..}" -- "$COMPROMISES_FILE" 2>/dev/null \
+      | grep -q '^Log a light-run compromise:'; then
+    old_log=" $COMPROMISES_FILE on this branch is a compromises log an earlier AIDA committed. The log now lives in $TASK_PATH/$COMPROMISES_FILE: move its rows there, then remove the file from this branch."
+  fi
+  if [ -z "$unmatched" ] && [ -n "$old_log" ]; then
+    rw_check_row "$CHECK_SERVES" "unmet" "every changed file in $RW_RANGE matches some order's own ownedFiles.$old_log$aside_line"
+  elif [ -n "$unmatched" ]; then
     [ -z "$support_changed" ] || extra=" These are frozen support files that changed after the freeze: ${support_changed%, }."
-    extra="$extra$aside_line$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
-    # Before gap row 334 a light run committed its compromises log in the code repository.
-    case ", $unmatched" in *", $COMPROMISES_FILE, "*)
-      extra="$extra $COMPROMISES_FILE is a compromises log an earlier AIDA committed here. The log now lives in $TASK_PATH/$COMPROMISES_FILE: move its rows there, then remove the file from this branch." ;;
-    esac
+    extra="$extra$old_log$aside_line$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
     [ -z "$extra" ] || extra=".$extra"
     rw_check_row "$CHECK_SERVES" "unmet" "these changed files match no work order's own ownedFiles, so nothing in the design asked for them: ${unmatched%, }$extra"
   elif [ -n "$aside_line" ]; then

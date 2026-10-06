@@ -11356,8 +11356,7 @@ do_close() {
   [ -n "$new_ledger" ] || die 3 "close: deriving the row states for $unit_id failed."
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
 
-  # Each fake a light build added is logged once the order is closed, so the log's own commit
-  # lands after the range this close recorded (gap row 197).
+  # Each fake a light build added is logged once the order is closed (gap row 197).
   if task_is_light "$TASK_PATH"; then
     local fake_file="" fake_line
     while IFS= read -r fake_line; do
