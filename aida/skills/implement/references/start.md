@@ -102,8 +102,10 @@ for it. So is a started or closed order whose research findings changed through 
 one whose reasoning only grew through `update --append-reasoning`. So is one whose absence rows
 design marked reviewed. Its frozen tests were written from
 fields that did not change. An order already built carries the new findings only into a review it
-has not had yet, never into the build it already had. A removed owned file, or any other change,
-halts it as before. A reasoning whose earlier text changed halts too.
+has not had yet, never into the build it already had. So is one that dropped an owned or shared
+path that names no file in the code, because nothing was built there. A removed owned file that
+the code holds, or any other change, halts it as before. A reasoning whose earlier text changed
+halts too.
 An order the live design no longer holds, because design merged or removed it, has no live copy
 to take. When it has not started, it is dropped from the snapshot and the ledger, and the
 `removed:` line names it. That line prints only when an order was dropped. When it has started,

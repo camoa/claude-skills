@@ -2113,7 +2113,25 @@ do_start() {
       # reasoning whose earlier text changed, or a changed criterion it serves, halts as before.
       # The program also lists what changed in each order, and a refusal names that list (gap row
       # 241), so the cause a person reads is the one this comparison found.
-      widened_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" \
+      # A removed path that names nothing in the code was never built: the design named a file
+      # under a wrong path (gap row 326). Dropping it is taken in place too. The owned-files check
+      # still reads the diff, so a file the build changed and no longer owns still stops it.
+      local phantom_json='[]' removed_path
+      while IFS= read -r removed_path; do
+        [ -n "$removed_path" ] || continue
+        case "$removed_path" in
+          /*) [ -e "$removed_path" ] && continue ;;
+          *) { [ -e "$code_path/$removed_path" ] || [ -n "$(git -C "$code_path" ls-files -- "$removed_path" 2>/dev/null)" ]; } && continue ;;
+        esac
+        phantom_json="$(printf '%s' "$phantom_json" | jq -c --arg p "$removed_path" '. + [$p]')"
+      done <<REMOVED_PATHS
+$(jq -rn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" '
+    ($live | map({(.id): .}) | add // {}) as $liveMap
+    | [ $snap[] | ($liveMap[.id]) as $l | select($l != null)
+        | ((.ownedFiles // []) - ($l.ownedFiles // [])), ((.sharedFiles // []) - ($l.sharedFiles // [])) | .[] ]
+    | unique | .[]')
+REMOVED_PATHS
+      widened_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson phantom "$phantom_json" \
           --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
           | ($snap | map({(.id): .}) | add // {}) as $snapMap
@@ -2123,11 +2141,13 @@ do_start() {
               | select($l != null)
               | select(($l | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed)) == ($s | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed)))
               | select(($l.reasoning // "") | startswith($s.reasoning // ""))
-              | select(((($s.ownedFiles // []) - ($l.ownedFiles // [])) | length) == 0)
-              | select(((($s.sharedFiles // []) - ($l.sharedFiles // [])) | length) == 0)
+              | select(((($s.ownedFiles // []) - ($l.ownedFiles // []) - $phantom) | length) == 0)
+              | select(((($s.sharedFiles // []) - ($l.sharedFiles // []) - $phantom) | length) == 0)
               | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null) ] | length) == 0)
               | [ (if ((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 then "gained owned files" else empty end),
                   (if ((($l.sharedFiles // []) - ($s.sharedFiles // [])) | length) > 0 then "gained shared files" else empty end),
+                  ((($s.ownedFiles // []) - ($l.ownedFiles // [])) + (($s.sharedFiles // []) - ($l.sharedFiles // [])) | unique
+                    | if length > 0 then "dropped paths that name no file in the code: " + join(", ") else empty end),
                   (if $l.findings != $s.findings then "findings changed" else empty end),
                   (if $l.reasoning != $s.reasoning then "reasoning appended" else empty end),
                   (if $l.absenceReviewed != $s.absenceReviewed then "absence rows marked reviewed changed" else empty end) ] as $why
@@ -2592,7 +2612,7 @@ LO_MOVE
   [ -f "$IMPL_DIR/preconditions.json" ] && jq empty "$IMPL_DIR/preconditions.json" 2>/dev/null && st_precon=true
   [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
   st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
-  st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" '{workOrders: $w}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
+  st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" --arg h "$snapshot_hash_on_disk" '{workOrders: $w, hash: $h}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
   # After a retake, or a restart from before restart reverted (gap row 252), the order's own build
   # and fix commits may still be on the branch; one line per order names them while they are. Not
   # a refusal: a retake keeps them on purpose (live-run row 94). The line is dropped when there is
