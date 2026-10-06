@@ -29,6 +29,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                            [--accept-baseline <surface id>]...
 #                                            [--value <name>=<value>]...
 #   review-actions.sh close    <task_folder> [--row <criterion or check>=met|unmet]...
+#                                            [--row <finding id>=wrong|deferred]...
 #   review-actions.sh audit    <task_folder>          the checks, and how each verdict came about
 #   review-actions.sh step     <name>
 #
@@ -198,6 +199,7 @@ usage: review-actions.sh read     <task_folder>
        review-actions.sh surfaces <task_folder> [--walked <surface id>]...
                                                [--accept-baseline <surface id>]... [--value <name>=<value>]...
        review-actions.sh close    <task_folder> [--row <criterion or check>=met|unmet]...
+                                               [--row <finding id>=wrong|deferred]...
        review-actions.sh audit    <task_folder>
        review-actions.sh step     <name>
 EOF
@@ -413,7 +415,7 @@ rw_refuse_moved_code() {
   [ -n "$current" ] \
     || die 3 "$who: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
   [ "$recorded" = "$current" ] \
-    || die 51 "$who: $RV_CODEPATH is at $current, and the checks were run at $recorded. The code moved under this review, so what this step would record is about code that is no longer there."
+    || die 51 "$who: $RV_CODEPATH is at $current, and the checks were run at $recorded. The code moved under this review, so what this step would record is about code that is no longer there. Run checks again to start a fresh pass at this commit."
   [ "$how" = "clean" ] || return 0
   dirty="$(git -C "$RV_CODEPATH" status --porcelain 2>/dev/null)"
   [ -z "$dirty" ] \
@@ -1906,23 +1908,23 @@ do_findings() {
   # times, which is why every one of the six is written here rather than left out.
   # Check 16's floor, before its lens verdict. The practices lens reads the plays research loaded
   # into records/playbooks.json, so a missing load is a lens that did not run, never a lens that
-  # found nothing to follow. Unknown when the record is absent; unknown when no source in it is
-  # loaded while the project subscribes to a set, holds a playbook.md, or declares a folder as a
-  # source of playbooks, since then something was there to load. A folder and nothing else: the
-  # loader reads folder sources only, and `add-source <project> playbooks catalog` writes a
-  # catalog entry the loader skips, so counting that entry would hold the check at unknown for
-  # ever with a repair that cannot clear it. A record whose sources are all absent with nothing
-  # to load is the ordinary case for a project with no plays, and the lens verdict stands.
-  # A person never runs the load, so the repair names the stage that does.
+  # found nothing to follow. The floor applies only when something was there to load: the project
+  # subscribes to a set, holds a playbook.md, or declares a folder as a source of playbooks. Then
+  # it reads unknown when the record is absent, or when no source in it is loaded. A folder and
+  # nothing else: the loader reads folder sources only, and `add-source <project> playbooks
+  # catalog` writes a catalog entry the loader skips, so counting that entry would hold the check
+  # at unknown for ever with a repair that cannot clear it. With nothing to load, an absent record
+  # and a record whose sources all read absent say the same thing, so the lens verdict stands
+  # (gap row 329). A person never runs the load, so the repair names the stage that does.
   local playbooks_record playbooks_floor
   playbooks_record="$(playbooks_record_path "$TASK_PATH")"
   playbooks_floor=""
-  if [ ! -f "$playbooks_record" ]; then
-    playbooks_floor="playbooks not loaded: $playbooks_record is absent, so the practices lens read no play. Run /aida:research on this task again; it loads the plays at its start."
-  elif [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ]; then
-    if [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.playbookSubscriptions // {})[] | .[] ] | length')" != "0" ] \
-      || [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.sources // [])[] | select(.locationType == "folder") | select((.provides // []) | index("playbooks")) ] | length')" != "0" ] \
-      || [ -f "$RV_PROJECT_FOLDER/playbook.md" ]; then
+  if [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.playbookSubscriptions // {})[] | .[] ] | length')" != "0" ] \
+    || [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.sources // [])[] | select(.locationType == "folder") | select((.provides // []) | index("playbooks")) ] | length')" != "0" ] \
+    || [ -f "$RV_PROJECT_FOLDER/playbook.md" ]; then
+    if [ ! -f "$playbooks_record" ]; then
+      playbooks_floor="playbooks not loaded: $playbooks_record is absent, while the project subscribes to a set, declares a folder of plays, or holds playbook.md. So the practices lens read no play. Run /aida:research on this task again; it loads the plays at its start."
+    elif [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ]; then
       playbooks_floor="playbooks not loaded: every source in $playbooks_record reads absent, empty or unreachable, while the project subscribes to a set, declares a folder of plays, or holds playbook.md. Run /aida:research on this task again; it loads the plays at its start."
     fi
   fi
@@ -2768,6 +2770,19 @@ do_close() {
   rw_refuse_moved_code "close" "commit-only"
   [ -z "$rows" ] || rw_require_person "close" "--row" "a person read a checklist row and judged it"
 
+  # A person rules a finding that fails a criterion, with the words a build's ruling takes (gap row
+  # 329). wrong: the reviewer was mistaken, so the criterion reads its own answer. deferred: the
+  # finding is real and waits, so it becomes follow-up and completion offers it as a task. The
+  # finding stays in the record either way, and `ruling` holds the person's word.
+  local rulable_findings ruled
+  rulable_findings="$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.findings // [])[] | select(.disposition == "criterion" or has("ruling")) | .id ]')"
+  RW_RECORD_DOC="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson rf "$rulable_findings" --arg given "$rows" '
+    [ ($given | split("\n"))[] | split("\t") | select(length == 2 and (.[1] == "wrong" or .[1] == "deferred")) ] as $g
+    | .findings = [ (.findings // [])[] | . as $f | ([ $g[] | select(.[0] == $f.id) ][0]) as $r
+        | if $r == null or ($rf | index($f.id)) == null then $f
+          else $f | .ruling = $r[1] | .disposition = (if $r[1] == "deferred" then "follow-up" else "criterion" end) end ]')"
+  [ -n "$RW_RECORD_DOC" ] || die 3 "close: could not apply the person's rulings to the findings in $RECORD_FILE."
+
   local alignment criteria count i one kind state verdict answered suite_verdict
   local hit rows_out criteria_json bad_rows person_checks unanswered=0 unmet_count=0
   local observe_owner observed_file person_owned failed_by cited_by="" stale_low
@@ -2837,9 +2852,9 @@ do_close() {
       esac
     fi
     # A finding `findings` recorded with disposition criterion fails the criterion it cites, however
-    # the row above answered (gap row 274).
+    # the row above answered (gap row 274), until a person rules it wrong (gap row 329).
     failed_by="$(printf '%s' "$RW_RECORD_DOC" | jq -r --arg id "$cid" \
-      '[ (.findings // [])[] | select(.disposition == "criterion" and .linkedTo == $id) | .id ] | join(", ")')"
+      '[ (.findings // [])[] | select(.disposition == "criterion" and .linkedTo == $id and .ruling != "wrong") | .id ] | join(", ")')"
     if [ -n "$failed_by" ]; then
       verdict="unmet"; answered="script"; cited_by="$cited_by $cid on $failed_by;"
     fi
@@ -2857,15 +2872,15 @@ do_close() {
   # A --row for a criterion the contract does not hold, or one a machine verifies, is a caller
   # answering a question nobody asked. Every id is checked in one question rather than one per row.
   person_checks="$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.checks // [])[] | select(has("answeredBy")) | .id ]')"
-  bad_rows="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --rawfile given /dev/stdin '
+  bad_rows="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --argjson pf "$rulable_findings" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
-      | . as $id | select(($po | index($id)) == null) | select(($pc | index($id)) == null) ]
+      | . as $id | select(($po | index($id)) == null) | select(($pc | index($id)) == null) | select(($pf | index($id)) == null) ]
     | unique | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS
 )"
   [ -z "$bad_rows" ] \
-    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, and no check of that id waits for the person. Any other machine-verified criterion is answered by the suite join, never by a flag."
+    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, no check of that id waits for the person, and no finding of that id fails a criterion. Any other machine-verified criterion is answered by the suite join, never by a flag."
 
   # A record `findings` wrote before gap row 274 routed low findings through criteria. Close does
   # not judge severity, so it names them and sends the person back to the producer.
@@ -2882,19 +2897,13 @@ RW_ROWS
     check_one_verdict="met"
     check_one_detail="every criterion in the frozen contract reads met."
   fi
-
-  rw_archive_closed_record "close"
-  if [ -z "$RW_RECORD_DOC" ]; then
-    # The archive moved the record this call was about to close a second time. Its rows are what
-    # this verdict was computed from, so it is read back from the archive rather than lost.
-    die 63 "close: the record was archived and there is nothing left to write to. Run checks again to start a fresh pass."
-  fi
+  ruled="$(printf '%s' "$RW_RECORD_DOC" | jq -r '[ (.findings // [])[] | select(has("ruling")) | .id + " " + .ruling ] | join(", ")')"
+  check_one_detail="$check_one_detail${ruled:+ The person ruled these findings: $ruled.}"
 
   local updated verdict_word failing
-  updated="$(jq -n --slurpfile record "$RECORD_FILE" --argjson criteria "$criteria_json" \
+  updated="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson criteria "$criteria_json" \
     --argjson one "$(rw_check_row "$CHECK_EVERY_CRITERION" "$check_one_verdict" "$check_one_detail")" '
-    $record[0]
-    | .criteria = $criteria
+    .criteria = $criteria
     | .checks = ([$one] + (.checks | map(select(.id != "every-criterion"))))')"
   # A check holding only low findings takes the person's --row (gap row 274), and so does a
   # decision an unattended build left (gap row 279).
@@ -2904,13 +2913,14 @@ RW_ROWS
     [ ($given | split("\n"))[] | split("\t") | select(length == 2) | . as [$id, $w]
       | select(if ($id | startswith("decision-") and endswith("-departure")) then (["keep", "rebuild"] | index($w)) == null
                elif ($id | startswith("decision-")) then (["wrong", "deferred", "load-bearing", "test-wrong"] | index($w)) == null
+               elif ($id | test("^f[1-9][0-9]*$")) then (["wrong", "deferred"] | index($w)) == null
                else (["met", "unmet"] | index($w)) == null end)
       | $id + "=" + $w ] | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS
 )"
   [ -z "$wrong_words" ] \
-    || die 3 "close: --row gave $wrong_words. A ruling takes wrong, deferred, load-bearing or test-wrong; a departure takes keep or rebuild; every other row takes met or unmet."
+    || die 3 "close: --row gave $wrong_words. A ruling takes wrong, deferred, load-bearing or test-wrong; a departure takes keep or rebuild; a finding takes wrong or deferred; every other row takes met or unmet."
   check_rows="$(jq -Rcn --argjson pc "$person_checks" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t") | select(length == 2) | select(($pc | index(.[0])) != null)
       | .[1] as $w
@@ -2943,6 +2953,13 @@ RW_ROWS
       --argjson row "$(rw_absence_check_row "$(printf '%s' "$updated" | jq -c '.absences')")" '
       .checks = [ .checks[] | if .id == "absence-clauses" then $row else . end ]')"
     [ -n "$updated" ] || die 3 "close: could not read the absence check again off the record's rows."
+  fi
+
+  # A close on a closed record answers the person's rows again at the same commit, which the
+  # moved-code refusal above guarantees, so no fresh pass runs. The closed record is archived first,
+  # so each verdict stays on disk. The brief and the findings file stay: the pass is the same one.
+  if printf '%s' "$RW_RECORD_DOC" | jq -e 'has("verdict")' >/dev/null 2>&1; then
+    rw_archive_files "close" "$(rw_record_short)" "$RECORD_FILE"
   fi
 
   # A decision an unattended build left, still unanswered, holds the verdict back (gap row 279).

@@ -33,6 +33,13 @@ the departure halt for a departure. The answer decides what happens next:
 and a later `close` with the person present answers each one with no fresh pass. Autonomous,
 nobody answers, so the review has no verdict and completion's halt names each decision.
 
+A finding the summary prints under `disposition(criterion)` fails the criterion it cites, whatever
+that criterion's own answer says. Ask the person to rule each such finding once, in the same words.
+`wrong`: the reviewer was mistaken, so the criterion reads its own answer. `deferred`: the finding
+is real and waits, so completion offers it as a follow up task, and the criterion reads its own
+answer. With no ruling, the finding still fails its criterion. The record keeps the finding and the
+person's word.
+
 The person answers met or unmet per criterion, from its rows. Their answer becomes one flag
 below. Autonomous, there is
 nobody to ask: each such criterion reads unanswered, no row flag is accepted, and the task gets no
@@ -52,14 +59,18 @@ the row.
 ## Close
 
 Run, with one `--row` per criterion a person verified, and one per criterion that carries the
-done-when rows of an order proved by `confirm`, and one per check the person answered:
+done-when rows of an order proved by `confirm`, and one per check the person answered, and one per
+finding the person ruled:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh close "<task_folder>" \
   --row <criterion>=met|unmet --row <check id>=met|unmet \
-  --row <decision id>=wrong|deferred|load-bearing|test-wrong|keep|rebuild
+  --row <decision id>=wrong|deferred|load-bearing|test-wrong|keep|rebuild \
+  --row <finding id>=wrong|deferred
 ```
-On a record that already holds a verdict, it archives that pass's files as `checks` does, per
-SKILL.md, and stops at exit 63.
+On a record that already holds a verdict, it archives that record alone and writes the new
+verdict in its place. The brief, the findings and every check stay, because the commit has not
+moved. So a person who gave a wrong row, or left one out, runs `close` again. After a fix commit,
+`close` refuses at exit 51, and the route is `checks`.
 
 It writes check 1, one verdict per criterion, and the review's own verdict into
 `review/review.json`. The record is committed when the stage closes: `close` commits the task
