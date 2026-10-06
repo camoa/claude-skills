@@ -40,7 +40,8 @@ the person confirms with `install --viewport`. Unattended, the recipe's list sta
 For each surface the person keeps, ask which paths render it. On Drupal that is a theme's
 templates folder, a module, or a block's template. Each answer is one `--path` glob, relative to
 the code tree. A bare directory covers every file under it; `dir/*` matches only its direct
-children. Ask whether the surface is critical, and pass `--critical` when it is. A surface
+children. A glob with a wildcard and no `/`, such as `*.css`, matches that file name in any
+folder. Ask whether the surface is critical, and pass `--critical` when it is. A surface
 with no declared paths runs on every review, so declaring is what makes review affordable.
 
 ## Write what the person kept
