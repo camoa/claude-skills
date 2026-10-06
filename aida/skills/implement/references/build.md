@@ -314,9 +314,9 @@ read `git diff <range>` over the project folder whole. AIDA commits that folder 
 build brief and its record. A task note commits `tasks/` whole, and another task's stage close
 commits its folder. None of that is the implementer's, so the files AIDA's own scripts write
 are set aside before the owned list is compared. Inside this task's folder those are
-`task.json`, `alignment.json`, their renderings, `design-closed.json`, and the `research/`,
-`design/`, `implementation/`, `implementation-<date>-<commit>/`, `review/`, `completion/`,
-`notes/` and `records/` folders. Outside it, every other task's folder and `project.json`.
+`task.json`, `alignment.json`, their renderings, `design-closed.json`, `COMPROMISES.md`, and
+the `research/`, `design/`, `implementation/`, `implementation-<date>-<commit>/`, `review/`,
+`completion/`, `notes/` and `records/` folders. Outside it, every other task's folder and `project.json`.
 The check's detail says how many were set aside. A person's places are `inputs/`,
 `deliverables/` and the project folders a report lands in. A file under a stage folder is set
 aside even when a person wrote it. A file in a person's place is never set aside, so a second

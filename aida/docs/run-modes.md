@@ -244,10 +244,10 @@ the same step go in one dispatch. The build reads the implement recipe that prec
 recorded. One interface lookup names every reuse candidate.
 
 **The compromises log.** Each skip is written by the code that decides it, never from a model's
-memory. It goes to `COMPROMISES.md` at the top of the task's worktree, one row per skip, and is
-committed there, so it ships with the code. A row names the task, the stage, what was skipped and
-what a normal run would do. Each marked fake gets its own row when its order closes. The same
-step run twice logs once. A light run is ready for you when the path script passes, the log is
+memory. It goes to `COMPROMISES.md` in the task folder, one row per skip, and the stage close
+commits it with the task's other records. It never enters the code repository. A row names the
+task, the stage, what was skipped and what a normal run would do. Each marked fake gets its own
+row when its order closes. The same step run twice logs once. A light run is ready for you when the path script passes, the log is
 current, and nothing on the non-goals was built. It is done when a person has answered the
 criteria and closed the task. A later normal task takes the log as its scope.
 

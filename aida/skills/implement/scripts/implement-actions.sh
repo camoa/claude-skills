@@ -2269,8 +2269,7 @@ REMOVED_PATHS
     die 8 "start: the build order could not be derived from the frozen work orders: $msg"
   fi
 
-  # A light task's review runs no visual regression (gap row 197). The log is written here, before
-  # the build's first commit is read, because review refuses a tree that moved after finish.
+  # A light task's review runs no visual regression (gap row 197). The log is written here, once.
   if task_is_light "$TASK_PATH" \
     && [ "$(jq -r '.surfaces.visualRegression.enabled // false' "$(resolve_project_folder "$TASK_PATH")/project.json" 2>/dev/null)" = "true" ]; then
     log_compromise "$TASK_PATH" review "visual regression" \
@@ -7500,14 +7499,14 @@ br_observed_check() {
 }
 
 # True when $1, a path relative to its task folder, is one AIDA's own scripts write there. Those
-# are the task record and the contract, each with its rendering, and the design close. Also the
-# stage folders, the archive `restart` leaves, the notes a save appends, and records/. The
-# owned-files check on a record order sets these aside. A task note or a stage close commits
-# them inside the order's range, and no implementer wrote them. A deliverable a person writes is
+# are the task record and the contract, each with its rendering, the design close and the
+# compromises log. Also the stage folders, the archive `restart` leaves, the notes a save
+# appends, and records/. The owned-files check on a record order sets these aside. A task note
+# or a stage close commits them inside the order's range, and no implementer wrote them. A deliverable a person writes is
 # never here: inputs/ and deliverables/ are theirs. The one list of what a script writes under a task.
 br_aida_writes_in_task() {
   case "$1" in
-    task.json|task.md|alignment.json|alignment.md|design-closed.json) return 0 ;;
+    task.json|task.md|alignment.json|alignment.md|design-closed.json|"$COMPROMISES_FILE") return 0 ;;
     research/*|design/*|implementation/*|implementation-*/*|review/*|completion/*|notes/*|records/*) return 0 ;;
   esac
   return 1
@@ -7666,8 +7665,7 @@ br_seven_checks() {
   # --- the realized diff touches only the files this order owns ------------------------------------
   local ofc_verdict ofc_detail
   local diff_output owned_files_json owned_count unmatched="" p matched gi g set_aside=0 aside_noun
-  local own_count allowed_hit="" env_aside="" rerun_step="" light=false
-  task_is_light "$TASK_PATH" && light=true
+  local own_count allowed_hit="" env_aside="" rerun_step=""
   # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
   # the new path, so a deleted file this order does not own would never appear here.
   diff_output="$(git_diff_of "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$BRC_SCOPE" --no-renames --name-only)"
@@ -7678,8 +7676,6 @@ br_seven_checks() {
   owned_count="$(printf '%s' "$owned_files_json" | jq 'length')"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
-    # A light task's compromises log is AIDA's own file, and no order owns it (gap row 197).
-    [ "$light" = "true" ] && [ "$p" = "$COMPROMISES_FILE" ] && continue
     # A record order owns absolute paths under the project folder, and its diff is the project
     # folder's, whose names are relative to it; the two meet on the absolute form. A file AIDA's
     # own scripts write there is counted and set aside: nobody dispatched wrote it.
@@ -12585,8 +12581,7 @@ RS_ADDED
 # serves check prints them, because their files can match an order's ownedFiles while no order's
 # review read them (gap row 287). An order accounts for a commit its records name (rs_order_commits),
 # one inside its closed commitRange, and one a restart reverted, with its revert. A commit that
-# changes only files AIDA itself writes, the compromises log and the files `task environment up`
-# recorded, is AIDA's own.
+# changes only files `task environment up` recorded is AIDA's own.
 do_unattributed() {
   [ "$#" -eq 1 ] || die 3 "unattributed: one task folder is required"
   local resolve_rc
@@ -12612,7 +12607,7 @@ do_unattributed() {
     ours=true
     while IFS= read -r p; do
       [ -n "$p" ] || continue
-      [ "$p" = "$COMPROMISES_FILE" ] || task_env_recipe_change "$TASK_PATH" "$p" "$RV_CODEPATH" "$c" || ours=false
+      task_env_recipe_change "$TASK_PATH" "$p" "$RV_CODEPATH" "$c" || ours=false
     done <<UA_PATHS
 $(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)
 UA_PATHS
@@ -12637,8 +12632,7 @@ UA_PATHS
 # row 217). Sets LO_LEFTOVERS_JSON, one {path, status, orders} per path git reports changed or
 # untracked, with the orders whose owned files hold it. Sets LO_TRACKED to the changes that cannot
 # move aside: a change other than an untracked or a modified file. A gitignored file is not read.
-# COMPROMISES.md is AIDA's own file, so it is not named. `-uall` names each file in a new folder,
-# because only a file meets an owned-file entry. `-z` leaves a name unquoted. git_status_of passes
+# `-uall` names each file in a new folder, because only a file meets an owned-file entry. `-z` leaves a name unquoted. git_status_of passes
 # neither flag, so this reads git directly. `start` and `dispatch-open` both call it.
 LO_TEXT_JQ='.[] | .path + " (" + (if (.orders | length) > 0 then (.orders | join(", ")) else "no order owns it" end) + ")"'
 im_scan_leftovers() {
@@ -12654,7 +12648,6 @@ im_scan_leftovers() {
     lo_xy="$(printf '%s' "$lo_line" | cut -c1-2)"
     lo_rel="${lo_line#???}"
     case "$lo_xy" in R*|C*|?R|?C) lo_skip=true ;; esac
-    [ "$lo_rel" != "$COMPROMISES_FILE" ] || continue
     lo_owners=""
     while IFS="$lo_tab" read -r lo_id lo_glob; do
       [ -n "$lo_id" ] && tf_path_matches_catalog_glob "$lo_rel" "$lo_glob" || continue

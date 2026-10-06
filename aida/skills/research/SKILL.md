@@ -135,7 +135,7 @@ and implementation read one record and never fetch. Research itself cites no pla
 `outward-search: skipped, light run` means the task is light. Dispatch no `outward-searcher`. The
 search inside this project and the catalog lookup still run. `start` logged the skip. A criterion
 that only an outward search would serve gets one finding that says the search was skipped. Its
-`--source` is `COMPROMISES.md` in the task's worktree.
+`--source` is `COMPROMISES.md` in the task folder.
 
 ## Read the parent's research
 

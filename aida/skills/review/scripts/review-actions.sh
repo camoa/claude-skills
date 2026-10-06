@@ -841,9 +841,8 @@ rw_run_fault() {
 # Check 3, the half a script can decide: a changed file no order owns is work no order asked for.
 # The hunk half is the reviewer's, and its finding cites an id or is not acted on.
 rw_check_serves() {
-  local owned owned_count one matched gi glob unmatched="" env_aside="" support_aside="" support_changed="" frozen sha aside_line="" extra="" light=false
+  local owned owned_count one matched gi glob unmatched="" env_aside="" support_aside="" support_changed="" frozen sha aside_line="" extra=""
   owned="$(rw_owned_files)"
-  task_is_light "$TASK_PATH" && light=true
   owned_count="$(printf '%s' "$owned" | jq 'length')"
   if [ "$RW_CHANGED_COUNT" -eq 0 ]; then
     # No order commits in the code repository, so this range was never going to hold anything and
@@ -860,8 +859,6 @@ rw_check_serves() {
   matched=false; gi=0; glob=""
   while IFS= read -r one; do
     [ -n "$one" ] || continue
-    # A light task's compromises log is AIDA's own file, and no order owns it (gap row 197).
-    [ "$light" = "true" ] && [ "$one" = "$COMPROMISES_FILE" ] && continue
     # A file `task environment up` recorded, still as it recorded it (gap row 256).
     if task_env_recipe_change "$TASK_PATH" "$one" "$RV_CODEPATH" "${RW_RANGE##*..}"; then
       env_aside="$env_aside$one, "; continue
@@ -904,6 +901,10 @@ RW_CHANGED
   if [ -n "$unmatched" ]; then
     [ -z "$support_changed" ] || extra=" These are frozen support files that changed after the freeze: ${support_changed%, }."
     extra="$extra$aside_line$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
+    # Before gap row 334 a light run committed its compromises log in the code repository.
+    case ", $unmatched" in *", $COMPROMISES_FILE, "*)
+      extra="$extra $COMPROMISES_FILE is a compromises log an earlier AIDA committed here. The log now lives in $TASK_PATH/$COMPROMISES_FILE: move its rows there, then remove the file from this branch." ;;
+    esac
     [ -z "$extra" ] || extra=".$extra"
     rw_check_row "$CHECK_SERVES" "unmet" "these changed files match no work order's own ownedFiles, so nothing in the design asked for them: ${unmatched%, }$extra"
   elif [ -n "$aside_line" ]; then
@@ -2660,10 +2661,9 @@ do_surfaces() {
   else
     rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
   fi
-  # A light task runs no visual regression. Implementation's start logged the skip, because a
-  # commit here would move the code under this review (gap row 197).
+  # A light task runs no visual regression. Implementation's start logged the skip (gap row 197).
   if [ "${vr_on%% *}" = "on" ] && task_is_light "$TASK_PATH"; then
-    rw_check_row "$CHECK_VR" "undeclared" "a light run skips visual regression, so review ran nothing for it. COMPROMISES.md in the code repository records the skip." >>"$checks_file"
+    rw_check_row "$CHECK_VR" "undeclared" "a light run skips visual regression, so review ran nothing for it. $COMPROMISES_FILE in the task folder records the skip." >>"$checks_file"
   else
     rw_surface_kind "$CHECK_VR" "visual-regression" "visual-regression" "$vr_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
   fi

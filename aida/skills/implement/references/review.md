@@ -452,9 +452,8 @@ Run:
 ```
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
-the last record left it. On a light task, commits that change only `COMPROMISES.md` may follow
-that record: they are AIDA's own log, and the range ends at the record. On success it writes `lastStep = "closed"` and the commit range the order
-produced, from the freeze. When another order's commit sits between two attempts, the range
+the last record left it. On success it writes `lastStep = "closed"` and the commit range the
+order produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
 order the tree, HEAD and the range are the project folder's, from the last attempt. The
 machine criteria it owns are written as judged by whoever judged its done-when row, person or

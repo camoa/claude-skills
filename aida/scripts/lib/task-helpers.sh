@@ -29,8 +29,7 @@
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
 #   log_compromise <folder> <stage> <skipped> <normal>
-#                                         adds one row to COMPROMISES.md in the task's tree and
-#                                         commits that file alone
+#                                         adds one row to COMPROMISES.md in the task folder
 #   task_env_recipe_change <folder> <path> <tree> <commit>
 #                                         true when `environment up` recorded the path and the
 #                                         commit still holds that content
@@ -439,22 +438,16 @@ OWNED_OVERLAP_JQ='
     | select(((($a.sharedFiles // []) | index($p) != null) and (($b.sharedFiles // []) | index($p) != null)) | not)
     | {ids: [$a.id, $b.id], path: $p} ]'
 
-# One row of the compromises log, COMPROMISES.md at the top of the task's tree (gap row 197). The
-# code that decides a skip calls this, so the log never rests on a model's memory. The file ships
-# with the code, because a later normal task takes it as its scope. A row already in the file is
-# not written again, so a step run twice logs once. The file alone is committed, because a stage
-# refuses a tree that is not clean. A commit that fails is said on stderr and does not stop the
-# stage. $1 the task folder, $2 the stage, $3 what was skipped, $4 what a normal run would do.
-# COMPROMISES_FILE is the file's one name. The owned-files checks in implementation and review
-# set it aside on a light task, because no work order owns it.
+# One row of the compromises log, COMPROMISES.md in the task folder (gap row 197). The code that
+# decides a skip calls this, so the log never rests on a model's memory. The log is AIDA's record,
+# so it never enters the code repository (gap row 334): the stage close commits the task folder.
+# A later normal task takes the log as its scope. A row already in the file is not written again,
+# so a step run twice logs once. A write that fails is said on stderr and does not stop the stage.
+# $1 the task folder, $2 the stage, $3 what was skipped, $4 what a normal run would do.
+# COMPROMISES_FILE is the file's one name.
 COMPROMISES_FILE="COMPROMISES.md"
 log_compromise() {
-  local tree file row
-  tree="$(jq -r '.worktree.path // empty' "$1/task.json" 2>/dev/null)"
-  [ -n "$tree" ] && [ -d "$tree" ] || tree="$(
-    command -v resolve_project_folder >/dev/null 2>&1 || . "${PLUGIN_ROOT}/scripts/lib/recipes.sh"
-    task_worktree "$1" "log-compromise")" || return 0
-  file="$tree/$COMPROMISES_FILE"
+  local file="$1/$COMPROMISES_FILE" row
   row="| $(basename -- "$1") | $2 | $(printf '%s' "$3" | sed 's/|/\\|/g') | $(printf '%s' "$4" | sed 's/|/\\|/g') |"
   [ -f "$file" ] && grep -qxF -- "$row" "$file" && return 0
   if [ ! -f "$file" ]; then
@@ -465,8 +458,6 @@ log_compromise() {
       || { printf 'task-helpers: could not write %s\n' "$file" >&2; return 0; }
   fi
   printf '%s\n' "$row" >>"$file"
-  { git -C "$tree" add -- "$COMPROMISES_FILE" && git -C "$tree" commit -q -m "Log a light-run compromise: $2" -- "$COMPROMISES_FILE"; } >/dev/null 2>&1 \
-    || printf 'task-helpers: %s was written and not committed. Commit it before the next step.\n' "$file" >&2
   printf 'compromise: %s: %s\n' "$2" "$3"
 }
 
