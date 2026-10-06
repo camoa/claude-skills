@@ -11534,7 +11534,7 @@ do_finish() {
           | if ($c.rowState == "rejected")
               then ($c.id + " (rejected: a row checker turned this down. The row goes back to the test author, who runs tests-freeze on that order again once the test is repaired; clear-halt first when the order halted on it)")
             elif (($served | index($c.id)) == null)
-              then ($c.id + " (no work order serves or owns it, so nothing will ever judge it. Design left this criterion with no order behind it: close design again with one, then restart)")
+              then ($c.id + " (no work order serves or owns it, so nothing will ever judge it. Design left this criterion with no order behind it: close design again with one, then run start, which takes the added order in)")
             else ($c.id + " (" + $c.rowState + ": the orders serving it have not all closed yet, so close them)")
             end ]
       | join("; ")')"
