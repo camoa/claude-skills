@@ -12918,8 +12918,10 @@ TG_GLOBS
       done <<TG_OWN
 $(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '.workOrders[]? | select(.id == $u) | .ownedFiles[]?')
 TG_OWN
+      # The order always owns a file, so the refusal names them and the globs. A wrong glob then
+      # reads as a wrong glob, not as a test file design forgot (gap row 333).
       [ "$is_test" = true ] \
-        || die 47 "dispatch-open: $unit_id owns no file a test glob matches, and no directory, so the freeze would refuse every test its author writes. Design adds the order's test file with add-owned-file and closes again. Nothing was dispatched."
+        || die 47 "dispatch-open: $unit_id owns $(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) | .ownedFiles[]? ] | join(", ")'), and no file or directory there matches a test glob: $(printf '%s' "$test_glob_raw" | paste -sd, - | sed 's/,/, /g'). A glob with no / matches a file name in any folder. A glob with / matches the whole path from the repository root. The freeze would refuse every test its author writes. If one of those files is the order's test file, pass the globs from the implement recipe's Oracle files block. If none is, design adds the test file with add-owned-file and closes again. Nothing was dispatched."
     fi
     # The test-glob filter keeps only this order's own test files readable. A reused file under the
     # test tree, such as a shared kernel base class, shows its shape as surely as source does, and
