@@ -34,11 +34,13 @@ and a later `close` with the person present answers each one with no fresh pass.
 nobody answers, so the review has no verdict and completion's halt names each decision.
 
 A finding the summary prints under `disposition(criterion)` fails the criterion it cites, whatever
-that criterion's own answer says. Ask the person to rule each such finding once, in the same words.
+that criterion's own answer says. Ask the person to rule each unruled one once, in the same words.
+The summary prints a ruled finding with its ruling beside it.
 `wrong`: the reviewer was mistaken, so the criterion reads its own answer. `deferred`: the finding
 is real and waits, so completion offers it as a follow up task, and the criterion reads its own
 answer. With no ruling, the finding still fails its criterion. The record keeps the finding and the
-person's word.
+person's word. A lens check whose medium and high findings are all ruled then waits for the person,
+the way a lens check with low findings only does.
 
 The person answers met or unmet per criterion, from its rows. Their answer becomes one flag
 below. Autonomous, there is

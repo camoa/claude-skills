@@ -69,6 +69,7 @@
 #                                         the <codePath> repository, else <codePath>
 #   playbooks_record_path <folder>        prints the path of the playbook record research loads
 #   playbooks_path_json <folder>          prints that path as a JSON string, or null when absent
+#   playbooks_person_path                 prints the path of the person's own playbook file
 #   DENIES_JQ                             a jq definition, `denies`, true when a string carries
 #                                         a negation word
 #   REASONING_JQ                          jq definitions: `struckMark`, and `liveReasoning`,
@@ -770,6 +771,11 @@ distill_deferred() {
 # to learn that nothing was loaded. $1 the task folder. Calls no die function.
 playbooks_record_path() {
   printf '%s/records/playbooks.json' "$1"
+}
+# The person's own playbook file, one per machine. The load reads it, and check 16's floor asks
+# whether it is there. Calls no die function.
+playbooks_person_path() {
+  printf '%s/.claude/aida/playbook.md' "$HOME"
 }
 playbooks_path_json() {
   local record

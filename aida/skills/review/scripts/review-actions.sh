@@ -525,7 +525,7 @@ rw_print_summary() {
     + (if has("surfaceSetup") then [ line("surfaceSetup"; .surfaceSetup) ] else [] end)
     + [ line("mutation"; "\(.mutation.verdict) survivors=\((.mutation.survivors // []) | length) score=\(if (.mutation.score // "") == "" then "none printed" else "in the record" end)") ]
     + [ (.findings // []) | group_by(.lens)[] | line("lens(\(.[0].lens))"; "\(length) finding(s): \([ .[].id ] | join(", "))") ]
-    + [ (.findings // []) | group_by(.disposition)[] | line("disposition(\(.[0].disposition))"; "\(length): \([ .[].id ] | join(", "))") ]
+    + [ (.findings // []) | group_by(.disposition)[] | line("disposition(\(.[0].disposition))"; "\(length): \([ .[] | .id + (if has("ruling") then " (ruled " + .ruling + ")" else "" end) ] | join(", "))") ]
     + [ line("catalogNotes"; ((.catalogNotes // []) | length)) ]
     + (if has("reviewerSkipped") then [ line("reviewerSkipped"; .reviewerSkipped) ] else [] end)
     # One line per routed clause. The check detail above is cut to one line, so a second clause
@@ -1812,20 +1812,24 @@ rw_check_for_lens() {
 rw_lens_hits() {
   printf '%s' "$2" | jq -r --arg l "$1" '[ .[] | select(.lens == $l)
     | (.id + " (" + .severity + ")" + (if $l == "purpose" then " at " + .file + ":" + .lines else "" end)
-       + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)) ] | join(", ")'
+       + " cites " + (if .linkedTo == "" then "nothing" else .linkedTo end)
+       + (if has("ruling") then ", ruled " + .ruling + " by the person" else "" end)) ] | join(", ")'
 }
 
 # One lens's reading of its check, as one check row, or nothing when the lens raised no finding.
 # A medium or high finding reads unmet. Only low findings: a person decides the check at close, and
-# nobody present reads met (gap row 274). The answeredBy key marks the check as the person's
+# nobody present reads met (gap row 274). A finding a person ruled at close counts as low here,
+# because the person already answered it (gap row 329). The answeredBy key marks the check as the person's
 # question, and `close --row` answers it. $1 the lens, $2 the check id, $3 the findings array.
 rw_lens_row() {
-  local lens_word="$1" check_id="$2" hits low_only
+  local lens_word="$1" check_id="$2" hits low_only low_word="is low"
   hits="$(rw_lens_hits "$lens_word" "$3")"
   [ -n "$hits" ] || return 0
-  low_only="$(printf '%s' "$3" | jq -r --arg l "$lens_word" '[ .[] | select(.lens == $l) | .severity ] | all(. == "low")')"
+  low_only="$(printf '%s' "$3" | jq -r --arg l "$lens_word" '[ .[] | select(.lens == $l) | select(has("ruling") | not) | .severity ] | all(. == "low")')"
+  [ "$(printf '%s' "$3" | jq -r --arg l "$lens_word" 'any(.[]; .lens == $l and has("ruling"))')" = "false" ] \
+    || low_word="is low or ruled by the person"
   if [ "$low_only" = "true" ] && [ "$RW_RUN_MODE" = "interactive" ]; then
-    rw_check_row "$check_id" "unknown" "every finding the $lens_word lens raised is low: $hits. The person confirms them at close with --row $check_id=met, which leaves them follow-up, or rejects them with --row $check_id=unmet." \
+    rw_check_row "$check_id" "unknown" "every finding the $lens_word lens raised $low_word: $hits. The person confirms them at close with --row $check_id=met, which leaves them follow-up, or rejects them with --row $check_id=unmet." \
       | jq -c '. + {answeredBy: "nobody"}'
   elif [ "$low_only" = "true" ]; then
     rw_check_row "$check_id" "met" "every finding the $lens_word lens raised is low: $hits. Nobody was present to confirm them, so the check reads met and the findings stay follow-up." \
@@ -1909,10 +1913,10 @@ do_findings() {
   # Check 16's floor, before its lens verdict. The practices lens reads the plays research loaded
   # into records/playbooks.json, so a missing load is a lens that did not run, never a lens that
   # found nothing to follow. The floor applies only when something was there to load: the project
-  # subscribes to a set, holds a playbook.md, or declares a folder as a source of playbooks. Then
-  # it reads unknown when the record is absent, or when no source in it is loaded. A folder and
-  # nothing else: the loader reads folder sources only, and `add-source <project> playbooks
-  # catalog` writes a catalog entry the loader skips, so counting that entry would hold the check
+  # subscribes to a set, holds a playbook.md, or declares a folder as a source of playbooks, or the
+  # person has their own playbook file. Then it reads unknown when the record is absent, or when
+  # no source in it is loaded. A folder and nothing else: the loader reads folder sources only, and
+  # `add-source <project> playbooks catalog` writes a catalog entry the loader skips, so counting that entry would hold the check
   # at unknown for ever with a repair that cannot clear it. With nothing to load, an absent record
   # and a record whose sources all read absent say the same thing, so the lens verdict stands
   # (gap row 329). A person never runs the load, so the repair names the stage that does.
@@ -1921,11 +1925,11 @@ do_findings() {
   playbooks_floor=""
   if [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.playbookSubscriptions // {})[] | .[] ] | length')" != "0" ] \
     || [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '[ (.sources // [])[] | select(.locationType == "folder") | select((.provides // []) | index("playbooks")) ] | length')" != "0" ] \
-    || [ -f "$RV_PROJECT_FOLDER/playbook.md" ]; then
+    || [ -f "$RV_PROJECT_FOLDER/playbook.md" ] || [ -f "$(playbooks_person_path)" ]; then
     if [ ! -f "$playbooks_record" ]; then
-      playbooks_floor="playbooks not loaded: $playbooks_record is absent, while the project subscribes to a set, declares a folder of plays, or holds playbook.md. So the practices lens read no play. Run /aida:research on this task again; it loads the plays at its start."
+      playbooks_floor="playbooks not loaded: $playbooks_record is absent, while the project subscribes to a set, declares a folder of plays, or holds playbook.md, or the person has $(playbooks_person_path). So the practices lens read no play. Run /aida:research on this task again; it loads the plays at its start."
     elif [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ]; then
-      playbooks_floor="playbooks not loaded: every source in $playbooks_record reads absent, empty or unreachable, while the project subscribes to a set, declares a folder of plays, or holds playbook.md. Run /aida:research on this task again; it loads the plays at its start."
+      playbooks_floor="playbooks not loaded: every source in $playbooks_record reads absent, empty or unreachable, while the project subscribes to a set, declares a folder of plays, or holds playbook.md, or the person has $(playbooks_person_path). Run /aida:research on this task again; it loads the plays at its start."
     fi
   fi
 
@@ -2782,6 +2786,18 @@ do_close() {
         | if $r == null or ($rf | index($f.id)) == null then $f
           else $f | .ruling = $r[1] | .disposition = (if $r[1] == "deferred" then "follow-up" else "criterion" end) end ]')"
   [ -n "$RW_RECORD_DOC" ] || die 3 "close: could not apply the person's rulings to the findings in $RECORD_FILE."
+  # Each lens check a ruling in this call touched is read again, the way `findings` reads it. A
+  # check whose medium and high findings are all ruled then waits for --row <check>=met|unmet, like
+  # a check with low findings only. An unruled medium finding still fails its lens (gap row 274).
+  local ruled_lens lens_row
+  for ruled_lens in $(printf '%s' "$RW_RECORD_DOC" | jq -r --argjson rf "$rulable_findings" --arg given "$rows" '
+    [ ($given | split("\n"))[] | split("\t") | select(length == 2 and (.[1] == "wrong" or .[1] == "deferred")) | .[0] ] as $ids
+    | [ (.findings // [])[] | . as $f | select((($ids | index($f.id)) != null) and (($rf | index($f.id)) != null)) | .lens ]
+    | unique | .[] | select(. as $l | ["non-goals", "solid", "dry", "architecture", "guides", "practices"] | index($l) != null)'); do
+    lens_row="$(rw_lens_row "$ruled_lens" "$(rw_check_for_lens "$ruled_lens")" "$(printf '%s' "$RW_RECORD_DOC" | jq -c '.findings')")"
+    RW_RECORD_DOC="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson r "$lens_row" '.checks = [ .checks[] | if .id == $r.id then $r else . end ]')"
+  done
+  [ -n "$RW_RECORD_DOC" ] || die 3 "close: could not read the ruled lens checks again in $RECORD_FILE."
 
   local alignment criteria count i one kind state verdict answered suite_verdict
   local hit rows_out criteria_json bad_rows person_checks unanswered=0 unmet_count=0
@@ -2957,9 +2973,20 @@ RW_ROWS
 
   # A close on a closed record answers the person's rows again at the same commit, which the
   # moved-code refusal above guarantees, so no fresh pass runs. The closed record is archived first,
-  # so each verdict stays on disk. The brief and the findings file stay: the pass is the same one.
+  # so each verdict stays on disk, with the brief and the findings under the same suffix. Those two
+  # are copied back, because the pass is the same one.
+  local keep_dir one_kept
   if printf '%s' "$RW_RECORD_DOC" | jq -e 'has("verdict")' >/dev/null 2>&1; then
-    rw_archive_files "close" "$(rw_record_short)" "$RECORD_FILE"
+    keep_dir="$(mktemp -d)" || die 3 "close: could not create a temporary folder"
+    for one_kept in "$FINDINGS_TARGET" "$BRIEF_FILE"; do
+      [ ! -e "$one_kept" ] || cp -p "$one_kept" "$keep_dir/" || die 63 "close: could not copy $one_kept aside, so the write was refused."
+    done
+    rw_archive_files "close" "$(rw_record_short)" "$FINDINGS_TARGET" "$BRIEF_FILE" "$RECORD_FILE"
+    for one_kept in "$FINDINGS_TARGET" "$BRIEF_FILE"; do
+      [ ! -e "$keep_dir/$(basename "$one_kept")" ] || mv "$keep_dir/$(basename "$one_kept")" "$one_kept" \
+        || die 63 "close: could not put $one_kept back from $keep_dir."
+    done
+    rmdir "$keep_dir"
   fi
 
   # A decision an unattended build left, still unanswered, holds the verdict back (gap row 279).
