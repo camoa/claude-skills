@@ -176,7 +176,7 @@ cp_paths() {
 CP_TASK_DOC=""; CP_TASK_ID=""; CP_STATE=""; CP_RUN_MODE="interactive"
 CP_ALIGNMENT_STATE=""; CP_FINISHED_STATE=""; CP_REVIEW_STATE=""; CP_RECORD_STATE=""
 CP_ALIGNMENT_DOC="null"; CP_FINISHED_DOC="null"; CP_REVIEW_DOC="null"
-CP_REVIEW_VERDICT="none"; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"; CP_OBSERVED="[]"
+CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=""; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"; CP_OBSERVED="[]"
 
 # Reads one record as JSON text into the named variable, or dies when it is present and
 # unreadable. Missing is a real state every action reports in words, never a refusal. $1 the
@@ -302,6 +302,9 @@ cp_load() {
     ok) CP_REVIEW_VERDICT="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '.verdict // "unfinished"')" ;;
     *)  CP_REVIEW_VERDICT="none" ;;
   esac
+  # A review of an earlier build is no review of this one (gap row 335).
+  CP_REVIEW_WHY="$(task_review_outdated "$TASK_PATH")" \
+    && { CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=" ($CP_REVIEW_WHY, so run the review stage again)"; }
   cp_load_children "$who"
   cp_load_follow_ups "$who"
   cp_load_observed "$who"
@@ -354,7 +357,7 @@ do_read() {
   fi
   case "$CP_REVIEW_VERDICT" in
     passed) closes="on the review verdict, with nothing asked" ;;
-    *)      closes="on a person's reason (--reason), because the review verdict is $CP_REVIEW_VERDICT" ;;
+    *)      closes="on a person's reason (--reason), because the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY" ;;
   esac
   cp_print_summary "read" "$(jq -nc --arg closes "$closes" --arg next "$next_step" '{closes: $closes, nextStep: $next}')"
   if [ "$CP_STATE" = "complete" ]; then
@@ -423,7 +426,9 @@ do_follow_ups() {
   done
   cp_paths "follow-ups" "$task_arg"
   cp_load "follow-ups"
-  cp_refuse_complete "follow-ups"
+  # A task marked complete by hand writes no completion record, and its review still offers follow
+  # up tasks (gap row 324). Only a close through completion forecloses them.
+  [ "$CP_RECORD_STATE" = missing ] || cp_refuse_complete "follow-ups"
 
   # Unattended, every finding still without a task is created: a task changes the contract least,
   # and the fixed id means nobody has to name it. A person names each one through --create.
@@ -737,8 +742,8 @@ do_close() {
     [ -z "$undecided" ] \
       || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. A --reason here closes the task with every one of those decisions unmade."
     case "$CP_RUN_MODE" in
-      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}$decide_route" ;;
-      *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it.$decide_route" ;;
+      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}$decide_route" ;;
+      *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it.$decide_route" ;;
     esac
   fi
 

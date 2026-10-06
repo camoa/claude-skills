@@ -152,13 +152,13 @@ Interactive, the script also prints one `unrouted:` line per finding of medium o
 severity that cites no id, then a count line. Nothing prints when there are none. Such a finding
 has no route inside this task. `fix-brief` hands a fixer open actionable findings only, and
 refuses (exit 53) when there are none. A commit after the review record moves HEAD, and `close`
-refuses (exit 63), so nobody fixes it by hand before the close. A new order cannot enter a
-running build. `finish` carries only findings ruled deferred into `finished.json`, so the review
-stage sees this one only if its own reviewer finds it again. When an `unrouted:` line prints, put
-it to the person, opening with: "The reviewer found a problem this task has no criterion or
-non-goal for, so nothing here will fix it. Only you can say what happens to it. Close as
-recorded: the finding stays in the order's review record, and the order closes. Track it as a
-task, then close: a follow up task takes it as its goal, and the order closes." Then say each
+refuses (exit 63), so nobody fixes it by hand before the close. A new order needs a criterion to
+serve, and this finding cites none. `finish` carries only findings ruled deferred into
+`finished.json`, so the review stage sees this one only if its own reviewer finds it again. When an
+`unrouted:` line prints, put it to the person, opening with: "The reviewer found a problem this task
+has no criterion or non-goal for, so nothing here will fix it. Only you can say what happens to it.
+Close as recorded: the finding stays in the order's review record, and the order closes. Track it as
+a task, then close: a follow up task takes it as its goal, and the order closes." Then say each
 finding in plain words and name its file. A yes to the second answer is the person's ask for
 that task, so run, once per finding said yes to:
 ```
@@ -452,9 +452,8 @@ Run:
 ```
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
-the last record left it. On a light task, commits that change only `COMPROMISES.md` may follow
-that record: they are AIDA's own log, and the range ends at the record. On success it writes `lastStep = "closed"` and the commit range the order
-produced, from the freeze. When another order's commit sits between two attempts, the range
+the last record left it. On success it writes `lastStep = "closed"` and the commit range the
+order produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
 order the tree, HEAD and the range are the project folder's, from the last attempt. The
 machine criteria it owns are written as judged by whoever judged its done-when row, person or

@@ -86,7 +86,9 @@ order's shape, not its file list. The route is the change, then `check`, `close`
 `design-closed.json` records, and `distill`. A reopen that creates or merges an order, removes
 one with `remove --id --reason`, or changes an order's interface, criteria or dependencies, reads
 as a first run does. Recording an old merge with `remove --merged-into` changes no order, so it
-takes the cheap route above.
+takes the cheap route above. Once implementation has a snapshot, an order `create` adds enters
+the build at the next `start`, after this close. A defect that a review found is fixed on the
+task branch, and implementation's `finish` runs again.
 
 Four changes do not halt an order that implementation already started: an added owned file, an
 `account` call, a reason added with `update --append-reasoning`, and a row marked with
@@ -351,7 +353,7 @@ is already in that file. Do not pay for it twice.
 For a name that was not searched, look in this order, and stop at the first answer:
 
 1. This project's own code. Dispatch `internal-searcher` with the words to search.
-2. The catalog. Ask the navigator to identify guides and recipes covering it. Identify only. It
+2. The catalog. Dispatch `catalog-identifier` with the words to search. It identifies only. It
    returns names and never resolves a body, so one name costs one lookup. Read a body only when
    a match is worth reading.
 3. When no guide or recipe covers it, what reputable sources recommend. Dispatch
@@ -857,11 +859,16 @@ Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recip
 Unattended, `close` exits 8 on a disposition no confirmer agreed with. "The reuse decision" says
 what to do.
 
-Interactive, when critique files exist: ask the person for one line. It names how many findings
-changed an order and how many were left with a reason. Pass it as `--critique-outcome`. The
-record holds it as `critique.outcome` beside the files and the count, and `close` prints it as
-`critiqueOutcome:`. Autonomous: pass none; the flag is refused unattended, and the record says
-`none`, because nobody answered the findings. A count alone said nothing about what changed.
+On a first close, interactive, when critique files exist: ask the person for one line. It names
+how many findings changed an order and how many were left with a reason. Pass it as
+`--critique-outcome`. The record holds it as `critique.outcome` beside the files and the count,
+and `close` prints it as `critiqueOutcome:`. Autonomous: pass none; the flag is refused
+unattended, and the record says `none`, because nobody answered the findings. A count alone said
+nothing about what changed.
+A re-close after a reopen, with no new critique file, needs no flag in either mode. `close`
+keeps the last record's answer and prints `critiqueCarriedFrom:`, naming the close that gave it.
+When an order was added, removed or merged since that close, `close` records `none` and says so
+on stderr. Run "Critique the design" again, then close again.
 
 This runs the design check again. It writes `design-closed.json` only when that check exits clean.
 The record is committed when the stage closes: `close` commits the task folder, and the work order

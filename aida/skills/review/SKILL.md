@@ -20,7 +20,8 @@ round finds new things forever. The reference here is the frozen contract and th
 
 **Review is not completion.** It never marks the task complete, writes no pull request body, and
 repairs no finding. The task stays in progress, and the completion stage is what moves it. A person
-may run their own reviews in between.
+may run their own reviews in between. A task a person marked complete before its review stays
+complete, and review still runs on it and records its verdict.
 
 ## Find the task
 
@@ -66,10 +67,12 @@ step being run is in this conversation.
 
 A recorded verdict is the end of the pass, and `read` says so in that word. Start a second review
 only when a person asks for one, and start it at `checks`, because the range and the tools answer
-against the code as it stands now. Before anything is written, `checks` or `close` archives the
+against the code as it stands now. Before anything is written, `checks` archives the
 closed record, `review/findings.json` and `review/brief.json`, each to `<name>-<date>-<commit>.json`.
 A taken name gets `-2`, `-3` and on. `brief` archives a findings file left at its path the same way.
 A fresh reviewer then finds no earlier findings there. Exit 63 refuses the write when a move fails.
+`close` on a closed record at the same commit archives the record alone and answers the rows again,
+with no fresh pass, per `references/close.md`.
 
 Open a step file through the script, never through the Read tool:
 ```
@@ -198,7 +201,7 @@ One number never means two things, and these keep the meanings implementation ga
 | Code | What it says |
 |---|---|
 | 1 | the given path holds no `task.json`, so it is not a task folder |
-| 3 | the script could not do its job: a missing argument, a tool not on PATH, a folder or a record it could not resolve or read, or a head that is not where the range ends |
+| 3 | the script could not do its job: a missing argument, a tool not on PATH, a folder or a record it could not resolve or read, or a head that is not where the range ends, or past it by more than removing the files `task environment up` added |
 | 5 | the recorded code path exists and is not a git repository |
 | 14 | the project's own `project.json` exists and is not valid JSON |
 | 15 | the recorded code path does not exist on disk |

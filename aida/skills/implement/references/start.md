@@ -28,8 +28,7 @@ either.
 Before it writes, the script reads the task's tree. It names each file that git reports untracked
 or changed and not committed, and the orders whose owned files hold it. A role stopped mid-run
 leaves such files, and the next role would work beside them. A gitignored file is never named.
-`COMPROMISES.md` is AIDA's own file, so it is not named either. The usual first-run case is
-`package-lock.json`, changed by a surfaces harness install at `environment up`. Commit it.
+The usual first-run case is `package-lock.json`, changed by a surfaces harness install at `environment up`. Commit it.
 
 Interactive, such a file refuses with exit 104, and nothing is written. Read the paths to the
 person and offer two choices. To keep a file, the person commits it. Or you run start again with
@@ -102,8 +101,10 @@ for it. So is a started or closed order whose research findings changed through 
 one whose reasoning only grew through `update --append-reasoning`. So is one whose absence rows
 design marked reviewed. Its frozen tests were written from
 fields that did not change. An order already built carries the new findings only into a review it
-has not had yet, never into the build it already had. A removed owned file, or any other change,
-halts it as before. A reasoning whose earlier text changed halts too.
+has not had yet, never into the build it already had. So is one that dropped an owned or shared
+path that names no file now and named none where the build started. Such a path never existed.
+A removed owned file the code holds or held, or any other change, halts it as before. A reasoning
+whose earlier text changed halts too.
 An order the live design no longer holds, because design merged or removed it, has no live copy
 to take. When it has not started, it is dropped from the snapshot and the ledger, and the
 `removed:` line names it. That line prints only when an order was dropped. When it has started,
@@ -114,6 +115,12 @@ order's frozen record still guards its test files. The `next:` line names the re
 that reason. Both need design closed on the live files; otherwise the run refuses with exit
 13 and says to close design again. The `haltedDependents:` line names only orders the ledger
 halts, each of which depends on a started drifted order, directly or through another order.
+An order the live design holds and the snapshot does not was added after the snapshot was taken.
+It enters the snapshot and the ledger as not started, and the `added:` line names it. That needs
+design closed on the live files too. It is ready when every order it depends on is closed.
+`implementation/finished.json` stands only while every order is closed and none is halted. When
+that stops being true, the run removes the record and the `finished:` line says why. Take
+`finish` again when every order is closed.
 
 A resumed run refuses two more things, before it writes. Exit 82: HEAD does not descend from the
 commit the ledger started from. The branch was rewritten under the build, by a rebase or an

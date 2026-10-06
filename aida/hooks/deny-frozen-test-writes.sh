@@ -139,7 +139,7 @@ if [ "$TOOL" != "Bash" ]; then
         || deny_own_record "$OWN_TARGET: the ${AGENT##*:} writes only its own record under records/, and nothing else." ;;
     *)
       [ -z "$OWN_OWNER" ] \
-        || deny_own_record "$OWN_TARGET: only the $OWN_OWNER writes this record. Dispatch it; do not write the record yourself." ;;
+        || deny_own_record "$OWN_TARGET: only the $OWN_OWNER writes this record, and this write's agent_type is ${AGENT:-empty, the main thread}. Dispatch it; do not write the record yourself." ;;
   esac
   if [ "$OWN_OWNER" = disposition-confirmer ]; then
     [ "$TOOL" = Write ] || deny_own_record "$OWN_TARGET: write the whole verdict file with Write, and keep every value it already holds."

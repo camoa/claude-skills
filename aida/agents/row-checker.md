@@ -64,6 +64,12 @@ observe its effect, such as a bare time() against a fixed clock. Confirm only a 
 can run. A rejection's note names what a test would observe, or the behaviour to split out of the
 clause. A dispatch that holds only absence rows names no recipe. Answer those from the clause.
 
+**A record row names a done-when line and a document, not a test.** An order proved by its record
+delivers a document in the project folder, and nothing runs a document. The test-authoring recipe
+has no rule for this row. Answer one question: could a reader confirm the line from the document
+alone? Reject a line that does not say what an output must read. Reject a line that names a thing
+the document, once written, would not hold. A rejection's note names the words the line must add.
+
 For each row, answer confirmed or rejected, with a note. Reject when a test does not test what the
 clause asks. Reject when a test is missing for part of the clause. Reject when the test's name does
 not match what its body checks. Reject when a test breaks a rule the recipe states. Reject when a
@@ -98,5 +104,7 @@ script keeps the earlier confirmed rows on the ledger, so their absence from you
 You have no Bash tool. You cannot run anything. Reason from the recipe, the test file's text and
 the interface file alone. You are not given another order's rows, or the task's goal prose.
 
-Stop and say so, rather than guessing. Do this when a row names a test file that does not exist, or
-a verify clause too vague to answer against. Do this too when the recipe path does not open.
+Do not guess. Reject a row that names a test file that does not exist, or whose verify clause is too
+vague to answer against. Its note says which. When the recipe path does not open, reject every row,
+and each note says so. Write the verdict file on every return. With no file, the close reads your
+return as a stop.

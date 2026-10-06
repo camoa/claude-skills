@@ -14,7 +14,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # `close` also moves each finished critique file from <task_folder>/records/, which the project
 # ignores, into <task_folder>/design/, which it commits. It records the new paths, their finding
-# count, and the outcome line --critique-outcome passed, `none` without one, and refused unattended.
+# count, and the outcome line --critique-outcome passed, refused unattended. Without one, a re-close
+# over the same critique carries the last close's answer, else `none`.
 #
 # What reaches stdout is what reaches the orchestrator's context. Every action prints `key: value`
 # summary lines and the paths it wrote, and never a record body. A caller that needs a field reads
@@ -535,6 +536,21 @@ critique_findings_of() {
   n="$(grep -E '^findings: [0-9]+$' "$1" | tail -n 1 | sed 's/^findings: //')"
   [ -n "$n" ] || return 1
   printf '%s' "$n"
+}
+
+# The order ids, one per line and sorted, of the close commit whose design-closed.json holds the
+# hash $1. Exit 1 when no commit of the project holds it. The project folder is two levels up, as
+# in commit_stage_close.
+answered_order_ids() {
+  local project rel c
+  project="$(dirname -- "$(dirname -- "$TASK_PATH")")"
+  rel="tasks/$(jq -r '.id' "$TASK_PATH/task.json")"
+  while IFS= read -r c; do
+    [ "$(git -C "$project" show "$c:$rel/design-closed.json" 2>/dev/null | jq -r '.hash' 2>/dev/null)" = "$1" ] || continue
+    git -C "$project" ls-tree --name-only "$c" "$rel/design/" | sed -n 's|.*/\(wo[0-9]*\)\.json$|\1|p' | sort
+    return 0
+  done < <(git -C "$project" log --format=%H -- "$rel/design-closed.json" 2>/dev/null)
+  return 1
 }
 
 # The orders implementation closed, from the ledger's `lastStep`, comma-joined, or nothing when
@@ -2186,12 +2202,13 @@ $unaccounted"
   # read from it would be invented. The prefix keeps it out of the `design-critique-*.md` pattern.
   # So the count loop below skips it. And the design skill still routes a bare `close` to the
   # critique step when no finished file is there.
-  local crit_file crit_dest
+  local crit_file crit_dest moved_finished=false
   drop_closed_critique_rows
   while IFS= read -r crit_file; do
     [ -n "$crit_file" ] || continue
     if critique_findings_of "$crit_file" >/dev/null; then
       crit_dest="$DESIGN_DIR/$(basename -- "$crit_file")"
+      moved_finished=true
     else
       crit_dest="$DESIGN_DIR/unfinished-$(basename -- "$crit_file")"
       printf 'close: %s has no findings line, so its critic did not finish; it moves to %s and is not counted\n' "$crit_file" "$crit_dest" >&2
@@ -2212,8 +2229,8 @@ $unaccounted"
   # design: a critic that can stop a close trains a design that writes for the critic. Beside the
   # count sits `outcome`, the --critique-outcome line: how the findings were answered, in the
   # person's words, one line per flag. A count alone said nothing about what changed (live-run row
-  # 135). `none` when no flag was passed, which is every unattended close: nobody answered the
-  # findings there, so the flag is refused above. A second close reads the files the first close
+  # 135). `none` when no flag was passed and no earlier answer carries, below. Unattended, nobody
+  # answers the findings, so the flag is refused above. A second close reads the files the first close
   # moved and records them again, so the record still names what is on disk.
   local critique_files critique_total crit_n
   critique_files=""; critique_total=0
@@ -2234,6 +2251,36 @@ $unaccounted"
     die3 "close: --critique-outcome names how the critique's findings were answered, and no finished critique file is under $TASK_PATH/records or $DESIGN_DIR to record it beside"
   fi
 
+  # A re-close with no new critique and no flag keeps the answer the last close recorded (gap row
+  # 323). The files and the count must match that record, so the answer is to these findings.
+  # `carriedFrom` names the close that holds the answer, and its hash, which is the design the
+  # person answered over. A later change to an order is then visible as a hash that differs.
+  local carried=""
+  if [ -n "$critique_files" ] && [ -z "$outcome" ] && [ "$moved_finished" = false ] && [ -f "$CLOSED_FILE" ]; then
+    carried="$(jq -c --argjson now "$(printf '%s' "$doc" | jq -c '.critique')" '
+      def names: map(sub(".*/"; "")) | sort;
+      select((.critique.outcome // "none") != "none"
+        and (.critique.files | names) == ($now.files | names) and .critique.findings == $now.findings)
+      | {outcome: .critique.outcome, carriedFrom: (.critique.carriedFrom // {closedAt, closedBy, hash})}' \
+      "$CLOSED_FILE" 2>/dev/null)"
+  fi
+  # An order added, removed or merged since the answer is one the critics never read. The order
+  # ids the answered close held come from its own commit, so an uncommitted close carries nothing.
+  if [ -n "$carried" ]; then
+    local answered_ids now_ids
+    answered_ids="$(answered_order_ids "$(printf '%s' "$carried" | jq -r '.carriedFrom.hash')")" || answered_ids="unknown"
+    now_ids="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sed 's|.*/||; s|\.json$||' | sort)"
+    if [ "$answered_ids" != "$now_ids" ]; then
+      printf 'close: the critique answer is not carried: the orders are %s, and the answered close held %s. Critique the design again\n' \
+        "$(printf '%s' "$now_ids" | tr '\n' ' ')" "$(printf '%s' "$answered_ids" | tr '\n' ' ')" >&2
+      carried=""
+    fi
+  fi
+  if [ -n "$carried" ]; then
+    doc="$(printf '%s' "$doc" | jq --argjson c "$carried" '.critique += $c')"
+    outcome="$(printf '%s' "$carried" | jq -r '.outcome')"
+  fi
+
   # The orders `remove` deleted and `merge` folded, with the reason each went, so the close says why a number is missing.
   if [ -f "$REMOVED_FILE" ]; then
     doc="$(printf '%s' "$doc" | jq --slurpfile r "$REMOVED_FILE" '.removed = $r[0].removed')"
@@ -2249,6 +2296,8 @@ $unaccounted"
   echo "runMode: $RUN_MODE"
   echo "hash: $hash"
   [ -z "$critique_files" ] || printf '%s\n' "${outcome:-none}" | sed 's/^/critiqueOutcome: /'
+  [ -z "$carried" ] || printf '%s' "$carried" \
+    | jq -r '.carriedFrom | "critiqueCarriedFrom: the close of \(.closedAt) by \(.closedBy), over hash \(.hash)"'
   exit 0
 }
 

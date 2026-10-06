@@ -62,8 +62,12 @@ condition, read as above, so an absent tool stops the run with the install advic
 names the tool's tooling recipe, which says how to install it. This holds when no order needs the
 harness too. Such a task runs no test, but `build-record` runs these
 checks on every order. Without this check, the first order is built and paid for, and then its
-checks cannot run. The review recipe's other tools, such as a duplication tool, are review's to
-check.
+checks cannot run.
+
+The review recipe's other tools, such as a duplication tool, run only at review. The script checks
+each one that a review-only row holds, under the same rule for owned files. An absent one does
+not stop the run. It goes in `endOfTaskToolsAbsent`, and the `endOfTaskAbsent:` line names it.
+Read that line to the person, so a missing review tool is known before the build.
 
 A row that `build-record` runs, whose argv holds no tool the review recipe names, is not checked.
 No tool name is guessed from a command. The record keeps that row and its argv under

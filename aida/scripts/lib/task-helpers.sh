@@ -29,8 +29,7 @@
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
 #   log_compromise <folder> <stage> <skipped> <normal>
-#                                         adds one row to COMPROMISES.md in the task's tree and
-#                                         commits that file alone
+#                                         adds one row to COMPROMISES.md in the task folder
 #   task_env_recipe_change <folder> <path> <tree> <commit>
 #                                         true when `environment up` recorded the path and the
 #                                         commit still holds that content
@@ -65,10 +64,13 @@
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
+#   task_review_outdated <folder>         true, and prints both ranges, when the review covers
+#                                         a commit range the finished build no longer ends at
 #   active_tree_for <codePath> <dir>      prints <dir>'s git top level when it is a worktree of
 #                                         the <codePath> repository, else <codePath>
 #   playbooks_record_path <folder>        prints the path of the playbook record research loads
 #   playbooks_path_json <folder>          prints that path as a JSON string, or null when absent
+#   playbooks_person_path                 prints the path of the person's own playbook file
 #   DENIES_JQ                             a jq definition, `denies`, true when a string carries
 #                                         a negation word
 #   REASONING_JQ                          jq definitions: `struckMark`, and `liveReasoning`,
@@ -438,22 +440,16 @@ OWNED_OVERLAP_JQ='
     | select(((($a.sharedFiles // []) | index($p) != null) and (($b.sharedFiles // []) | index($p) != null)) | not)
     | {ids: [$a.id, $b.id], path: $p} ]'
 
-# One row of the compromises log, COMPROMISES.md at the top of the task's tree (gap row 197). The
-# code that decides a skip calls this, so the log never rests on a model's memory. The file ships
-# with the code, because a later normal task takes it as its scope. A row already in the file is
-# not written again, so a step run twice logs once. The file alone is committed, because a stage
-# refuses a tree that is not clean. A commit that fails is said on stderr and does not stop the
-# stage. $1 the task folder, $2 the stage, $3 what was skipped, $4 what a normal run would do.
-# COMPROMISES_FILE is the file's one name. The owned-files checks in implementation and review
-# set it aside on a light task, because no work order owns it.
+# One row of the compromises log, COMPROMISES.md in the task folder (gap row 197). The code that
+# decides a skip calls this, so the log never rests on a model's memory. The log is AIDA's record,
+# so it never enters the code repository (gap row 334): the stage close commits the task folder.
+# A later normal task takes the log as its scope. A row already in the file is not written again,
+# so a step run twice logs once. A write that fails is said on stderr and does not stop the stage.
+# $1 the task folder, $2 the stage, $3 what was skipped, $4 what a normal run would do.
+# COMPROMISES_FILE is the file's one name.
 COMPROMISES_FILE="COMPROMISES.md"
 log_compromise() {
-  local tree file row
-  tree="$(jq -r '.worktree.path // empty' "$1/task.json" 2>/dev/null)"
-  [ -n "$tree" ] && [ -d "$tree" ] || tree="$(
-    command -v resolve_project_folder >/dev/null 2>&1 || . "${PLUGIN_ROOT}/scripts/lib/recipes.sh"
-    task_worktree "$1" "log-compromise")" || return 0
-  file="$tree/$COMPROMISES_FILE"
+  local file="$1/$COMPROMISES_FILE" row
   row="| $(basename -- "$1") | $2 | $(printf '%s' "$3" | sed 's/|/\\|/g') | $(printf '%s' "$4" | sed 's/|/\\|/g') |"
   [ -f "$file" ] && grep -qxF -- "$row" "$file" && return 0
   if [ ! -f "$file" ]; then
@@ -464,8 +460,6 @@ log_compromise() {
       || { printf 'task-helpers: could not write %s\n' "$file" >&2; return 0; }
   fi
   printf '%s\n' "$row" >>"$file"
-  { git -C "$tree" add -- "$COMPROMISES_FILE" && git -C "$tree" commit -q -m "Log a light-run compromise: $2" -- "$COMPROMISES_FILE"; } >/dev/null 2>&1 \
-    || printf 'task-helpers: %s was written and not committed. Commit it before the next step.\n' "$file" >&2
   printf 'compromise: %s: %s\n' "$2" "$3"
 }
 
@@ -771,6 +765,11 @@ distill_deferred() {
 playbooks_record_path() {
   printf '%s/records/playbooks.json' "$1"
 }
+# The person's own playbook file, one per machine. The load reads it, and check 16's floor asks
+# whether it is there. Calls no die function.
+playbooks_person_path() {
+  printf '%s/.claude/aida/playbook.md' "$HOME"
+}
 playbooks_path_json() {
   local record
   record="$(playbooks_record_path "$1")"
@@ -798,11 +797,26 @@ task_stage() {
     echo "design"
   elif [ ! -f "$task_folder/implementation/finished.json" ]; then
     echo "implementation"
-  elif [ "$review" != "passed" ] && [ "$review" != "failed" ]; then
+  elif [ "$review" != "passed" ] && [ "$review" != "failed" ] || task_review_outdated "$task_folder" >/dev/null; then
     echo "review"
   else
     echo "completion"
   fi
+}
+
+# A review judged the commit range finished.json held when it ran. A later finish, after a fix or
+# an order design added, ends the build at another commit, and that verdict covers none of the
+# new commits (gap row 335). So a review whose reviewedRange differs from the finished commitRange,
+# or has no finished record beside it, counts as no review. task_stage and completion ask here.
+# $1 the task folder. Prints both ranges and returns 0 when outdated; prints nothing and returns 1
+# otherwise, and when there is no review record. Calls no die function.
+task_review_outdated() {
+  local reviewed built
+  reviewed="$(jq -r '.reviewedRange // empty' "$1/review/review.json" 2>/dev/null)"
+  [ -n "$reviewed" ] || return 1
+  built="$(jq -r '.commitRange // empty' "$1/implementation/finished.json" 2>/dev/null)"
+  [ "$reviewed" != "$built" ] || return 1
+  printf 'the review covers %s, and the finished build is %s' "$reviewed" "${built:-not recorded}"
 }
 
 # A chain made with --in-tree shares one tree, and the branch checked out there says which task

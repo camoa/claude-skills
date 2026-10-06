@@ -4,6 +4,112 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.15] - 2026-10-06
+
+Changes from the supporting taxonomies site test and the periplus
+light-mode test, on 6.0.14. The destructive-command hook gives one
+verdict per command. Review runs on a task completed by hand, and a
+person can rule a finding that fails a criterion.
+
+### Added
+
+- A hook refuses a dispatch of an AIDA role that carries a `name`. A
+  named dispatch can start a teammate, and the role's guards then miss
+  it. The refusal says to dispatch again with no name.
+- Review `close` takes `--row <finding id>=wrong|deferred` for a
+  finding that fails a criterion. `wrong` lets the criterion read its
+  own answer. `deferred` keeps the finding as a follow up task. The
+  record keeps the finding and the person's word.
+- `set-run-mode` on a mode that covers review names each criterion a
+  person answers, on a `sign-off:` line. An unattended review writes no
+  verdict for such a task. A `review-tools:` line names each review
+  tool that is absent.
+- Preconditions checks the tools that only review runs, such as a
+  duplication tool. An absent tool does not stop the build. The
+  `endOfTaskAbsent:` line names it. A review record made before 6.0.11
+  can still name the wrong recipe on a check row.
+
+### Changed
+
+- An order that design adds after the build started is built in the
+  same task. Once design closed over it, `start` takes it into the
+  snapshot and the ledger as not started, and prints `added:`.
+- `start` removes the finished record when an order is not closed or is
+  halted. The `finished:` line says why, and `finish` writes the record
+  again.
+- A review whose range differs from the finished build's range counts
+  as no review. The next step names review, and completion refuses
+  (exit 1) and names both ranges. A task that builds on another task
+  still reads that task's recorded verdict as it is.
+- For a criterion that no order serves, `finish` now names `start`
+  after a design close with a new order, not `restart`.
+- A design close with no `--critique-outcome` keeps the last answer to
+  the critique when the critique and the orders are unchanged.
+  `critique.carriedFrom` names the close that gave it. A changed set of
+  orders carries nothing and asks for a new critique. An unattended
+  close after the orders changed still names the old critique files,
+  with the outcome `none`.
+- `dispatch-open` refuses an implementer whose order has no build
+  brief (exit 115). `dispatch-close` refuses (exit 111) while the
+  builder's answers file is missing or holds no stop line. Searchers
+  still return their findings as text. The check tests that a build
+  brief exists, not that it is current.
+- A close on a review record that holds a verdict, at the same commit,
+  writes the new verdict. A corrected row needs no new reviewer pass.
+  After a fix commit, `close` refuses (exit 51) and names `checks`. The
+  close archives the record before it reads the rows.
+- The framework practices check does not fail for an absent playbook
+  record when the project has no plays to load. When research found no
+  guide, the guide-body floor still reads unknown. The verdict word
+  still does not separate a failed check from an unreadable one.
+- The catalog identifier asks about words with no framework filter. A
+  task about another framework now finds its guides. A match outside
+  the project's frameworks is marked "another framework".
+- The distiller's refusal names the agent type it compared.
+- A light run writes its compromises log in the task folder of the
+  project record. The stage close commits it with the other records.
+  The log never enters the code repository or its pull request. A task
+  abandoned mid-stage leaves the log uncommitted until the next close.
+- Review's serves check fails on a compromises log that an earlier AIDA
+  committed anywhere on the branch. The detail says where the log lives
+  now and how to move it.
+
+### Fixed
+
+- The destructive-command hook gave different verdicts on the same
+  command, so an unattended build stopped at random steps. The hook
+  matched through a pipe that raced. The hook now reads the whole text
+  every time. A backticked git verb in a script comment no longer reads
+  as an unreadable verb. A backticked verb after text the hook takes
+  for a comment still passes that rule. The other rules still catch it.
+  The GitHub API method check lets a command through when grep cannot
+  run.
+- `start` clears a dependent design-drift halt on a closed order once
+  the order it names no longer drifts. Before, `finish` refused, and
+  only a hand edit cleared it. A review verdict in the contract no
+  longer reads as a changed criterion.
+- `start` takes in place an order whose design dropped a path that
+  names no file, now or at the order's start. `build-recheck` then
+  answers the owned-files stop. A path the build deleted still halts.
+  A live task whose fixes were committed outside the records needs a
+  starting commit that a person gives.
+- A row checker or reviewer that wrote its verdict file closes as
+  finished on `dispatch-close --no-report`. Before, the close asked for
+  a resume and the second close halted the order. A plain close with no
+  verdict file refuses (exit 111).
+- Review runs on a task marked complete by hand before its review. The
+  task stays complete, and completion does not run. Follow up tasks
+  still reach such a task.
+- Review `checks` accepts a head past the finished range when the only
+  later change removes the files that `task environment up` added.
+  Any other change still refuses (exit 3).
+- A test glob with a wildcard and no `/`, such as `test_*.py`, matches
+  the file name in any folder. Before, it matched only at the top of
+  the repository. The refusal (exit 47) names the order's owned files
+  and the globs it compared. The departed-verdict check reads a literal
+  bare name in any folder. A wildcard in a person's `fix-brief --allow`
+  now widens the same way.
+
 ## [6.0.14] - 2026-10-05
 
 Changes from the supporting taxonomies site test and the periplus

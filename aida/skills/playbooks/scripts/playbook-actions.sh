@@ -42,7 +42,7 @@ for lib_name in task-helpers recipes schema-check playbooks project-commit; do
   source "${PLUGIN_ROOT}/scripts/lib/${lib_name}.sh" || die 3 "the library failed to load: ${lib_name}.sh"
 done
 SCHEMA="${PLUGIN_ROOT}/scripts/playbooks-schema.json"
-PERSON_FILE="$HOME/.claude/aida/playbook.md"
+PERSON_FILE="$(playbooks_person_path)"
 
 usage() {
   cat <<'EOF' >&2

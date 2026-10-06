@@ -113,14 +113,14 @@
         },
         "endOfTaskToolsAbsent": {
           "type": "array",
-          "description": "Each tool the recipe names under requires_tooling that read absent and that only end-of-task rows run, matched by name in their argv. Recorded instead of a condition, so the build goes on, and review reads those rows as known since preconditions (gap row 271). Present only when one exists.",
+          "description": "Each tool the recipe names under requires_tooling that read absent and that only end-of-task rows run, matched by name in their argv. A tool the review recipe names that only review's own check rows run, such as duplication, counts too (gap row 328). Recorded instead of a condition, so the build goes on, and review reads those rows as known since preconditions (gap row 271). Present only when one exists.",
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": ["tool", "rows"],
             "properties": {
               "tool": {"type": "string", "minLength": 1},
-              "rows": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "The ids of the test-command rows whose argv names the tool."},
+              "rows": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "The ids of the test-command rows, or of the check rows only review runs, whose argv names the tool."},
               "firstLine": {"type": "string", "minLength": 1, "description": "The first line the tool's check printed."}
             }
           }

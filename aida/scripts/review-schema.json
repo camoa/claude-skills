@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA review record",
-  "description": "What one pass of the review stage found, at <task folder>/review/review.json (ideal/review.md, 'The review record'). One file per task, in its own folder beside research/, design/ and implementation/, because implementation's own `restart` archives that folder whole and a review inside it would go with a build restart it has nothing to do with. Four actions write it in turn: `checks` creates it with the change set and checks 3 to 8, `findings` adds checks 2, 9 to 12 and 16 and every finding, `surfaces` adds checks 13 to 15 and the surface rows, and `close` adds check 1, the criterion verdicts and the verdict. A re-run archives a closed record, with that pass's review/findings.json and review/brief.json, to <name>-<date>-<commit>.json before it writes, adding -2, -3 and on when a name is taken, and refuses when a move fails (exit 63). Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "description": "What one pass of the review stage found, at <task folder>/review/review.json (ideal/review.md, 'The review record'). One file per task, in its own folder beside research/, design/ and implementation/, because implementation's own `restart` archives that folder whole and a review inside it would go with a build restart it has nothing to do with. Four actions write it in turn: `checks` creates it with the change set and checks 3 to 8, `findings` adds checks 2, 9 to 12 and 16 and every finding, `surfaces` adds checks 13 to 15 and the surface rows, and `close` adds check 1, the criterion verdicts and the verdict. A `checks` re-run archives a closed record, with that pass's review/findings.json and review/brief.json, to <name>-<date>-<commit>.json before it writes, adding -2, -3 and on when a name is taken, and refuses when a move fails (exit 63). A `close` re-run at the same commit archives the closed record alone and writes the new verdict in its place. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -50,7 +50,7 @@
     "reviewedAt": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The commit the review read, which is the code repository's HEAD when `checks` ran and the right-hand end of the range above. `checks` refuses a dirty working tree (exit 61), so this value describes a tree nothing uncommitted changes. Every later action refuses when the code path has moved off it or gone dirty (exit 51), because a finding about code that is no longer there is not a finding."
+      "description": "The commit the review read, which is the code repository's HEAD when `checks` ran. It is the right-hand end of the range above, or a descendant whose only later change puts back files `task environment up` added, which the fork point lacks. `checks` refuses a dirty working tree (exit 61), so this value describes a tree nothing uncommitted changes. Every later action refuses when the code path has moved off it or gone dirty (exit 51), because a finding about code that is no longer there is not a finding."
     },
     "hasUpstream": {
       "type": "boolean",
@@ -366,7 +366,12 @@
         "disposition": {
           "type": "string",
           "enum": ["criterion", "non-goal", "follow-up"],
-          "description": "What this finding is. `criterion` means this task's work: it cites a criterion at medium or high severity, and `close` records that criterion unmet. A low finding citing a criterion is `follow-up`, because the reviewer chooses both the severity and the link and nothing checks the link. `non-goal` means this task did what it said it would not do. `follow-up` is a finding citing neither, or a low one citing a criterion, which becomes a task a person creates: review records it and names it in the report, whatever the run mode, because the only producer of a task interviews a person. Folding such a finding in silently is what scope exists to prevent."
+          "description": "What this finding is. `criterion` means this task's work: it cites a criterion at medium or high severity, and `close` records that criterion unmet. A low finding citing a criterion is `follow-up`, because the reviewer chooses both the severity and the link and nothing checks the link. `non-goal` means this task did what it said it would not do. `follow-up` is a finding citing neither, a low one citing a criterion, or one a person deferred at close, which becomes a task a person creates: review records it and names it in the report, whatever the run mode, because the only producer of a task interviews a person. Folding such a finding in silently is what scope exists to prevent."
+        },
+        "ruling": {
+          "type": "string",
+          "enum": ["wrong", "deferred"],
+          "description": "A person's ruling on a finding with disposition criterion, given at close with `--row <finding id>=wrong|deferred` (gap row 329). Only a person writes it, because close refuses the row when nobody is present. `wrong`: the reviewer was mistaken, the disposition stays criterion, and the criterion reads its own answer. `deferred`: the finding is real and waits, so the disposition becomes follow-up and completion offers it as a task. Absent when nobody ruled."
         }
       }
     },

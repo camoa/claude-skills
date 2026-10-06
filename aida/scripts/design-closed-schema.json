@@ -67,7 +67,18 @@
       "properties": {
         "files": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "description": "Every <task folder>/design/design-critique-<lens>.md this close carries, sorted, one per finished lens. A critic writes into records/, which the project ignores. The close moves each finished file into design/ before it commits, so one commit carries the record and the evidence it names (live-run row 176). A file without its count line was not finished by its critic, so it stays under records/, is left out and is named on stderr." },
         "findings": { "type": "integer", "minimum": 0, "description": "The sum of those files' `findings: N` last lines, read by `close` from the files and never typed by hand." },
-        "outcome": { "type": "string", "minLength": 1, "description": "How the findings were answered, from `close --critique-outcome`. How many changed an order and how many were left with a reason, in the person's words, one line per flag. `none` when no flag was passed, which is every unattended close (live-run row 135). A count alone said nothing about what changed." }
+        "outcome": { "type": "string", "minLength": 1, "description": "How the findings were answered, from `close --critique-outcome`. How many changed an order and how many were left with a reason, in the person's words, one line per flag. A close with no flag, no new critique file, the same files and count as the last record, and the order ids the answered close committed keeps that record's answer, and `carriedFrom` says so (gap row 323). Otherwise `none` when no flag was passed, which an unattended close cannot pass (live-run row 135). A count alone said nothing about what changed." },
+        "carriedFrom": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["closedAt", "closedBy", "hash"],
+          "properties": {
+            "closedAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The date of the close where the outcome was given." },
+            "closedBy": { "type": "string", "enum": ["person", "nobody"], "description": "Who was present at that close." },
+            "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "That close's hash: the design the outcome answered over. A differing top-level hash means an order changed after the answer, and the critics never read that change." }
+          },
+          "description": "Present only when `outcome` was carried from an earlier close and not given at this one. It names that close, copied unchanged along a chain of re-closes."
+        }
       },
       "description": "What the design critique found before this close, and how it was answered. A person can see later what was read, how much it raised and what came of it. Absent when no critic ran. The findings themselves stay in the files; the critique blocks nothing, and a count here is a pointer, never a verdict."
     },

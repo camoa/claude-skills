@@ -386,10 +386,15 @@ removes the field and the stages: there is no `"interactive"` value to write, si
 absence already means that. Show the whole output.
 
 `light` is an autonomous run over every stage that skips named steps, and it takes no `--stage`.
-Each skip is logged in `COMPROMISES.md` in the task's worktree. The `path-script:` line says
+Each skip is logged in `COMPROMISES.md` in the task folder. The `path-script:` line says
 whether end to end is on. Light keeps one script that walks the demo path, and review
 fails the task without it. When end to end is off, say that a person sets it up with
-`/aida:surfaces e2e` before the run. The `sign-off:` line says that a person closes the task.
+`/aida:surfaces e2e` before the run.
+
+When the mode covers review, two lines can follow, on light or autonomous. The `sign-off:` line
+names the criteria a person answers, so an unattended review writes no verdict. The
+`review-tools:` line names the review tools that preconditions found absent. Before
+preconditions has run, it says that preconditions will check them. Read both to the person.
 
 ## `set-budget <task-id> [--dispatches <n>] [--minutes <n>]`
 

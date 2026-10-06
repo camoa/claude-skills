@@ -111,7 +111,8 @@ The script derives the rest itself from the frozen snapshot: this role is denied
 order's owned files, and allowed its own. Never type those paths here. It prints both lists, and
 an order that declares nothing it owns refuses rather than opening a dispatch with nowhere to
 write. It also refuses for each reason `build-brief` refuses above, with the same words. Tests
-never frozen exit 114 here. Nothing is written. Act on the refusal first.
+never frozen exit 114 here. An order with no build brief exits 115, because the implementer then
+has no answers file to write. Nothing is written. Act on the refusal first.
 
 **Then dispatch `implementer`**, with the message SKILL.md names. Its lines are the role, the run
 mode, and two paths: the `implement` recipe for its framework and the brief `build-brief` wrote.
@@ -313,9 +314,9 @@ read `git diff <range>` over the project folder whole. AIDA commits that folder 
 build brief and its record. A task note commits `tasks/` whole, and another task's stage close
 commits its folder. None of that is the implementer's, so the files AIDA's own scripts write
 are set aside before the owned list is compared. Inside this task's folder those are
-`task.json`, `alignment.json`, their renderings, `design-closed.json`, and the `research/`,
-`design/`, `implementation/`, `implementation-<date>-<commit>/`, `review/`, `completion/`,
-`notes/` and `records/` folders. Outside it, every other task's folder and `project.json`.
+`task.json`, `alignment.json`, their renderings, `design-closed.json`, `COMPROMISES.md`, and
+the `research/`, `design/`, `implementation/`, `implementation-<date>-<commit>/`, `review/`,
+`completion/`, `notes/` and `records/` folders. Outside it, every other task's folder and `project.json`.
 The check's detail says how many were set aside. A person's places are `inputs/`,
 `deliverables/` and the project folders a report lands in. A file under a stage folder is set
 aside even when a person wrote it. A file in a person's place is never set aside, so a second

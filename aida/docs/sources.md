@@ -116,9 +116,9 @@ A body is fetched once per content version and kept in a store on disk, under
 projects. A lookup that answers with a path never prints the body; the caller reads the file.
 That is what keeps a recipe affordable.
 
-Research and design run their own lookups: research its process-recipe lookup, design both of
-its lookups. The task, research, implement, review and surfaces skills dispatch the
-`catalog-identifier` agent for the points named above. It runs the lookup, returns names or a
+Research and design run their own process-recipe lookups. The task, research, design, implement,
+review and surfaces skills dispatch the `catalog-identifier` agent for the points named above,
+and for identify. It runs the lookup, returns names or a
 path, and never opens a body. It exists because one name costs one lookup, and opening a body is
 how that becomes ten.
 

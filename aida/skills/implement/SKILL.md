@@ -204,15 +204,17 @@ that never returned leaves one.
 **A role the runtime stops at its turn limit is resumed once.** This holds for every role this
 skill dispatches. An implementer whose order's diff budget starts with `large` is resumed twice.
 The script reads that word from the frozen order. The signal is the runtime's own mark that the
-role stopped at its turn limit. For the reviewer the script also sees it: a plain close refuses
-(exit 111) when the findings or verdicts file its brief names is missing. The fixer and the test
-author end the report their brief pins with `Report: complete`. A plain close whose report lacks
-that line takes the step below itself (exit 112). After a 112, do not close again: resume the
-agent. A `--no-report` close after a 112 spends a resume. For the row-checker only the mark tells,
-so watch for it. Close with `--no-report` added. A fixer or a test author can finish before the
-runtime marks it stopped. If its report is complete, the close says so and removes the record, and
-the role is not resumed. Otherwise the record stays open, so both hooks keep applying. Then send
-one message to the same agent: finish the work and write the report. Do not
+role stopped at its turn limit. The script also sees it for the reviewer, the row-checker and the
+implementer. A plain close refuses (exit 111) when the file the role writes is missing. That is
+the findings or verdicts file the brief names, the row-checker's `row-check-<order id>.json`, or
+the implementer's answers file, which also needs its stop line. The fixer and the test author end
+the report their brief pins with `Report: complete`. A plain close whose report
+lacks that line takes the step below itself (exit 112). After a 112, do not close again: resume
+the agent. A `--no-report` close after a 112 spends a resume. Add `--no-report` only on the
+runtime's mark. A role can finish before the runtime marks it stopped. If its file passes, the
+close says so and removes the record, and the role is not resumed. Otherwise the record stays
+open, so both hooks keep applying. Then send one message to the same agent: finish the work and
+write the report. Do not
 dispatch a fresh role. The brief is unchanged and the work is unfinished, and a fresh role meets
 the half-written files. This differs from a row a person rejects, where the brief changes and the
 role is dispatched fresh. When the resumed role returns, close again, with `--no-report` if it
