@@ -152,10 +152,11 @@ Interactive, the script also prints one `unrouted:` line per finding of medium o
 severity that cites no id, then a count line. Nothing prints when there are none. Such a finding
 has no route inside this task. `fix-brief` hands a fixer open actionable findings only, and
 refuses (exit 53) when there are none. A commit after the review record moves HEAD, and `close`
-refuses (exit 63), so nobody fixes it by hand before the close. A new order cannot enter a
-running build. `finish` carries only findings ruled deferred into `finished.json`, so the review
-stage sees this one only if its own reviewer finds it again. When an `unrouted:` line prints, put
-it to the person, opening with: "The reviewer found a problem this task has no criterion or
+refuses (exit 63), so nobody fixes it by hand before the close. A new order needs a criterion
+to serve, and this finding cites none. `finish` carries only findings ruled deferred into
+`finished.json`, so the review stage sees this one only if its own reviewer finds it again.
+When an `unrouted:` line prints, put it to the person, opening with: "The reviewer found a
+problem this task has no criterion or
 non-goal for, so nothing here will fix it. Only you can say what happens to it. Close as
 recorded: the finding stays in the order's review record, and the order closes. Track it as a
 task, then close: a follow up task takes it as its goal, and the order closes." Then say each

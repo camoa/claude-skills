@@ -115,6 +115,12 @@ order's frozen record still guards its test files. The `next:` line names the re
 that reason. Both need design closed on the live files; otherwise the run refuses with exit
 13 and says to close design again. The `haltedDependents:` line names only orders the ledger
 halts, each of which depends on a started drifted order, directly or through another order.
+An order the live design holds and the snapshot does not was added after the snapshot was taken.
+It enters the snapshot and the ledger as not started, and the `added:` line names it. That needs
+design closed on the live files too. It is ready when every order it depends on is closed.
+`implementation/finished.json` stands only while every order is closed and none is halted. When
+that stops being true, the run removes the record and the `finished:` line says why. Take
+`finish` again when every order is closed.
 
 A resumed run refuses two more things, before it writes. Exit 82: HEAD does not descend from the
 commit the ledger started from. The branch was rewritten under the build, by a rebase or an

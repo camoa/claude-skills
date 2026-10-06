@@ -1253,11 +1253,15 @@ snapshot_self_hash() {
 # (ideal/implementation.md, the 2026-09-14 paragraph under "Freezing"). Both callers require
 # design closed over the live files, so the alignment taken is the one design closed on; a live
 # copy frozen beside a stale contract would hand a test author the old criterion (live-run row 86).
+# An id in $2 that the document does not hold is an order design added after the snapshot: its
+# live copy is appended (gap row 335).
 snapshot_with_live_orders() {
   local doc="$1" ids="$2" live="$3" alignment="$4" orders hash
   orders="$(printf '%s' "$doc" | jq -c --argjson ids "$ids" --argjson live "$live" '
       ($live | map({(.id): .}) | add // {}) as $lm
-      | .workOrders | map(. as $o | if (($ids | index($o.id)) != null) then $lm[$o.id] else $o end)')"
+      | (.workOrders | map(.id)) as $have
+      | (.workOrders | map(. as $o | if (($ids | index($o.id)) != null) then $lm[$o.id] else $o end))
+        + [ $ids[] | . as $i | select(($have | index($i)) == null) | $lm[$i] | select(. != null) ]')"
   hash="$(snapshot_self_hash "$alignment" "$orders")" || return 1
   printf '%s' "$doc" | jq -c --arg hash "$hash" --argjson orders "$orders" --argjson alignment "$alignment" \
     '.hash = $hash | .alignment = $alignment | .workOrders = $orders'
@@ -1972,7 +1976,7 @@ do_start() {
   fi
 
   local run_kind snapshot_hash_on_disk snapshot_alignment_json snapshot_workorders_json
-  local drifted_orders_json='[]' contract_changed=false new_live_order_ids_json='[]'
+  local drifted_orders_json='[]' contract_changed=false added_ids_json='[]'
   local changed_criteria_json='[]' dependent_halts_json='[]' drift_halts_json='[]'
   local drift_checked=false
   local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' halted_removed_ids_json='[]'
@@ -2168,6 +2172,16 @@ REMOVED_PATHS
         drift_what="${drift_what}these started work orders changed only in fields their frozen tests were not written from: $(printf '%s' "$widened_json" | jq -r 'map(.id + " (" + (.why | join(", ")) + ")") | join(", ")'). Each would take its live copy in place, with its frozen tests untouched"
         resnapshot_ids_json="$(jq -cn --argjson a "$resnapshot_ids_json" --argjson b "$widened_ids_json" '$a + $b')"
       fi
+      # An order design added after the snapshot was taken has not started either, so it is taken
+      # in from the live design the same way (gap row 335). Left out, its criterion entered the
+      # snapshot with no order to build it, and the run read every order closed.
+      added_ids_json="$(jq -cn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" \
+        '[ $live[].id ] - [ $snap[].id ]')"
+      if [ "$(printf '%s' "$added_ids_json" | jq 'length')" -gt 0 ]; then
+        [ -z "$drift_what" ] || drift_what="$drift_what; and "
+        drift_what="${drift_what}these work orders were added since the snapshot was taken: $(printf '%s' "$added_ids_json" | jq -r 'join(", ")'). Each would be taken in from the live design, not started"
+        resnapshot_ids_json="$(jq -cn --argjson a "$resnapshot_ids_json" --argjson b "$added_ids_json" '$a + $b')"
+      fi
       if [ "$contract_changed" = "true" ]; then
         [ -z "$drift_what" ] || drift_what="$drift_what; and "
         drift_what="${drift_what}the contract changed since the snapshot was taken, and the snapshot would take the live alignment.json"
@@ -2223,8 +2237,6 @@ REMOVED_PATHS
             ]
         ')"
       drift_halts_json="$(jq -cn --argjson a "$drifted_orders_json" --argjson b "$dependent_halts_json" '$a + $b')"
-      new_live_order_ids_json="$(jq -n --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" \
-        '([ $live[].id ]) - ([ $snap[].id ])')"
     fi
   fi
 
@@ -2365,9 +2377,12 @@ REMOVED_PATHS
     # A drift halt never writes over a reason the order already carries. The old text is kept after
     # the new one, joined by "; earlier: ", so nothing loses a reason; and a start run repeated on
     # the same drift adds nothing, because the reason it would write is already at the front.
-    # An unstarted order the design removed leaves the order list here, as it left the snapshot.
-    final_orders_json="$(printf '%s' "$ledger_doc" | jq -c --argjson drifted "$drift_halts_json" --argjson gone "$removed_ids_json" "$HALT_MERGE_JQ"'
-        .orders | map(. as $o | select(($gone | index($o.id)) == null)) | map(
+    # An unstarted order the design removed leaves the order list here, as it left the snapshot,
+    # and an order the design added enters it not started.
+    final_orders_json="$(printf '%s' "$ledger_doc" | jq -c --argjson drifted "$drift_halts_json" --argjson gone "$removed_ids_json" \
+        --argjson added "$added_ids_json" "$HALT_MERGE_JQ"'
+        (.orders + [ $added[] | {id: ., lastStep: null, attemptsUsed: 0, roundsUsed: 0} ])
+        | map(. as $o | select(($gone | index($o.id)) == null)) | map(
           . as $o
           | (([ $drifted[] | select(.id == $o.id) | .reason ])[0]) as $r
           | if $r == null then $o else ($o + {haltedBecause: halt_merge($o.haltedBecause; $r)}) end
@@ -2540,6 +2555,20 @@ LO_MOVE
      | if ($resnapshots | length) > 0 then .resnapshots = $resnapshots else . end')"
   write_atomic "$LEDGER_FILE" "$ledger_json_out"
 
+  # finished.json stands only while finish's own condition holds: every order closed, none halted.
+  # An order design added, or a drift halt on a closed order, ends that, and the record would send
+  # the task to review with an order unbuilt (gap row 335). Every field in it is derived, so finish
+  # writes it again.
+  local st_unfinished=""
+  if [ -f "$IMPL_DIR/finished.json" ]; then
+    st_unfinished="$(printf '%s' "$final_orders_json" | jq -r '
+        [ .[] | select(.lastStep != "closed" or (.haltedBecause // "") != "") | .id ] | join(", ")')"
+    if [ -n "$st_unfinished" ]; then
+      rm -f -- "$IMPL_DIR/finished.json" || die 3 "start: could not remove $IMPL_DIR/finished.json"
+      st_unfinished="implementation/finished.json removed: $st_unfinished not closed or halted, so the build is not finished. finish writes it again"
+    fi
+  fi
+
   # --- step 13: the report --------------------------------------------------------------------------
   local ready_ids_json halted_json in_flight_json
   ready_ids_json="$(jq -n --argjson orders "$snapshot_workorders_json" --argjson ledgerOrders "$final_orders_json" '
@@ -2640,7 +2669,8 @@ LO_MOVE
     --argjson resnapshotted "$resnapshot_ids_json" \
     --argjson driftCleared "$drift_cleared_ids_json" \
     --argjson removed "$removed_ids_json" \
-    --argjson newLiveOrders "$new_live_order_ids_json" \
+    --argjson added "$added_ids_json" \
+    --arg finished "$st_unfinished" \
     --argjson partialBuild "$st_partial_json" \
     --argjson leftovers "$(printf '%s' "$leftovers_json" | jq -c "[ $LO_TEXT_JQ ]")" \
     --arg setAside "$set_aside_dir" \
@@ -2650,13 +2680,15 @@ LO_MOVE
     --arg state "$run_state" --arg next "$st_next" '
     {task: $task, codePath: $codePath, run: $run, runMode: $runMode, branch: $branch, trunk: $trunk,
      snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom, proofAbsent: $proofAbsent,
-     drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: $resnapshotted,
-     driftCleared: $driftCleared, removed: $removed, newLiveOrders: $newLiveOrders,
+     drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: ($resnapshotted - $added),
+     driftCleared: $driftCleared, removed: $removed, added: $added, finished: $finished,
      partialBuild: $partialBuild, leftovers: $leftovers, setAside: $setAside,
      halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
     | if ($leftovers | length) == 0 then del(.leftovers) else . end
     | if $setAside == "" then del(.setAside) else . end
     | if ($removed | length) == 0 then del(.removed) else . end
+    | if ($added | length) == 0 then del(.added) else . end
+    | if $finished == "" then del(.finished) else . end
     | if ($driftCleared | length) == 0 then del(.driftCleared) else . end
     | if ($partialBuild | length) == 0 then del(.partialBuild) else . end')"
   exit 0

@@ -187,8 +187,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      entry with no run or no pass, a pass or a kind outside its three forms, a run line carrying
 #      a shell character, or a --run or --check with no --cite; or `close` was given
 #      --approve-runs unattended; or `account` was given a --finding not shaped <search>#<n>, or a
-#      blank --set-aside; or `create` found implementation/snapshot.json, so no new order would be
-#      built.
+#      blank --set-aside.
 #   4  `check` ran and found a work order file, or the guides-read record, that cannot be read as
 #      its format: not valid JSON, not an object, or a missing, malformed or unknown field
 #      (check-design.sh's own exit 1, remapped here so it never collides with this script's own
@@ -888,10 +887,6 @@ do_create() {
   done
 
   is_blank "$title" && die3 "create: --title is required and must not be blank"
-  # Implementation builds only the orders its snapshot froze, so a new order never enters a build
-  # that started (gap row 319).
-  [ ! -e "$TASK_PATH/implementation/snapshot.json" ] \
-    || die3 "create: implementation froze this design in $TASK_PATH/implementation/snapshot.json, and it builds only the orders frozen there, so a new order would never be built. A defect a review found is fixed on the task branch, then implementation's finish runs again. Work no criterion covers goes to a follow up task."
 
   parse_id_list "$criteria_served" c "create: --criteria-served"; local served_json="$ID_LIST_JSON"
   parse_id_list "$criteria_owned" c "create: --criteria-owned"; local owned_json="$ID_LIST_JSON"
