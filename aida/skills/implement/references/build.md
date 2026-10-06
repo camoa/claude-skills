@@ -111,7 +111,8 @@ The script derives the rest itself from the frozen snapshot: this role is denied
 order's owned files, and allowed its own. Never type those paths here. It prints both lists, and
 an order that declares nothing it owns refuses rather than opening a dispatch with nowhere to
 write. It also refuses for each reason `build-brief` refuses above, with the same words. Tests
-never frozen exit 114 here. Nothing is written. Act on the refusal first.
+never frozen exit 114 here. An order with no build brief exits 115, because the implementer then
+has no answers file to write. Nothing is written. Act on the refusal first.
 
 **Then dispatch `implementer`**, with the message SKILL.md names. Its lines are the role, the run
 mode, and two paths: the `implement` recipe for its framework and the brief `build-brief` wrote.

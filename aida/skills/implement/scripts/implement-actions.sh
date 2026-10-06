@@ -773,10 +773,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      report again. The order halts with a reason naming
 #      the role and its `maxTurns`, and the record is removed. A person runs clear-halt, then
 #      start, then dispatches again.
-# 111  a plain `dispatch-close` on a reviewer's or a row-checker's record found its file missing, or
-#      written before the record's `openedAt`: `findingsPath` in review mode, `verdictsPath` in
-#      verify mode after the ledger's `fixed`, `row-check-<order>.json` for the row-checker (gap row
-#      322). The record stays open. The message names `--no-report`.
+# 111  a plain `dispatch-close` on a reviewer's, a row-checker's or an implementer's record found its
+#      file missing, or written before the record's `openedAt`: `findingsPath` in review mode,
+#      `verdictsPath` in verify mode after the ledger's `fixed`, `row-check-<order>.json` for the
+#      row-checker (gap row 322), the build brief's `reportPath` for the implementer. An implementer's
+#      file also fails without the stop line build-record reads (gap row 327). The record stays
+#      open. The message names `--no-report`.
 # The code the completion line added (gap row 250).
 # 112  a plain `dispatch-close` on a fixer's or a test author's record found the report its brief
 #      pins missing, not ending with the line `Report: complete`, or holding nothing but that
@@ -804,9 +806,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      `build-brief`'s ledger refusals and its exits 40, 41 and 116, with the same codes and words
 #      (gap row 281).
 # 115  `dispatch-open` was given the reviewer role for an order with no reviewer brief:
-#      brief-<unit_id>-review.json, or brief-<unit_id>-verify-<round>.json after a fix round. The
+#      brief-<unit_id>-review.json, or brief-<unit_id>-verify-<round>.json after a fix round, or the
+#      implementer role with no brief-<unit_id>-build.json (gap row 327). The
 #      message names the step that writes it. Nothing is written. Kept apart from 114 because the
-#      repair differs: a missing brief needs review-brief or verify-brief, not tests-freeze.
+#      repair differs: a missing brief needs its brief step, not tests-freeze.
 # The code the build-step check added (gap row 281).
 # 116  `build-brief` or `dispatch-open implementer` found the order at a ledger step no build starts
 #      from. A build starts from tests-frozen, or from code-written to rebuild a failed attempt. The
@@ -12807,6 +12810,14 @@ do_dispatch_open() {
     [ -f "$rv_brief" ] \
       || die 115 "dispatch-open: $rv_brief not found, so a reviewer of $unit_id has no brief. Run ${rv_step%%-*}-brief on $unit_id first. Nothing was dispatched."
   fi
+  # The implementer writes its answers to the file the build brief pins. Without the brief it has no
+  # such file, and its answers come back as returned text the runtime can cut (gap row 327).
+  local bd_brief=""
+  if [ "$role_bare" = "implementer" ]; then
+    bd_brief="$TASK_PATH/implementation/brief-$unit_id-build.json"
+    [ -f "$bd_brief" ] \
+      || die 115 "dispatch-open: $bd_brief not found, so an implementer of $unit_id has no file to write its answers to. Run build-brief on $unit_id first. Nothing was dispatched."
+  fi
 
   # The row-checker takes the test author's derivation exactly. It reads a criterion's verify clause
   # and the test named against it, and answers whether the one observes the other. Reading the
@@ -13072,7 +13083,8 @@ TG_ROOTS
       || die 3 "dispatch-open: $forms_file holds no form or could not be read. This plugin's own files are incomplete; nothing about the task is wrong."
   fi
   # The file the role's brief pins, which dispatch-close checks (gap rows 228 and 250): the
-  # reviewer's findings or verdicts, the fixer's and the test author's report. The last two end
+  # reviewer's findings or verdicts, the fixer's and the test author's report, the implementer's
+  # answers (gap row 327). The last two end
   # theirs with IM_REPORT_DONE, so their record carries that line too. A fresh dispatch removes an
   # earlier report of theirs, so a complete one from before cannot close this one. A resume keeps it.
   # The row-checker has no brief. Its verdict file has the one name tests-freeze reads (gap row 322).
@@ -13081,6 +13093,7 @@ TG_ROOTS
     fixer) report_brief="$fx_brief" ;;
     test-author) report_brief="$TASK_PATH/implementation/brief-$unit_id-tests.json" ;;
     reviewer) report_brief="$rv_brief" ;;
+    implementer) report_brief="$bd_brief" ;;
   esac
   if [ "$role_bare" = "row-checker" ]; then
     report_path="$IMPL_DIR/row-check-$unit_id.json"
@@ -13207,6 +13220,12 @@ do_dispatch_close() {
       rp_cause="$rp_path is missing"
     elif [ -z "$rp_line" ] && [ "$rp_written" -lt "$rp_opened" ]; then
       rp_cause="$rp_path is older than its dispatch: written $(im_iso_of "$rp_written"), dispatch opened $(im_iso_of "$rp_opened")"
+    elif [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "implementer" ]; then
+      # The implementer writes its answers first and its stop line last, so the stop line is
+      # its finished mark. The rule is the one build-record and the return hook read (gap row 327).
+      rp_cause="$(br_lines_fault "$rp_path" "$(jq -r '.interfacePath // ""' \
+        "$(dirname "$dispatch_file")/brief-$(jq -r '.unit // ""' "$dispatch_file")-build.json" 2>/dev/null)")"
+      rp_cause="${rp_cause%.}"
     elif [ -n "$rp_line" ]; then
       rp_last="$(grep -v '^[[:space:]]*$' "$rp_path" | tail -n 1 | sed 's/[[:space:]]*$//')"
       if [ "$rp_last" != "$rp_line" ]; then
