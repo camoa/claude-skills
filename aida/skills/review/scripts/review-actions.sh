@@ -2770,13 +2770,12 @@ do_close() {
 
   local alignment criteria count i one kind state verdict answered suite_verdict
   local hit rows_out criteria_json bad_rows person_checks unanswered=0 unmet_count=0
-  local observe_owner observed_file confirm_owned failed_by cited_by="" stale_low
+  local observe_owner observed_file person_owned failed_by cited_by="" stale_low
   alignment="$(rw_alignment)"
-  # The criteria an order proved by confirm puts to the person, confirmCriteria in
-  # scripts/lib/proof.sh. The person answers each one with --row, the way a person-verified
-  # criterion is answered, from the checklist rows `finish` wrote (gap row 196).
-  confirm_owned="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -c "$BR_ORDER_FACTS_JQ"'
-    [ (.workOrders // [])[] | confirmCriteria[] ] | unique')"
+  # The criteria a person answers, personCriteria in scripts/lib/proof.sh: each person-verified
+  # one, and each one an order proved by confirm puts to the person. The person answers each with
+  # --row, from the checklist rows `finish` wrote (gap row 196).
+  person_owned="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -c "$BR_ORDER_FACTS_JQ personCriteria")"
   criteria="$(printf '%s' "$alignment" | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
   suite_verdict="$(printf '%s' "$RW_RECORD_DOC" | jq -r '[ (.checks // [])[] | select(.id == "suite") ][0].verdict // "unknown"')"
@@ -2794,8 +2793,7 @@ do_close() {
     # one is not, unanswered when the record is not there to read.
     observe_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
       [ (.workOrders // [])[] | select(orderFacts.slot == "observed") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
-    if [ "$kind" = "person" ] \
-       || [ "$(printf '%s' "$confirm_owned" | jq --arg id "$cid" 'index($id) != null')" = "true" ]; then
+    if [ "$(printf '%s' "$person_owned" | jq --arg id "$cid" 'index($id) != null')" = "true" ]; then
       verdict="$(cr_lookup "$rows" "$cid")"
       if [ -n "$verdict" ]; then
         answered="person"
@@ -2859,10 +2857,9 @@ do_close() {
   # A --row for a criterion the contract does not hold, or one a machine verifies, is a caller
   # answering a question nobody asked. Every id is checked in one question rather than one per row.
   person_checks="$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.checks // [])[] | select(has("answeredBy")) | .id ]')"
-  bad_rows="$(jq -Rrn --argjson c "$criteria" --argjson co "$confirm_owned" --argjson pc "$person_checks" --rawfile given /dev/stdin '
+  bad_rows="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
-      | . as $id | select(($co | index($id)) == null) | select(($pc | index($id)) == null)
-      | select(([ $c[] | select(.id == $id and .verifiedBy == "person") ] | length) == 0) ]
+      | . as $id | select(($po | index($id)) == null) | select(($pc | index($id)) == null) ]
     | unique | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS

@@ -89,6 +89,8 @@
 #   recipe_precondition_names <recipe>        each name its ## Preconditions prose puts in backticks
 #   recipe_name_of <recipe> [<key>]           the name: field of its frontmatter, or the <key>:
 #                                             field; empty when it has none
+#   PC_END_ABSENT_JQ                          `endAbsentTools` on a preconditions record: each
+#                                             tool in endOfTaskToolsAbsent with its rows, as text
 #   recipe_requires_tooling_of <recipe> [<key>]  the names its requires_tooling: list holds, or
 #                                             the list under <key>; 2 on a value it cannot read
 #   recipe_stale_line <fw> <copy> <catalog>   one sentence when the copy is behind the catalog's
@@ -654,6 +656,13 @@ CR_TOOL_IDS_ALL=false
 # takes five arguments and a sixth read only by one caller is a list read wrong sooner than right.
 # shellcheck disable=SC2034 # read by the sourcing script
 PC_VALUES=""
+# The tools preconditions recorded absent at the end of the task, one "tool (rows)" text each, on
+# a preconditions record. The summary's endOfTaskAbsent line and set-run-mode's review-tools line
+# read it.
+# shellcheck disable=SC2034 # read by the sourcing script
+PC_END_ABSENT_JQ='
+  def endAbsentTools:
+    [ (.frameworks // [])[] | (.endOfTaskToolsAbsent // [])[] | .tool + " (" + (.rows | join(", ")) + ")" ];'
 cr_resolve() {
   local work fw_file tools_file fw names
   local test_path check_path tc_rows cc_rows rows_file

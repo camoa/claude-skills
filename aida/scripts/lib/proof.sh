@@ -27,7 +27,7 @@
 #
 #   br_order_facts <work order document>   sets BR_ORDER_SLOT, BR_ORDER_RANGE, BR_ORDER_OWNS_CODE
 #   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`,
-#                                          and `confirmCriteria` beside it
+#                                          and `confirmCriteria` and `personCriteria` beside it
 #   BR_HARNESS_JQ                          `noAutomatedTests` and `harnessNeeded` on a snapshot
 #   br_order_needs <work order document>   sets BR_ORDER_ROLES, BR_ORDER_LOOKUPS
 #   br_proof_facts <snapshot>              commits in the code repository, owns a file there
@@ -67,6 +67,10 @@ br_order_facts() {
 # other order lists none. finish writes the order's done-when rows under these criteria and does
 # not wait for their row state. review's close takes the person's answer on them. The three sites
 # read the one list, so a row a person sees is always a row the person can answer.
+#
+# `personCriteria`, on a snapshot document ({alignment, workOrders}), lists every criterion a
+# person answers at review: each one the contract marks person-verified, and each order's
+# confirmCriteria. Review's close and set-run-mode read it, so the two never disagree (gap row 328).
 BR_ORDER_FACTS_JQ='
   def orderFacts:
     (.proof // "tests") as $p
@@ -79,7 +83,10 @@ BR_ORDER_FACTS_JQ='
   def confirmCriteria:
     if orderFacts.slot != "confirm-at-review" then []
     elif ((.criteriaOwned // []) | length) > 0 then .criteriaOwned
-    else (.criteriaServed // []) end;'
+    else (.criteriaServed // []) end;
+  def personCriteria:
+    [ ((.alignment.criteria // [])[] | select(.verifiedBy == "person") | .id),
+      ((.workOrders // [])[] | confirmCriteria[]) ] | unique;'
 
 # Two jq definitions on the snapshot document. `noAutomatedTests` is true when the frozen contract
 # says the task has no automated tests; an absent answer reads as tests. `harnessNeeded` says

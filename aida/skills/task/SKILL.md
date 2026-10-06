@@ -393,8 +393,8 @@ fails the task without it. When end to end is off, say that a person sets it up 
 
 When the mode covers review, two lines can follow, on light or autonomous. The `sign-off:` line
 names the criteria a person answers, so an unattended review writes no verdict. The
-`review-tools:` line names the review tools that preconditions found absent. Read both to the
-person.
+`review-tools:` line names the review tools that preconditions found absent. Before
+preconditions has run, it says that preconditions will check them. Read both to the person.
 
 ## `set-budget <task-id> [--dispatches <n>] [--minutes <n>]`
 

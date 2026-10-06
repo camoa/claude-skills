@@ -4054,7 +4054,7 @@ PC_CATALOG
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
         --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" --arg nextAdvice "$pc_advice" \
-        --arg failedOutput "$pc_failed" --arg staleRecipe "$pc_stale" '
+        --arg failedOutput "$pc_failed" --arg staleRecipe "$pc_stale" "$PC_END_ABSENT_JQ"'
     def named($v): [ .entries[] | select(.verdict == $v) | .id + (if (.owner // "") == "" then "" else " (owner: " + .owner + ")" end) ]
                    | if length == 0 then "none" else join(", ") end;
     {verdict: $verdict,
@@ -4089,7 +4089,7 @@ PC_CATALOG
                      else "codingStandards=" + $baselineSummary.codingStandards.verdict
                           + " staticAnalysis=" + $baselineSummary.staticAnalysis.verdict
                           + " security=" + $baselineSummary.security.verdict end),
-     endOfTaskAbsent: ([ $report.frameworks[] | (.endOfTaskToolsAbsent // [])[] | .tool + " (" + (.rows | join(", ")) + ")" ]
+     endOfTaskAbsent: ($report | endAbsentTools
                        | if length == 0 then "none"
                          else join(", ") + ": absent, and only end-of-task rows run it, so the build goes on and review reads those rows as known. Install it with the tool skill to run them." end),
      buildToolsNotChecked: ([ $report.frameworks[] | (.buildToolsNotChecked // [])[] | .row + " (" + (.argv | join(" ")) + ")" ]

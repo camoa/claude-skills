@@ -1022,11 +1022,18 @@ do_set_run_mode() {
   # verdict (gap rows 290 and 328). Said here, from the records, so the person chooses knowing it.
   if [ "$value" = "light" ] || { [ "$value" = "autonomous" ] \
       && [ "$(printf '%s' "$stages_json" | jq 'length == 0 or index("review") != null')" = "true" ]; }; then
-    orders="$(find "$task_dir/design" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' -exec cat {} + 2>/dev/null | jq -sc '.' 2>/dev/null)"
+    # The frozen snapshot once implementation took one, else the contract and the design's orders,
+    # in the snapshot's own shape.
+    if [ -f "$task_dir/implementation/snapshot.json" ]; then
+      orders="$(jq -c '.workOrders // []' "$task_dir/implementation/snapshot.json" 2>/dev/null)"
+      person_rows="$(jq -r "$BR_ORDER_FACTS_JQ"' personCriteria | join(", ")' "$task_dir/implementation/snapshot.json" 2>/dev/null)"
+    else
+      orders="$(find "$task_dir/design" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' -exec cat {} + 2>/dev/null | jq -sc '.' 2>/dev/null)"
+      [ -n "$orders" ] || orders='[]'
+      person_rows="$(jq -r --argjson orders "$orders" "$BR_ORDER_FACTS_JQ"'
+        {alignment: ., workOrders: $orders} | personCriteria | join(", ")' "$task_dir/alignment.json" 2>/dev/null)"
+    fi
     [ -n "$orders" ] || orders='[]'
-    person_rows="$(jq -r --argjson orders "$orders" "$BR_ORDER_FACTS_JQ"'
-      [ ((.criteria // [])[] | select(.verifiedBy == "person") | .id), ($orders[] | confirmCriteria[]) ]
-      | unique | join(", ")' "$task_dir/alignment.json" 2>/dev/null)"
     if [ -n "$person_rows" ]; then
       echo "sign-off: an unattended review writes no verdict. A person answers $person_rows at review, so a person closes this task."
     elif [ "$orders" = "[]" ] && { [ "$(automated_tests "$task_dir")" = "no" ] \
@@ -1035,10 +1042,14 @@ do_set_run_mode() {
       # Light's scope writes that answer itself, so a light contract not yet asked reads no too.
       echo "sign-off: the run ends at review. Each code order's proof is a person's answer, so a person closes this task."
     fi
-    absent_tools="$(jq -r '[ (.frameworks // [])[] | (.endOfTaskToolsAbsent // [])[] | .tool + " (" + (.rows | join(", ")) + ")" ] | join(", ")' \
-      "$task_dir/implementation/preconditions.json" 2>/dev/null)"
-    [ -z "$absent_tools" ] \
-      || echo "review-tools: preconditions recorded $absent_tools absent, so review cannot run those rows. Install each with the tool skill before review."
+    if [ -f "$task_dir/implementation/preconditions.json" ]; then
+      absent_tools="$(jq -r "$PC_END_ABSENT_JQ"' endAbsentTools | join(", ")' \
+        "$task_dir/implementation/preconditions.json" 2>/dev/null)"
+      [ -z "$absent_tools" ] \
+        || echo "review-tools: preconditions recorded $absent_tools absent, so review cannot run those rows. Install each with the tool skill before review."
+    else
+      echo "review-tools: implementation's preconditions will check the review recipe's tools and record each missing one, and review's row for it names that record."
+    fi
   fi
   task_summary "$task_json"
 }

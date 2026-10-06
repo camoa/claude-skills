@@ -58,7 +58,9 @@ reads the task too, so a mode scoped to the build leaves review to you. Then inv
 When the mode covers review, `set-run-mode` reads the task's records and says what an unattended
 review cannot conclude. The `sign-off:` line names each criterion a person answers. Review
 records those as unanswered and writes no verdict, so a person closes the task. The
-`review-tools:` line names each review tool that preconditions found absent.
+`review-tools:` line names each review tool that preconditions found absent. Before the build,
+it says that preconditions will check those tools. Review's row for a missing tool names that
+record, so you read it again when you close the task.
 
 A task can carry a ceiling on its build, in either mode. Set it with
 `/aida:task set-budget <task-id> [--dispatches <n>] [--minutes <n>]`, either number or both, each
