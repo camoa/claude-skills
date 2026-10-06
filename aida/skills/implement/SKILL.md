@@ -204,11 +204,11 @@ that never returned leaves one.
 **A role the runtime stops at its turn limit is resumed once.** This holds for every role this
 skill dispatches. An implementer whose order's diff budget starts with `large` is resumed twice.
 The script reads that word from the frozen order. The signal is the runtime's own mark that the
-role stopped at its turn limit. For the reviewer, the row-checker and the implementer the script
-also sees it: a plain close refuses (exit 111) when the file the role writes is missing. That is
+role stopped at its turn limit. The script also sees it for the reviewer, the row-checker and the
+implementer. A plain close refuses (exit 111) when the file the role writes is missing. That is
 the findings or verdicts file the brief names, the row-checker's `row-check-<order id>.json`, or
-the implementer's answers file, which also needs its stop line. The fixer and the
-test author end the report their brief pins with `Report: complete`. A plain close whose report
+the implementer's answers file, which also needs its stop line. The fixer and the test author end
+the report their brief pins with `Report: complete`. A plain close whose report
 lacks that line takes the step below itself (exit 112). After a 112, do not close again: resume
 the agent. A `--no-report` close after a 112 spends a resume. Add `--no-report` only on the
 runtime's mark. A role can finish before the runtime marks it stopped. If its file passes, the

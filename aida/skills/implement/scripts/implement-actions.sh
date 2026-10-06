@@ -13254,7 +13254,10 @@ do_dispatch_close() {
       fi
     fi
     if [ -n "$rp_cause" ] && [ -z "$rp_line" ] && [ "$no_report" = false ]; then
-      die 111 "dispatch-close: the $(jq -r '.role // "" | split(":") | last' "$dispatch_file") on $(jq -r '.unit // ""' "$dispatch_file") returned, and $rp_cause. The record stays open. If it stopped at its turn limit, run dispatch-close again with --no-report."
+      local rp_route=""
+      [ -f "$rp_path" ] && [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "implementer" ] \
+        && rp_route=" If it finished, resume it by message to correct its stop or deviation line in $rp_path, then close again."
+      die 111 "dispatch-close: the $(jq -r '.role // "" | split(":") | last' "$dispatch_file") on $(jq -r '.unit // ""' "$dispatch_file") returned, and $rp_cause. The record stays open. If it stopped at its turn limit, run dispatch-close again with --no-report.$rp_route"
     fi
     if [ -n "$rp_cause" ]; then
       [ "$no_report" = true ] || { cut_off="$rp_cause"; no_report=true; }
