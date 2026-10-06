@@ -64,6 +64,8 @@
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
+#   task_review_outdated <folder>         true, and prints both ranges, when the review covers
+#                                         a commit range the finished build no longer ends at
 #   active_tree_for <codePath> <dir>      prints <dir>'s git top level when it is a worktree of
 #                                         the <codePath> repository, else <codePath>
 #   playbooks_record_path <folder>        prints the path of the playbook record research loads
@@ -795,11 +797,26 @@ task_stage() {
     echo "design"
   elif [ ! -f "$task_folder/implementation/finished.json" ]; then
     echo "implementation"
-  elif [ "$review" != "passed" ] && [ "$review" != "failed" ]; then
+  elif [ "$review" != "passed" ] && [ "$review" != "failed" ] || task_review_outdated "$task_folder" >/dev/null; then
     echo "review"
   else
     echo "completion"
   fi
+}
+
+# A review judged the commit range finished.json held when it ran. A later finish, after a fix or
+# an order design added, ends the build at another commit, and that verdict covers none of the
+# new commits (gap row 335). So a review whose reviewedRange differs from the finished commitRange,
+# or has no finished record beside it, counts as no review. task_stage and completion ask here.
+# $1 the task folder. Prints both ranges and returns 0 when outdated; prints nothing and returns 1
+# otherwise, and when there is no review record. Calls no die function.
+task_review_outdated() {
+  local reviewed built
+  reviewed="$(jq -r '.reviewedRange // empty' "$1/review/review.json" 2>/dev/null)"
+  [ -n "$reviewed" ] || return 1
+  built="$(jq -r '.commitRange // empty' "$1/implementation/finished.json" 2>/dev/null)"
+  [ "$reviewed" != "$built" ] || return 1
+  printf 'the review covers %s, and the finished build is %s' "$reviewed" "${built:-not recorded}"
 }
 
 # A chain made with --in-tree shares one tree, and the branch checked out there says which task

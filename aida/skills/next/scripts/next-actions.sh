@@ -376,7 +376,9 @@ do_open() {
     fi
     local review
     review="$(review_verdict_of "$project_path/tasks/$target")"
-    echo "review: $review"
+    local outdated
+    outdated="$(task_review_outdated "$project_path/tasks/$target")"
+    echo "review: $review${outdated:+, outdated: $outdated, so the review stage runs again}"
     echo "stage: $(task_stage "$project_path/tasks/$target" "$review")"
     local after
     after="$(task_after_state "$project_path/tasks/$target")"

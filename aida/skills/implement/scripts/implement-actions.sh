@@ -1267,6 +1267,18 @@ snapshot_with_live_orders() {
     '.hash = $hash | .alignment = $alignment | .workOrders = $orders'
 }
 
+# The orders that keep implementation from finishing, from the ledger document $1: each one not
+# closed, and each one carrying a halt, closed or not. A halt survives a close: `start` writes a
+# drift halt onto every order a design change touches, whatever step each had reached, and
+# `restart` follows it. Prints "<id> (<step>[, halted: <reason>])" joined by "; ", or nothing.
+# finish refuses on it, and start removes finished.json on it (gap row 335).
+im_unfinished_orders() {
+  printf '%s' "$1" | jq -r '
+      [ (.orders // [])[] | select(.lastStep != "closed" or (.haltedBecause // "") != "")
+        | .id + " (" + (.lastStep // "not started") + (if (.haltedBecause // "") == "" then "" else ", halted: " + .haltedBecause end) + ")" ]
+      | join("; ")'
+}
+
 # Every design/*.json under $1, parsed and sorted by numeric work order id (wo1, wo2, ... wo10),
 # never by filename: a lexicographic sort would put wo10 before wo2. Prints a JSON array on
 # stdout, [] when the folder holds no *.json files. Sets READ_FAILED to the path of the first
@@ -2533,9 +2545,10 @@ LO_MOVE
   [ -z "$ledger_doc" ] || resnapshots_json="$(printf '%s' "$ledger_doc" | jq -c '.resnapshots // []')"
   if [ -n "$resnapshot_doc" ]; then
     write_atomic "$SNAPSHOT_FILE" "$resnapshot_doc"
-    resnapshots_json="$(jq -cn --argjson have "$resnapshots_json" --argjson ids "$resnapshot_ids_json" \
+    resnapshots_json="$(jq -cn --argjson have "$resnapshots_json" --argjson ids "$resnapshot_ids_json" --argjson added "$added_ids_json" \
       --arg from "$snapshot_hash_on_disk" --arg to "$resnapshot_hash" --arg at "$(date -u +%Y-%m-%d)" \
-      '$have + [ $ids[] | {id: ., from: $from, to: $to, at: $at} ]')"
+      '$have + [ $ids[] | . as $id | {id: $id, from: $from, to: $to, at: $at}
+                 + (if ($added | index($id)) != null then {added: true} else {} end) ]')"
     snapshot_hash_on_disk="$resnapshot_hash"
   fi
 
@@ -2555,17 +2568,15 @@ LO_MOVE
      | if ($resnapshots | length) > 0 then .resnapshots = $resnapshots else . end')"
   write_atomic "$LEDGER_FILE" "$ledger_json_out"
 
-  # finished.json stands only while finish's own condition holds: every order closed, none halted.
-  # An order design added, or a drift halt on a closed order, ends that, and the record would send
-  # the task to review with an order unbuilt (gap row 335). Every field in it is derived, so finish
-  # writes it again.
+  # finished.json stands only while finish's own condition holds. An order design added, or a drift
+  # halt on a closed order, ends that, and the record would send the task to review with an order
+  # unbuilt (gap row 335). Every field in it is derived, so finish writes it again.
   local st_unfinished=""
   if [ -f "$IMPL_DIR/finished.json" ]; then
-    st_unfinished="$(printf '%s' "$final_orders_json" | jq -r '
-        [ .[] | select(.lastStep != "closed" or (.haltedBecause // "") != "") | .id ] | join(", ")')"
+    st_unfinished="$(im_unfinished_orders "$ledger_json_out")"
     if [ -n "$st_unfinished" ]; then
       rm -f -- "$IMPL_DIR/finished.json" || die 3 "start: could not remove $IMPL_DIR/finished.json"
-      st_unfinished="implementation/finished.json removed: $st_unfinished not closed or halted, so the build is not finished. finish writes it again"
+      st_unfinished="implementation/finished.json removed, so the build is not finished and finish writes it again: $st_unfinished"
     fi
   fi
 
@@ -11503,23 +11514,9 @@ do_finish() {
 
   # --- exit 66: every order closed, and every machine-verified criterion confirmed ----------------
   local open_orders unconfirmed
-  open_orders="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '
-      [ (.orders // [])[] | select(.lastStep != "closed")
-        | .id + " (" + (.lastStep // "not started") + (if (.haltedBecause // "") == "" then "" else ", halted: " + .haltedBecause end) + ")" ]
-      | join("; ")')"
+  open_orders="$(im_unfinished_orders "$FN_LEDGER_DOC")"
   [ -z "$open_orders" ] \
-    || die 66 "finish: these orders are not closed: $open_orders. Every order closes before implementation finishes."
-
-  # A halt survives a close. `start` writes a drift halt onto every order the change touches,
-  # whatever step each had reached, so an order closed before the design moved carries one
-  # afterwards. Reading lastStep alone would finish a task whose design has moved under it, and hand
-  # the review stage a commit range for a design that is gone. `restart` is what follows such a halt.
-  local halted_orders
-  halted_orders="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '
-      [ (.orders // [])[] | select((.haltedBecause // "") != "") | .id + ": " + .haltedBecause ]
-      | join("; ")')"
-  [ -z "$halted_orders" ] \
-    || die 66 "finish: these orders are halted, closed or not: $halted_orders. Implementation does not finish while a reason to stop stands on an order."
+    || die 66 "finish: these orders are not closed, or carry a halt: $open_orders. Every order closes, and no reason to stop stands on any order, before implementation finishes."
   # A criterion that is not confirmed stops the stage, and three different facts land here. The
   # refusal names which, and which action answers it: `restart` wants a drift halt, `grant-attempt`
   # answers a spent counter, `clear-halt` the rest, so a reader told only "not confirmed" has
