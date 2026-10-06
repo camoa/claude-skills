@@ -29,6 +29,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                            make each task's own worktree
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh           sourced, for the codePath readers
 #                                                            task_worktree needs
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/proof.sh             sourced, for confirmCriteria, which
+#                                                            set-run-mode reads
 #
 # Usage:
 #   task-actions.sh [--run-mode <interactive|autonomous>] create --project <path> --name <id> \
@@ -107,7 +109,8 @@ die3() {
 # The two libraries take these from their caller, so a refusal still says which script refused.
 die() { printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
 die1() { die 1 "$1"; }
-for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh"; do
+for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh" \
+    "${PLUGIN_ROOT}/scripts/lib/proof.sh"; do
   [ -f "$lib_name" ] || die3 "cannot find the library at $lib_name"
   # shellcheck source=/dev/null
   source "$lib_name" || die3 "the library failed to load: $lib_name"
@@ -931,7 +934,7 @@ do_split() {
 # ------------------------------------------------------------------------------------------------
 
 do_set_run_mode() {
-  local project_path="" id="" value="" stages_json='[]'
+  local project_path="" id="" value="" stages_json='[]' person_rows orders absent_tools
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project_path="${2:?--project needs a value}"; shift 2 ;;
@@ -1014,10 +1017,28 @@ do_set_run_mode() {
     else
       echo "path-script: end to end is off. Review fails this task until a person sets it up with /aida:surfaces e2e and registers the demo path as one critical surface."
     fi
-    # With no automated tests each code order's proof is a person's answer, so the run cannot close
-    # the task (gap row 290). A contract that already answered yes keeps its tests.
-    [ "$(automated_tests "$task_dir")" = "yes" ] \
-      || echo "sign-off: the run ends at review. Each code order's proof is a person's answer, so a person closes this task."
+  fi
+  # An unattended review records each criterion a person answers as unanswered, so it writes no
+  # verdict (gap rows 290 and 328). Said here, from the records, so the person chooses knowing it.
+  if [ "$value" = "light" ] || { [ "$value" = "autonomous" ] \
+      && [ "$(printf '%s' "$stages_json" | jq 'length == 0 or index("review") != null')" = "true" ]; }; then
+    orders="$(find "$task_dir/design" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' -exec cat {} + 2>/dev/null | jq -sc '.' 2>/dev/null)"
+    [ -n "$orders" ] || orders='[]'
+    person_rows="$(jq -r --argjson orders "$orders" "$BR_ORDER_FACTS_JQ"'
+      [ ((.criteria // [])[] | select(.verifiedBy == "person") | .id), ($orders[] | confirmCriteria[]) ]
+      | unique | join(", ")' "$task_dir/alignment.json" 2>/dev/null)"
+    if [ -n "$person_rows" ]; then
+      echo "sign-off: an unattended review writes no verdict. A person answers $person_rows at review, so a person closes this task."
+    elif [ "$orders" = "[]" ] && { [ "$(automated_tests "$task_dir")" = "no" ] \
+        || { [ "$value" = "light" ] && [ "$(automated_tests "$task_dir")" != "yes" ]; }; }; then
+      # No design yet: with no automated tests each code order's proof will be a person's answer.
+      # Light's scope writes that answer itself, so a light contract not yet asked reads no too.
+      echo "sign-off: the run ends at review. Each code order's proof is a person's answer, so a person closes this task."
+    fi
+    absent_tools="$(jq -r '[ (.frameworks // [])[] | (.endOfTaskToolsAbsent // [])[] | .tool + " (" + (.rows | join(", ")) + ")" ] | join(", ")' \
+      "$task_dir/implementation/preconditions.json" 2>/dev/null)"
+    [ -z "$absent_tools" ] \
+      || echo "review-tools: preconditions recorded $absent_tools absent, so review cannot run those rows. Install each with the tool skill before review."
   fi
   task_summary "$task_json"
 }

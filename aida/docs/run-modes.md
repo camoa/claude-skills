@@ -55,6 +55,11 @@ step reads the task, so a mode you change after a halt takes at once, with no `s
 reads the task too, so a mode scoped to the build leaves review to you. Then invoke the stage the task is at,
 `/aida:scope <task-id>` for a new task, and let it run.
 
+When the mode covers review, `set-run-mode` reads the task's records and says what an unattended
+review cannot conclude. The `sign-off:` line names each criterion a person answers. Review
+records those as unanswered and writes no verdict, so a person closes the task. The
+`review-tools:` line names each review tool that preconditions found absent.
+
 A task can carry a ceiling on its build, in either mode. Set it with
 `/aida:task set-budget <task-id> [--dispatches <n>] [--minutes <n>]`, either number or both, each
 a whole number of 1 or more. A number you do not name keeps the value it had, so raising one

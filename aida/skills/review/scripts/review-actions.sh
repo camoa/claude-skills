@@ -788,8 +788,8 @@ rw_run_done() {
 # placeholder nothing supplied a value for, an argv with no token, a command that is not there, and
 # an argv list that came out empty. Sets RW_RUN_VERDICT and RW_RUN_DETAIL, and clears both when the
 # exit status is the caller's own to read. $1 the row's own label, $2 the framework of a
-# test-execution row, whose preconditions record may hold its tool as absent at the end of the task,
-# $3 the install advice for exit 127 when no recipe supplies one.
+# test-execution row or a check row, whose preconditions record may hold its tool as absent at the
+# end of the task (gap row 328), $3 the install advice for exit 127 when no recipe supplies one.
 rw_run_fault() {
   local label="$1" fw="${2:-}" said known install named rp
   RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
@@ -1174,7 +1174,7 @@ rw_tool_row_check() {
   fi
 
   rw_run_row "$argv" "$scoped" "$RW_VALUES" "$signal"
-  rw_run_fault "$row_id"
+  rw_run_fault "$row_id" "$framework"
   verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
   if [ -z "$verdict" ]; then
     rc="$RW_RUN_RC"

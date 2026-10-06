@@ -3368,9 +3368,11 @@ PC_ONLY
 # a file of a type it reads inside the code repository, whether or not that file exists yet.
 # `tools` holds each name the recipe lists under requires_tooling that an applying row's argv
 # holds. `unchecked` holds each applying row whose argv holds none of them, with that argv: no
-# tool name is guessed from a command. Returns 2 on a list the reader cannot see.
+# tool name is guessed from a command. `review` holds the rows only review runs, such as
+# duplication, as {id, argv, cost: end-of-task}, under the same applying rule, and `reviewTools`
+# the names they hold that `tools` lacks (gap row 328). Returns 2 on a list the reader cannot see.
 pc_build_tools() {
-  local names="" listed name scope rows row row_argv exts scoped applying='[]'
+  local names="" listed name scope rows row row_argv exts scoped applying='[]' review_only='[]' all_rows
   listed="$(recipe_requires_tooling_of "$2")" || return 2
   while IFS= read -r name; do
     [ -z "$name" ] || names="$names$(pc_unquote "$name")
@@ -3380,6 +3382,13 @@ $listed
 PC_NAMES
   scope="$(br_inside_repository "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.workOrders // [])[] | (.ownedFiles // [])[] ] | unique')" "$codepath")"
   rows="$(printf '%s' "$CR_DOC" | jq -c --arg fw "$1" '(.tools // [])[] | select(.framework == $fw and (.argv | type) == "array")')"
+  # The rows only review runs: every row of the block whose id cr_resolve did not take.
+  all_rows="$(mktemp)" || return 2
+  cc_parse_recipe "$2" "Check commands" "check_commands" "$all_rows" >/dev/null
+  rows="$rows
+$(jq -c --argjson taken "$(printf '%s' "$CR_DOC" | jq -c '[ (.tools // [])[].id ]')" \
+    '.id as $id | select((.argv | type) == "array" and ($taken | index($id)) == null) | . + {reviewOnly: true}' "$all_rows" 2>/dev/null)"
+  rm -f "$all_rows"
   while IFS= read -r row; do
     [ -n "$row" ] || continue
     row_argv="$(printf '%s' "$row" | jq -c '.argv')"
@@ -3388,15 +3397,22 @@ PC_NAMES
       scoped="$scope"; [ -z "$exts" ] || scoped="$(br_filter_extensions "$scope" "$exts")"
       [ "$scoped" != "[]" ] || continue
     fi
-    applying="$(jq -nc --argjson have "$applying" --argjson row "$row" '$have + [$row]')"
+    if [ "$(printf '%s' "$row" | jq '.reviewOnly // false')" = "true" ]; then
+      review_only="$(jq -nc --argjson have "$review_only" --argjson row "$row" '$have + [{id: $row.id, argv: $row.argv, cost: "end-of-task"}]')"
+    else
+      applying="$(jq -nc --argjson have "$applying" --argjson row "$row" '$have + [$row]')"
+    fi
   done <<PC_ROWS
 $rows
 PC_ROWS
-  jq -nc --argjson rows "$applying" --arg names "$names" '
+  jq -nc --argjson rows "$applying" --argjson review "$review_only" --arg names "$names" '
     ($names | split("\n") | map(select(length > 0))) as $n
     | def holds($t): any(.argv[]; contains($t));
-    {tools: [ $n[] as $t | select(any($rows[]; holds($t))) | $t ],
-     unchecked: [ $rows[] | select(any($n[] as $t | holds($t); .) | not) | {row: .id, argv} ]}'
+    [ $n[] as $t | select(any($rows[]; holds($t))) | $t ] as $tools
+    | {tools: $tools,
+       unchecked: [ $rows[] | select(any($n[] as $t | holds($t); .) | not) | {row: .id, argv} ],
+       review: $review,
+       reviewTools: [ $n[] as $t | select(($tools | index($t)) == null and any($review[]; holds($t))) | $t ]}'
 }
 
 # The step. Every framework the project declares must be answered for, because the build runs in
@@ -3418,7 +3434,7 @@ do_preconditions() {
   local ledger_doc ledger_started_from check_recipes_json order_tests_absent
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
   local harness_needed harness_reason env_asked=no env_owner="" tooling_entries
-  local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc build_json build_entries unchecked_json smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
+  local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc build_json build_entries unchecked_json review_tools smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -3689,6 +3705,14 @@ PC_RECIPES
         entries_json="$(jq -nc --argjson have "$entries_json" --argjson add "$build_entries" '$have + $add')"
         tooling_entries="$build_entries"
       fi
+    fi
+    # A tool only review runs is checked too, and an absent one is advisory: it goes in
+    # endOfTaskToolsAbsent and never stops the build, so the person learns it before review.
+    review_tools="$(printf '%s' "$build_json" | jq -r '(.reviewTools // [])[]')"
+    if [ -n "$review_tools" ]; then
+      tooling_json="$(pc_tooling_check "$check_path" "$(printf '%s' "$build_json" | jq -c '.review')" \
+        "the review recipe names under requires_tooling, for a check only review runs" "$review_tools" tooling)"
+      end_absent_json="$(jq -nc --argjson have "$end_absent_json" --argjson add "$(printf '%s' "$tooling_json" | jq -c '.end')" '$have + $add')"
     fi
     if [ "$section_state" = "ok" ] || [ -n "$tooling_entries" ]; then
       # A tool check on a framework that needs no harness leaves it not-needed, unless it stopped.
