@@ -2114,14 +2114,16 @@ do_start() {
       # The program also lists what changed in each order, and a refusal names that list (gap row
       # 241), so the cause a person reads is the one this comparison found.
       # A removed path that names nothing in the code was never built: the design named a file
-      # under a wrong path (gap row 326). Dropping it is taken in place too. The owned-files check
-      # still reads the diff, so a file the build changed and no longer owns still stops it.
-      local phantom_json='[]' removed_path
+      # under a wrong path (gap row 326). Dropping it is taken in place too. A path the build
+      # deleted is absent now but present where the build started, so it still halts.
+      local phantom_json='[]' removed_path phantom_from
+      phantom_from="$(jq -r '.startedFrom // ""' "$LEDGER_FILE" 2>/dev/null)"
       while IFS= read -r removed_path; do
         [ -n "$removed_path" ] || continue
         case "$removed_path" in
           /*) [ -e "$removed_path" ] && continue ;;
-          *) { [ -e "$code_path/$removed_path" ] || [ -n "$(git -C "$code_path" ls-files -- "$removed_path" 2>/dev/null)" ]; } && continue ;;
+          *) { [ -e "$code_path/$removed_path" ] || [ -n "$(git -C "$code_path" ls-files -- "$removed_path" 2>/dev/null)" ] \
+               || { [ -n "$phantom_from" ] && git -C "$code_path" cat-file -e "$phantom_from:$removed_path" 2>/dev/null; }; } && continue ;;
         esac
         phantom_json="$(printf '%s' "$phantom_json" | jq -c --arg p "$removed_path" '. + [$p]')"
       done <<REMOVED_PATHS
