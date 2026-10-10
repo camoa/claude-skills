@@ -108,10 +108,11 @@ back needs nothing, under any commit subject. When every file is back, it makes 
 own. It refuses at exit 1 when a file that existed where the branch started is back and the
 record still names a site.
 
-Otherwise it writes the pull request body to `<task_folder>/completion/pr-body.md`. The body
-names each restore commit, a person's and its own, so a reviewer sees why those files are not in the diff. It writes the record to
-`<task_folder>/completion/completed.json`. Then it calls `task complete` last. That call commits
-the record and the body with the state.
+Otherwise it writes the record to `<task_folder>/completion/completed.json`, then the pull
+request body to `<task_folder>/completion/pr-body.md`. The body names each restore commit, a
+person's and its own, so a reviewer sees why those files are not in the diff. A record that does
+not match its shape is refused before the body is written. Then it calls `task complete` last.
+That call commits the record and the body with the state.
 
 When `task complete` refuses, the record is already written. Answer the task script's line, then
 run `close` again with the same arguments; that is the repair.
