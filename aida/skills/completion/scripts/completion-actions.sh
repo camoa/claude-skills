@@ -536,6 +536,7 @@ cp_render_body() {
               | ["### " + .[0].disposition, ""]
                 + [ .[] | "- " + .id + " (" + .severity + ", " + .lens
                     + (if .file == "" then "" else ", " + .file + (if .lines == "" then "" else ":" + .lines end) end)
+                    + (if has("ruling") then ", ruled " + .ruling + " by the person" else "" end)
                     + "): " + .evidence ] ]
               | map(. + [""]) | add // [] | .[:-1]); "no findings")
         end)
