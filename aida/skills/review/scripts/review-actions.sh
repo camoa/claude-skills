@@ -2655,14 +2655,17 @@ do_surfaces() {
   [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq --arg id "visual-parity" '[ .[] | select(.id == $id and (has("argv")) and ((.absent // false) == false)) ] | length')" -gt 0 ] \
     && parity_on="on"
   # A light task is done only when the script that walks the demo path passes, so review fails
-  # one with no enabled critical end to end surface to run (gap row 197).
+  # one with no enabled critical end to end surface to run (gap row 197). End to end is opt in, so a
+  # project that declined it and never switched it on has no demo path script to fail (gap row 338).
   local path_scripts=none
   if task_is_light "$TASK_PATH"; then
     path_scripts=0
     [ "$e2e_on" != "on" ] || [ "$SF_STATE" != "ok" ] \
       || path_scripts="$(printf '%s' "$SF_SURFACES" | jq '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ] | length')"
   fi
-  if [ "$path_scripts" = "0" ] && [ -n "$RW_SURFACE_BRANCH" ]; then
+  if [ "$path_scripts" = "0" ] && [ "$e2e_declined" = "true" ] && [ "${e2e_on%% *}" != "on" ]; then
+    rw_check_row "$CHECK_E2E" "undeclared" "the project record says e2e is declined, so a light run keeps no script that walks the demo path, and review ran nothing for it. /aida:surfaces e2e sets it up if the project opts in." >>"$checks_file"
+  elif [ "$path_scripts" = "0" ] && [ -n "$RW_SURFACE_BRANCH" ]; then
     rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path. Branch $RW_SURFACE_BRANCH holds the surface file, and this task's tree does not, so there is no script to run here. Register the demo path before the build: on the trunk before tasks are cut, or in the first task's tree." >>"$checks_file"
   elif [ "$path_scripts" = "0" ]; then
     rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path, and no enabled critical end to end surface is registered, so there is no script to pass. Set it up with /aida:surfaces e2e and register the demo path as one critical surface: a page, or a command that exits 0 when the path works." >>"$checks_file"
