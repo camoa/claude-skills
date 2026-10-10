@@ -413,6 +413,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      `review-record` follow `checks-passed`; `fix-brief` and `fix-record` follow `reviewed` or
 #      `fixed`; `verify-brief` and `verify-record` follow `fixed`; `verify-record` with --ruling and
 #      no --verdicts also follows `reviewed` (gap row 265); `close` follows `reviewed` or `fixed`.
+#      `build-record` refuses at `reviewed`, `fixed` or `closed`, before it spends an attempt: one
+#      order gets one review, so a later attempt could reach no close (gap row 339).
 #      The message names the step found and the steps allowed.
 #  49  the order is halted, so the step refuses. Every step-five action refuses on it, and the
 #      message carries the halt's own recorded reason. `build-record` refuses on it too, so a
@@ -476,10 +478,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  62  `fix-brief` or `fix-record` was asked for a round while the last one has no verification.
 #      `verify-record` is what turns a fixer's own account into a verdict this stage holds, so two
 #      rounds spent back to back leave the first round's findings judged by nobody. Exit 60 names
-#      the same gap at `close`, by which point both rounds are already spent.
+#      the same gap at `close`, by which point both rounds are already spent. `fix-record` on that
+#      last round, before `verify-brief` ran for it, records the round again at the current commit
+#      and spends no round (gap row 339).
 #  63  `close` found the code repository at a commit other than the one the last record for this
 #      order was written at: the build record when no fix round ran, the last fix record otherwise.
-#      The range this would write would name work nothing in this stage judged.
+#      The range this would write would name work nothing in this stage judged. `verify-brief`
+#      refuses on the same fact for the last fix record, so a verifier never reads a stale range.
 #
 # The exit codes the checkpoint, the finish, the grant and the restart add.
 #  64  `tests-freeze`'s own `--row` flags and this order's tests do not correspond: a
@@ -8442,6 +8447,14 @@ do_build_record() {
   [ -z "$accept" ] || br_halted="$(halt_segments_matching "$br_halted" "$(jq -cn --arg p "$BR_DEVIATION_PREFIX" '[$p]')" drop)"
   [ -z "$br_halted" ] \
     || die 49 "build-record: $unit_id is halted, so this step refuses. The ledger records the reason: $br_halted"
+  # Exit 48. One order gets one review, so an attempt after it could reach neither a review nor a
+  # close (gap row 339).
+  local br_step
+  br_step="$(printf '%s' "$order_entry" | jq -r '.lastStep // ""')"
+  case "$br_step" in
+    reviewed|fixed|closed)
+      die 48 "build-record: $unit_id is at step $br_step, past its review. One order gets one review, so a new attempt could never be reviewed or closed. No attempt was spent. Code for a reviewed order comes from a fix round, for an open finding." ;;
+  esac
   # Exit 117. The owned-files check reads the snapshot, so a design that widened the order after
   # start would spend an attempt on a stale list (gap row 315). Only ownedFiles and sharedFiles
   # are compared: findings and reasoning may grow mid-build (gap rows 226 and 227).
@@ -10418,10 +10431,21 @@ do_fix_record() {
     || die 53 "fix-record: $unit_id has no open actionable finding, so there was nothing for a fixer to do."
   rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
   case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
-  [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ] \
-    || die 54 "fix-record: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. Every open finding needs a ruling now, not another round."
-  rv_require_round_verified "fix-record" "$unit_id" "$rounds_used"
-  round_number=$((rounds_used + 1))
+  # Gap row 339. A last round that no verifier has read is recorded again at the current commit,
+  # so a commit the round made after its record does not fall outside every record. No round is
+  # spent. Once verify-brief hands the round to a verifier, later code is a new round.
+  local rerecord=false
+  if [ "$rounds_used" -gt 0 ] \
+    && [ "$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.rounds // [])[] | .round ] | max // 0')" != "$rounds_used" ] \
+    && [ ! -f "$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json" ]; then
+    rerecord=true
+    round_number="$rounds_used"
+  else
+    [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ] \
+      || die 54 "fix-record: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. Every open finding needs a ruling now, not another round."
+    rv_require_round_verified "fix-record" "$unit_id" "$rounds_used"
+    round_number=$((rounds_used + 1))
+  fi
 
   # The report is the one the round's fix brief pins, the file dispatch-close read (gap row 250). A
   # report written elsewhere was never checked there, so it is refused. A brief from before the
@@ -10480,6 +10504,7 @@ RV_SCOPE
   # The ledger step a recorded round writes, in the crash repair and after the checks. On a light
   # task it also marks the order, so its cap stays one round in any later mode (gap row 296).
   local step_expr='.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed"'
+  [ "$rerecord" = false ] || step_expr='.lastStep = "fixed"'
   ! task_is_light "$TASK_PATH" || step_expr="$step_expr | .lightRounds = true"
   if [ -f "$record_file" ]; then
     existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
@@ -10653,6 +10678,7 @@ RV_SCOPE
 
   local fr_state
   if [ "$all_met" = "true" ]; then fr_state="fixed"; else fr_state="fixed, every finding left open: stopped by $first_stopper"; fi
+  [ "$rerecord" = false ] || fr_state="$fr_state, round $round_number recorded again at the current commit, no round spent"
   im_print_summary "fix-record" "$(printf '%s' "$record_json" | jq -c --arg record "$record_file" \
     --arg rounds "$round_number of $FIX_ROUNDS_ALLOWED" --arg state "$fr_state" \
     --arg scope "${scope_list:-none}" --arg halt "${halt_why:-none}" \
@@ -10727,6 +10753,18 @@ do_verify_brief() {
   fix_doc="$(jq -c '.' "$fix_file" 2>/dev/null)"
   [ -n "$fix_doc" ] \
     || die 3 "verify-brief: $fix_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  # Exit 63. The verifier reads the recorded range, so a commit after the record would go unread,
+  # and close would then refuse it (gap row 339). fix-record records the round again, unless an
+  # earlier brief already handed the round to a verifier.
+  local vb_head vb_commit vb_route
+  rv_load_range_repo "verify-brief" "$RV_UNIT_JSON"
+  vb_head="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
+  vb_commit="$(printf '%s' "$fix_doc" | jq -r '.commit // ""')"
+  vb_route="Run fix-record again with the same --started-at. It records round $rounds_used again at the current commit, and no round is spent."
+  [ ! -f "$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json" ] \
+    || vb_route="An earlier verify-brief handed round $rounds_used to a verifier, so the later commits are a new round. Run verify-record with that verifier's reading first."
+  [ "$vb_head" = "$vb_commit" ] \
+    || die 63 "verify-brief: $RV_RANGE_REPO is at $vb_head, and round $rounds_used of $unit_id was recorded at $vb_commit. $vb_route"
 
   # The open findings are the ones the fixer received: nothing has closed one since, because this
   # round's verification is what closes findings and it has not run. A scope report the fixer made
@@ -11308,7 +11346,7 @@ do_close() {
   [ -n "$last_commit" ] \
     || die 3 "close: $last_record holds no commit, though the step that wrote it records one."
   [ "$last_commit" = "$head_now" ] \
-    || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged."
+    || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged. No action records the commits after $last_commit now. A person moves the branch back to it, and that later work goes to a follow-up task."
 
   local new_ledger
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \

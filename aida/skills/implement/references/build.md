@@ -158,6 +158,8 @@ halt a started order. `build-record` refuses while the order's owned or shared f
 design differ from the snapshot (exit 117), and spends no attempt. Run `start` first. Unattended, run `build-record` as after any return. It halts the order
 itself, so do not halt it again. A halted order records no attempt: `build-record` refuses it
 (exit 49) until the halt is cleared, except the deviation halt `--accept-deviation` answers. The next `start` sets aside what was left.
+An order past its review records no attempt either: `build-record` refuses it (exit 48). One order
+gets one review, so code after it comes from a fix round.
 
 **A defect in a closed order's file has its own route.** The stop line reads
 `Stop: closed-order-defect: <file>: <what fails>`. `build-record` finds the order that owns the

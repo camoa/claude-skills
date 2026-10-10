@@ -316,6 +316,12 @@ moved past it, a crash between the two, rather than spending a round twice; othe
 (exit 45). A commit unchanged since the round before it always refuses (exit 45): a round spent on
 unchanged code is a round nobody worked.
 
+Every commit of a round lands before `verify-brief`. A commit after `fix-record` and before
+`verify-brief` is the same round's work. Run `fix-record` again with the same `--started-at`. It
+records that round again at the current commit, and no round is spent. `verify-brief` refuses
+while HEAD is past the fix record (exit 63) and names this route. After `verify-brief`, a verifier
+reads the round, so later code is a new round, under the cap. Commit no more code for the order then.
+
 **When `fix-record` halted the order, stop here.** Do not dispatch the reviewer in verify
 mode: `verify-record` refuses on a halted order. Report the halt instead, the same way a halt at
 the build step is reported. A person clears it with
@@ -335,7 +341,7 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh verify-brief "<task_folder>" <order id>
 ```
 It refuses when the order is not at `fixed`, when it is halted, when nothing is open, or when this
-round is already verified. It writes `implementation/brief-<order id>-verify-<round>.json`. The
+round is already verified. It refuses when HEAD is not where the fix record left it (exit 63). It writes `implementation/brief-<order id>-verify-<round>.json`. The
 brief holds the open findings the fixer received, the fix diff as a path, and the fixer's report as
 a path. It names the path the verdicts go to, `implementation/verify-<order id>-<round>.json`.
 Nothing else: not the original diff, not an earlier round's verdicts. It prints the brief's path, the three paths it
@@ -452,7 +458,8 @@ Run:
 ```
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
-the last record left it. On success it writes `lastStep = "closed"` and the commit range the
+the last record left it. That last refusal names no action, because none records the later
+commits. A person moves the branch back, and that work goes to a follow-up task. On success it writes `lastStep = "closed"` and the commit range the
 order produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
 order the tree, HEAD and the range are the project folder's, from the last attempt. The
