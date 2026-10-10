@@ -39,8 +39,9 @@ The summary prints a ruled finding with its ruling beside it.
 `wrong`: the reviewer was mistaken, so the criterion reads its own answer. `deferred`: the finding
 is real and waits, so completion offers it as a follow up task, and the criterion reads its own
 answer. With no ruling, the finding still fails its criterion. The record keeps the finding and the
-person's word. A lens check whose medium and high findings are all ruled then waits for the person,
-the way a lens check with low findings only does.
+person's word. A medium or high finding that cites no criterion still fails its lens check. Ask
+the person to rule it in the same words. A lens check whose medium and high findings are all ruled
+then waits for the person, the way a lens check with low findings only does.
 
 The person answers met or unmet per criterion, from its rows. Their answer becomes one flag
 below. Autonomous, there is
