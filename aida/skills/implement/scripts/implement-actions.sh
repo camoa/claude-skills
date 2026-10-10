@@ -10167,7 +10167,7 @@ do_fix_brief() {
     repair_all="$(rv_repair_round_ids "$findings_json" "$rounds_used" "$repair_na")"
     repair_ids="$repair_all"
     [ -n "$allow_raw" ] || repair_ids="$(printf '%s' "$findings_json" | jq -r --arg ids "$repair_all" --arg origin "round$rounds_used" --argjson na "$repair_na" '
-      ($ids | split(", ")) as $s | [ .[] | select((.origin == $origin or (.id as $i | $na | index($i)) != null) and (.id as $i | $s | index($i))) | .id ] | join(", ")')"
+      ($ids | split(", ")) as $s | [ .[] | select((.origin == $origin or ((.id as $i | $na | index($i)) != null and .scopeInsufficientInRound != ($origin | ltrimstr("round") | tonumber))) and (.id as $i | $s | index($i))) | .id ] | join(", ")')"
     repair_rest="$(printf '%s' "$findings_json" | jq -r --arg ids "$repair_ids" '
       ($ids | split(", ")) as $s | [ .[] | select(.actionable == true and .status == "open" and (.id as $i | $s | index($i) | not)) | .id ] | join(", ")')"
     if [ -z "$repair_ids" ] || [ -n "$repair_rest" ]; then
