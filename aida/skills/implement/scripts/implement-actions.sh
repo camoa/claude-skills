@@ -955,6 +955,10 @@ attempts_allowed_for() {
 # read and changed in one place.
 FIX_ROUNDS_ALLOWED=2
 
+# The route for code that came after a fix round was handed to a verifier (gap row 339), said the
+# same way by every step that refuses that code.
+LATE_ROUTE="With a person present, a light order at its cap gets one repair round for a finding read not-addressed. fix-brief begins it at the last record, so it holds the later commits, and a fresh verifier reads them. Unattended, the cap holds. close refuses those commits (exit 63) until a person moves the branch back to the record."
+
 # The fix rounds one order is allowed. A light task gets one. So does an order whose rounds were
 # recorded on a light task: a person who sets the task interactive to rule is then not offered a
 # second round light never allows (gap row 296). Each repair a dependent order opened adds its one
@@ -8449,11 +8453,16 @@ do_build_record() {
     || die 49 "build-record: $unit_id is halted, so this step refuses. The ledger records the reason: $br_halted"
   # Exit 48. One order gets one review, so an attempt after it could reach neither a review nor a
   # close (gap row 339).
-  local br_step
+  local br_step br_route="Code for it comes from a fix round, for an open finding: fix-brief, then fix-record."
   br_step="$(printf '%s' "$order_entry" | jq -r '.lastStep // ""')"
   case "$br_step" in
     reviewed|fixed|closed)
-      die 48 "build-record: $unit_id is at step $br_step, past its review. One order gets one review, so a new attempt could never be reviewed or closed. No attempt was spent. Code for a reviewed order comes from a fix round, for an open finding." ;;
+      if [ "$br_step" = "closed" ]; then
+        br_route="A defect found later in its files reaches it through another order's builder, as Stop: closed-order-defect: <file>: <what fails>. That reopens it for a repair round."
+      elif [ "$(printf '%s' "$order_entry" | jq -r '.roundsUsed // 0')" -ge "$(order_fix_rounds_allowed "$order_entry")" ]; then
+        br_route="Its fix rounds are spent, so each open finding needs a ruling at verify-record. $LATE_ROUTE"
+      fi
+      die 48 "build-record: $unit_id is at step $br_step, past its review. One order gets one review, so a new attempt could never be reviewed or closed. No attempt was spent. $br_route" ;;
   esac
   # Exit 117. The owned-files check reads the snapshot, so a design that widened the order after
   # start would spend an attempt on a stale list (gap row 315). Only ownedFiles and sharedFiles
@@ -9523,15 +9532,21 @@ rv_require_round_verified() {
 # no ruling should have to settle. New breakage its last round made: the fix diff caused it, so
 # its own scope can repair it, and no person is needed. And, with a person present, a finding its
 # last fixer reported scope-insufficient: the person widens the scope with `fix-brief --allow`.
+# Gap row 339: with a person present, also a finding the verifier read not-addressed in the last
+# round, so a fix that answers the verifier gets a fresh verifier rather than a ruling. A person
+# is present when the implement stage's run mode is interactive, the test every ruling uses; a
+# light task reads autonomous until a person sets it interactive.
 # Light alone: a normal order's two rounds stay the cap, because rounds that repair the last
 # round's breakage do not converge. Prints the ids, comma-separated, or nothing once the order has
-# had that round. $1 the findings array, $2 the last round.
+# had that round. $1 the findings array, $2 the last round, $3 the ids that round read
+# not-addressed, a JSON array.
 rv_repair_round_ids() {
   task_is_light "$TASK_PATH" || [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq '.lightRounds // false')" = "true" ] || return 0
   [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq '[ (.repairs // [])[] | select(has("round")) ] | length')" = "0" ] || return 0
-  printf '%s' "$1" | jq -r --arg origin "round$2" --argjson r "$2" --arg mode "$RV_RUN_MODE" '
+  printf '%s' "$1" | jq -r --arg origin "round$2" --argjson r "$2" --arg mode "$RV_RUN_MODE" --argjson na "$3" '
     [ .[] | select(.actionable == true and .status == "open"
-                   and (.origin == $origin or ($mode != "autonomous" and .scopeInsufficientInRound == $r))) | .id ]
+                   and (.origin == $origin
+                        or ($mode != "autonomous" and (.scopeInsufficientInRound == $r or (.id as $i | $na | index($i)) != null)))) | .id ]
     | join(", ")'
 }
 
@@ -10143,15 +10158,16 @@ do_fix_brief() {
   # finding. A finding the fixer reported scope-insufficient joins only with a person's --allow.
   # A repair round already opened for this round keeps its findings, so a second call may correct
   # a mistyped --allow.
-  local findings_json repair_all="" repair_ids repair_rest repair_why repair_new=""
+  local findings_json repair_all="" repair_ids repair_rest repair_why repair_new="" repair_na
   repair_ids="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r --argjson r "$((rounds_used + 1))" \
     '[ (.repairs // [])[] | select(.round == $r) | .findings[] ] | join(", ")')"
   if [ -z "$repair_ids" ] && [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ]; then
     findings_json="$(printf '%s' "$RV_REVIEW_DOC" | jq -c '.findings // []')"
-    repair_all="$(rv_repair_round_ids "$findings_json" "$rounds_used")"
+    repair_na="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson r "$rounds_used" '[ (.rounds // [])[] | select(.round == $r) | (.notAddressed // [])[] ]')"
+    repair_all="$(rv_repair_round_ids "$findings_json" "$rounds_used" "$repair_na")"
     repair_ids="$repair_all"
-    [ -n "$allow_raw" ] || repair_ids="$(printf '%s' "$findings_json" | jq -r --arg ids "$repair_all" --arg origin "round$rounds_used" '
-      ($ids | split(", ")) as $s | [ .[] | select(.origin == $origin and (.id as $i | $s | index($i))) | .id ] | join(", ")')"
+    [ -n "$allow_raw" ] || repair_ids="$(printf '%s' "$findings_json" | jq -r --arg ids "$repair_all" --arg origin "round$rounds_used" --argjson na "$repair_na" '
+      ($ids | split(", ")) as $s | [ .[] | select((.origin == $origin or (.id as $i | $na | index($i)) != null) and (.id as $i | $s | index($i))) | .id ] | join(", ")')"
     repair_rest="$(printf '%s' "$findings_json" | jq -r --arg ids "$repair_ids" '
       ($ids | split(", ")) as $s | [ .[] | select(.actionable == true and .status == "open" and (.id as $i | $s | index($i) | not)) | .id ] | join(", ")')"
     if [ -z "$repair_ids" ] || [ -n "$repair_rest" ]; then
@@ -10293,8 +10309,17 @@ FB_ALLOW
     echo "FIX-BRIEF: round $((rounds_used + 1)) of $unit_id is its one repair round, for $repair_ids." >&2
   fi
 
-  local fb_head brief_file brief_json
+  local fb_head fb_last brief_file brief_json
   fb_head="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
+  # Gap row 339. Commits after the order's last record are this round's work, so the round begins
+  # at that record, and fix-record puts them in the range a verifier reads.
+  if [ "$rounds_used" -gt 0 ]; then
+    fb_last="$(jq -r '.commit // ""' "$IMPL_DIR/fix-$unit_id-$rounds_used.json" 2>/dev/null)"
+  else
+    fb_last="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
+  fi
+  [ -z "$fb_last" ] || [ "$fb_last" = "$fb_head" ] \
+    || ! git -C "$RV_RANGE_REPO" merge-base --is-ancestor "$fb_last" "$fb_head" 2>/dev/null || fb_head="$fb_last"
   # One brief per round, because each round's open findings differ from the last round's and the
   # record of what a fixer was given is worth keeping beside its report.
   brief_file="$IMPL_DIR/brief-$unit_id-fix-$((rounds_used + 1)).json"
@@ -10441,8 +10466,15 @@ do_fix_record() {
     rerecord=true
     round_number="$rounds_used"
   else
+    local late_note="" late_verify=""
+    [ "$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.rounds // [])[] | .round ] | max // 0')" = "$rounds_used" ] \
+      || late_verify="Run verify-record with the verifier's reading. "
+    [ "$rounds_used" -eq 0 ] || [ ! -f "$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json" ] \
+      || late_note=" verify-brief handed round $rounds_used to a verifier, so a commit after its record is not that round. $late_verify$LATE_ROUTE"
     [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ] \
-      || die 54 "fix-record: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. Every open finding needs a ruling now, not another round."
+      || die 54 "fix-record: $unit_id has already used $rounds_used of $FIX_ROUNDS_ALLOWED allowed fix rounds. Every open finding needs a ruling now, not another round.$late_note"
+    [ -z "$late_note" ] || [ -z "$late_verify" ] \
+      || die 62 "fix-record: $unit_id has used $rounds_used fix round(s) and round $rounds_used is not verified.$late_note"
     rv_require_round_verified "fix-record" "$unit_id" "$rounds_used"
     round_number=$((rounds_used + 1))
   fi
@@ -10762,7 +10794,7 @@ do_verify_brief() {
   vb_commit="$(printf '%s' "$fix_doc" | jq -r '.commit // ""')"
   vb_route="Run fix-record again with the same --started-at. It records round $rounds_used again at the current commit, and no round is spent."
   [ ! -f "$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json" ] \
-    || vb_route="An earlier verify-brief handed round $rounds_used to a verifier, so the later commits are a new round. Run verify-record with that verifier's reading first."
+    || vb_route="An earlier verify-brief handed round $rounds_used to a verifier, so the later commits are not that round. Run verify-record with that verifier's reading first. $LATE_ROUTE"
   [ "$vb_head" = "$vb_commit" ] \
     || die 63 "verify-brief: $RV_RANGE_REPO is at $vb_head, and round $rounds_used of $unit_id was recorded at $vb_commit. $vb_route"
 
@@ -11079,7 +11111,8 @@ do_verify_record() {
   fi
   # A finding the repair round may take neither halts nor needs a ruling yet (gap row 314).
   local open_now unruled repair_ids="" open_jq
-  [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ] || repair_ids="$(rv_repair_round_ids "$updated_findings" "$rounds_used")"
+  [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ] || repair_ids="$(rv_repair_round_ids "$updated_findings" "$rounds_used" \
+    "$(printf '%s' "$verdict_rows" | jq -c '[ .[] | select(.verdict == "not-addressed") | .id ]')")"
   open_jq='($skip | split(", ")) as $s | [ .[] | select(.actionable == true and .status == "open" and (.id as $i | $s | index($i) | not)) ]'
   open_now="$(printf '%s' "$updated_findings" | jq --arg skip "$repair_ids" "$open_jq | length")"
   if [ "$rounds_used" -ge "$FIX_ROUNDS_ALLOWED" ] && [ "$open_now" -gt 0 ] 2>/dev/null && [ "$RV_RUN_MODE" = "autonomous" ]; then
@@ -11346,7 +11379,7 @@ do_close() {
   [ -n "$last_commit" ] \
     || die 3 "close: $last_record holds no commit, though the step that wrote it records one."
   [ "$last_commit" = "$head_now" ] \
-    || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged. No action records the commits after $last_commit now. A person moves the branch back to it, and that later work goes to a follow-up task."
+    || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged. Nothing is open, so no fix round, repair round or test-wrong ruling can take the commits after $last_commit. A person moves the branch back to it, and that later work goes to a follow-up task, or runs restart, which sets every order's records aside."
 
   local new_ledger
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
