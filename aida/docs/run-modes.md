@@ -236,7 +236,8 @@ security check. It also keeps one script that walks the demo path. That script i
 end to end setup, for that one path. A person sets it up once with `/aida:surfaces e2e` and
 registers the demo path as one critical surface. The surface is a page, or a command that exits 0
 when the path works. Review then runs it every time, and so can you, after each change. Review
-fails a light task that has no such surface. `set-run-mode` says whether end to end is on.
+fails a light task that has no such surface. A project that declined end to end keeps no such
+script, and review runs nothing for it. `set-run-mode` says whether end to end is on.
 
 Light also dispatches fewer helpers before the first line of code. Scope and research run no
 distiller, and one distiller reads all three stages when design closes. Recipe lookups made at

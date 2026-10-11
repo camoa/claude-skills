@@ -1014,6 +1014,8 @@ do_set_run_mode() {
   if [ "$value" = "light" ]; then
     if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then
       echo "path-script: end to end is on. Review fails this task until the demo path is registered as one critical surface with /aida:surfaces."
+    elif [ "$(jq -r '.surfaces.e2e.declined // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then
+      echo "path-script: end to end is declined for this project, so this task keeps no script that walks the demo path. Review runs nothing for it."
     else
       echo "path-script: end to end is off. Review fails this task until a person sets it up with /aida:surfaces e2e and registers the demo path as one critical surface."
     fi

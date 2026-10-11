@@ -1848,6 +1848,30 @@ rw_lens_row() {
   fi
 }
 
+# The mutation lens is check 4's other half and the purpose lens is check 3's, each one more
+# reading of the same check, never a check of its own. On a met script half the lens decides, by
+# the same reading as the six lens checks (gap row 277). Otherwise the script half decides, and a
+# medium or high finding still turns a script half that could not look into unmet. The detail
+# names the half that decided, and an unmet check never carries the met half's sentence.
+# $1 the record, $2 mutation or purpose. Prints the record with that check read again.
+rw_lens_with_half() {
+  local check_id lens_row lens_hits findings
+  check_id="$(rw_check_for_lens "$2")"
+  findings="$(printf '%s' "$1" | jq -c '.findings // []')"
+  lens_row="$(rw_lens_row "$2" "$check_id" "$findings")"
+  [ -n "$lens_row" ] || lens_row="null"
+  lens_hits="$(rw_lens_hits "$2" "$findings")"
+  printf '%s' "$1" | jq -c --argjson r "$lens_row" --arg id "$check_id" --arg l "$2" --arg hits "$lens_hits" '
+    .checks = [ .checks[] | if .id != $id then .
+      else .scriptHalf as $s | del(.answeredBy) | .verdict = $s.verdict | .detail = $s.detail
+      | if $r == null then .
+        elif .verdict == "met" then . + $r
+          | .detail = "the script half read met, so the \($l) lens decides this check: \($r.detail)"
+        elif .verdict == "unmet" then .detail += " The script half decides this check. The \($l) lens also raised \($hits)."
+        elif $r.verdict == "unmet" then .verdict = "unmet" | .detail += " The \($l) lens decides this check: \($r.detail)."
+        else .detail += " The \($l) lens raised only low findings, which stay follow-up: \($hits)." end end ]'
+}
+
 do_findings() {
   local task_arg="" findings_path=""
   while [ "$#" -gt 0 ]; do
@@ -2110,32 +2134,15 @@ RW_RESEARCH_FILES
   rm -f "$rows_file"
   [ -n "$updated" ] || die 3 "findings: could not update the record with what the reviewer found."
 
-  # The mutation lens is check 4's other half and the purpose lens is check 3's, each one more
-  # reading of the same check, never a check of its own. On a met script half the lens decides, by
-  # the same reading as the six lens checks (gap row 277). Otherwise the script half decides, and a
-  # medium or high finding still turns a script half that could not look into unmet. The detail
-  # names the half that decided, and an unmet check never carries the met half's sentence.
   # A record checks wrote before gap row 277 holds no script half, and its row may already carry
   # an earlier lens reading. Findings cannot tell the two apart, so it sends the caller back.
-  local no_half lens_hits
+  local no_half
   no_half="$(printf '%s' "$updated" | jq -r --arg a "$CHECK_SERVES" --arg b "$CHECK_TEST_MUTATION" \
     '[ .checks[] | select((.id == $a or .id == $b) and (has("scriptHalf") | not)) | .id ] | join(", ")')"
   [ -z "$no_half" ] \
     || die 62 "findings: $RECORD_FILE holds no script half for $no_half, because checks wrote it before the script half was kept apart. Run checks again, then brief and findings."
   for lens_word in mutation purpose; do
-    check_id="$(rw_check_for_lens "$lens_word")"
-    lens_row="$(rw_lens_row "$lens_word" "$check_id" "$findings_json")"
-    [ -n "$lens_row" ] || lens_row="null"
-    lens_hits="$(rw_lens_hits "$lens_word" "$findings_json")"
-    updated="$(printf '%s' "$updated" | jq -c --argjson r "$lens_row" --arg id "$check_id" --arg l "$lens_word" --arg hits "$lens_hits" '
-      .checks = [ .checks[] | if .id != $id then .
-        else .scriptHalf as $s | del(.answeredBy) | .verdict = $s.verdict | .detail = $s.detail
-        | if $r == null then .
-          elif .verdict == "met" then . + $r
-            | .detail = "the script half read met, so the \($l) lens decides this check: \($r.detail)"
-          elif .verdict == "unmet" then .detail += " The script half decides this check. The \($l) lens also raised \($hits)."
-          elif $r.verdict == "unmet" then .verdict = "unmet" | .detail += " The \($l) lens decides this check: \($r.detail)."
-          else .detail += " The \($l) lens raised only low findings, which stay follow-up: \($hits)." end end ]')"
+    updated="$(rw_lens_with_half "$updated" "$lens_word")"
   done
 
   rw_write_record "findings" "$updated"
@@ -2655,14 +2662,17 @@ do_surfaces() {
   [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq --arg id "visual-parity" '[ .[] | select(.id == $id and (has("argv")) and ((.absent // false) == false)) ] | length')" -gt 0 ] \
     && parity_on="on"
   # A light task is done only when the script that walks the demo path passes, so review fails
-  # one with no enabled critical end to end surface to run (gap row 197).
+  # one with no enabled critical end to end surface to run (gap row 197). End to end is opt in, so a
+  # project that declined it and never switched it on has no demo path script to fail (gap row 338).
   local path_scripts=none
   if task_is_light "$TASK_PATH"; then
     path_scripts=0
     [ "$e2e_on" != "on" ] || [ "$SF_STATE" != "ok" ] \
       || path_scripts="$(printf '%s' "$SF_SURFACES" | jq '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ] | length')"
   fi
-  if [ "$path_scripts" = "0" ] && [ -n "$RW_SURFACE_BRANCH" ]; then
+  if [ "$path_scripts" = "0" ] && [ "$e2e_declined" = "true" ] && [ "${e2e_on%% *}" != "on" ]; then
+    rw_check_row "$CHECK_E2E" "undeclared" "the project record says e2e is declined, so a light run keeps no script that walks the demo path, and review ran nothing for it. /aida:surfaces e2e sets it up if the project opts in." >>"$checks_file"
+  elif [ "$path_scripts" = "0" ] && [ -n "$RW_SURFACE_BRANCH" ]; then
     rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path. Branch $RW_SURFACE_BRANCH holds the surface file, and this task's tree does not, so there is no script to run here. Register the demo path before the build: on the trunk before tasks are cut, or in the first task's tree." >>"$checks_file"
   elif [ "$path_scripts" = "0" ]; then
     rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path, and no enabled critical end to end surface is registered, so there is no script to pass. Set it up with /aida:surfaces e2e and register the demo path as one critical surface: a page, or a command that exits 0 when the path works." >>"$checks_file"
@@ -2785,9 +2795,13 @@ do_close() {
   # A person rules a finding that fails a criterion, with the words a build's ruling takes (gap row
   # 329). wrong: the reviewer was mistaken, so the criterion reads its own answer. deferred: the
   # finding is real and waits, so it becomes follow-up and completion offers it as a task. The
-  # finding stays in the record either way, and `ruling` holds the person's word.
+  # finding stays in the record either way, and `ruling` holds the person's word. A medium or high
+  # finding that cites no criterion still fails its lens check, so the person rules it the same way
+  # (gap row 337). A frozen-tests finding decides no check, so nothing asks for its ruling.
   local rulable_findings ruled
-  rulable_findings="$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.findings // [])[] | select(.disposition == "criterion" or has("ruling")) | .id ]')"
+  rulable_findings="$(printf '%s' "$RW_RECORD_DOC" | jq -c --arg lenses "$LENS_WORDS" '[ (.findings // [])[]
+    | . as $f | select(.disposition == "criterion" or has("ruling")
+                       or (.severity != "low" and (($lenses | split(" ") | index($f.lens)) != null))) | .id ]')"
   RW_RECORD_DOC="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson rf "$rulable_findings" --arg given "$rows" '
     [ ($given | split("\n"))[] | split("\t") | select(length == 2 and (.[1] == "wrong" or .[1] == "deferred")) ] as $g
     | .findings = [ (.findings // [])[] | . as $f | ([ $g[] | select(.[0] == $f.id) ][0]) as $r
@@ -2798,12 +2812,16 @@ do_close() {
   # check whose medium and high findings are all ruled then waits for --row <check>=met|unmet, like
   # a check with low findings only. An unruled medium finding still fails its lens (gap row 274).
   local ruled_lens lens_row
-  for ruled_lens in $(printf '%s' "$RW_RECORD_DOC" | jq -r --argjson rf "$rulable_findings" --arg given "$rows" '
+  for ruled_lens in $(printf '%s' "$RW_RECORD_DOC" | jq -r --argjson rf "$rulable_findings" --arg given "$rows" --arg lenses "$LENS_WORDS" '
     [ ($given | split("\n"))[] | split("\t") | select(length == 2 and (.[1] == "wrong" or .[1] == "deferred")) | .[0] ] as $ids
     | [ (.findings // [])[] | . as $f | select((($ids | index($f.id)) != null) and (($rf | index($f.id)) != null)) | .lens ]
-    | unique | .[] | select(. as $l | ["non-goals", "solid", "dry", "architecture", "guides", "practices"] | index($l) != null)'); do
-    lens_row="$(rw_lens_row "$ruled_lens" "$(rw_check_for_lens "$ruled_lens")" "$(printf '%s' "$RW_RECORD_DOC" | jq -c '.findings')")"
-    RW_RECORD_DOC="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson r "$lens_row" '.checks = [ .checks[] | if .id == $r.id then $r else . end ]')"
+    | unique | .[] | select(. as $l | $lenses | split(" ") | index($l) != null)'); do
+    case "$ruled_lens" in
+      mutation|purpose) RW_RECORD_DOC="$(rw_lens_with_half "$RW_RECORD_DOC" "$ruled_lens")" ;;
+      *)
+        lens_row="$(rw_lens_row "$ruled_lens" "$(rw_check_for_lens "$ruled_lens")" "$(printf '%s' "$RW_RECORD_DOC" | jq -c '.findings')")"
+        RW_RECORD_DOC="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson r "$lens_row" '.checks = [ .checks[] | if .id == $r.id then $r else . end ]')" ;;
+    esac
   done
   [ -n "$RW_RECORD_DOC" ] || die 3 "close: could not read the ruled lens checks again in $RECORD_FILE."
 
@@ -2904,7 +2922,7 @@ $rows
 RW_ROWS
 )"
   [ -z "$bad_rows" ] \
-    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, no check of that id waits for the person, and no finding of that id fails a criterion. Any other machine-verified criterion is answered by the suite join, never by a flag."
+    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, no check of that id waits for the person, and no finding of that id fails a criterion or, at medium or high, its lens check. Any other machine-verified criterion is answered by the suite join, never by a flag."
 
   # A record `findings` wrote before gap row 274 routed low findings through criteria. Close does
   # not judge severity, so it names them and sends the person back to the producer.

@@ -194,7 +194,8 @@ ruling with no round, under Rulings below. It writes `implementation/brief-<orde
 - the frozen tests;
 - `reportPath`, `implementation/answers-<order id>-fix<round>.md`, and the order's diff budget;
 - the round number;
-- `headNow`, the code repository's own commit at the moment of this call;
+- `headNow`, the code repository's own commit at the moment of this call, or the order's last
+  record when commits came after it, so the round holds them;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path, the report path and `headNow`. It prints one line per finding with its
@@ -215,10 +216,14 @@ file this order does not own. Only you can allow that. Allow the file and the fi
 it. Withhold it and the fixer reports the finding, and you rule on it after the round." Then
 name the finding and the files.
 
-**The repair round.** At the cap, a light order gets one more round, once, for two kinds of open
+**The repair round.** At the cap, a light order gets one more round, once, for three kinds of open
 finding. The first is new breakage that the last round made. The fix caused it, so the order's own
 scope can repair it, and the round opens unattended too. The second is a finding that the last
-fixer reported scope-insufficient, when a person is present and grants paths with `--allow`. In
+fixer reported scope-insufficient, when a person is present and grants paths with `--allow`.
+The third is a finding the verifier read not-addressed in the last round, when a person is
+present. A commit that answers the verifier then gets a fresh verifier, not a ruling. A person is
+present when the task's implement stage is interactive. A light task reads unattended until
+`task set-run-mode` sets it interactive. In
 that round `--allow` may name a path that no fix scope names, because the fixer's report names
 it. A path the order owns then joins the scope with no grant. A path another order owns
 refuses (exit 3). `fix-brief` opens the round only when the round can take every open finding.
@@ -316,6 +321,14 @@ moved past it, a crash between the two, rather than spending a round twice; othe
 (exit 45). A commit unchanged since the round before it always refuses (exit 45): a round spent on
 unchanged code is a round nobody worked.
 
+Every commit of a round lands before `verify-brief`. A commit after `fix-record` and before
+`verify-brief` is the same round's work. Run `fix-record` again with the same `--started-at`. It
+records that round again at the current commit, and no round is spent. `verify-brief` refuses
+while HEAD is past the fix record (exit 63) and names this route. After `verify-brief`, a verifier
+reads the round, so later code is not that round. Run `verify-record` with the reading. With a
+person present, the repair round above begins at the last record and holds the later code.
+Unattended, the cap holds, and `close` refuses that code (exit 63).
+
 **When `fix-record` halted the order, stop here.** Do not dispatch the reviewer in verify
 mode: `verify-record` refuses on a halted order. Report the halt instead, the same way a halt at
 the build step is reported. A person clears it with
@@ -335,7 +348,7 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh verify-brief "<task_folder>" <order id>
 ```
 It refuses when the order is not at `fixed`, when it is halted, when nothing is open, or when this
-round is already verified. It writes `implementation/brief-<order id>-verify-<round>.json`. The
+round is already verified. It refuses when HEAD is not where the fix record left it (exit 63). It writes `implementation/brief-<order id>-verify-<round>.json`. The
 brief holds the open findings the fixer received, the fix diff as a path, and the fixer's report as
 a path. It names the path the verdicts go to, `implementation/verify-<order id>-<round>.json`.
 Nothing else: not the original diff, not an earlier round's verdicts. It prints the brief's path, the three paths it
@@ -452,7 +465,8 @@ Run:
 ```
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
-the last record left it. On success it writes `lastStep = "closed"` and the commit range the
+the last record left it. Nothing is open then, so no round or ruling can take the later commits.
+A person moves the branch back, and that work goes to a follow-up task, or runs `restart`. On success it writes `lastStep = "closed"` and the commit range the
 order produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
 order the tree, HEAD and the range are the project folder's, from the last attempt. The

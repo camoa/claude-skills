@@ -536,6 +536,7 @@ cp_render_body() {
               | ["### " + .[0].disposition, ""]
                 + [ .[] | "- " + .id + " (" + .severity + ", " + .lens
                     + (if .file == "" then "" else ", " + .file + (if .lines == "" then "" else ":" + .lines end) end)
+                    + (if has("ruling") then ", ruled " + .ruling + " by the person" else "" end)
                     + "): " + .evidence ] ]
               | map(. + [""]) | add // [] | .[:-1]); "no findings")
         end)
@@ -831,8 +832,8 @@ CP_LEAVES2
   mkdir -p "$COMPLETION_DIR" || die 3 "close: could not create $COMPLETION_DIR"
   body="$(cp_render_body "$record" "$audit_lines")"
   [ -n "$body" ] || die 3 "close: could not render the pull request body for $CP_TASK_ID."
-  write_atomic "$BODY_FILE" "$body"
   cp_write_record "close" "$record"
+  write_atomic "$BODY_FILE" "$body"
   CP_RECORD_STATE="ok"
 
   # The task skill stays the one writer of `state: complete`. With no summary given, one line names

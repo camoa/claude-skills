@@ -105,8 +105,8 @@
       "properties": {
         "finding": {
           "type": "string",
-          "pattern": "^f[1-9][0-9]*$",
-          "description": "The finding's own id, as the review record carries it. Joined on, never re-minted."
+          "pattern": "^(wo[1-9][0-9]*-)?f[1-9][0-9]*$",
+          "description": "The finding's own id, as the review record carries it. Joined on, never re-minted. A decision a person deferred at review's close carries its order, `<order>-<finding>`, because two orders can each hold an f1 (gap row 279)."
         },
         "task": {
           "oneOf": [

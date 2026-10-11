@@ -4,6 +4,60 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.16] - 2026-10-10
+
+Changes from the periplus light-mode test, on 6.0.15. Completion closes
+a task that holds an order's deferred finding. A person can rule any
+medium or high finding of the architecture reviewer. A late fix commit
+reaches close through the records.
+
+### Added
+
+- With a person present, the repair round opens for a finding that the
+  verifier read not-addressed on the last allowed round. The late
+  commit becomes that round, and a fresh verifier reads it. A person is
+  present when the implement stage runs interactive, so a light task
+  needs `task set-run-mode interactive` first. The repair round is
+  still for light orders only. Unattended runs keep the round cap.
+
+### Changed
+
+- Review `close` takes `--row <finding id>=wrong|deferred` for any
+  medium or high finding on one of the eight lenses. Before, it took
+  one only for a finding that fails a criterion. Close then reads that
+  lens check again. A medium finding filed as a follow up still fails
+  its lens check until a person rules it. On a light task, the suite row
+  still ignores the tests that the builders ran, so a finding about
+  them needs a ruling.
+- The pull request body shows the person's ruling on each finding line.
+  A `wrong` ruling on a finding that cites no criterion keeps the
+  disposition `criterion`.
+- On a light task, review reads the end to end row as `undeclared` when
+  the project declined end to end and did not switch it on. The detail
+  names the decline. `set-run-mode` no longer says that review fails
+  such a task.
+- `fix-record` records the last round again at the current commit when
+  commits landed after the record. It spends no round. Unattended, it
+  refuses this once `verify-brief` gave the round to a verifier.
+- `verify-brief` refuses (exit 63) while the code is past the fix
+  record, and names `fix-record` or `verify-record`.
+- `build-record` refuses (exit 48) on an order that was reviewed, fixed
+  or closed, before it uses an attempt. The refusal names the ruling,
+  the repair round, or the stop for a defect in a closed order.
+- The `close` refusal for code past the fix record (exit 63) names two
+  routes: move the branch back to the record, or `restart`.
+
+### Fixed
+
+- Completion `close` refused its own record when a follow up came from
+  an order's deferred finding, such as `wo4-f1`. Review makes these
+  ids, and the completion record now accepts them. Before, the task
+  closed only through the task skill, with no grounds and no pull
+  request body.
+- Completion `close` writes the completion record before the pull
+  request body. A refused close no longer leaves a body behind. A
+  refused close can still leave the commit that restores the env files.
+
 ## [6.0.15] - 2026-10-06
 
 Changes from the supporting taxonomies site test and the periplus
