@@ -50,10 +50,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      git repository with no uncommitted work. Nothing more is said.
 #   1  One or more fields are missing from project.json, present with the wrong shape, retired
 #      from the schema (its `retired` list; `drop-retired` is the repair), or
-#      fail one of the two cross-field checks project-schema.json's own descriptions
+#      fail one of the three cross-field checks project-schema.json's own descriptions
 #      promise (a schema checks one field at a time, never two fields against each other):
-#      a playbookSubscriptions key naming a framework this project never declared, or a
-#      source's precedence keys not matching its own provides list. Each is named, on
+#      a playbookSubscriptions key naming a framework this project never declared, a
+#      source's precedence keys not matching its own provides list, or a worktreeBase at or
+#      under the code path or in a refused location. Each is named, on
 #      stdout, with the text that would produce it. Nothing is repaired; a repair is
 #      proposed.
 #   2  codePath is present and well-formed, but the directory it names does not exist. A
@@ -296,7 +297,8 @@ STATE_NAMED_IN_UNREADABLE="$(schema_check_field_named_in "$UNREADABLE_JSON" "sta
 #       - every source's precedence keys are exactly that source's own
 #         provides list, neither more nor fewer.
 #     Skipped, and said so, when frameworks itself failed the schema check
-#     above: there is nothing to compare the other two fields against.
+#     above: there is nothing to compare the other two fields against. A
+#     third test, worktreeBase against codePath, runs after them either way.
 #     A third test read every source's answersFor against frameworks until
 #     6.0.0-beta.24. The field is retired: nothing writes it and nothing reads
 #     it, so a value in an older file decides nothing and checking it would
@@ -337,6 +339,17 @@ if [ "$FRAMEWORKS_NAMED_IN_MISSING" = "false" ] && [ "$FRAMEWORKS_NAMED_IN_UNREA
   CROSS_FIELD_ISSUES_JSON="$(jq -n --slurpfile data "$PROJECT_FILE" "$CROSS_FIELD_JQ")" \
     || die3 "the cross-field comparison itself failed to run. Check project.json for a malformed sources or playbookSubscriptions entry"
   CROSS_FIELD_TEST_NOTE="ran: playbookSubscriptions keys against frameworks, and source precedence against each source's own provides"
+fi
+
+# worktreeBase against codePath (gap row 350), whatever frameworks holds: the folder that holds
+# the task trees may not sit at or under the code path, nor in a location refused as a code path.
+WORKTREE_BASE="$(jq -r 'if (.worktreeBase | type) == "string" and (.codePath | type) == "string" then .worktreeBase else empty end' "$PROJECT_FILE")"
+if [ -n "$WORKTREE_BASE" ]; then
+  WORKTREE_BASE_WHY="$(worktree_base_refusal "$WORKTREE_BASE" "$(jq -r '.codePath' "$PROJECT_FILE")")"
+  [ -z "$WORKTREE_BASE_WHY" ] || CROSS_FIELD_ISSUES_JSON="$(printf '%s' "$CROSS_FIELD_ISSUES_JSON" | jq -c \
+    --arg r "$WORKTREE_BASE is refused as the base of the task trees ($WORKTREE_BASE_WHY)" \
+    '. + [{field: "worktreeBase", reason: $r, detail: "Run the project set-worktree-base action again, with another folder or with none for the default."}]')"
+  CROSS_FIELD_TEST_NOTE="$CROSS_FIELD_TEST_NOTE; ran: worktreeBase against codePath"
 fi
 
 CROSS_FIELD_COUNT="$(printf '%s' "$CROSS_FIELD_ISSUES_JSON" | jq 'length')"
@@ -395,41 +408,30 @@ SAFETY_DETAIL="codePath is not set, or is not a well-formed string; the safety c
 if [ "$CODEPATH_IS_STRING" = "true" ] && [ "$CODEPATH_NAMED_IN_MISSING" = "false" ] \
    && [ "$CODEPATH_NAMED_IN_UNREADABLE" = "false" ]; then
   CODEPATH_NORM="$(strip_trailing_slash "$CODEPATH_VALUE")"
-  # The system root list does not depend on $HOME, so it is tested first and on its own. It used
-  # to sit inside the branch that needs $HOME, so an environment with no $HOME accepted a code
-  # path of / or /etc and still reported the project ready.
-  case "$CODEPATH_NORM" in
-    "/"|"/etc"|"/usr"|"/bin"|"/sbin"|"/lib"|"/lib64"|"/boot"|"/sys"|"/proc"|"/dev"|"/var"|"/opt"|"/root")
-      SAFETY_VERDICT="refused-system-root"
-      SAFETY_DETAIL="$CODEPATH_NORM is a system root. Refused outright, the same as version 5's set-code-path filter."
+  # The system root list does not depend on $HOME, so path_refusal tests it first and on its own.
+  # It used to sit inside the branch that needs $HOME, so an environment with no $HOME accepted a
+  # code path of / or /etc and still reported the project ready.
+  SAFETY_VERDICT="$(path_refusal "$CODEPATH_NORM")"
+  case "$SAFETY_VERDICT" in
+    refused-system-root)
+      SAFETY_DETAIL="$CODEPATH_NORM is a system root. Refused outright, the same as version 5's set-code-path filter." ;;
+    refused-home)
+      SAFETY_DETAIL="$CODEPATH_NORM is the home directory. Refused outright: every AIDA operation on the code path would then run over the whole home directory." ;;
+    refused-above-home)
+      SAFETY_DETAIL="$CODEPATH_NORM is an ancestor of the home directory. Refused outright, the same as version 5's set-code-path filter." ;;
+    *)
+      if [ -z "${HOME:-}" ]; then
+        SAFETY_VERDICT="not-evaluated"
+        SAFETY_DETAIL="\$HOME is not set in this environment; only the system root list was checked."
+      elif str_starts_with "$CODEPATH_NORM" "$(strip_trailing_slash "$HOME")/"; then
+        SAFETY_VERDICT="ok"
+        SAFETY_DETAIL="$CODEPATH_NORM is at or below the home directory."
+      else
+        SAFETY_VERDICT="warn-outside-home"
+        SAFETY_DETAIL="$CODEPATH_NORM is outside the home directory. Accepted, the same as version 5's set-code-path filter, but worth a second look."
+      fi
       ;;
   esac
-
-  if [ "$SAFETY_VERDICT" != "refused-system-root" ]; then
-   if [ -z "${HOME:-}" ]; then
-    SAFETY_VERDICT="not-evaluated"
-    SAFETY_DETAIL="\$HOME is not set in this environment; only the system root list was checked."
-   else
-    HOME_NORM="$(strip_trailing_slash "${HOME:-}")"
-    case "$CODEPATH_NORM" in
-      *)
-        if [ "$CODEPATH_NORM" = "$HOME_NORM" ]; then
-          SAFETY_VERDICT="refused-home"
-          SAFETY_DETAIL="$CODEPATH_NORM is the home directory. Refused outright: every AIDA operation on the code path would then run over the whole home directory."
-        elif str_starts_with "$HOME_NORM" "${CODEPATH_NORM}/"; then
-          SAFETY_VERDICT="refused-above-home"
-          SAFETY_DETAIL="$CODEPATH_NORM is an ancestor of the home directory. Refused outright, the same as version 5's set-code-path filter."
-        elif [ "$CODEPATH_NORM" = "$HOME_NORM" ] || str_starts_with "$CODEPATH_NORM" "${HOME_NORM}/"; then
-          SAFETY_VERDICT="ok"
-          SAFETY_DETAIL="$CODEPATH_NORM is at or below the home directory."
-        else
-          SAFETY_VERDICT="warn-outside-home"
-          SAFETY_DETAIL="$CODEPATH_NORM is outside the home directory. Accepted, the same as version 5's set-code-path filter, but worth a second look."
-        fi
-        ;;
-    esac
-   fi
-  fi
 fi
 
 # ---------------------------------------------------------------------------

@@ -12,11 +12,14 @@
 #   normalize_abs <path>        collapses "." and ".." textually, drops a trailing slash
 #   resolve_against <p> <base>  prints p when it is absolute, base/p when it is not
 #   is_under <path> <root>      true when path is root itself or falls under it
+#   path_refusal <path>         prints why the path may not be a code path, or nothing
+#   worktree_base_refusal <base> <codePath>
+#                               prints why the folder may not hold the task trees, or nothing
 #   dispatch_record_for <project path> <dir> [<agent type>]
 #                               sets DISPATCH_RECORD to the open dispatch record of the task whose
 #                               codePath holds dir, else to the one open record whose role is the
 #                               agent type, or empty, and DISPATCH_OPEN_COUNT to how many records
-#                               are open. One of the two functions here that read the disk.
+#                               are open. One of the three functions here that read the disk.
 #   main_checkout <project codePath> <canonical record codePath>
 #                               prints the project's main checkout in canonical form, or nothing
 #                               when it is the record's own tree or is not on disk.
@@ -68,6 +71,40 @@ is_under() {
   [ "$1" = "$2" ] && return 0
   case "$1" in "$2"/*) return 0 ;; esac
   return 1
+}
+
+# Why absolute path $1 may not be a code path, or nothing when it may. Prints refused-system-root,
+# refused-home or refused-above-home. Without $HOME only the system roots are tested. Ported from
+# version 5's set-code-path safety filter, with the home directory itself added.
+path_refusal() {
+  local p home
+  p="$(normalize_abs "$1")"
+  case "$p" in
+    /|/etc|/usr|/bin|/sbin|/lib|/lib64|/boot|/sys|/proc|/dev|/var|/opt|/root)
+      printf 'refused-system-root'; return 0 ;;
+  esac
+  [ -n "${HOME:-}" ] || return 0
+  home="$(normalize_abs "$HOME")"
+  if [ "$p" = "$home" ]; then printf 'refused-home'
+  elif is_under "$home" "$p"; then printf 'refused-above-home'
+  fi
+}
+
+# Why $1 may not be the base folder of a project's task trees, or nothing when it may (gap row
+# 350). $2 is the project's code path. DDEV hands a tree inside the code path to the parent
+# project, and a tool that registers projects by folder misses it. So a base at or under the code
+# path is refused, and so is any location refused as a code path. Each path is read in its resolved
+# form when it is on disk, so a link into the checkout is caught. The third function here that
+# reads the disk.
+worktree_base_refusal() {
+  local base code why
+  case "$1" in /*) ;; *) printf 'not-absolute'; return 0 ;; esac
+  base="$(cd "$1" 2>/dev/null && pwd -P)" || base="$(normalize_abs "$1")"
+  code="$(cd "$2" 2>/dev/null && pwd -P)" || code="$(normalize_abs "$2")"
+  why="$(path_refusal "$base")"
+  if [ -n "$why" ]; then printf '%s' "$why"
+  elif is_under "$base" "$code"; then printf 'inside-code-path'
+  fi
 }
 
 # The open dispatch record for the working directory $2, under the project folder $1. Each task

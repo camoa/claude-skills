@@ -104,6 +104,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh state <name-or-path> <active|complete|archived> -- <why...>
        project-actions.sh set-code-path <name-or-path> <newCodePath>
        project-actions.sh set-frameworks <name-or-path> <framework>...
+       project-actions.sh set-worktree-base <name-or-path> [<folder>]
        project-actions.sh git-init <name-or-path>
        project-actions.sh add-source <name-or-path> <kind> <folder|catalog>
        project-actions.sh recipe-source <projectFolder> <phase> <framework>
@@ -133,6 +134,8 @@ source "$COMMIT_LIB"
 source "$SOURCES_LIB"  # the one source walk, for recipe-source and agentic-source below
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh"
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/paths.sh"  # worktree_base_refusal, for set-worktree-base
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.
@@ -849,6 +852,39 @@ do_set_frameworks() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# set-worktree-base: the folder that holds the project's group of task trees (gap row 350)
+# ------------------------------------------------------------------------------------------------
+
+# With a folder, records it as worktreeBase in its resolved form. With none, removes the field, so
+# the trees go beside the code path again. A refused folder writes nothing: worktree_base_refusal
+# in paths.sh is the one rule, and the check and task_worktree read the same one. A tree that a
+# task already records stays where it is, so this moves no tree.
+do_set_worktree_base() {
+  local target="${1:?set-worktree-base: a name or a path is required}" base="${2:-}"
+  local match project_path code why
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+  if [ -z "$base" ]; then
+    write_project_field "$project_path" "could not remove worktreeBase from $project_path/project.json" \
+      'del(.worktreeBase)'
+    commit_project "$project_path" "Clear the worktree base" "requested" "" "" "project" "worktree-base" project.json \
+      || printf 'project-actions: the worktree base was removed but not committed.\n' >&2
+    echo "WORKTREE BASE: none, new task trees go beside the code path"
+  else
+    code="$(jq -r '.codePath // empty' "$project_path/project.json")"
+    base="$(canon_path "$base")"
+    why="$(worktree_base_refusal "$base" "$code")"
+    [ -z "$why" ] || die3 "set-worktree-base: $base is refused ($why). A task tree never sits at or under the code path $code, nor in a location refused as a code path. Nothing was changed."
+    write_project_field "$project_path" "could not update worktreeBase in $project_path/project.json" \
+      --arg b "$base" '.worktreeBase = $b'
+    commit_project "$project_path" "Set the worktree base to ${base}" "requested" "" "" "project" "worktree-base" project.json \
+      || printf 'project-actions: the worktree base was written but not committed.\n' >&2
+    echo "WORKTREE BASE: $base"
+  fi
+  run_check "$project_path"
+}
+
+# ------------------------------------------------------------------------------------------------
 # git-init: the repair the check names on a project folder that is not a repository yet
 # ------------------------------------------------------------------------------------------------
 
@@ -1547,6 +1583,7 @@ case "$action" in
   state) do_state "$@" ;;
   set-code-path) do_set_code_path "$@" ;;
   set-frameworks) do_set_frameworks "$@" ;;
+  set-worktree-base) do_set_worktree_base "$@" ;;
   git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
   recipe-source) do_recipe_source "$@" ;;

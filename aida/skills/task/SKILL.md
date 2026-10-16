@@ -60,6 +60,8 @@ person said this task builds on another task of this project:
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree in one folder per repository beside the code path, at
 `<parent of codePath>/<slug of the code folder>.worktrees/<slug of the code folder>-<name>`.
+A project that sets a worktree base through the project skill gets `<base>` in place of
+`<parent of codePath>`. The script refuses a base at or under the code path.
 The tree is on the branch `feature/<name>`. The script records both in `task.json` and commits. The folder name is the
 slug of the code folder plus the task name, so a site name is predictable and unique. The tree is
 outside the code path for one reason. A nested worktree is invisible to a tool that registers
@@ -249,7 +251,8 @@ tree goes, the branch stays.
 
 **3. Remove.** Run the action once with every id that got a yes, in the order given, or with
 `--all` when every tree got one. For each tree the script tears the site down when one is up,
-then removes the tree. It deletes the branch when it is merged. It clears `worktree` and
+then removes the tree. It removes the group folder when it is empty, never the worktree base
+itself. It deletes the branch when it is merged. It clears `worktree` and
 `environment` from `task.json` and commits. It prints one `pruned:` line per tree naming what
 happened to the branch. A tree that another task also records stays, and its line says `kept`:
 a later task made with `--in-tree` builds in it. Show them. Exit 3 names the tree it stopped at and why. The task is not

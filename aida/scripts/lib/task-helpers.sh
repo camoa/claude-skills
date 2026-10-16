@@ -59,7 +59,7 @@
 #   task_tree_from_git <folder> <code> <action>
 #                                         prints the registered worktree carrying the task's
 #                                         branch, and repairs worktree.path when git disagrees
-#   task_worktree_group <codePath> <action>
+#   task_worktree_group <project> <codePath> <action>
 #                                         prints the folder that holds the repository's task trees
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
@@ -870,17 +870,30 @@ task_after_state() {
   fi
 }
 
-# The folder that holds every task tree of one repository: <parent of code>/<slug of the code
-# folder>.worktrees. It sits beside the code path, so the trees do not lie loose among the other
-# folders there (gap row 260). task_worktree makes a tree in it, and prune removes it when empty.
-# $1 the code path, $2 the action's own name. Dies through die3.
+# The folder that holds every task tree of one repository: <base>/<slug of the code folder>.worktrees.
+# The base is the project's worktreeBase when set (gap row 350), else the parent of the code path,
+# so the trees do not lie loose among the other folders there (gap row 260). A refused base stops
+# the action: worktree_base_refusal in paths.sh holds the rule. task_worktree makes a tree in the
+# group, and prune removes the group when empty. The base itself is never removed.
+# $1 the project folder, $2 the code path, $3 the action's own name. Dies through die3.
 task_worktree_group() {
-  local code
-  code="$(cd "$1" && pwd -P)" || die3 "$2: the code path is not on disk: $1"
+  local code base why
+  code="$(cd "$2" && pwd -P)" || die3 "$3: the code path is not on disk: $2"
   # shellcheck source=/dev/null
   command -v pb_slug >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/playbooks.sh" \
-    || die3 "$2: the library failed to load: playbooks.sh"
-  printf '%s/%s.worktrees' "$(dirname -- "$code")" "$(pb_slug "$(basename -- "$code")")"
+    || die3 "$3: the library failed to load: playbooks.sh"
+  base="$(jq -r '.worktreeBase // empty' "$1/project.json" 2>/dev/null)"
+  if [ -n "$base" ]; then
+    # shellcheck source=/dev/null
+    command -v worktree_base_refusal >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/paths.sh" \
+      || die3 "$3: the library failed to load: paths.sh"
+    why="$(worktree_base_refusal "$base" "$code")"
+    [ -z "$why" ] || die3 "$3: the project's worktreeBase $base is refused ($why). A task tree never sits at or under the code path, nor in a location refused as a code path. Nothing was made. Run the project set-worktree-base action again."
+    base="$(cd "$base" 2>/dev/null && pwd -P)" || base="$(normalize_abs "$base")"
+  else
+    base="$(dirname -- "$code")"
+  fi
+  printf '%s/%s.worktrees' "$base" "$(pb_slug "$(basename -- "$code")")"
 }
 
 # The task's own git worktree (ideal/task.md, "A worktree per task, always"), in the group folder
@@ -921,7 +934,7 @@ task_worktree() {
     || die3 "$who: the library failed to load: playbooks.sh"
   # The path rule, run here rather than read from the record, because the record is an address on
   # the machine that wrote it. One copy serves both branches below.
-  group="$(task_worktree_group "$code" "$who")" || exit 3
+  group="$(task_worktree_group "$project" "$code" "$who")" || exit 3
   rule="$group/$(pb_slug "$(basename -- "$code")")-$(pb_slug "$id")"
   # A task made with `after` is cut from that task's branch, and only once its build is finished:
   # cut earlier, the branch holds none of that build (gap row 291). A complete task whose branch is

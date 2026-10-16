@@ -1890,7 +1890,10 @@ TA_IDS
       said="$(git -C "$CODE_PATH" worktree remove "$wt" 2>&1)" \
         || die3 "prune: git refused to remove $wt: $said. Commit or stash there first; prune never forces"
     fi
-    group="$(task_worktree_group "$CODE_PATH" "prune")" && rmdir "$group" 2>/dev/null
+    # The group folder that held this tree, under the base it was made in, goes when it is empty.
+    # A base set later does not strand the old group, and the base itself is never removed.
+    group="$(task_worktree_group "$project_path" "$CODE_PATH" "prune")" && [ "${group##*/}" = "$(basename -- "${wt%/*}")" ] \
+      && rmdir -- "${wt%/*}" 2>/dev/null
     if printf '%s\n' "$merged" | grep -Fqx "$branch"; then
       git -C "$CODE_PATH" branch -d "$branch" >/dev/null 2>&1 && branch_word="removed" || branch_word="kept, git refused to delete it"
     else

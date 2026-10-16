@@ -1,7 +1,7 @@
 ---
 name: project
-description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", "check this machine", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | drop-retired <name-or-path> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path> | check-machine]"
+description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", "set where task worktrees go", "check this machine", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | set-worktree-base <name-or-path> [<folder>] | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | drop-retired <name-or-path> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path> | check-machine]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -349,6 +349,23 @@ Sets the stack by hand, for a project whose code path the detector did not recog
 ```
 Looks the target up the same way `switch` does. Not found: say so and stop. Otherwise it writes
 the list into the project file, commits the change, and runs the check. Show the whole output.
+
+## `set-worktree-base <name-or-path> [<folder>]`
+
+Sets the folder that holds this project's task worktrees. By default each tree goes in
+`<parent of codePath>/<slug of the code folder>.worktrees`. With a folder, the group goes in
+`<folder>/<slug of the code folder>.worktrees` instead. The group name keeps the code folder, so
+site names stay unique on the machine. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
+  set-worktree-base "<target>" ["<folder>"]
+```
+Looks the target up the same way `switch` does. Not found: say so and stop. Without a folder it
+removes the setting, and new trees go beside the code path again. The script refuses a folder at
+or under the code path, because DDEV hands a nested tree to the parent project. It also refuses a
+location that is refused as a code path. A refusal exits 3 and writes nothing. Otherwise it
+records the folder, commits the change, and runs the check. A tree that a task already records
+stays where it is. Show the whole output.
 
 ## `add-source <name-or-path> <kind> <folder | catalog>`
 
