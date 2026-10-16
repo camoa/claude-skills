@@ -12,6 +12,7 @@
 #   normalize_abs <path>        collapses "." and ".." textually, drops a trailing slash
 #   resolve_against <p> <base>  prints p when it is absolute, base/p when it is not
 #   is_under <path> <root>      true when path is root itself or falls under it
+#   path_refusal <path>         prints why the path may not be a code path, or nothing
 #   worktree_base_refusal <base> <codePath>
 #                               prints why the folder may not hold the task trees, or nothing
 #   worktree_base_path <base> <codePath>
@@ -74,18 +75,40 @@ is_under() {
   return 1
 }
 
+# Why absolute path $1 may not be a code path, or nothing when it may. Prints refused-system-root,
+# refused-home or refused-above-home. Without $HOME only the system roots are tested. Ported from
+# version 5's set-code-path safety filter, with the home directory itself added.
+path_refusal() {
+  local p home
+  p="$(normalize_abs "$1")"
+  case "$p" in
+    /|/etc|/usr|/bin|/sbin|/lib|/lib64|/boot|/sys|/proc|/dev|/var|/opt|/root)
+      printf 'refused-system-root'; return 0 ;;
+  esac
+  [ -n "${HOME:-}" ] || return 0
+  home="$(normalize_abs "$HOME")"
+  if [ "$p" = "$home" ]; then printf 'refused-home'
+  elif is_under "$home" "$p"; then printf 'refused-above-home'
+  fi
+}
+
 # Why $1 may not be the base folder of a project's task trees, or nothing when it may (gap row
 # 350). $2 is the project's code path, and a relative $1 is read against it. DDEV hands a tree inside the code path to the parent
 # project, and a tool that registers projects by folder misses it. So a base at or under the code
 # path is refused. Each path is read in its resolved form when it is on disk, so a link into the
-# checkout is caught. The locations refused as a code path are not refused here: the default base,
-# the parent of the code path, is often the home directory itself. The third function here that
-# reads the disk.
+# checkout is caught. A system root and a folder above the home directory are refused as for a code
+# path. The home directory is allowed, because the default yields it for a code path at ~/x. The
+# default, `..`, is never refused for where it lies: the trees have always gone there. The third
+# function here that reads the disk.
 worktree_base_refusal() {
-  local base code
+  local base code why=""
   code="$(cd "$2" 2>/dev/null && pwd -P)" || code="$(normalize_abs "$2")"
   base="$(worktree_base_path "$1" "$code")"
-  if is_under "$base" "$code"; then printf 'inside-code-path'; fi
+  [ "$1" = ".." ] || why="$(path_refusal "$base")"
+  [ "$why" != "refused-home" ] || why=""
+  if [ -n "$why" ]; then printf '%s' "$why"
+  elif is_under "$base" "$code"; then printf 'inside-code-path'
+  fi
 }
 
 # The base folder $1 as an absolute path: read against the code path $2 when relative, and in its

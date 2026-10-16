@@ -164,7 +164,7 @@ path is known now, and a new project has no tree yet to move. Autonomous: do not
 ```
 It writes every file, makes the first commit, adds the registry row, records the projects-home
 base the first time only, and runs the check itself. It records the worktree base given, or the
-default. A worktree base at or under the code path exits 3 before anything is written: ask
+default. A refused worktree base exits 3 before anything is written: ask
 again. Show the whole output.
 
 Exit code 2 from the check here is normal, not a problem: the code path was just set from what
@@ -370,9 +370,11 @@ keeps the code folder, so site names stay unique on the machine. Run:
   set-worktree-base "<target>" ["<folder>"]
 ```
 Looks the target up the same way `switch` does. Not found: say so and stop. Without a folder it
-records the default, `..`, which reads as the parent of the code path and follows it. This is the repair the check names when the
-field is missing. The script refuses a folder at or under the code path, because DDEV hands a
-nested tree to the parent project. A refusal exits 3 and writes nothing. Otherwise it records the
+records the default, `..`, which reads as the parent of the code path and follows it. The check
+names this action in a note when the field is missing. The note does not change the exit code.
+The script refuses a folder at or under the code path, because DDEV hands a nested tree to the
+parent project. It also refuses a system root and a folder above the home directory. The home
+directory itself is allowed. A refusal exits 3 and writes nothing. Otherwise it records the
 folder, commits the change, and runs the check. A tree that a task already records stays where it
 is. Show the whole output.
 

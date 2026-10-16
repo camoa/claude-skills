@@ -53,8 +53,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      fail one of the three cross-field checks project-schema.json's own descriptions
 #      promise (a schema checks one field at a time, never two fields against each other):
 #      a playbookSubscriptions key naming a framework this project never declared, a
-#      source's precedence keys not matching its own provides list, or a worktreeBase at or
-#      under the code path. Each is named, on
+#      source's precedence keys not matching its own provides list, or a refused worktreeBase.
+#      Each is named, on
 #      stdout, with the text that would produce it. Nothing is repaired; a repair is
 #      proposed.
 #   2  codePath is present and well-formed, but the directory it names does not exist. A
@@ -341,14 +341,16 @@ if [ "$FRAMEWORKS_NAMED_IN_MISSING" = "false" ] && [ "$FRAMEWORKS_NAMED_IN_UNREA
   CROSS_FIELD_TEST_NOTE="ran: playbookSubscriptions keys against frameworks, and source precedence against each source's own provides"
 fi
 
-# worktreeBase against codePath (gap row 350), whatever frameworks holds. The folder that holds the
-# task trees may not sit at or under the code path.
+# worktreeBase against codePath (gap row 350), whatever frameworks holds. worktree_base_refusal in
+# paths.sh is the rule. An absent field is a note, not a fault: a project made before the field has
+# none, and its exit code must not rise for a question nobody has been asked yet.
+WORKTREE_BASE_UNSET="$(jq 'has("worktreeBase") | not' "$PROJECT_FILE")"
 WORKTREE_BASE="$(jq -r 'if (.worktreeBase | type) == "string" and (.codePath | type) == "string" then .worktreeBase else empty end' "$PROJECT_FILE")"
 if [ -n "$WORKTREE_BASE" ]; then
   WORKTREE_BASE_WHY="$(worktree_base_refusal "$WORKTREE_BASE" "$(jq -r '.codePath' "$PROJECT_FILE")")"
   [ -z "$WORKTREE_BASE_WHY" ] || CROSS_FIELD_ISSUES_JSON="$(printf '%s' "$CROSS_FIELD_ISSUES_JSON" | jq -c \
     --arg r "$WORKTREE_BASE is refused as the base of the task trees ($WORKTREE_BASE_WHY)" \
-    '. + [{field: "worktreeBase", reason: $r, detail: "Run the project set-worktree-base action again, with a folder outside the code path, or with none for the default."}]')"
+    '. + [{field: "worktreeBase", reason: $r, detail: "Run the project set-worktree-base action again, with another folder, or with none for the default."}]')"
   CROSS_FIELD_TEST_NOTE="$CROSS_FIELD_TEST_NOTE; ran: worktreeBase against codePath"
 fi
 
@@ -408,41 +410,30 @@ SAFETY_DETAIL="codePath is not set, or is not a well-formed string; the safety c
 if [ "$CODEPATH_IS_STRING" = "true" ] && [ "$CODEPATH_NAMED_IN_MISSING" = "false" ] \
    && [ "$CODEPATH_NAMED_IN_UNREADABLE" = "false" ]; then
   CODEPATH_NORM="$(strip_trailing_slash "$CODEPATH_VALUE")"
-  # The system root list does not depend on $HOME, so it is tested first and on its own. It used
-  # to sit inside the branch that needs $HOME, so an environment with no $HOME accepted a code
-  # path of / or /etc and still reported the project ready.
-  case "$CODEPATH_NORM" in
-    "/"|"/etc"|"/usr"|"/bin"|"/sbin"|"/lib"|"/lib64"|"/boot"|"/sys"|"/proc"|"/dev"|"/var"|"/opt"|"/root")
-      SAFETY_VERDICT="refused-system-root"
-      SAFETY_DETAIL="$CODEPATH_NORM is a system root. Refused outright, the same as version 5's set-code-path filter."
+  # The system root list does not depend on $HOME, so path_refusal tests it first and on its own.
+  # It used to sit inside the branch that needs $HOME, so an environment with no $HOME accepted a
+  # code path of / or /etc and still reported the project ready.
+  SAFETY_VERDICT="$(path_refusal "$CODEPATH_NORM")"
+  case "$SAFETY_VERDICT" in
+    refused-system-root)
+      SAFETY_DETAIL="$CODEPATH_NORM is a system root. Refused outright, the same as version 5's set-code-path filter." ;;
+    refused-home)
+      SAFETY_DETAIL="$CODEPATH_NORM is the home directory. Refused outright: every AIDA operation on the code path would then run over the whole home directory." ;;
+    refused-above-home)
+      SAFETY_DETAIL="$CODEPATH_NORM is an ancestor of the home directory. Refused outright, the same as version 5's set-code-path filter." ;;
+    *)
+      if [ -z "${HOME:-}" ]; then
+        SAFETY_VERDICT="not-evaluated"
+        SAFETY_DETAIL="\$HOME is not set in this environment; only the system root list was checked."
+      elif str_starts_with "$CODEPATH_NORM" "$(strip_trailing_slash "$HOME")/"; then
+        SAFETY_VERDICT="ok"
+        SAFETY_DETAIL="$CODEPATH_NORM is at or below the home directory."
+      else
+        SAFETY_VERDICT="warn-outside-home"
+        SAFETY_DETAIL="$CODEPATH_NORM is outside the home directory. Accepted, the same as version 5's set-code-path filter, but worth a second look."
+      fi
       ;;
   esac
-
-  if [ "$SAFETY_VERDICT" != "refused-system-root" ]; then
-   if [ -z "${HOME:-}" ]; then
-    SAFETY_VERDICT="not-evaluated"
-    SAFETY_DETAIL="\$HOME is not set in this environment; only the system root list was checked."
-   else
-    HOME_NORM="$(strip_trailing_slash "${HOME:-}")"
-    case "$CODEPATH_NORM" in
-      *)
-        if [ "$CODEPATH_NORM" = "$HOME_NORM" ]; then
-          SAFETY_VERDICT="refused-home"
-          SAFETY_DETAIL="$CODEPATH_NORM is the home directory. Refused outright: every AIDA operation on the code path would then run over the whole home directory."
-        elif str_starts_with "$HOME_NORM" "${CODEPATH_NORM}/"; then
-          SAFETY_VERDICT="refused-above-home"
-          SAFETY_DETAIL="$CODEPATH_NORM is an ancestor of the home directory. Refused outright, the same as version 5's set-code-path filter."
-        elif [ "$CODEPATH_NORM" = "$HOME_NORM" ] || str_starts_with "$CODEPATH_NORM" "${HOME_NORM}/"; then
-          SAFETY_VERDICT="ok"
-          SAFETY_DETAIL="$CODEPATH_NORM is at or below the home directory."
-        else
-          SAFETY_VERDICT="warn-outside-home"
-          SAFETY_DETAIL="$CODEPATH_NORM is outside the home directory. Accepted, the same as version 5's set-code-path filter, but worth a second look."
-        fi
-        ;;
-    esac
-   fi
-  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -790,6 +781,10 @@ echo "Cross-field checks: $CROSS_FIELD_TEST_NOTE"
 if [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
   echo "$CROSS_FIELD_ISSUES_JSON" | jq -r '.[] | "  - " + .field + ": " + .reason + ".\n      " + .detail'
 fi
+if [ "$WORKTREE_BASE_UNSET" = "true" ]; then
+  echo "Note, not a fault: worktreeBase is not set, so task worktrees go beside the code path."
+  echo "  The task skill asks once before the next task. Producer: project-actions.sh set-worktree-base <name> [<folder>]."
+fi
 echo
 
 echo "Registry: $REGISTRY_PATH ($REGISTRY_FILE_STATE)"
@@ -946,6 +941,7 @@ jq -n \
   --argjson autonomousNoResponse "$AUTONOMOUS_NO_RESPONSE_JSON" \
   --argjson exitCode "$EXIT_CODE" \
   --argjson surfacesOnWithoutFile "$SURFACES_WITHOUT_FILE_JSON" \
+  --argjson worktreeBaseUnset "$WORKTREE_BASE_UNSET" \
   '{
     timestamp: $timestamp,
     exitCode: $exitCode,
@@ -958,6 +954,7 @@ jq -n \
     crossFieldIssues: $crossFieldIssues,
     ignoredFiles: $ignoredFiles,
     surfacesOnWithoutFile: $surfacesOnWithoutFile,
+    worktreeBaseUnset: $worktreeBaseUnset,
     registry: {
       fileState: $registryFileState,
       missingFields: $registryMissingFields,

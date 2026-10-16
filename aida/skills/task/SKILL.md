@@ -62,7 +62,7 @@ printed the default. Interactive: ask once, "Where should task worktrees go? Def
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   set-worktree-base "<projectPath>" ["<folder>"]
 ```
-Exit 3 refuses a folder at or under the code path: ask again. Autonomous: do not ask. Run the
+Exit 3 refuses the folder, for the reason it prints: ask again. Autonomous: do not ask. Run the
 same action with no folder, so it records the default, and say that it did. This is asked here
 because the first tree is about to be made, and a tree once made stays where it is.
 
@@ -75,8 +75,7 @@ person said this task builds on another task of this project:
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree in one folder per repository beside the code path, at
 `<parent of codePath>/<slug of the code folder>.worktrees/<slug of the code folder>-<name>`.
-The worktree base recorded above takes the place of `<parent of codePath>`. The script refuses a
-base at or under the code path.
+The worktree base recorded above takes the place of `<parent of codePath>`.
 The tree is on the branch `feature/<name>`. The script records both in `task.json` and commits. The folder name is the
 slug of the code folder plus the task name, so a site name is predictable and unique. The tree is
 outside the code path for one reason. A nested worktree is invisible to a tool that registers
