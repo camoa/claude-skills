@@ -12429,11 +12429,14 @@ rs_rebase_table() {
 # reverts commit <id>.", whoever ran it: `restart` runs it, and a person may. A revert that is
 # itself reverted puts the change back, so its pair does not count. After a rebase the line names
 # the old id, so a target HEAD does not hold is found again through rs_on_branch and <table>.
+# A person's revert line can carry a short id, and every reader compares full ids, so the id is
+# resolved first. A short id git cannot resolve to one commit pairs nothing (gap row 348).
 rs_reverted() {
   local r t on pairs=""
   while IFS= read -r r; do
     [ -n "$r" ] || continue
     t="$(git -C "$1" log -1 --format=%B "$r" 2>/dev/null | sed -n 's/^This reverts commit \([0-9a-f][0-9a-f]*\)\.$/\1/p' | head -1)"
+    [ -z "$t" ] || t="$(git -C "$1" rev-parse --verify --quiet "$t^{commit}" 2>/dev/null)"
     if [ -n "$t" ] && ! git -C "$1" merge-base --is-ancestor "$t" HEAD >/dev/null 2>&1; then
       on="$(rs_on_branch "$1" "$t" "${3:-}")"
       case "$on" in ""|"?"*) t="" ;; *) t="$on" ;; esac
@@ -12862,13 +12865,17 @@ RS_ADDED
     | .resnapshots = ((.resnapshots // []) + [ $retaken[] | {id: ., from: $from, to: $to, at: $at} ])')"
   [ -n "$new_ledger" ] || die 3 "restart: the ledger update failed."
 
-  # A revert that stops on a conflict is taken back, so the tree is clean again. The reverts before
-  # it stay committed, and a second restart skips them, because rs_reverted reads them.
-  local reverted_json='[]' said
+  # A revert that stops on a conflict is taken back, and so is every revert this run committed
+  # before it, so the branch is where it was (gap row 348). Those commits are this run's own and no
+  # other commit sits on them, so `reset --keep` drops nothing else and refuses to touch a changed file.
+  local reverted_json='[]' said orig
+  orig="$(git -C "$RV_CODEPATH" rev-parse HEAD)"
   for c in $(printf '%s' "$revert_json" | jq -r '.[].commit'); do
     said="$(git -C "$RV_CODEPATH" revert --no-edit "$c" 2>&1)" || {
       git -C "$RV_CODEPATH" revert --abort >/dev/null 2>&1
-      die 3 "restart: git revert of $(git -C "$RV_CODEPATH" rev-parse --short "$c") failed, and was taken back: $said. The reverts before it are committed, and no record moved. A person resolves it, then runs restart again."
+      git -C "$RV_CODEPATH" reset -q --keep "$orig" >/dev/null 2>&1 \
+        || die 3 "restart: git revert of $(git -C "$RV_CODEPATH" rev-parse --short "$c") failed: $said. The reverts before it could not be taken back: the branch was at ${orig:0:7} before the restart. No record moved. A person resolves it, then runs restart again."
+      die 3 "restart: git revert of $(git -C "$RV_CODEPATH" rev-parse --short "$c") failed: $said. Every revert was taken back, so the branch is at ${orig:0:7} as before, and no record moved. A person resolves it, then runs restart again."
     }
     reverted_json="$(printf '%s' "$reverted_json" | jq -c --argjson e "$(printf '%s' "$revert_json" | jq -c --arg c "$c" '.[] | select(.commit == $c)')" \
       --arg r "$(git -C "$RV_CODEPATH" rev-parse HEAD)" '. + [$e + {revert: $r}]')"

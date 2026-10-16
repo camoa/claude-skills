@@ -202,7 +202,7 @@ the same way, because a revert of a merge needs a person to choose its parent. N
 to the person, opening with: "This unit's code sits in a commit that also changes other files.
 A revert would undo that other work too, so only you can separate them." When they say it is
 done, run restart again. A revert that stops on a conflict is taken back, and the restart stops.
-The reverts before it stay committed, and the next restart skips them.
+The reverts it committed before that are taken back too, so the branch is where it was.
 
 ## Clear any other halt, once the person has acted on it
 
