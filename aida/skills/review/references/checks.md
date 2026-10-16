@@ -64,6 +64,11 @@ person wants more, and say they can open it in an editor.
 declares, including a duplication tool or a design-metrics tool, and records one check row each. The
 reviewer reads those rows before it judges, so do not re-derive a measurement here.
 
+**A change no tool row reads gets a catalog note.** A row that names `extensions` reads only those
+files. When no row read a file this change touched, every tool row reads undeclared, and the note
+names the files. A project adds a tool for them as a row with its own id and `extensions` in its
+own copy of the review recipe. Review then runs that row like any other.
+
 **The tool rows leave the frozen tests out, as the build's do.** The frozen tests are the reference
 this stage judges against, and no role after the freeze may change them. A row's detail names each
 test it left out. A row whose files are all frozen tests reads undeclared.

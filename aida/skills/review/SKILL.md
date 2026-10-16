@@ -152,8 +152,8 @@ verdict word, so a person sees what did not run first. `close` writes the last c
 why `audit` runs after it.
 
 Name the catalog notes by count as well. A note is a guide the code contradicts, a recipe whose
-command no longer runs, or a pattern the framework wants and no guide names. A recipe research or
-design judged not to fit this task is a note too. `checks` writes it from the `recipeFit` field of
+command no longer runs, a change no tool row read, or a pattern the framework wants and no guide
+names. A recipe research or design judged not to fit this task is a note too. `checks` writes it from the `recipeFit` field of
 each research file and of `design-closed.json`, and a mismatch never fails a review. Review writes
 nothing to the catalog. A person decides whether a note becomes a proposal.
 

@@ -1184,6 +1184,7 @@ rw_tool_row_check() {
     return 0
   fi
 
+  [ "$only_frozen" = "frozen" ] || RW_TOOL_READ="yes"
   rw_run_row "$argv" "$scoped" "$RW_VALUES" "$signal"
   rw_run_fault "$row_id" "$framework"
   verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
@@ -1360,7 +1361,7 @@ do_checks() {
   local frameworks fw lookup recipes_json rows_file parts_file catalog stale
   local range base head_end head_now end_commit tab said restored past coverage cov_verdict cov_detail
   local mut_verdict tool_count ti one frozen_row frozen_findings mutation_file record_json today floor_id
-  local upstream empty_range
+  local upstream empty_range unread
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -1567,7 +1568,7 @@ RW_REVIEWS
 
   tool_count="$(printf '%s' "$CR_DOC" | jq '(.tools // []) | length')"
   case "$tool_count" in ''|*[!0-9]*) tool_count=0 ;; esac
-  ti=0; one=""; frozen_row=""; frozen_findings="[]"
+  ti=0; one=""; frozen_row=""; frozen_findings="[]"; RW_TOOL_READ=""
   while [ "$ti" -lt "$tool_count" ]; do
     one="$(printf '%s' "$CR_DOC" | jq -c --argjson i "$ti" '.tools[$i]')"
     rw_tool_row_check "$one" >>"$parts_file"
@@ -1587,6 +1588,14 @@ RW_REVIEWS
     fi
     ti=$((ti + 1))
   done
+  # Gap row 353. When no tool row read a file this change touched, every tool row reads undeclared,
+  # and those words hide that no tool checked the change at all. One catalog note names the files.
+  unread="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$(br_frozen_test_paths "$RW_TEST_ROWS")" \
+    '[ $changed[] | select(. as $p | $frozen | index($p) == null) ]')"
+  if [ -z "$RW_TOOL_READ" ] && [ "$unread" != "[]" ]; then
+    rw_catalog_note "no check commands row reads a file this change touched, so no tool checked $(printf '%s' "$unread" | jq -r '.[0:10] | join(", ")')$(printf '%s' "$unread" | jq -r 'if length > 10 then " and \(length - 10) more" else "" end'). A project adds a tool for these files as a row with its own id and extensions in its own copy of the review recipe." \
+      "$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | select(.checkRecipe != "") | .checkRecipe ] | if length == 0 then "no check recipe was resolved" else join(", ") end')"
+  fi
   # The three ids below are a floor the recipe may add to and never a list it may shorten, so each one
   # no row declared still gets a row of its own. A check with no row at all is a check a reader cannot
   # see was never answered, and version 5 printed that four times.

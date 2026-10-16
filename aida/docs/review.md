@@ -62,7 +62,10 @@ suite. A recipe may declare more rows, such as a duplication tool or a design-me
 adds one check, so the list can run past sixteen on such a framework. The tool rows leave the frozen
 tests out, as the build does, because no role after the freeze may change them. Static analysis
 then runs once more over the frozen tests alone. A finding there blocks nothing: it becomes a
-follow-up that completion offers.
+follow-up that completion offers. A row reads only the file types its recipe names. When no row
+reads a file the task changed, such as a shell script on a Drupal project, review records a
+catalog note that names those files. To check them, copy the review recipe into your own process
+recipes folder and add a row with its own id, its command and its `extensions`.
 
 **The reviewer's lenses.** One reviewer reading the diff answers five checks. They are SOLID,
 DRY, architecture fit, the guides research cited, and the framework practices this project
