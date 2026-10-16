@@ -216,8 +216,12 @@ role stopped at its turn limit. The script also sees it for the reviewer, the ro
 implementer. A plain close refuses (exit 111) when the file the role writes is missing. That is
 the findings or verdicts file the brief names, the row-checker's `row-check-<order id>.json`, or
 the implementer's answers file, which also needs its stop line. The fixer and the test author end
-the report their brief pins with `Report: complete`. A plain close whose report
-lacks that line takes the step below itself (exit 112). After a 112, do not close again: resume
+the report their brief pins with `Report: complete`. A fixer's report also gives each finding an
+`Outcome:` line, and a `Ran:` line with its output when the finding is fixed or already correct.
+A plain close whose report lacks one of these lines takes the step below itself (exit 112).
+The first time a fixer's report misses an outcome or run line, or its fix brief is missing, the
+112 spends no resume, with or without `--no-report`, because the fixer finished. Resume it by
+message to add the lines. A second such fault spends a resume. After a 112, do not close again: resume
 the agent. A `--no-report` close after a 112 spends a resume. Add `--no-report` only on the
 runtime's mark. A role can finish before the runtime marks it stopped. If its file passes, the
 close says so and removes the record, and the role is not resumed. Otherwise the record stays

@@ -292,7 +292,20 @@ finding, and `clear-halt` is the person's way past. Its reason may not hold the 
 another, and a reason carrying it would forge one.
 
 The commit the round began from is `fix-brief`'s own `headNow`. Equal to the current commit, or
-not an ancestor of it, refuses (exit 71), the same rule `build-record` applies.
+not an ancestor of it, refuses (exit 71), the same rule `build-record` applies. One case is
+recorded with no commit: `fix-brief` handed the round to a fixer, and every open finding is named
+by `--scope-insufficient` or by a line `Outcome: <id>: already-correct` in the report. The round is spent, and the checks run at HEAD.
+The message for exit 71 names the findings that are neither. `fix-record` marks each
+already-correct finding with `alreadyCorrectInRound`. Its `alreadyCorrect:` line names them.
+The cited file must exist at HEAD. When it changed since the review, the verifier reads its
+cited code at HEAD and the report's run for it, and addressed closes the finding. So no ruling is
+needed for a finding that is real and already fixed. When it is unchanged since the review, the
+claim disputes the reviewer. An addressed reading then makes the finding pending for a person, and
+an unattended order halts. Each `--scope-insufficient` needs a line
+`Outcome: <id>: scope-insufficient` in the report, and the verifier may not read that finding
+addressed in that round (exit 52). A round with no commit addresses no check finding. With a person
+present, a finding the verifier read not-addressed at the cap goes to the repair round above.
+There the fixer can report it already correct with its run.
 A task site that is down refuses (exit 103) before any check runs, as build.md says for `build-record`.
 
 **`fix-record` refuses when the code repository's tree is not clean.** The fixer commits its own

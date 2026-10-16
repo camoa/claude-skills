@@ -538,6 +538,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      began from: it is the commit HEAD is at now, so the diff would be empty and every check would
 #      answer about nothing, or it is not an ancestor of HEAD, so the range between the two is not
 #      this order's own work. Exit 43 stays the separate fact that the value is not a commit at all.
+#      `fix-record` records a round with no commit when its fix brief exists and every open finding
+#      is named by --scope-insufficient or by an `Outcome: <id>: already-correct` line in the report
+#      (gap row 341). The message names the findings that are neither.
 #  72  two frameworks each declare a command for one check row, and nothing here may choose between
 #      two answers to one question. The message names both frameworks and the row.
 #  73  the check recipe resolved for a framework moved after this task's baseline was taken: its
@@ -804,7 +807,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      such close halts the order at exit 110, and the halt names the cause. `dispatch-open`
 #      without --resume removes the role's earlier report, so an old complete one cannot pass,
 #      and no time is read (gap row 309). A `--no-report` close of a fixer or a test author whose
-#      report passes these tests closes the record as finished.
+#      report passes these tests closes the record as finished. A fixer's report also gives each
+#      finding of its brief one `Outcome:` line, and a fixed or already-correct one a `Ran:` line
+#      and a fenced block of output (gap row 352). The first report that misses one refuses 112
+#      with the record open and no resume spent: the fixer finished, and only its report's shape is
+#      wrong. The record counts it as `shapeRefusals`, and a second such fault spends a resume as
+#      above. A missing fix brief is such a fault.
 #      `fix-record` refuses a --report other than the one the fix brief pins (exit 3).
 # The code the reverting restart added (gap row 252).
 # 113  `restart` found a commit of a halted order that also changes a file the order does not own,
@@ -996,6 +1004,50 @@ im_report_line_fault() {
   elif [ "$(grep -v '^[[:space:]]*$' "$1" | grep -c -v -x -F -e "$2")" -eq 0 ]; then
     printf '%s' "$1 holds nothing but the line '$2'"
   fi
+}
+
+# im_fix_outcomes <report>: prints `<finding id> <outcome>` for each line `Outcome: <id>: <outcome>`
+# in a fixer's report. The outcome is fixed, already-correct or scope-insufficient. fix-record reads
+# already-correct from it, and im_fix_report_fault reads all three (gap rows 341 and 352).
+im_fix_outcomes() {
+  br_marked_lines "$1" outcome | sed -e 's/^[^:]*:[[:space:]]*//' | awk -F: '{
+    id = $1; w = tolower($2); gsub(/[[:space:]]/, "", id); gsub(/^[[:space:]]+|[[:space:]]*[.]?[[:space:]]*$/, "", w)
+    if (id ~ /^f[1-9][0-9]*$/ && (w == "fixed" || w == "already-correct" || w == "scope-insufficient")) print id, w }'
+}
+
+# im_fix_report_fault <report> <fix brief>: prints why a fixer's report does not answer every finding
+# the brief handed it, or nothing when it does. Each finding needs one outcome line. A fixed or
+# already-correct finding also needs a line `Ran: <id>: <command>` and then a fenced block that
+# holds its output. A verifier reads a claim with no run as not addressed, and that spent the
+# round (gap row 352). dispatch-close reads the fault as a report not yet finished.
+im_fix_report_fault() {
+  local id n word outcomes
+  [ -f "$2" ] || { printf '%s' "the fix brief $2 is missing, so nothing shows which findings $1 must answer"; return 0; }
+  outcomes="$(im_fix_outcomes "$1")"
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    n="$(printf '%s\n' "$outcomes" | grep -c "^$id ")"
+    if [ "$n" -ne 1 ]; then
+      printf '%s' "$1 gives $id $n lines 'Outcome: $id: <fixed|already-correct|scope-insufficient>', and it must give one"
+      return 0
+    fi
+    word="$(printf '%s\n' "$outcomes" | sed -n "s/^$id //p")"
+    [ "$word" != "scope-insufficient" ] || continue
+    awk -v id="$id:" '
+      state == 0 { l = $0; gsub(/\*/, "", l); sub(/^[[:space:]]*(-[[:space:]]*)?/, "", l)
+        if (tolower(substr(l, 1, 4)) == "ran:") { r = substr(l, 5); sub(/^[[:space:]]*/, "", r)
+          if (index(r, id) == 1 && substr(r, length(id) + 1) ~ /[^[:space:]]/) state = 1 }
+        next }
+      state == 1 { if ($0 ~ /^[[:space:]]*$/) next
+        if ($0 ~ /^[[:space:]]*```/) { state = 2; n = 0; next }
+        state = 0; next }
+      state == 2 { if ($0 ~ /^[[:space:]]*```/) { if (n > 0) { found = 1; exit } state = 0; next }
+        if ($0 !~ /^[[:space:]]*$/) n++ }
+      END { exit found ? 0 : 1 }' "$1" \
+      || { printf '%s' "$1 says $id is $word and shows no run: a line 'Ran: $id: <command>', then a fenced block of its output"; return 0; }
+  done <<IM_FIX_IDS
+$(jq -r '.findings[]?.id // empty' "$2" 2>/dev/null)
+IM_FIX_IDS
 }
 
 # A light task allows a fake off the demo path, marked in the code with this text. The build brief
@@ -10783,7 +10835,8 @@ do_fix_record() {
   # names nothing open, or carries no reason, is a caller fault, and refusing it after the tools
   # have run would leave a fix record on disk that the ledger never learned about. What it changes
   # is applied further down, once the record itself is written.
-  local scope_json="[]" scope_line scope_id scope_reason scope_open
+  local scope_json="[]" scope_line scope_id scope_reason scope_open fr_outcomes
+  fr_outcomes="$(im_fix_outcomes "$report_path")"
   while IFS= read -r scope_line; do
     [ -n "$scope_line" ] || continue
     case "$scope_line" in
@@ -10800,11 +10853,20 @@ do_fix_record() {
       '[ (.findings // [])[] | select(.id == $id and .actionable == true and .status == "open") ] | length')"
     [ "$scope_open" = "1" ] \
       || die 3 "fix-record: --scope-insufficient names $scope_id, which is not an open actionable finding on $unit_id."
+    # The flag repeats the fixer's report and never stands in for it (gap row 341).
+    printf '%s\n' "$fr_outcomes" | grep -q -x "$scope_id scope-insufficient" \
+      || die 3 "fix-record: --scope-insufficient names $scope_id, and $report_path gives it no line 'Outcome: $scope_id: scope-insufficient'. Pass the flag only for a finding the fixer's report names so."
     scope_json="$(printf '%s' "$scope_json" | jq -c --arg id "$scope_id" --arg reason "$scope_reason" \
       '. + [{id: $id, reason: $reason}]')"
   done <<RV_SCOPE
 $scope_raw
 RV_SCOPE
+  # The open findings the fixer's report calls already correct at HEAD. The verifier reads each
+  # one's cited code there, beside the report's run, so no person's word closes it (gap row 352).
+  local ac_json
+  ac_json="$(printf '%s\n' "$fr_outcomes" | awk '$2 == "already-correct" { print $1 }' \
+    | jq -R -s -c --argjson f "$(printf '%s' "$RV_REVIEW_DOC" | jq -c '.findings // []')" '
+      split("\n") | map(select(. as $id | $f | any(.id == $id and .actionable == true and .status == "open"))) | unique')"
 
   rv_load_codepath "fix-record"
   rv_load_range_repo "fix-record" "$RV_UNIT_JSON"
@@ -10816,7 +10878,43 @@ RV_SCOPE
   current_commit="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
     || die 3 "fix-record: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
-  br_require_real_base "fix-record" "$RV_RANGE_REPO" "$started_at" "$started_at_full" "$current_commit"
+  # An already-correct claim on a file unchanged since the review disputes the reviewer, who read
+  # that same file. git decides it here, and verify-record sends such a finding to a person rather
+  # than closing it on the verifier's word. A cited file must exist at HEAD (gap row 352).
+  local ac_unchanged="[]" ac_id ac_file ac_rc ac_since
+  ac_since="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '.reviewedAt // ""')"
+  while IFS= read -r ac_id; do
+    [ -n "$ac_id" ] || continue
+    ac_file="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$ac_id" '[ .findings[] | select(.id == $id) ][0].file // ""')"
+    ac_rc=0
+    if [ -n "$ac_file" ]; then
+      git -C "$RV_RANGE_REPO" cat-file -e "HEAD:$ac_file" 2>/dev/null \
+        || die 3 "fix-record: $report_path calls $ac_id already correct, and the file it cites, $ac_file, is not in $RV_RANGE_REPO at HEAD."
+      git -C "$RV_RANGE_REPO" diff --quiet "$ac_since" HEAD -- "$ac_file" 2>/dev/null
+      ac_rc=$?
+    fi
+    [ "$ac_rc" = "1" ] || ac_unchanged="$(printf '%s' "$ac_unchanged" | jq -c --arg id "$ac_id" '. + [$id]')"
+  done <<RV_AC
+$(printf '%s' "$ac_json" | jq -r '.[]')
+RV_AC
+  # Gap row 341. A round that committed nothing is recorded when the report answers every open
+  # finding without code: scope-insufficient, or already correct at HEAD. The checks then run at
+  # HEAD over an empty range. Any other empty round is a fixer that did nothing, exit 71 as before.
+  local empty_round=false uncovered
+  if [ "$started_at_full" = "$current_commit" ]; then
+    # With no commit, only the fix brief shows that a fixer was handed the round.
+    [ -f "$IMPL_DIR/brief-$unit_id-fix-$round_number.json" ] \
+      || die 71 "fix-record: --started-at ($started_at) is the commit $RV_RANGE_REPO is at now, and no fix brief hands round $round_number of $unit_id to a fixer. A round with no commit is recorded only on the report of a fixer that fix-brief dispatched."
+    uncovered="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --argjson s "$scope_json" --argjson a "$ac_json" '
+      ([ $s[].id ] + $a) as $ok
+      | [ (.findings // [])[] | select(.actionable == true and .status == "open" and (.id as $i | $ok | index($i) | not)) | .id ]
+      | join(", ")')"
+    [ -z "$uncovered" ] \
+      || die 71 "fix-record: --started-at ($started_at) is the commit $RV_RANGE_REPO is at now, so this round committed nothing. A round with no commit is recorded only when every open finding is named by --scope-insufficient or by a line 'Outcome: <id>: already-correct' in $report_path. These are neither: $uncovered."
+    empty_round=true
+  else
+    br_require_real_base "fix-record" "$RV_RANGE_REPO" "$started_at" "$started_at_full" "$current_commit"
+  fi
 
   # Exit 45, twice over. One round per commit: a second call at the commit a record already names
   # would spend a round on code nobody changed. The round number moves with the ledger, so the
@@ -10860,7 +10958,9 @@ RV_SCOPE
       die 45 "fix-record: $record_file already holds round $round_number at commit $current_commit. Nothing has changed since that record was written."
     fi
   fi
-  if [ "$round_number" -gt 1 ]; then
+  # An empty round is the report's answer, not code, so the commit the round before it named is no
+  # duplicate.
+  if [ "$round_number" -gt 1 ] && [ "$empty_round" = false ]; then
     prev_file="$IMPL_DIR/fix-$unit_id-$((round_number - 1)).json"
     if [ -f "$prev_file" ]; then
       existing_doc="$(jq -c '.' "$prev_file" 2>/dev/null)"
@@ -10985,7 +11085,12 @@ FR_PATHS
     scope_list="$scope_list$sc_id ($sc_reason), "
     si=$((si + 1))
   done
-  if [ -n "$scope_list" ]; then
+  RV_REVIEW_DOC="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson a "$ac_json" --argjson round "$round_number" \
+    --argjson u "$ac_unchanged" --arg since "$ac_since" '
+    .findings = (.findings | map(if (.id as $i | $a | index($i)) then . + {alreadyCorrectInRound: $round}
+      + (if (.id as $i | $u | index($i)) then {alreadyCorrectUnchangedSince: $since} else {} end) else . end))')"
+  [ -n "$RV_REVIEW_DOC" ] || die 3 "fix-record: the already-correct report could not be recorded."
+  if [ -n "$scope_list" ] || [ "$ac_json" != "[]" ]; then
     write_atomic "$RV_REVIEW_FILE" "$RV_REVIEW_DOC"
   fi
 
@@ -11016,9 +11121,10 @@ FR_PATHS
   local fr_state
   if [ "$all_met" = "true" ]; then fr_state="fixed"; else fr_state="fixed, every finding left open: stopped by $first_stopper"; fi
   [ "$rerecord" = false ] || fr_state="$fr_state, round $round_number recorded again at the current commit, no round spent"
+  [ "$empty_round" = false ] || fr_state="$fr_state, with no commit: the report answers every open finding without code"
   im_print_summary "fix-record" "$(printf '%s' "$record_json" | jq -c --arg record "$record_file" \
     --arg rounds "$round_number of $FIX_ROUNDS_ALLOWED" --arg state "$fr_state" \
-    --arg scope "${scope_list:-none}" --arg halt "${halt_why:-none}" \
+    --arg scope "${scope_list:-none}" --arg halt "${halt_why:-none}" --argjson ac "$ac_json" \
     --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     {order: .unit,
      round: $rounds,
@@ -11026,6 +11132,7 @@ FR_PATHS
      check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
      executed: "\(.executed) of 7 ran a command, a diff or a hash",
      scopeInsufficient: ($scope | if endswith(", ") then .[0:-2] else . end),
+     alreadyCorrect: (if $ac == [] then "none" else ($ac | join(", ")) end),
      state: $state,
      halt: $halt,
      record: $record,
@@ -11108,11 +11215,12 @@ do_verify_brief() {
   # rides on the finding it names, so the verifier sees it beside the finding rather than in prose.
   # A check finding is left out: verify-record judges it from the fix record's checks (gap row 305).
   local open_json brief_file brief_json
-  open_json="$(printf '%s' "$RV_REVIEW_DOC" | jq -c '
+  open_json="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson round "$rounds_used" '
     [ (.findings // [])[] | select(.actionable == true and .status == "open" and .origin != "check") ]
     | sort_by(if .severity == "high" then 0 elif .severity == "medium" then 1 else 2 end)
     | map({id, severity, file, lines, linkedTo, evidence, fixScope, origin}
           + (if has("scopeInsufficientInRound") then {scopeInsufficientInRound, scopeInsufficientBecause} else {} end)
+          + (if .alreadyCorrectInRound == $round then {alreadyCorrectInRound} else {} end)
           + (if .origin == "repair" then {question: ("Does the cited failure arise in " + .file + "? Answer defectInFile yes or no.")} else {} end)
           + (if has("departureFrom") then {departureFrom, question: ("Is the departure from " + .departureFrom + " gone? Answer departureCured yes or no.")} else {} end))')"
   [ "$(rv_open_actionable_count "$RV_REVIEW_DOC")" -gt 0 ] 2>/dev/null \
@@ -11148,7 +11256,7 @@ do_verify_brief() {
      fixDiff: .fixDiffPath,
      fixReport: .fixReportPath,
      verdictsPath: .verdictsPath,
-     finding: ([ .findings[] | {id, severity, scope: (if has("scopeInsufficientInRound") then "scope reported insufficient" else "in scope" end)} ]),
+     finding: ([ .findings[] | {id, severity, scope: (if has("scopeInsufficientInRound") then "scope reported insufficient" elif has("alreadyCorrectInRound") then "reported already correct at HEAD" else "in scope" end)} ]),
      next: "dispatch reviewer in verify mode with the brief path, then verify-record with the verdicts path"}')"
   exit 0
 }
@@ -11298,6 +11406,11 @@ do_verify_record() {
       addressed|not-addressed) ;;
       *) die 52 "verify-record: the verdict for $vid is '$vverdict'. The two words are addressed and not-addressed." ;;
     esac
+    # A finding the fixer reported out of its scope in this round had no change made for it, so an
+    # addressed reading would close what nobody addressed (gap row 341).
+    [ "$vverdict" != "addressed" ] \
+      || [ "$(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$vid" '[ (.findings // [])[] | select(.id == $id) ][0].scopeInsufficientInRound // 0')" != "$rounds_used" ] \
+      || die 52 "verify-record: the verdict for $vid is addressed, and the fixer reported $vid scope-insufficient in round $rounds_used, so no change in this round answers it. Write it not-addressed; a person may then rule on it."
     # A repair finding rests on the stopped builder's word that the failure lies in that file.
     # The verifier answers that too, and a no waits for the person (gap row 286).
     vorigin="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$vid" '[ (.findings // [])[] | select(.id == $id) ][0].origin // ""')"
@@ -11330,8 +11443,13 @@ do_verify_record() {
   [ -z "$extra" ] \
     || die 58 "verify-record: these verdicts in $verdicts_path name nothing open on $unit_id: $extra."
 
-  # Addressed closes the finding. Not addressed keeps it open, and attempted is not addressed.
-  local updated_findings
+  # Addressed closes the finding. Not addressed keeps it open, and attempted is not addressed. An
+  # already-correct claim on a file unchanged since the review disputes the reviewer, so an
+  # addressed reading of it waits for a person instead (gap row 352).
+  local updated_findings disputed
+  disputed="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --argjson v "$verdict_rows" --argjson r "$rounds_used" '
+    [ (.findings // [])[] | select(.alreadyCorrectInRound == $r and has("alreadyCorrectUnchangedSince"))
+      | .id as $i | select([ $v[] | select(.id == $i and .verdict == "addressed") ] | length > 0) | .id ] | join(", ")')"
   updated_findings="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson v "$verdict_rows" --argjson r "$rounds_used" '
     .findings | map(
       . as $f
@@ -11343,6 +11461,11 @@ do_verify_record() {
         elif $row.departureCured == "no" then
           $f + { status: "pending", departureCured: "no",
                  pendingBecause: ("the verifier answered that the departure from " + $f.departureFrom + " is not gone: " + ($row.evidence // "")) }
+        elif $row.verdict == "addressed" and $f.alreadyCorrectInRound == $r and ($f | has("alreadyCorrectUnchangedSince")) then
+          $f + { status: "pending",
+                 pendingBecause: ("the fixer reports it already correct, and "
+                   + (if ($f.file // "") == "" then "it cites no file a change could show in" else $f.file + " is unchanged" end)
+                   + " since the review at " + $f.alreadyCorrectUnchangedSince + ", so the claim disputes the reviewer: " + ($row.evidence // "")) }
         elif $row.verdict == "addressed" then
           $f + (if $row.defectInFile then {defectInFile: $row.defectInFile} else {} end)
           + (if $row.departureCured then {departureCured: $row.departureCured} else {} end)
@@ -11378,13 +11501,16 @@ do_verify_record() {
   # coding-standards alone stopped the round, a style line, and medium for any other check, so a
   # light task's cap leaves only a style failure for the review. The script, not the verifier,
   # judges it: a round whose checks pass addresses it, and one that fails again keeps it open.
+  # A round with no commit ran its checks over an empty range, which proves nothing about the
+  # cause a check finding names, so its pass leaves that finding open (gap row 341).
   local fix_checks check_stop check_severity
   fix_checks="$(jq -c '.checks // []' "$fix_file" 2>/dev/null)"
   if [ "$(br_checks_pass "${fix_checks:-[]}" "")" = "true" ]; then
-    updated_findings="$(printf '%s' "$updated_findings" | jq -c --argjson r "$rounds_used" --arg f "$fix_file" '
-      map(if .origin == "check" and .status == "open"
-          then . + {status: "addressed", addressedInRound: $r, addressedEvidence: ("every check passed in " + $f)}
-          else . end)')"
+    [ "$(jq -r '.startedAt == .commit' "$fix_file" 2>/dev/null)" = "true" ] \
+      || updated_findings="$(printf '%s' "$updated_findings" | jq -c --argjson r "$rounds_used" --arg f "$fix_file" '
+        map(if .origin == "check" and .status == "open"
+            then . + {status: "addressed", addressedInRound: $r, addressedEvidence: ("every check passed in " + $f)}
+            else . end)')"
   elif [ "$(printf '%s' "$updated_findings" | jq '[ .[] | select(.origin == "check" and .status == "open") ] | length')" = "0" ]; then
     check_stop="$(br_first_stopper "${fix_checks:-[]}" "")"
     check_severity="$(printf '%s' "${fix_checks:-[]}" | jq -r "$BR_STOPPERS_JQ"'
@@ -11445,6 +11571,8 @@ do_verify_record() {
     halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
   elif [ -n "$RV_RULING_HALT" ]; then
     halt_why="$RV_RULING_HALT"
+  elif [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$disputed" ]; then
+    halt_why="a fixer reports $disputed already correct with the cited code unchanged since the review, and nobody is present to rule on it"
   fi
   rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" "$halt_why"
 
@@ -13782,6 +13910,18 @@ NS_OWNED
         fi
         if [ "$rp_dirty" -eq 1 ]; then rp_cause="1 uncommitted path is in $rp_where"
         elif [ "$rp_dirty" -gt 1 ]; then rp_cause="$rp_dirty uncommitted paths are in $rp_where"; fi
+        # fix-brief names the report after its round, answers-<order>-fix<round>.md. A finished
+        # fixer that wrote the report in another shape, such as one from before the outcome lines,
+        # did not stop early, so the first such fault spends no resume. The record counts it, and a
+        # second fault takes the resume route below, so no caller resumes for ever (gap row 352).
+        if [ -z "$rp_cause" ]; then
+          rp_cause="$(im_fix_report_fault "$rp_path" \
+            "$TASK_PATH/implementation/brief-$(jq -r '.unit // ""' "$dispatch_file")-fix-$(basename "${rp_path##*-fix}" .md).json")"
+          if [ -n "$rp_cause" ] && [ "$(jq -r '.shapeRefusals // 0' "$dispatch_file")" = "0" ]; then
+            write_atomic "$dispatch_file" "$(jq -c '.shapeRefusals = 1' "$dispatch_file")"
+            die 112 "dispatch-close: the fixer on $(jq -r '.unit // ""' "$dispatch_file") returned, and $rp_cause. The record stays open and no resume is spent. Resume the same fixer by message: give each finding its line 'Outcome: <id>: <fixed|already-correct|scope-insufficient>', and under each fixed or already-correct one a line 'Ran: <id>: <command>' and a fenced block of its output. Then run dispatch-close again. A second such fault spends a resume."
+          fi
+        fi
       fi
     fi
     if [ -n "$rp_cause" ] && [ -z "$rp_line" ] && [ "$no_report" = false ]; then

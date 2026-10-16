@@ -42,6 +42,12 @@
       "minimum": 1,
       "description": "How many times `dispatch-close --no-report` kept this record open for a resume (gap row 301). A record carrying `resumedAt` and not this key counts one, as `dispatch-open --resume` writes it."
     },
+    "shapeRefusals": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1,
+      "description": "On a fixer's record: 1 once `dispatch-close` refused its finished report for a missing outcome line, a missing run, or a missing fix brief, with no resume spent (gap row 352). A second such fault spends a resume as `resumes` counts."
+    },
     "resumesAllowed": {
       "type": "integer",
       "minimum": 1,
