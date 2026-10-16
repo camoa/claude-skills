@@ -57,13 +57,15 @@ yes or no before writing anything. Autonomous with no goal given or implied by t
 ```
 Exit 0: a base is recorded. Use it silently; this is never asked a second time. Exit 1: it
 printed the default. Interactive: ask once, "Where should task worktrees go? Default:
-`<printed folder>`." Accept the default on an empty answer, or a typed absolute path. Record it:
+`<printed folder>`." An empty answer passes no folder, which records the default. A typed
+absolute path passes that path. Record it:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   set-worktree-base "<projectPath>" ["<folder>"]
 ```
-Exit 3 refuses the folder, for the reason it prints: ask again. Autonomous: do not ask. Run the
-same action with no folder, so it records the default, and say that it did. This is asked here
+Exit 3 refuses the folder, for the reason it prints: ask again. Autonomous: do not ask, and
+record nothing. The tree goes in the default folder. Say so; the next attended create asks. This
+is asked here
 because the first tree is about to be made, and a tree once made stays where it is.
 
 Then run the create, with the run mode set as decided above. Add `--after <task-id>` when the

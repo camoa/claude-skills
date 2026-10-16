@@ -308,7 +308,7 @@ worktree_base_value() {
   local base="${1:-..}" why
   [ "$base" = ".." ] || base="$(canon_path "$base")"
   why="$(worktree_base_refusal "$base" "$2")"
-  [ -z "$why" ] || die3 "$3: $base is refused ($why). A task tree never sits at or under the code path $2. Nothing was changed."
+  [ -z "$why" ] || die3 "$3: $base is refused ($why). A task tree never sits at or under the code path, in another project or repository, or in a refused location $2. Nothing was changed."
   printf '%s' "$base"
 }
 
@@ -388,8 +388,11 @@ do_create() {
   esac
 
   code_path="$(canon_path "$code_path")"
-  # Without the option the default is recorded, the way an unattended run takes the projects base.
-  worktree_base="$(worktree_base_value "$worktree_base" "$code_path" create)" || exit 3
+  # Without the option nothing is recorded: an unattended run uses the default, and the next attended
+  # project or task create asks once.
+  if [ -n "$worktree_base" ]; then
+    worktree_base="$(worktree_base_value "$worktree_base" "$code_path" create)" || exit 3
+  fi
 
   # The library's own reader, not a raw read of REGISTRY_FILE: registry__current tells a missing
   # store (fine, nothing registered yet) apart from a corrupt one (refuses and fails loudly), so

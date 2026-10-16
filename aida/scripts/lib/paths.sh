@@ -76,7 +76,8 @@ is_under() {
 }
 
 # Why absolute path $1 may not be a code path, or nothing when it may. Prints refused-system-root,
-# refused-home or refused-above-home. Without $HOME only the system roots are tested. Ported from
+# refused-home or refused-above-home. Without $HOME only the system roots are tested. $HOME is
+# compared in its resolved form, since callers pass resolved paths. Ported from
 # version 5's set-code-path safety filter, with the home directory itself added.
 path_refusal() {
   local p home
@@ -86,7 +87,7 @@ path_refusal() {
       printf 'refused-system-root'; return 0 ;;
   esac
   [ -n "${HOME:-}" ] || return 0
-  home="$(normalize_abs "$HOME")"
+  home="$( (cd "$HOME" 2>/dev/null && pwd -P) || normalize_abs "$HOME")"
   if [ "$p" = "$home" ]; then printf 'refused-home'
   elif is_under "$home" "$p"; then printf 'refused-above-home'
   fi
@@ -96,19 +97,36 @@ path_refusal() {
 # 350). $2 is the project's code path, and a relative $1 is read against it. DDEV hands a tree inside the code path to the parent
 # project, and a tool that registers projects by folder misses it. So a base at or under the code
 # path is refused. Each path is read in its resolved form when it is on disk, so a link into the
-# checkout is caught. A system root and a folder above the home directory are refused as for a code
-# path. The home directory is allowed, because the default yields it for a code path at ~/x. The
-# default, `..`, is never refused for where it lies: the trees have always gone there. The third
-# function here that reads the disk.
+# checkout is caught. The default, `..`, is never refused for where it lies: the trees have always
+# gone there. Any other folder is also refused when it is a system root or above the home
+# directory, as for a code path, though the home directory itself is allowed: the default yields it
+# for a code path at ~/x. It is refused at or under any registered code path or project folder,
+# and inside any other git work tree, for the same reason as the code path. A work tree whose top
+# is the home directory or above it does not count, so a dotfiles repository at home refuses
+# nothing. The git test reads the nearest folder of the base that is on disk. The third function
+# here that reads the disk.
 worktree_base_refusal() {
-  local base code why=""
+  local base code why="" row anc top home reg
   code="$(cd "$2" 2>/dev/null && pwd -P)" || code="$(normalize_abs "$2")"
   base="$(worktree_base_path "$1" "$code")"
-  [ "$1" = ".." ] || why="$(path_refusal "$base")"
-  [ "$why" != "refused-home" ] || why=""
-  if [ -n "$why" ]; then printf '%s' "$why"
-  elif is_under "$base" "$code"; then printf 'inside-code-path'
-  fi
+  if is_under "$base" "$code"; then printf 'inside-code-path'; return 0; fi
+  [ "$1" != ".." ] || return 0
+  why="$(path_refusal "$base")"
+  if [ -n "$why" ] && [ "$why" != "refused-home" ]; then printf '%s' "$why"; return 0; fi
+  reg="${AIDA_REGISTRY_PATH:-${HOME:-}/.claude/aida/registry.json}"
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    row="$( (cd "$row" 2>/dev/null && pwd -P) || normalize_abs "$row")"
+    if is_under "$base" "$row"; then printf 'inside-registered-project'; return 0; fi
+  done <<WB_ROWS
+$(jq -r '.projects[]? | (.codePath // empty), (.path // empty)' "$reg" 2>/dev/null)
+WB_ROWS
+  anc="$base"
+  while [ ! -d "$anc" ]; do anc="${anc%/*}"; [ -n "$anc" ] || anc="/"; done
+  top="$(git -C "$anc" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  top="$( (cd "$top" 2>/dev/null && pwd -P) || normalize_abs "$top")"
+  home="$( (cd "${HOME:-/}" 2>/dev/null && pwd -P) || normalize_abs "${HOME:-/}")"
+  is_under "$home" "$top" || printf 'inside-git-repository'
 }
 
 # The base folder $1 as an absolute path: read against the code path $2 when relative, and in its

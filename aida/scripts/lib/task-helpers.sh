@@ -889,7 +889,7 @@ task_worktree_group() {
     command -v worktree_base_refusal >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/paths.sh" \
       || die3 "$3: the library failed to load: paths.sh"
     why="$(worktree_base_refusal "$base" "$code")"
-    [ -z "$why" ] || die3 "$3: the project's worktreeBase $base is refused ($why). A task tree never sits at or under the code path. Nothing was made. Run the project set-worktree-base action again."
+    [ -z "$why" ] || die3 "$3: the project's worktreeBase $base is refused ($why). A task tree never sits at or under the code path, in another project or repository, or in a refused location. Nothing was made. Run the project set-worktree-base action again."
     base="$(worktree_base_path "$base" "$code")"
   else
     base="$(dirname -- "$code")"
