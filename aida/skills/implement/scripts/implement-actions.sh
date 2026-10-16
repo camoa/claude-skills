@@ -12866,16 +12866,24 @@ RS_ADDED
   [ -n "$new_ledger" ] || die 3 "restart: the ledger update failed."
 
   # A revert that stops on a conflict is taken back, and so is every revert this run committed
-  # before it, so the branch is where it was (gap row 348). Those commits are this run's own and no
-  # other commit sits on them, so `reset --keep` drops nothing else and refuses to touch a changed file.
-  local reverted_json='[]' said orig
+  # before it, so the branch is where it was (gap row 348). `reset --keep` refuses to touch a changed
+  # file. It runs only when the commits since the start are this run's reverts alone, so a commit a
+  # hook or a person made during the loop is never dropped.
+  local reverted_json='[]' said orig failed made
   orig="$(git -C "$RV_CODEPATH" rev-parse HEAD)"
   for c in $(printf '%s' "$revert_json" | jq -r '.[].commit'); do
     said="$(git -C "$RV_CODEPATH" revert --no-edit "$c" 2>&1)" || {
-      git -C "$RV_CODEPATH" revert --abort >/dev/null 2>&1
-      git -C "$RV_CODEPATH" reset -q --keep "$orig" >/dev/null 2>&1 \
-        || die 3 "restart: git revert of $(git -C "$RV_CODEPATH" rev-parse --short "$c") failed: $said. The reverts before it could not be taken back: the branch was at ${orig:0:7} before the restart. No record moved. A person resolves it, then runs restart again."
-      die 3 "restart: git revert of $(git -C "$RV_CODEPATH" rev-parse --short "$c") failed: $said. Every revert was taken back, so the branch is at ${orig:0:7} as before, and no record moved. A person resolves it, then runs restart again."
+      failed="restart: git revert of $(git -C "$RV_CODEPATH" rev-parse --short "$c") failed: $said."
+      if ! git -C "$RV_CODEPATH" revert --abort >/dev/null 2>&1 \
+        && { [ -e "$(git -C "$RV_CODEPATH" rev-parse --git-path REVERT_HEAD)" ] || [ -e "$(git -C "$RV_CODEPATH" rev-parse --git-path sequencer)" ]; }; then
+        die 3 "$failed A revert is still in progress in $RV_CODEPATH, and git revert --abort failed there. A person ends it with git revert --abort, or resolves it and runs git revert --continue. The branch was at ${orig:0:7} before the restart. No record moved."
+      fi
+      made="$(printf '%s' "$reverted_json" | jq 'length')"
+      if [ "$(git -C "$RV_CODEPATH" rev-list --count "$orig..HEAD" 2>/dev/null)" != "$made" ] \
+        || ! git -C "$RV_CODEPATH" reset -q --keep "$orig" >/dev/null 2>&1; then
+        die 3 "$failed The reverts before it could not be taken back: the branch was at ${orig:0:7} before the restart, and these commits came after it: $(git -C "$RV_CODEPATH" log --format='%h %s' "$orig..HEAD" 2>/dev/null | paste -sd ';' - | sed 's/;/; /g'). No record moved. A person resolves it, then runs restart again."
+      fi
+      die 3 "$failed Every revert was taken back, so the branch is at ${orig:0:7} as before, and no record moved. A person resolves it, then runs restart again."
     }
     reverted_json="$(printf '%s' "$reverted_json" | jq -c --argjson e "$(printf '%s' "$revert_json" | jq -c --arg c "$c" '.[] | select(.commit == $c)')" \
       --arg r "$(git -C "$RV_CODEPATH" rev-parse HEAD)" '. + [$e + {revert: $r}]')"
