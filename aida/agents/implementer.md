@@ -112,8 +112,13 @@ Stop: test-wrong: <the test, and why it seems wrong>
 Stop: interface-misfit: <what the unit needs that the interface does not give>
 Stop: file-not-owned: <the file, and why the unit needs it>
 Stop: closed-order-defect: <the file>: <what fails, and the output that shows it>
+Stop: row-wrong: <the done-when row number>: <the evidence that the row is wrong>
 Stop: attempts-out: <what is still not done>
 ```
+
+Use `row-wrong` when a done-when row of your unit cannot hold, and no file holds a defect. An
+example is a count the row states that the real data does not give. Name the row by its number,
+counted from 1, then the evidence. A person decides whether the row changes.
 
 Use `closed-order-defect` when your code is right and what fails lies in a file another unit
 owns. Name that one file, as the error names it, then the failure. A script finds the unit that

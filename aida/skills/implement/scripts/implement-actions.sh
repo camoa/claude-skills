@@ -744,6 +744,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      deviation is no stop: the attempt is recorded, and review-record keeps it (gap row 279).
 #      A `Stop: closed-order-defect: <file>: <what fails>` line naming a file a closed order owns
 #      exits 0 instead: br_open_repair reopens that order for one fix round (gap row 286).
+#      A `Stop: row-wrong: <row number>: <the evidence>` line exits 105 too, and the message
+#      quotes that done-when row from the snapshot for the person (gap row 346).
 # 106  `build-record` was given a report with no stop line, or more than one. Or its stop line is
 #      `Stop: none`, and it holds no deviation line, or more than one. Nothing is recorded and no
 #      attempt is spent. A builder stopped at its turn limit writes no stop line, so the message
@@ -8288,6 +8290,10 @@ BR_SHOTS
 # `build-record --accept-deviation` clears the deviation segments only, so a stop line still halts.
 BR_STOP_PREFIX="the builder stopped:"
 BR_DEVIATION_PREFIX="the builder declared a deviation:"
+# Gap row 346. A done-when row the builder finds wrong is a defect in no order, so the stop has
+# its own kind, `Stop: row-wrong: <row number>: <the evidence>`, and goes to a person. The
+# message quotes the row from the snapshot, never from the builder's text.
+BR_ROW_KIND="row-wrong"
 
 # Gap row 286. A builder that meets a defect in a file a closed order owns stops with
 # `Stop: closed-order-defect: <file>: <what fails>`. A closed order cannot be reopened, two orders
@@ -8636,7 +8642,22 @@ do_build_record() {
     if [ "$stop_commit_count" -gt 0 ]; then
       stop_commit_text=" It committed $stop_commit_count after it began: $stop_commits."
     fi
-    local keep_route="" halt_front="$BR_STOP_PREFIX a Stop: line says so"
+    local keep_route="" halt_front="$BR_STOP_PREFIX a Stop: line says so" row_n row_text row_note=""
+    case "$stop_value" in
+      "$BR_ROW_KIND:"*)
+        row_n="$(printf '%s' "${stop_value#*:}" | sed -e 's/:.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        row_text=""
+        case "$row_n" in
+          ''|*[!0-9]*) ;;
+          *) row_text="$(printf '%s' "$UNIT_JSON" | jq -r --argjson n "$row_n" 'if $n >= 1 then (.doneWhen // [])[$n - 1] // empty else empty end')" ;;
+        esac
+        if [ -n "$row_text" ]; then
+          halt_front="$BR_STOP_PREFIX a Stop: line says done-when row $row_n is wrong"
+          row_note=" Done-when row $row_n of $unit_id reads: $row_text A person rules on the row. A wrong row is reworded in design, design closes again, and start halts $unit_id for design drift, which restart answers. A row that stands goes back to the builder."
+        else
+          row_note=" The line must read '$BR_ROW_KIND: <done-when row number>: <the evidence>', and $unit_id has no done-when row '$row_n'."
+        fi ;;
+    esac
     if $is_deviation; then
       keep_route=" Or, interactive only, a person keeps the deviation: run build-record again with --accept-deviation <their reason>."
       halt_front="$BR_DEVIATION_PREFIX a Deviation: line or heading says so"
@@ -8649,7 +8670,7 @@ do_build_record() {
     fi
     [ -z "$stop_commit_text" ] \
       || stop_commit_text="$stop_commit_text Revert them, or have the person keep them, before the next build."
-    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route$BR_REPAIR_NOTE"
+    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route$BR_REPAIR_NOTE$row_note"
   fi
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 

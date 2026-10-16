@@ -152,8 +152,8 @@ when code was committed after it. `build-record` refuses it (exit 105), records 
 attempt. It names each commit made after the attempt began, and the person reverts or keeps them
 before the next build. Interactive puts the stop to the person,
 opening with: "The builder stopped instead of working around something, and only you may change
-it. It says a test is wrong, the interface does not fit, it needs a file it does not own, or its
-attempts ran out.
+it. It says a test is wrong, a done-when row is wrong, the interface does not fit, it needs a file
+it does not own, or its attempts ran out.
 Repair that and the next attempt continues. Leave it and this unit of work stays stopped." Then
 say in plain words
 what the builder's report names. The person, or design, adds a file the unit needs:
@@ -187,6 +187,13 @@ open with: "A finished unit of work had a defect, and the next unit found it. It
 repairs it, and a reviewer checks the repair and where the defect lies. Nothing needs your
 decision unless the reviewer finds the defect elsewhere." Then name the file and the reopened
 order.
+
+**A done-when row that cannot hold is no defect, so it never reopens an order.** The stop line
+reads `Stop: row-wrong: <row number>: <the evidence>`. `build-record` stops as at any stop
+(exit 105), and its message quotes that row from the snapshot. The person rules on the row. A
+wrong row is reworded in design, and design closes again. Then `start` halts the order for
+design drift, and `restart` answers that halt. A row that stands goes back to the builder.
+Unattended, `clear-halt` comes first.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
