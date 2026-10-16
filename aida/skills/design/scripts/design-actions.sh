@@ -39,7 +39,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] \
+#                        [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] [--keep-choices] \
 #                        [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path> [--shared]
@@ -180,7 +180,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      or `read-guide` found design-guides-read.json already on disk and not valid JSON; or
 #      `update` was given --reasoning with --append-reasoning or --strike-reasoning; or
 #      --strike-reasoning named no paragraph that is there and live; or --absence-reviewed named
-#      no done-when row; or `close` was given
+#      no done-when row; or --keep-choices found no pair on the order; or `close` was given
 #      --critique-outcome with no finished critique file to record it beside, or unattended; or
 #      `close` found something that is not a file where a critique file has to move; or `verify`
 #      was given no single mode, a recipe with no `## Verifier` or nothing in it to carry, an
@@ -213,6 +213,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   8  an unattended `close` found a disposition made unattended, or one only a paragraph records,
 #      that records/disposition-<order>.json does not confirm: no value for the candidate, or
 #      another value (gap row 293). One line per such disposition says which, and what to do.
+#   9  `check` or `close` found two names in backticks that an order's interface joins with `or`,
+#      and that `update --keep-choices` did not keep (gap row 345). Such a pair is often a choice
+#      the builder makes, and the build's interface check wants both names in its record. Each
+#      order prints as `<wo> <a> or <b>`. Rewrite a choice as plain text with `update --interface`,
+#      or keep the order's pairs. `check` reports it only when the design check itself is clean.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
@@ -264,6 +269,7 @@ die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
 die6() { printf 'design-actions: %s\n' "$1" >&2; exit 6; }
 die7() { printf 'design-actions: %s\n' "$1" >&2; exit 7; }
 die8() { printf 'design-actions: %s\n' "$1" >&2; exit 8; }
+die9() { printf 'design-actions: %s\n' "$1" >&2; exit 9; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { printf 'design-actions: %s\n' "$1" >&2; exit 79; }
 
@@ -286,7 +292,7 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] \
+                                         [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] [--keep-choices] \
                                          [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path> [--shared]
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
@@ -645,6 +651,33 @@ unaccounted_findings() {
       done
 }
 
+# `choicePairs`, read from a work order document: each pair of backticked interface names joined
+# by `or`, with at most two words after it, as `<a> or <b>` (gap row 345). Such a pair is often a
+# choice the builder makes, such as `os.DirEntry` or an explicit `stat`. The build's interface
+# check wants both names in the builder's record, so a builder that takes one option stops.
+CHOICE_PAIRS_JQ='
+def choicePairs:
+  ((.interface // "") | if type == "string" then split("`") else [] end) as $p
+  | ($p | length) as $n
+  | (if $n % 2 == 1 then $n - 2 else $n - 3 end) as $last
+  | [ range(1; $last - 1; 2) as $i
+      | select(($p[$i] | length) > 0 and ($p[$i + 2] | length) > 0)
+      | select($p[$i + 1] | test("^,?\\s+or\\s+([a-z]+\\s+)?([a-z]+\\s+)?$"))
+      | $p[$i] + " or " + $p[$i + 2] ]
+  | unique;
+'
+
+# One line per order whose interface holds a choice pair that `update --keep-choices` did not
+# keep: `<wo> <pair>[, <pair>]`. A kept pair is held by its text, so a pair that changes is named
+# again. Prints nothing when every pair is kept or none exists.
+open_choices() {
+  local f
+  find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r "$CHOICE_PAIRS_JQ"'
+        . as $wo | choicePairs - ($wo.choicesKept // []) | select(length > 0)
+        | $wo.id + " " + join(", ")' "$f" 2>/dev/null; done
+}
+
 # Prints $1, a work order document, with $2 added to its `reasoning` as a new paragraph. The
 # paragraph follows a blank line, or is the whole field when it was empty. `dispose` and
 # `update --append-reasoning` both write this way, so an earlier paragraph is never lost
@@ -936,12 +969,16 @@ do_create() {
 # --absence-reviewed <n> stores the text of done-when row n, counted from 1, in `absenceReviewed`.
 # `check` stops printing that row under `absenceJoined:` (gap row 237). The text is the key, so a
 # row whose text changes flags again. Each write drops the entries no row holds any more.
+# --keep-choices stores every choice pair the order's interface holds now in `choicesKept`, after
+# any --interface in the same call. `check` and `close` stop refusing on those pairs (gap row 345).
+# Each name of a kept pair must then appear in the builder's record. A pair whose text changes is
+# named again. The order has to hold a pair.
 # ------------------------------------------------------------------------------------------------
 
 do_update() {
   local id="" title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
   local interface="" reasoning="" append_reasoning="" strike_n="" absence_n="" diff_budget="" surfaces_json='[]' proof=""
-  local set_absence=false set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
+  local set_keep=false set_absence=false set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
   local set_interface=false set_reasoning=false set_append=false set_strike=false set_diffbudget=false set_surfaces=false set_proof=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -978,6 +1015,7 @@ do_update() {
       --absence-reviewed)
         need_value "update" "--absence-reviewed" "$#" "${2:-}"
         absence_n="$2"; set_absence=true; shift 2 ;;
+      --keep-choices) set_keep=true; shift ;;
       --diff-budget)
         need_value "update" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; set_diffbudget=true; shift 2 ;;
@@ -1039,6 +1077,11 @@ do_update() {
   fi
   if [ "$set_reasoning" = "true" ]; then
     doc="$(printf '%s' "$doc" | jq --arg v "$reasoning" '.reasoning = $v')"
+  fi
+  if [ "$set_keep" = "true" ]; then
+    printf '%s' "$doc" | jq -e "$CHOICE_PAIRS_JQ"'choicePairs | length > 0' >/dev/null \
+      || die3 "update: $id's interface joins no two names in backticks with or, so it has no pair to keep"
+    doc="$(printf '%s' "$doc" | jq "$CHOICE_PAIRS_JQ"'.choicesKept = choicePairs')"
   fi
   if [ "$set_strike" = "true" ]; then
     local live
@@ -1872,6 +1915,9 @@ do_check() {
   local unaccounted
   unaccounted="$(unaccounted_findings)"
   [ -z "$unaccounted" ] || [ "$verdict" -ne 0 ] || verdict=7
+  local choices
+  choices="$(open_choices)"
+  [ -z "$choices" ] || [ "$verdict" -ne 0 ] || verdict=9
   lines="$(wc -l <"$CHECK_FILE" | tr -d '[:space:]')"
   echo "action: check"
   echo "status: $verdict"
@@ -1961,26 +2007,8 @@ do_check() {
   else
     echo "interfaceShaped: none"
   fi
-  # Two backticked interface names joined by `or`, with at most two words after it (periplus gap
-  # 36). Such a pair is often a choice the builder makes, such as `os.DirEntry` or an explicit
-  # `stat`, and the build's interface check wants both names in the record. A pair can also name
-  # two things that each exist, such as two exit codes, so the line never blocks the close.
-  local choice
-  choice="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
-    | while IFS= read -r f; do jq -r '
-        select((.interface | type) == "string") | . as $wo
-        | (.interface | split("`")) as $p
-        | ($p | length) as $n
-        | (if $n % 2 == 1 then $n - 2 else $n - 3 end) as $last
-        | [ range(1; $last - 1; 2) as $i
-            | select(($p[$i] | length) > 0 and ($p[$i + 2] | length) > 0)
-            | select($p[$i + 1] | test("^,?\\s+or\\s+([a-z]+\\s+){0,2}$"))
-            | $p[$i] + " or " + $p[$i + 2] ]
-        | unique | select(length > 0)
-        | $wo.id + " " + join(", ")' "$f" 2>/dev/null; done \
-    | paste -s -d ';' - | sed 's/;/; /g')"
-  if [ -n "$choice" ]; then
-    echo "interfaceChoice: $choice | best effort: each pair of names in backticks is joined by or, so it may be a choice the builder makes. The build's interface check wants both names in the builder's record. Write a choice as plain text with update --interface, or keep the pair when each name must exist"
+  if [ -n "$choices" ]; then
+    echo "interfaceChoice: $(printf '%s\n' "$choices" | paste -s -d ';' - | sed 's/;/; /g') | each pair of names in backticks is joined by or, so it may be a choice the builder makes. The build's interface check wants both names in the builder's record. Write a choice as plain text with update --interface. When each name must exist, keep the order's pairs with update --keep-choices"
   else
     echo "interfaceChoice: none"
   fi
@@ -2021,6 +2049,8 @@ do_check() {
   if [ "$verdict" -eq 7 ]; then
     printf '%s\n' "$unaccounted" | sed 's/^/unaccounted: /'
     echo "next: account for each finding above, cited by the order it affects or set aside with a reason"
+  elif [ "$verdict" -eq 9 ]; then
+    echo "next: answer each pair under interfaceChoice, as plain text with update --interface or kept with update --keep-choices"
   elif [ "$verdict" -ne 0 ]; then
     echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
   elif task_is_light "$TASK_PATH"; then
@@ -2174,6 +2204,12 @@ $wo_id, $cand, $disp: the confirmer answered $got. Dispose it again with --verdi
   [ -z "$unaccounted" ] \
     || die7 "close: a research finding is in no work order's findings. Account for each one with account, cited or set aside with a reason:
 $unaccounted"
+
+  local choices
+  choices="$(open_choices)"
+  [ -z "$choices" ] \
+    || die9 "close: an order's interface joins two names in backticks with or, and the build's interface check wants both in the builder's record. Write a choice as plain text with update --interface, or keep the order's pairs with update --keep-choices:
+$choices"
 
   # A run line that is not binding was written by a model from research, and only a person stands
   # between it and the worktree. The person approves such lines at this close, the design's

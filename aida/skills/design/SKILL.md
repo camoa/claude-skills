@@ -739,9 +739,15 @@ the shape as plain text with `update --interface`.
 
 `check` also prints `interfaceChoice:`, at every exit code. It names each pair of names in
 backticks that an order's interface joins with `or`. Such a pair is often a choice the builder
-makes, and a builder that takes one option leaves the other out of its record. Two exit codes
-can be joined by `or` too, so the line never blocks the close. Write a choice as plain text with
-`update --interface`. Keep a pair when each name must exist.
+makes, and a builder that takes one option leaves the other out of its record. `check` and
+`close` refuse, exit 9, while a pair is open, in both run modes. Answer each pair. Write a
+choice as plain text with `update --interface`. When each name must exist, such as two exit
+codes, keep the order's pairs:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
+  --id <woId> --keep-choices
+```
+The builder's record must then name both. A kept pair whose text changes is open again.
 
 `check` also prints `callsUndeclared:`, at every exit code. It names each `name()` call in an
 order's done-when rows and tests that no interface the order declares holds. It reads the order's

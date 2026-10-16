@@ -298,8 +298,9 @@ It also prints `interfaceShaped:` with every name in backticks in an interface t
 hold the close either.
 
 It also prints `interfaceChoice:` with every pair of names in backticks that an interface joins
-with `or`. Such a pair is often a choice the builder makes, but two exit codes can be joined the
-same way. So this does not hold the close either.
+with `or`. Such a pair is often a choice the builder makes, and the builder's record would leave
+one name out. This one holds the close, exit 9, until design writes the choice as plain text or
+keeps the pair because both names exist, such as two exit codes.
 
 It also prints `callsUndeclared:` with each `name()` call a done-when row or a test makes that no
 interface the order declares holds. The test author cannot read source to learn the signature. A
