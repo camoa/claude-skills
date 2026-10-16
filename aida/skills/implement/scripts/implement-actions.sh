@@ -13375,6 +13375,10 @@ TG_ROOTS
       openedAt: $openedAt, denyRead: $denyRead, allowWrite: $allowWrite} + $extra + $report')"
   # A reopened record carries one resume already, so a return with no report spends one less.
   [ "$resume" = false ] || record_json="$(printf '%s' "$record_json" | jq -c '.resumedAt = .openedAt')"
+  # The session that opened the dispatch, so a hook tells this session's role from another's. The
+  # platform sets this variable in Bash to the session_id hook payloads carry (gap row 358).
+  [ -z "${CLAUDE_CODE_SESSION_ID:-}" ] \
+    || record_json="$(printf '%s' "$record_json" | jq -c --arg s "$CLAUDE_CODE_SESSION_ID" '.sessionId = $s')"
 
   # The checker is denied every reused path and every other order's files, as the author is. The
   # author gets their interface text in the tests brief, so the checker gets that text too (gap

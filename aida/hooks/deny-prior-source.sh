@@ -55,8 +55,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The record is the task's own, <project>/tasks/<task>/implementation/dispatch.json, found as the
 # one whose codePath holds the payload's working directory, else the one open record naming the
 # agent's type (scripts/lib/paths.sh, dispatch_record_for). With no project for the working
-# directory, it is the one open record naming that type in any registered project
-# (dispatch_record_resolve). Records open for other trees only: allow, through `systemMessage` naming
+# directory, the project remembered for it answers the same way, else the one open record naming
+# this plugin's role in any registered project (dispatch_record_resolve). Records open for other trees only: allow, through `systemMessage` naming
 # why. dispatch.json
 # unreadable, a record naming no role, an agent whose type is not the role the record names, or a
 # dispatch whose denyRead list is empty:
@@ -121,10 +121,11 @@ CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 # open for another tree is another task's dispatch, and it says so rather than passing in silence.
 # The directory is held in the same canonical form codePath is, so the two compare as strings.
 # The Bash door below resolves a relative operand against it too. A session outside every code
-# path finds the record by the agent's type across the registered projects (gap row 358).
+# path reads the project remembered for its folder, else a role finds its record across the
+# registered projects (gap row 358).
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
-dispatch_record_resolve "$CWD_CANON" "$AGENT"
+dispatch_record_resolve "$CWD_CANON" "$AGENT" "$(jq -r '.session_id // empty' <<<"$INPUT" 2>/dev/null)"
 case $? in
   1) echo '{}'; exit 0 ;;
   2) not_enforced "the matched project row carries no path" ;;

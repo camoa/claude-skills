@@ -17,15 +17,18 @@
 #                               prints why the folder may not hold the task trees, or nothing
 #   worktree_base_path <base> <codePath>
 #                               prints the base as an absolute path, read against the code path
-#   dispatch_record_for <project path> <dir> [<agent type>]
+#   dispatch_record_for <project path> <dir> [<agent type>] [<session id>]
 #                               sets DISPATCH_RECORD to the open dispatch record of the task whose
 #                               codePath holds dir, else to the one open record whose role is the
 #                               agent type, or empty, and DISPATCH_OPEN_COUNT to how many records
 #                               are open. One of the functions here that read the disk.
-#   dispatch_record_resolve <canonical dir> [<agent type>]
-#                               dispatch_record_for under the project that owns dir, else the one
-#                               open record naming the agent type in any registered project. Sets
-#                               DISPATCH_PROJECT too. Needs registry.sh sourced.
+#   dispatch_record_resolve <canonical dir> [<agent type>] [<session id>]
+#                               dispatch_record_for under the project that owns dir or is
+#                               remembered for it, else the one open record naming this plugin's
+#                               role in any registered project. Sets DISPATCH_PROJECT too. Needs
+#                               registry.sh sourced.
+#   plugin_role <plugin root> <agent type>
+#                               true when the type names one of that plugin's roles
 #   main_checkout <project codePath> <canonical record codePath>
 #                               prints the project's main checkout in canonical form, or nothing
 #                               when it is the record's own tree or is not on disk.
@@ -156,15 +159,23 @@ worktree_base_path() {
 # checkout and not the worktree (gap row 230). So when no record's codePath holds $2, the record
 # is the one open record whose role is the agent type $3, bare or `<plugin>:<role>`. Two such
 # records are two tasks with the same role out, and nothing tells them apart, so none is chosen.
+# A record naming that role and stamped with the payload's session id $4 wins over every other,
+# the codePath match too: dispatch-open stamps the session that opened it (gap row 358).
 DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
 dispatch_record_for() {
-  local project="$1" dir="$2" agent="${3:-}" f code by_role="" by_role_count=0
+  local project="$1" dir="$2" agent="${3:-}" sid="${4:-}" f code role_sid by_role="" by_role_count=0
+  local by_session="" by_session_count=0
   DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     DISPATCH_OPEN_COUNT=$((DISPATCH_OPEN_COUNT + 1))
-    if [ -n "$agent" ] && role_matches "$agent" "$(jq -r '.role // empty' "$f" 2>/dev/null)"; then
+    role_sid=""
+    [ -z "$agent" ] || role_sid="$(jq -r '[.role // "", .sessionId // ""] | @tsv' "$f" 2>/dev/null)"
+    if [ -n "$agent" ] && role_matches "$agent" "${role_sid%%	*}"; then
       by_role="$f"; by_role_count=$((by_role_count + 1))
+      if [ -n "$sid" ] && [ "${role_sid#*	}" = "$sid" ]; then
+        by_session="$f"; by_session_count=$((by_session_count + 1))
+      fi
     fi
     [ -z "$DISPATCH_RECORD" ] || continue
     code="$(jq -r '.codePath // empty' "$f" 2>/dev/null)"
@@ -175,28 +186,40 @@ dispatch_record_for() {
   done <<DR_FILES
 $(find "$project/tasks" -mindepth 3 -maxdepth 3 -type f -path '*/implementation/dispatch.json' 2>/dev/null | sort)
 DR_FILES
-  if [ -z "$DISPATCH_RECORD" ] && [ "$by_role_count" -eq 1 ]; then DISPATCH_RECORD="$by_role"; fi
+  if [ "$by_session_count" -eq 1 ]; then DISPATCH_RECORD="$by_session"
+  elif [ -z "$DISPATCH_RECORD" ] && [ "$by_role_count" -eq 1 ]; then DISPATCH_RECORD="$by_role"; fi
 }
 
 # The open dispatch record for an agent of type $2 whose tool call runs in the canonical directory
-# $1, wherever the session runs (gap row 358). The project that owns $1 answers first, through
-# dispatch_record_for. A session started outside the code path, such as a folder the person keeps
-# notes in, resolves no project. Then every registered project's open records are read, and the
-# one record whose role is $2 is the record. Two such records are two projects with that role out:
-# the one in the project remembered for $1 is chosen, and with no single one there, none is. An
-# empty $2 is the person, who never reaches that search. Sets DISPATCH_PROJECT to the owning
-# project, or the project the record is in, besides the two globals dispatch_record_for sets. On
-# the search, DISPATCH_OPEN_COUNT counts only records naming $2, so a non-AIDA agent stays quiet.
-# Returns 1 when no project owns $1 and no record names $2, and 2 when the owning row has no path.
+# $1, wherever the session runs (gap row 358). $3 is the payload's session id. The project that
+# owns $1 answers first, then the project remembered for $1, which session-start and next also
+# read. Each answers through dispatch_record_for, so a remembered folder behaves as the main
+# checkout does. An agent type that is not one of this plugin's roles leaves before that second
+# read, and pays nothing more. With no project remembered, every registered project's open records
+# are read for one of this plugin's roles. The record stamped with $3 wins; else the one record
+# naming $2 is the record; else none is. The person never reaches that search. Sets
+# DISPATCH_PROJECT to the project read, besides the two globals dispatch_record_for sets. On the
+# search, DISPATCH_OPEN_COUNT counts only records naming $2. Returns 1 when no project and no
+# record answers, and 2 when the owning row has no path.
 DISPATCH_PROJECT=""
 dispatch_record_resolve() {
-  local dir="$1" agent="${2:-}" row f matched="" name p choice choice_path="" chosen="" chosen_count=0
+  local dir="$1" agent="${2:-}" sid="${3:-}" row f p choice role_sid matched="" by_session="" by_session_count=0
   DISPATCH_PROJECT=""; DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
   if row="$(registry_resolve_by_directory "$dir" 2>/dev/null)"; then
     DISPATCH_PROJECT="$(jq -r '.path // empty' <<<"$row" 2>/dev/null)"
     [ -n "$DISPATCH_PROJECT" ] || return 2
-    dispatch_record_for "$DISPATCH_PROJECT" "$dir" "$agent"
+    dispatch_record_for "$DISPATCH_PROJECT" "$dir" "$agent" "$sid"
     return 0
+  fi
+  [ -z "$agent" ] || plugin_role "${CLAUDE_PLUGIN_ROOT:-}" "$agent" || return 1
+  choice="$(registry_read_directory_choice "$dir" 2>/dev/null | jq -r '.project // empty' 2>/dev/null)"
+  if [ -n "$choice" ]; then
+    DISPATCH_PROJECT="$(registry_list_projects 2>/dev/null \
+      | jq -r --arg n "$choice" 'select(.name == $n) | .path // empty' 2>/dev/null | head -1)"
+    if [ -n "$DISPATCH_PROJECT" ]; then
+      dispatch_record_for "$DISPATCH_PROJECT" "$dir" "$agent" "$sid"
+      return 0
+    fi
   fi
   [ -n "$agent" ] || return 1
   # A glob, not find: find lists every file of every implementation folder, which doubled the cost
@@ -206,33 +229,30 @@ dispatch_record_resolve() {
     [ -n "$p" ] || continue
     for f in "$p"/tasks/*/implementation/dispatch.json; do
       [ -f "$f" ] || continue
-      role_matches "$agent" "$(jq -r '.role // empty' "$f" 2>/dev/null)" || continue
-      DISPATCH_OPEN_COUNT=$((DISPATCH_OPEN_COUNT + 1))
-      matched="$matched$f
-"
+      role_sid="$(jq -r '[.role // "", .sessionId // ""] | @tsv' "$f" 2>/dev/null)"
+      role_matches "$agent" "${role_sid%%	*}" || continue
+      DISPATCH_OPEN_COUNT=$((DISPATCH_OPEN_COUNT + 1)); matched="$f"
+      if [ -n "$sid" ] && [ "${role_sid#*	}" = "$sid" ]; then
+        by_session="$f"; by_session_count=$((by_session_count + 1))
+      fi
     done
   done <<DRR_PROJECTS
 $(registry_list_projects 2>/dev/null | jq -r '.path // empty' 2>/dev/null)
 DRR_PROJECTS
-  if [ "$DISPATCH_OPEN_COUNT" -eq 1 ]; then
-    DISPATCH_RECORD="${matched%?}"
-  elif [ "$DISPATCH_OPEN_COUNT" -gt 1 ]; then
-    choice="$(registry_read_directory_choice "$dir" 2>/dev/null | jq -r '.project // empty' 2>/dev/null)"
-    while IFS="$(printf '\t')" read -r name p; do
-      [ -z "$choice" ] || [ "$name" != "$choice" ] || choice_path="$p"
-    done <<DRR_ROWS
-$(registry_list_projects 2>/dev/null | jq -r '[.name // "", .path // ""] | @tsv' 2>/dev/null)
-DRR_ROWS
-    while IFS= read -r f; do
-      [ -n "$f" ] && [ -n "$choice_path" ] && is_under "$f" "$choice_path" || continue
-      chosen="$f"; chosen_count=$((chosen_count + 1))
-    done <<DRR_MATCHED
-$matched
-DRR_MATCHED
-    [ "$chosen_count" -ne 1 ] || DISPATCH_RECORD="$chosen"
-  fi
+  if [ "$by_session_count" -eq 1 ]; then DISPATCH_RECORD="$by_session"
+  elif [ "$DISPATCH_OPEN_COUNT" -eq 1 ]; then DISPATCH_RECORD="$matched"; fi
   [ -z "$DISPATCH_RECORD" ] || DISPATCH_PROJECT="${DISPATCH_RECORD%/tasks/*/implementation/dispatch.json}"
   [ "$DISPATCH_OPEN_COUNT" -gt 0 ]
+}
+
+# True when agent type $2 names one of the roles of the plugin at $1: agents/<name>.md exists, and
+# a prefix, when the type has one, is that plugin's name. Another plugin's role or a person's own
+# agent of the same bare name is then not this plugin's.
+plugin_role() {
+  [ -n "$2" ] && [ -f "$1/agents/${2##*:}.md" ] || return 1
+  case "$2" in
+    *:*) [ "${2%%:*}" = "$(jq -r '.name // empty' "$1/.claude-plugin/plugin.json" 2>/dev/null)" ] ;;
+  esac
 }
 
 # The project's registered codePath is its main checkout, and a task's worktree is a second tree

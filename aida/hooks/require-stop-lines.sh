@@ -34,8 +34,9 @@ CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
-# A session outside every code path finds the record by the agent's type (gap row 358).
-dispatch_record_resolve "$CWD_CANON" "$AGENT" || exit 0
+# A session outside every code path reads the project remembered for its folder, else finds the
+# record by the agent's type (gap row 358).
+dispatch_record_resolve "$CWD_CANON" "$AGENT" "$(jq -r '.session_id // empty' <<<"$INPUT" 2>/dev/null)" || exit 0
 [ -n "$DISPATCH_RECORD" ] || exit 0
 ROLE="$(jq -r '.role // empty' "$DISPATCH_RECORD" 2>/dev/null)"
 [ "${ROLE##*:}" = "implementer" ] && role_matches "$AGENT" "$ROLE" || exit 0
