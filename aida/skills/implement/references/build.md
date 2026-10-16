@@ -66,6 +66,8 @@ It reads the frozen copy and the frozen tests. It writes twelve things to
   in, `implementation/observed-<order id>-before/`;
 - `deniedReads`, present only when the order's own text names a path the implementer's dispatch
   denies: another order's owned file. The deny stands. Do not tell the implementer to read one.
+  The summary's `next` then asks a person to rule first. A file outside the code path that an
+  order this one depends on owns is never denied, so a record it reads is not listed.
 
 It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
 and counts, never the brief. The allowed count is two unless a person has granted this order one more; see
