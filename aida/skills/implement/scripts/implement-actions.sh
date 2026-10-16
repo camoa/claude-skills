@@ -706,8 +706,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The code a fix scope outside the order's files added (live-run row 116).
 # 100  `fix-brief` was given `--allow` on an unattended run. An allow is a person's grant of one
 #      path outside the order's ownedFiles to one fix round. An unattended run has nobody to
-#      grant it. Nothing is written. Three argument faults stay exit 3: a path already owned, a
-#      frozen test or support file, and a path no open finding's fixScope names.
+#      grant it. Nothing is written. Three argument faults stay exit 3: an owned path a fixScope
+#      already names, a frozen test or support file, and an unowned path no fixScope names.
 #
 # The code the commit form of a locks-in reason added (live-run row 183).
 # 101  `tests-freeze` was given a `--locks-in` reason written `commit:<id>` whose id is not
@@ -10434,7 +10434,7 @@ do_fix_brief() {
   # Live-run row 116. A fixScope path outside the order's ownedFiles is withheld from the fixer
   # unless a person allows it here. An allow is a person's grant, so unattended refuses it
   # (exit 100). A path already owned needs no grant. A frozen test or a support file may never
-  # be granted. A path no open finding names is a grant for nothing (exit 3, each).
+  # be granted. An unowned path no open finding names is a grant for nothing (exit 3, each).
   local allowed_json='[]' granted_json='[]' ap ap_abs ap_owned other tf fp frozen_list frozen_hit named
   [ -z "$allow_raw" ] || [ "$RV_RUN_MODE" != "autonomous" ] \
     || die 100 "fix-brief: --allow is a person's grant, and this run is unattended. Nobody is present to allow a path outside $unit_id's own files."
@@ -10448,12 +10448,18 @@ do_fix_brief() {
   while IFS= read -r ap; do
     [ -n "$ap" ] || continue
     ap_abs="$(normalize_abs "$(resolve_against "$ap" "$RV_CODEPATH")")"
-    # In a repair round, an owned path outside every fix scope joins the scope and needs no grant.
+    named="$(printf '%s' "$open_json" | jq -r --arg p "$ap" --arg abs "$ap_abs" --arg code "$RV_CODEPATH" '
+      [ .[] | (.fixScope // [])[] | select(. == $p or . == $abs or ($code + "/" + .) == $abs) ] | length')"
+    # Gap row 342. An owned path outside every fix scope joins the scope and needs no grant, in any
+    # round: a repair finding's scope is the one file the stopped build named, and its fixer may
+    # report that the cure needs more of the order's own files. An owned path a fix scope names
+    # already reaches the fixer.
     ap_owned=""
     [ -n "$(rv_scope_outside "$(jq -nc --arg p "$ap" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] || ap_owned=yes
-    [ -z "$ap_owned" ] || [ -n "$repair_ids" ] \
-      || die 3 "fix-brief: --allow names $ap, which $unit_id already owns. A grant is for a path outside the order's own files."
-    if [ -n "$repair_ids" ]; then
+    [ -z "$ap_owned" ] || [ "$named" = "0" ] || [ -n "$repair_ids" ] \
+      || die 3 "fix-brief: --allow names $ap, which $unit_id already owns and an open finding's fixScope names, so the fixer has it. An owned path no fix scope names joins the scope."
+    # A file the order shares with another order is still its own (gap row 287).
+    if [ -n "$repair_ids" ] && [ -z "$ap_owned" ]; then
       while IFS= read -r other; do
         [ -n "$other" ] || continue
         [ -z "$(im_path_claim "${ap_abs#"$RV_CODEPATH"/}" "$other")" ] \
@@ -10471,10 +10477,8 @@ $frozen_list
 FB_FROZEN
     [ -z "$frozen_hit" ] \
       || die 3 "fix-brief: --allow names $ap, a frozen test or a support file. A fixer never changes a test; rule the finding test-wrong at verify-record instead."
-    named="$(printf '%s' "$open_json" | jq -r --arg p "$ap" --arg abs "$ap_abs" --arg code "$RV_CODEPATH" '
-      [ .[] | (.fixScope // [])[] | select(. == $p or . == $abs or ($code + "/" + .) == $abs) ] | length')"
     # A repair round's grant answers a fixer's scope report, which names paths no fixScope holds.
-    [ "$named" != "0" ] || [ -n "$repair_ids" ] \
+    [ "$named" != "0" ] || [ -n "$repair_ids" ] || [ -n "$ap_owned" ] \
       || die 3 "fix-brief: --allow names $ap, which no open finding's fixScope names. A grant is for a finding; the open findings name: $(printf '%s' "$open_json" | jq -r '[ .[] | (.fixScope // [])[] ] | unique | join(", ")')"
     # Stored resolved and relative to codePath, whatever form was typed: the withhold, the
     # owned-files check and the hook all read that one spelling.

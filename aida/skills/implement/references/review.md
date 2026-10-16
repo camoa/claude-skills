@@ -209,9 +209,12 @@ for each finding whose fix scope names a file the order does not own. It stored 
 finding. `fix-brief` withholds those paths from the fixer. A person may grant one with `--allow`,
 one flag per path. The path joins the scope union and the brief records it under `allowedFiles`.
 The fixer's dispatch record carries it, and the owned-files check after the round accepts it.
-Unattended, `--allow` refuses (exit 100). A path the order already owns, a frozen test or a
-support file, or a path no open finding's fix scope names, refuses (exit 3). A finding whose
-whole fix scope is withheld is still handed over. The fixer reports it scope-insufficient in
+Unattended, `--allow` refuses (exit 100). A path the order owns needs no grant. When no fix
+scope names it, it joins the scope union in any round, and not `allowedFiles`. A finding with
+origin `repair` needs this, because its fix scope is the one file the stopped build named.
+Three paths refuse (exit 3): an owned path a fix scope already names, a frozen test or a support
+file, and a path outside the order's files that no open finding's fix scope names. A finding
+whose whole fix scope is withheld is still handed over. The fixer reports it scope-insufficient in
 round one, and the ruling route below opens for it. When an `outsideOwned:` line printed, put it
 to the person before running `fix-brief`. Open with: "A review finding wants a change in a
 file this order does not own. Only you can allow that. Allow the file and the fixer may change
@@ -227,10 +230,9 @@ present. A commit that answers the verifier then gets a fresh verifier, not a ru
 present when the task's implement stage is interactive. A light task reads unattended until
 `task set-run-mode` sets it interactive. In
 that round `--allow` may name a path that no fix scope names, because the fixer's report names
-it. A path the order owns then joins the scope with no grant. A path another order owns
-refuses (exit 3). `fix-brief` opens the round only when the round can take every open finding.
-The ledger records it, and the order's allowed rounds rise by one. Otherwise `fix-brief`
-refuses (exit 54), and the message names what to rule or allow first. A second `fix-brief` call
+it. A path only another order owns refuses (exit 3). `fix-brief` opens the round only when the round
+can take every open finding. The ledger records it, and the order's allowed rounds rise by one.
+Otherwise `fix-brief` refuses (exit 54), and the message names what to rule or allow first. A second `fix-brief` call
 reuses the open repair round, so a mistyped `--allow` can be corrected. A second repair round
 never opens.
 
