@@ -13,8 +13,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # One review record, at <task folder>/review/review.json (scripts/review-schema.json). It lives in
 # its own folder beside research/, design/ and implementation/, because implementation's own
-# `restart` archives that folder whole and a review inside it would go with a build restart it has
-# nothing to do with.
+# `restart` moves records out of implementation/ into an archive folder beside it, and a review
+# has nothing to do with a build restart.
 #
 # Usage:
 #   review-actions.sh read     <task_folder>

@@ -12266,7 +12266,8 @@ RS_REVERTS
 # words are the model's and no check may rest on them. Those two kinds stay record-read, and the
 # folders a record may sit in are found by their own names. That is the plugin's own naming and
 # not a guess: `retake-tests` writes `retaken-<order>-<n>/` and `restart` writes
-# `implementation-<date>-<commit>/`.
+# `implementation-<date>-<commit>/`, or `implementation-<date>-<commit>-<n>/` when that name is
+# taken.
 # Without this the live task restarted on beta.22 answered one commit against four on the branch:
 # the superseded freeze was in no record at all, and the build and fix records sat in a retake
 # folder the restart's own ledger reset had stopped naming (live-run row 182).
