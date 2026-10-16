@@ -197,7 +197,7 @@ ruling with no round, under Rulings below. It writes `implementation/brief-<orde
 - the round number;
 - `headNow`, the code repository's own commit at the moment of this call, or the order's last
   record when commits came after it, so the round holds them. A later commit that changes only
-  another order's files is that order's, so the round begins after the last such commit;
+  another order's files is that order's, so the round begins after each one that comes first;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path, the report path and `headNow`. It prints one line per finding with its

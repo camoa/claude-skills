@@ -10525,10 +10525,12 @@ FB_ALLOW
   [ -z "$fb_last" ] || [ "$fb_last" = "$fb_head" ] \
     || ! git -C "$RV_RANGE_REPO" merge-base --is-ancestor "$fb_last" "$fb_head" 2>/dev/null || fb_head="$fb_last"
   # Gap row 340. A commit after that record that changes only another order's files is that
-  # order's, recorded or not, so the round begins after the last such commit.
+  # order's, recorded or not, so the round begins after each such commit up to the first that is
+  # not. A commit of this order's after the record stays in the round (row 339).
   if [ "$fb_head" != "$fb_now" ] && [ -z "$RV_RANGE_SCOPE" ]; then
-    for c in $(git -C "$RV_RANGE_REPO" rev-list "$fb_last..$fb_now" 2>/dev/null); do
-      [ -z "$(im_commit_owner "$RV_RANGE_REPO" "$c" "$RV_UNIT_JSON")" ] || { fb_head="$c"; break; }
+    for c in $(git -C "$RV_RANGE_REPO" rev-list --reverse "$fb_last..$fb_now" 2>/dev/null); do
+      [ -n "$(im_commit_owner "$RV_RANGE_REPO" "$c" "$RV_UNIT_JSON")" ] || break
+      fb_head="$c"
     done
   fi
   # One brief per round, because each round's open findings differ from the last round's and the
@@ -12481,7 +12483,7 @@ RS_REVERTS
 # folder the restart's own ledger reset had stopped naming (live-run row 182).
 rs_order_commits() {
   local task="$1" codepath="$2" one_id="$3" ledger="$4" impl="$1/implementation"
-  local out='[]' c old range file kind dir files started span table="" lost="" unit_json
+  local out='[]' c old range file kind dir files started span table="" lost="" unit_json others
   unit_json="$(jq -c --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0] // {id: $id}' \
     "$impl/snapshot.json" 2>/dev/null)"
   [ -n "$unit_json" ] || unit_json="$(jq -nc --arg id "$one_id" '{id: $id}')"
@@ -12556,7 +12558,10 @@ RS_RETAKEN
 $(if [ "$kind" = "build" ] && [ "$span" != HEAD ]; then
     im_order_commits "$codepath" "$started" "${range#*..}" "$unit_json" "$(dirname "$file")" | sed -n 's/^own //p'
   else
-    git -C "$codepath" rev-list --reverse "$range" 2>/dev/null
+    # Another order's commit inside a fix range is that order's, never reverted here (row 340).
+    others="$(TASK_PATH="$task" SNAPSHOT_DOC="$(jq -c '.' "$impl/snapshot.json" 2>/dev/null)" \
+      im_other_order_commits "$codepath" "${range%%..*}" "${range#*..}" "$unit_json")"
+    git -C "$codepath" rev-list --reverse "$range" 2>/dev/null | grep -Fvx -f <(printf '%s\n' "$others")
   fi)
 RS_RANGE
   done <<RS_FILES
