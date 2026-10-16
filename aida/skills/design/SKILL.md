@@ -297,7 +297,8 @@ carries this text in place of it. A dispose that omits both records no reuse.
 Before that dispose, dispatch `internal-searcher` once per candidate the order's build or tests
 will call, with the message this file names. Its lines are the role, the run mode and the word
 `interface`. Then come the candidate as research named it, the order file's path, the code path,
-and the project folder. The code path is the task's worktree, from the `worktree:` line.
+and the project folder. The code path is the task's worktree, from the `worktree:` line. A
+`worktree: none` means the project's code path.
 **Light:** dispatch once for all orders. Repeat the candidate line and the order line, one pair
 per candidate, before the code path. Pass each returned block as that candidate's `--interface`.
 
@@ -323,7 +324,8 @@ A rejection that lives only in the conversation is not a rejection anyone can ch
 once for that order, with the message this file names. One confirmer judges every candidate of
 the order. Its lines are the role and the run mode. Then the order file's path, from the
 `DISPOSED:` line. Then the verdict file's path, from the `confirmFile:` line. Then the code
-path, which is the task's worktree, from the `worktree:` line. A dispatch that names
+path, which is the task's worktree, from the `worktree:` line that `dispose` prints beside it.
+A `worktree: none` means the project's code path. A dispatch that names
 no role runs as the general agent with write tools and this session's model. This one must write
 nothing but its verdict file to mean anything.
 

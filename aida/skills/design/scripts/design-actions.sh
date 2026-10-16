@@ -2316,7 +2316,7 @@ $unaccounted"
 #
 # Each call also writes the outcome to the order's `dispositions`, one entry per candidate.
 # Unattended, it prints `confirmFile:`, the order's verdict file, which maps each candidate to the
-# confirmer's value. An unattended `close` counts the dispositions against that file, because one
+# confirmer's value, and `worktree:`, where the confirmer reads the cited files (gap row 356). An unattended `close` counts the dispositions against that file, because one
 # confirmer once judged the last of six paragraphs and the other five stood (gap row 293).
 #
 # The table. Rows are tried in order and the first that applies decides. Extend is the downgrade
@@ -2431,7 +2431,10 @@ do_dispose() {
   echo "DISPOSED: $file"
   echo "proposed: $verdict"
   echo "disposition: $outcome"
-  [ "$RUN_MODE" != "autonomous" ] || echo "confirmFile: $verdict_file"
+  if [ "$RUN_MODE" = "autonomous" ]; then
+    echo "confirmFile: $verdict_file"
+    echo "worktree: $(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
+  fi
   echo "reuses: $(printf '%s' "$doc" | jq -r '(.reuses // []) | length')"
   wo_summary "$doc"
   render_wo "$id"
