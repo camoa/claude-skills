@@ -504,8 +504,9 @@ this conversation; the id space is shared and minted in order, so naming it ahea
 
 Write `--interface` so that it names each exposed element in backticks. That is the service id,
 the class, the interface, the method, the route, the hook and the config key. The build's
-interface check counts only the backtick-quoted names. An order that exposes nothing takes no
-`--interface`.
+interface check counts only the backtick-quoted names, and wants each one in the builder's record.
+So write a choice the builder makes, such as two calls it may pick from, as plain text. An order
+that exposes nothing takes no `--interface`.
 
 Start `--diff-budget` with `small`, `medium` or `large`. The build reads the first word. An order
 whose budget starts with `large` gives its builder a second resume at the turn limit. Number the
@@ -735,6 +736,12 @@ order's interface that holds `<` or `{`. Such a name is often a shape, such as `
 build's interface check matches a shape only when the builder's record repeats its text. A generic
 type holds `<` too, so the line never blocks the close. Name each real element instead, or write
 the shape as plain text with `update --interface`.
+
+`check` also prints `interfaceChoice:`, at every exit code. It names each pair of names in
+backticks that an order's interface joins with `or`. Such a pair is often a choice the builder
+makes, and a builder that takes one option leaves the other out of its record. Two exit codes
+can be joined by `or` too, so the line never blocks the close. Write a choice as plain text with
+`update --interface`. Keep a pair when each name must exist.
 
 `check` also prints `callsUndeclared:`, at every exit code. It names each `name()` call in an
 order's done-when rows and tests that no interface the order declares holds. It reads the order's

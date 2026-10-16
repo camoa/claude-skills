@@ -297,6 +297,10 @@ It also prints `interfaceShaped:` with every name in backticks in an interface t
 `{`. Such a name is often a shape, not a name, and a generic type holds `<` too. So this does not
 hold the close either.
 
+It also prints `interfaceChoice:` with every pair of names in backticks that an interface joins
+with `or`. Such a pair is often a choice the builder makes, but two exit codes can be joined the
+same way. So this does not hold the close either.
+
 It also prints `callsUndeclared:` with each `name()` call a done-when row or a test makes that no
 interface the order declares holds. The test author cannot read source to learn the signature. A
 call a clause denies is named too, so this does not hold the close either.

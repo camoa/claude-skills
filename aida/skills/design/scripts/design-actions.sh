@@ -1961,6 +1961,29 @@ do_check() {
   else
     echo "interfaceShaped: none"
   fi
+  # Two backticked interface names joined by `or`, with at most two words after it (periplus gap
+  # 36). Such a pair is often a choice the builder makes, such as `os.DirEntry` or an explicit
+  # `stat`, and the build's interface check wants both names in the record. A pair can also name
+  # two things that each exist, such as two exit codes, so the line never blocks the close.
+  local choice
+  choice="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r '
+        select((.interface | type) == "string") | . as $wo
+        | (.interface | split("`")) as $p
+        | ($p | length) as $n
+        | (if $n % 2 == 1 then $n - 2 else $n - 3 end) as $last
+        | [ range(1; $last - 1; 2) as $i
+            | select(($p[$i] | length) > 0 and ($p[$i + 2] | length) > 0)
+            | select($p[$i + 1] | test("^,?\\s+or\\s+([a-z]+\\s+){0,2}$"))
+            | $p[$i] + " or " + $p[$i + 2] ]
+        | unique | select(length > 0)
+        | $wo.id + " " + join(", ")' "$f" 2>/dev/null; done \
+    | paste -s -d ';' - | sed 's/;/; /g')"
+  if [ -n "$choice" ]; then
+    echo "interfaceChoice: $choice | best effort: each pair of names in backticks is joined by or, so it may be a choice the builder makes. The build's interface check wants both names in the builder's record. Write a choice as plain text with update --interface, or keep the pair when each name must exist"
+  else
+    echo "interfaceChoice: none"
+  fi
   # The calls an order's done-when rows and tests make that nothing it declares names (gap row
   # 231). The test author may not read source, so a signature the brief lacks sent it to a runtime.
   # A `name()` token is looked for as `name(` in the order's interface, its reuses and the
