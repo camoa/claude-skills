@@ -63,7 +63,7 @@
 #   rv_refuse_duplicate_keys <file> <action>  exit 52 on a JSON file naming one key twice
 #   rv_read_findings_array <file> <key> <action> [minted]  sets RV_FINDINGS_ARRAY, or exits 52
 #   cr_lookup_failure_pair <action> <flag> <value>  parses <framework>=<reason> into CR_PAIR
-#   cr_catalog_pair <action> <value>          parses --catalog-recipe's path or reason into CR_PAIR
+#   cr_catalog_pair <action> <value> [<flag>]  parses --catalog-recipe's path or reason into CR_PAIR
 #   json_file_state <file>                    missing | unreadable | ok, for any JSON file
 #   md_basenames_in <folder>                  the .md base names in it, sorted and space separated
 #   sw_source_lines <project file> <kind>     the sources providing that kind, in precedence order
@@ -93,7 +93,7 @@
 #                                             tool in endOfTaskToolsAbsent with its rows, as text
 #   recipe_requires_tooling_of <recipe> [<key>]  the names its requires_tooling: list holds, or
 #                                             the list under <key>; 2 on a value it cannot read
-#   recipe_stale_line <fw> <copy> <catalog>   one sentence when the copy is behind the catalog's
+#   recipe_stale_line <fw> <copy> <catalog> [<phase>]  one sentence when the copy is behind the catalog's
 #                                             copy or could not be compared; nothing otherwise
 #   recipe_file_is_earlier <recipe> <path> <file>  true when the file holds an earlier version's block
 #   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file;
@@ -626,11 +626,12 @@ cr_lookup_failure_pair() {
 }
 
 # Parses one `--catalog-recipe <framework>=<path or reason>` value, the catalog's copy of a recipe a
-# project folder answered for, and sets CR_PAIR the way the two functions above do. $1 the action.
+# project folder answered for, and sets CR_PAIR the way the two functions above do. $1 the action,
+# $3 the flag when it is another one, such as `--catalog-check-recipe`.
 cr_catalog_pair() {
   case "${2#*=}" in
-    no-recipe|listing-unreachable|fetch-failed) cr_lookup_failure_pair "$1" "--catalog-recipe" "$2" ;;
-    *) cr_recipe_pair "$1" "--catalog-recipe" "$2" ;;
+    no-recipe|listing-unreachable|fetch-failed) cr_lookup_failure_pair "$1" "${3:---catalog-recipe}" "$2" ;;
+    *) cr_recipe_pair "$1" "${3:---catalog-recipe}" "$2" ;;
   esac
 }
 
@@ -1247,16 +1248,16 @@ br_subtract_baseline() {
   [ -z "$selector" ] || rm -f "$base_sel" "$now_sel"
 }
 
-# The baseline field that holds one tool row's own earlier verdict, or the empty string for a row
-# the baseline has no field for. baseline-schema.json carries three tool fields and no more, so a
-# duplication or design-metrics row the recipe declares has no baseline to subtract, and this says
-# so rather than reading its absence as a clean one.
-rw_baseline_field_for() {
+# The place in baseline.json that holds one tool row's own earlier result, as a JSON path for jq's
+# getpath and setpath. The three floor rows keep their own fields. Every other row the check recipe
+# declares sits under toolRows by its id (gap row 353), so a row a project adds subtracts the way
+# the three do. A baseline taken before toolRows existed holds nothing there, and a reader says so.
+rw_baseline_path_for() {
   case "$1" in
-    coding-standards) printf 'codingStandards' ;;
-    static-analysis)  printf 'staticAnalysis' ;;
-    security)         printf 'security' ;;
-    *) printf '' ;;
+    coding-standards) printf '["codingStandards"]' ;;
+    static-analysis)  printf '["staticAnalysis"]' ;;
+    security)         printf '["security"]' ;;
+    *) jq -cn --arg id "$1" '["toolRows", $id]' ;;
   esac
 }
 
@@ -1793,32 +1794,37 @@ recipe_requires_tooling_of() {
 
 # One sentence when the project's copy $2 of a framework's test-execution recipe is behind the
 # catalog's copy $3, or could not be compared with it; nothing otherwise (gap row 284). $1 the
-# framework. $3 is a path, or the catalog lookup's own word: no-recipe has nothing to compare, and
+# framework, $4 the recipe's phase, test-execution when it is not given. $3 is a path, or the catalog lookup's own word: no-recipe has nothing to compare, and
 # listing-unreachable or fetch-failed means nobody read the catalog's copy. Two files with other
 # names are two recipes, so their versions are not compared. Preconditions and review both call
 # this. The task reads the recipe at its recorded path, so an update in place needs no other step.
 # version_at_least is task-helpers.sh's, which every caller sources.
 recipe_stale_line() {
-  local fw="$1" have="$2" catalog="$3" mine theirs
+  local fw="$1" have="$2" catalog="$3" phase="${4:-test-execution}" mine theirs after
+  # A changed test-execution recipe is read at its path. A changed review recipe moves the sha the
+  # baseline pinned, so the task adopts it through recipe-refresh, or every check stops at exit 73.
+  after="and the task reads the new version at the same path."
+  [ "$phase" = "test-execution" ] \
+    || after="and a task past preconditions adopts it with implement-actions.sh recipe-refresh --check-recipe $fw=<path>."
   case "$catalog" in
     ''|no-recipe) return 0 ;;
     listing-unreachable|fetch-failed)
       mine="$(recipe_name_of "$have" version)"
-      printf "%s: the project's copy of the test-execution recipe is version %s, and its catalog version was not checked, because the catalog's copy could not be read (%s)." \
-        "$fw" "${mine:-unstated}" "$catalog"
+      printf "%s: the project's copy of the %s recipe is version %s, and its catalog version was not checked, because the catalog's copy could not be read (%s)." \
+        "$fw" "$phase" "${mine:-unstated}" "$catalog"
       return 0 ;;
   esac
   [ ! "$have" -ef "$catalog" ] || return 0
   mine="$(recipe_name_of "$have")"; theirs="$(recipe_name_of "$catalog")"
   if [ -z "$mine" ] || [ "$mine" != "$theirs" ]; then
-    printf "%s: the project's copy of the test-execution recipe is named %s and the catalog's copy %s, so their versions were not compared." \
-      "$fw" "${mine:-nothing}" "${theirs:-nothing}"
+    printf "%s: the project's copy of the %s recipe is named %s and the catalog's copy %s, so their versions were not compared." \
+      "$fw" "$phase" "${mine:-nothing}" "${theirs:-nothing}"
     return 0
   fi
   mine="$(recipe_name_of "$have" version)"; theirs="$(recipe_name_of "$catalog" version)"
   version_at_least "$mine" "$theirs" && return 0
-  printf "%s: the project's copy of the test-execution recipe is version %s, and the catalog's is %s. Nothing was changed. Update the project's copy in place, and the task reads the new version at the same path." \
-    "$fw" "${mine:-unstated}" "$theirs"
+  printf "%s: the project's copy of the %s recipe is version %s, and the catalog's is %s. Nothing was changed. Update the project's copy in place, %s" \
+    "$fw" "$phase" "${mine:-unstated}" "$theirs" "$after"
 }
 
 # True when the file $3 holds the block for the path $2 of an earlier version of the recipe $1.

@@ -65,7 +65,8 @@ then runs once more over the frozen tests alone. A finding there blocks nothing:
 follow-up that completion offers. A row reads only the file types its recipe names. When no row
 reads a file the task changed, such as a shell script on a Drupal project, review records a
 catalog note that names those files. To check them, copy the review recipe into your own process
-recipes folder and add a row with its own id, its command and its `extensions`.
+recipes folder and add a row with its own id, its command and its `extensions`. A task that has
+already started its build adopts the copy with `recipe-refresh`.
 
 **The reviewer's lenses.** One reviewer reading the diff answers five checks. They are SOLID,
 DRY, architecture fit, the guides research cited, and the framework practices this project

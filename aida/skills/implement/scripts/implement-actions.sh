@@ -3507,6 +3507,7 @@ do_preconditions() {
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
   local harness_needed harness_reason env_asked=no env_owner="" tooling_entries
   local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc build_json build_entries unchecked_json review_tools smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
+  local pc_build_doc tool_rows_json pc_row_id pc_row_json
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -4033,6 +4034,26 @@ PC_CATALOG
           [ -n "$sa_json" ] || die 3 "preconditions: the static-analysis run produced no result. No baseline was written"
           sec_json="$(bl_tool_result "security" "security" "$codepath" "$scope_json" "$task_folder/implementation")"
           [ -n "$sec_json" ] || die 3 "preconditions: the security run produced no result. No baseline was written"
+          # Review runs every row the check recipes declare, and a failing row subtracts its own
+          # baseline. So every other row is taken here as well, keyed by its id under toolRows
+          # (gap row 353). The build reads the three rows above, so the full resolve is a second
+          # one, and CR_DOC goes back to the build's own afterwards.
+          pc_build_doc="$CR_DOC"
+          # shellcheck disable=SC2034 # read by the sourced library
+          CR_TOOL_IDS_ALL=true
+          cr_resolve
+          # shellcheck disable=SC2034 # read by the sourced library
+          CR_TOOL_IDS_ALL=false
+          tool_rows_json='{}'
+          while IFS= read -r pc_row_id; do
+            [ -n "$pc_row_id" ] || continue
+            pc_row_json="$(bl_tool_result "$pc_row_id" "$pc_row_id" "$codepath" "$scope_json" "$task_folder/implementation")"
+            [ -n "$pc_row_json" ] || die 3 "preconditions: the $pc_row_id run produced no result. No baseline was written"
+            tool_rows_json="$(jq -nc --argjson have "$tool_rows_json" --arg id "$pc_row_id" --argjson r "$pc_row_json" '$have + {($id): $r}')"
+          done <<PC_TOOL_ROWS
+$(printf '%s' "$CR_DOC" | jq -r '(.tools // [])[].id | select(. != "coding-standards" and . != "static-analysis" and . != "security")')
+PC_TOOL_ROWS
+          CR_DOC="$pc_build_doc"
 
           baseline_json="$(jq -n \
             --arg takenAt "$today" --arg commit "$ledger_started_from" \
@@ -4040,12 +4061,14 @@ PC_CATALOG
             --argjson codingStandards "$cs_json" \
             --argjson staticAnalysis "$sa_json" \
             --argjson security "$sec_json" \
+            --argjson toolRows "$tool_rows_json" \
             --argjson checkRecipes "$check_recipes_json" \
             '{
               schemaVersion: 1, takenAt: $takenAt, commit: $commit, scope: $scope, suite: $suite,
               codingStandards: $codingStandards,
               staticAnalysis:  $staticAnalysis,
               security:        $security,
+              toolRows:        $toolRows,
               checkRecipes:    $checkRecipes
             }')" || die 3 "preconditions: could not assemble the baseline record"
           write_atomic "$BASELINE_FILE" "$baseline_json"
@@ -4320,9 +4343,8 @@ RR_EOF
           met|undeclared) ;;
           *) failed="$failed $tool_id reads $verdict ($(printf '%s' "$result" | jq -r 'if .reason then .reason else "exit \(.exitCode)" end'))." ;;
         esac
-        field="$(rw_baseline_field_for "$tool_id")"
-        [ -n "$field" ] || continue
-        baseline_doc="$(printf '%s' "$baseline_doc" | jq -c --arg k "$field" --argjson r "$result" '.[$k] = $r')"
+        field="$(rw_baseline_path_for "$tool_id")"
+        baseline_doc="$(printf '%s' "$baseline_doc" | jq -c --argjson k "$field" --argjson r "$result" 'setpath($k; $r)')"
         moves="$moves$fw	$tool_id
 "
       done <<RR_TOOLS

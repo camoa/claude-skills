@@ -22,6 +22,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                            [--check-recipe <framework>=<path>]...
 #                                            [--lookup-failed <framework>=<reason>]...
 #                                            [--catalog-recipe <framework>=<path|reason>]...
+#                                            [--catalog-check-recipe <framework>=<path|reason>]...
 #                                            [--value <name>=<value>]...
 #   review-actions.sh brief    <task_folder>          writes <task>/review/brief.json
 #   review-actions.sh findings <task_folder> [--findings <path the reviewer wrote>]
@@ -193,6 +194,7 @@ usage: review-actions.sh read     <task_folder>
                                   [--check-recipe <framework>=<path to the review recipe>]...
                                   [--lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed>]...
                                   [--catalog-recipe <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
+                                  [--catalog-check-recipe <framework>=<path|no-recipe|listing-unreachable|fetch-failed>]...
                                   [--value <name>=<value>]...
        review-actions.sh brief    <task_folder>
        review-actions.sh findings <task_folder> [--findings <path the reviewer wrote>]
@@ -1202,15 +1204,15 @@ rw_tool_row_check() {
       verdict="met"
       detail="the $row_id command exited 0 over the files this change touched."
     else
-      field="$(rw_baseline_field_for "$row_id")"
-      baseline_verdict=""; baseline_output=""
-      if [ -n "$field" ] && [ -f "$BASELINE_FILE" ]; then
+      field="$(rw_baseline_path_for "$row_id")"
+      baseline_doc=""; baseline_verdict=""; baseline_output=""
+      if [ -f "$BASELINE_FILE" ]; then
         baseline_doc="$(jq -c '.' "$BASELINE_FILE" 2>/dev/null)"
-        [ -z "$baseline_doc" ] || baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].verdict // ""')"
-        [ -z "$baseline_doc" ] || baseline_output="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].outputFile // ""')"
+        [ -z "$baseline_doc" ] || baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --argjson f "$field" 'getpath($f).verdict // ""')"
+        [ -z "$baseline_doc" ] || baseline_output="$(printf '%s' "$baseline_doc" | jq -r --argjson f "$field" 'getpath($f).outputFile // ""')"
         [ -z "$baseline_output" ] || baseline_output="$(dirname -- "$BASELINE_FILE")/$baseline_output"
       fi
-      case "${field:+$baseline_verdict}" in
+      case "$baseline_verdict" in
         met)
           verdict="unmet"
           detail="the $row_id command $how, and the baseline recorded this tool met at the commit the build started from; this task introduced the finding." ;;
@@ -1222,11 +1224,10 @@ rw_tool_row_check() {
           verdict="unknown"
           detail="the $row_id command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so there is nothing to subtract and this cannot tell an old finding from a new one." ;;
         *)
-          # Two ways to get here, and the detail tells them apart: the baseline holds no field for
-          # this row at all, which is every row beyond the three the baseline knows, or it holds one
-          # and the file could not be read.
+          # Two ways to get here, and the detail tells them apart: the file could not be read, or
+          # it holds no result for this row, which is a baseline taken before toolRows existed.
           verdict="unknown"
-          detail="the $row_id command $how, and ${field:+$BASELINE_FILE could not be read for the baseline verdict of this tool}${field:-the baseline holds no field for this row}, so this cannot tell a finding this task introduced from one that predates it." ;;
+          detail="the $row_id command $how, and $([ -n "$baseline_doc" ] && printf 'the baseline holds no result for this row' || printf '%s could not be read for the baseline verdict of this tool' "$BASELINE_FILE"), so this cannot tell a finding this task introduced from one that predates it." ;;
       esac
     fi
   fi
@@ -1358,6 +1359,7 @@ rw_check_suite() {
 
 do_checks() {
   local task_arg="" recipes="" check_recipes="" failures="" values="" catalog_recipes=""
+  local catalog_check_recipes=""
   local frameworks fw lookup recipes_json rows_file parts_file catalog stale
   local range base head_end head_now end_commit tab said restored past coverage cov_verdict cov_detail
   local mut_verdict tool_count ti one frozen_row frozen_findings mutation_file record_json today floor_id
@@ -1387,6 +1389,12 @@ do_checks() {
         [ "$#" -ge 2 ] || die 3 "checks: --catalog-recipe needs <framework>=<path>"
         cr_catalog_pair "checks" "$2"
         catalog_recipes="$catalog_recipes$CR_PAIR
+"
+        shift 2 ;;
+      --catalog-check-recipe)
+        [ "$#" -ge 2 ] || die 3 "checks: --catalog-check-recipe needs <framework>=<path>"
+        cr_catalog_pair "checks" "$2" "--catalog-check-recipe"
+        catalog_check_recipes="$catalog_check_recipes$CR_PAIR
 "
         shift 2 ;;
       --value)
@@ -1477,6 +1485,13 @@ RW_FRAMEWORKS
   done <<RW_CATALOG
 $catalog_recipes
 RW_CATALOG
+  while IFS="$(printf '\t')" read -r fw catalog; do
+    [ -n "$fw" ] && [ -n "$(cr_lookup "$check_recipes" "$fw")" ] || continue
+    stale="$(recipe_stale_line "$fw" "$(cr_lookup "$check_recipes" "$fw")" "$catalog" review)"
+    [ -z "$stale" ] || rw_catalog_note "$stale" "$(cr_lookup "$check_recipes" "$fw")"
+  done <<RW_CATALOG_CHECK
+$catalog_check_recipes
+RW_CATALOG_CHECK
 
   # A recipe research or design judged not to fit is a catalog note, never a check (ideal/tooling.md).
   local fit_file fit_stage fit_json
@@ -1593,7 +1608,7 @@ RW_REVIEWS
   unread="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$(br_frozen_test_paths "$RW_TEST_ROWS")" \
     '[ $changed[] | select(. as $p | $frozen | index($p) == null) ]')"
   if [ -z "$RW_TOOL_READ" ] && [ "$unread" != "[]" ]; then
-    rw_catalog_note "no check commands row reads a file this change touched, so no tool checked $(printf '%s' "$unread" | jq -r '.[0:10] | join(", ")')$(printf '%s' "$unread" | jq -r 'if length > 10 then " and \(length - 10) more" else "" end'). A project adds a tool for these files as a row with its own id and extensions in its own copy of the review recipe." \
+    rw_catalog_note "no check commands row reads a file this change touched, so no tool checked $(printf '%s' "$unread" | jq -r '.[0:10] | join(", ")')$(printf '%s' "$unread" | jq -r 'if length > 10 then " and \(length - 10) more" else "" end'). A project adds a tool for these files as a row with its own id and extensions in its own copy of the review recipe, and a task past preconditions adopts that copy with implement-actions.sh recipe-refresh --check-recipe." \
       "$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | select(.checkRecipe != "") | .checkRecipe ] | if length == 0 then "no check recipe was resolved" else join(", ") end')"
   fi
   # The three ids below are a floor the recipe may add to and never a list it may shorten, so each one
