@@ -8652,7 +8652,10 @@ do_build_record() {
           *) row_text="$(printf '%s' "$UNIT_JSON" | jq -r --argjson n "$row_n" 'if $n >= 1 then (.doneWhen // [])[$n - 1] // empty else empty end')" ;;
         esac
         if [ -n "$row_text" ]; then
-          halt_front="$BR_STOP_PREFIX a Stop: line says done-when row $row_n is wrong"
+          # The text too, because design rewords a row by removing it and adding it last, so the
+          # number alone stops naming the row the builder meant.
+          [ "$ledger_run_mode" != "autonomous" ] || halt_refuse_separator "build-record" "done-when row $row_n" "$row_text"
+          halt_front="$BR_STOP_PREFIX a Stop: line says done-when row $row_n is wrong, which reads \"$row_text\""
           row_note=" Done-when row $row_n of $unit_id reads: $row_text A person rules on the row. A wrong row is reworded in design, design closes again, and start halts $unit_id for design drift, which restart answers. A row that stands goes back to the builder."
         else
           row_note=" The line must read '$BR_ROW_KIND: <done-when row number>: <the evidence>', and $unit_id has no done-when row '$row_n'."

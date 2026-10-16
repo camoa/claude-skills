@@ -193,7 +193,8 @@ reads `Stop: row-wrong: <row number>: <the evidence>`. `build-record` stops as a
 (exit 105), and its message quotes that row from the snapshot. The person rules on the row. A
 wrong row is reworded in design, and design closes again. Then `start` halts the order for
 design drift, and `restart` answers that halt. A row that stands goes back to the builder.
-Unattended, `clear-halt` comes first.
+Unattended, the order halts, and the halt quotes the row. `clear-halt` and `restart` refuse on an
+autonomous run (exit 68), so a person first sets the task to interactive.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
