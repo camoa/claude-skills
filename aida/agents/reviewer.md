@@ -138,7 +138,8 @@ file and the fixer's report. For each finding, write one verdict, `addressed` or
 file and lines you checked; attempted but not working is `not-addressed`. Note new breakage inside
 the fix diff only, in the same shape as a finding but with no `id`. The script gives each one the
 next free `f` number. Compare the fix diff against the fixer's five
-minimal-diff answers for each finding, and note where it exceeds them under `outOfScope`. Note
+minimal-diff answers for each finding, and note where it exceeds them under `outOfScope`. The
+brief's `fixScope` holds the files the fixer was given. A change to one of them is in scope. Note
 anything else you notice outside the fix diff as `outOfScope`; it opens nothing. Write your verdict file to the path the brief gives, in
 this shape:
 

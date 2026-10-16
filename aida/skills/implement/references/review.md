@@ -212,11 +212,15 @@ The fixer's dispatch record carries it, and the owned-files check after the roun
 Unattended, `--allow` refuses (exit 100). A path the order owns needs no grant. When no fix
 scope names it, it joins the scope union in any round, and not `allowedFiles`. A finding with
 origin `repair` needs this, because its fix scope is the one file the stopped build named.
-Three paths refuse (exit 3): an owned path a fix scope already names, a frozen test or a support
-file, and a path outside the order's files that no open finding's fix scope names. A finding
-whose whole fix scope is withheld is still handed over. The fixer reports it scope-insufficient in
-round one, and the ruling route below opens for it. When an `outsideOwned:` line printed, put it
-to the person before running `fix-brief`. Open with: "A review finding wants a change in a
+Three paths refuse (exit 3):
+
+- a frozen test or a support file;
+- an owned path that a fix scope already names;
+- a path outside the order's files that no open finding's fix scope names.
+
+A finding whose whole fix scope is withheld is still handed over. The fixer reports it
+scope-insufficient in round one, and the ruling route below opens for it. When an
+`outsideOwned:` line printed, put it to the person before running `fix-brief`. Open with: "A review finding wants a change in a
 file this order does not own. Only you can allow that. Allow the file and the fixer may change
 it. Withhold it and the fixer reports the finding, and you rule on it after the round." Then
 name the finding and the files.
@@ -353,8 +357,8 @@ Run:
 ```
 It refuses when the order is not at `fixed`, when it is halted, when nothing is open, or when this
 round is already verified. It refuses when HEAD is not where the fix record left it (exit 63). It writes `implementation/brief-<order id>-verify-<round>.json`. The
-brief holds the open findings the fixer received, the fix diff as a path, and the fixer's report as
-a path. It names the path the verdicts go to, `implementation/verify-<order id>-<round>.json`.
+brief holds the open findings the fixer received, the scope the fixer was given, the fix diff as a
+path, and the fixer's report as a path. It names the path the verdicts go to, `implementation/verify-<order id>-<round>.json`.
 Nothing else: not the original diff, not an earlier round's verdicts. It prints the brief's path, the three paths it
 names, and one line per finding.
 

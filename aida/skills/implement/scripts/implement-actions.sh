@@ -10448,6 +10448,15 @@ do_fix_brief() {
   while IFS= read -r ap; do
     [ -n "$ap" ] || continue
     ap_abs="$(normalize_abs "$(resolve_against "$ap" "$RV_CODEPATH")")"
+    frozen_hit=""
+    while IFS= read -r fp; do
+      [ -n "$fp" ] || continue
+      [ "$(normalize_abs "$(resolve_against "$fp" "$RV_CODEPATH")")" = "$ap_abs" ] && frozen_hit="$fp"
+    done <<FB_FROZEN
+$frozen_list
+FB_FROZEN
+    [ -z "$frozen_hit" ] \
+      || die 3 "fix-brief: --allow names $ap, a frozen test or a support file. A fixer never changes a test; rule the finding test-wrong at verify-record instead."
     named="$(printf '%s' "$open_json" | jq -r --arg p "$ap" --arg abs "$ap_abs" --arg code "$RV_CODEPATH" '
       [ .[] | (.fixScope // [])[] | select(. == $p or . == $abs or ($code + "/" + .) == $abs) ] | length')"
     # Gap row 342. An owned path outside every fix scope joins the scope and needs no grant, in any
@@ -10468,15 +10477,6 @@ do_fix_brief() {
 $(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" '.workOrders[] | select(.id != $u)')
 FB_OTHERS
     fi
-    frozen_hit=""
-    while IFS= read -r fp; do
-      [ -n "$fp" ] || continue
-      [ "$(normalize_abs "$(resolve_against "$fp" "$RV_CODEPATH")")" = "$ap_abs" ] && frozen_hit="$fp"
-    done <<FB_FROZEN
-$frozen_list
-FB_FROZEN
-    [ -z "$frozen_hit" ] \
-      || die 3 "fix-brief: --allow names $ap, a frozen test or a support file. A fixer never changes a test; rule the finding test-wrong at verify-record instead."
     # A repair round's grant answers a fixer's scope report, which names paths no fixScope holds.
     [ "$named" != "0" ] || [ -n "$repair_ids" ] || [ -n "$ap_owned" ] \
       || die 3 "fix-brief: --allow names $ap, which no open finding's fixScope names. A grant is for a finding; the open findings name: $(printf '%s' "$open_json" | jq -r '[ .[] | (.fixScope // [])[] ] | unique | join(", ")')"
@@ -11046,8 +11046,13 @@ do_verify_brief() {
   [ "$(rv_open_actionable_count "$RV_REVIEW_DOC")" -gt 0 ] 2>/dev/null \
     || die 53 "verify-brief: $unit_id has no open actionable finding, so there is nothing to verify."
   brief_file="$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json"
+  # Gap row 342. The scope the fixer was given, which --allow may have widened past the findings'
+  # own fix scopes, so a verifier does not read a widened file as out of scope.
+  local round_scope
+  round_scope="$(jq -c '.fixScope // []' "$IMPL_DIR/brief-$unit_id-fix-$rounds_used.json" 2>/dev/null)"
+  [ -n "$round_scope" ] || round_scope='[]'
   brief_json="$(jq -n --arg unit "$unit_id" --argjson round "$rounds_used" --argjson findings "$open_json" \
-    --slurpfile fix "$fix_file" --arg fixRecord "$fix_file" \
+    --slurpfile fix "$fix_file" --arg fixRecord "$fix_file" --argjson fixScope "$round_scope" \
     --arg verdictsPath "$IMPL_DIR/verify-$unit_id-$rounds_used.json" --arg worktree "$RV_CODEPATH" '
     $fix[0] as $fix
     | {unit: $unit,
@@ -11055,6 +11060,7 @@ do_verify_brief() {
      worktree: $worktree,
      round: $round,
      findings: $findings,
+     fixScope: $fixScope,
      fixDiffPath: ($fix.diffPath // ""),
      fixReportPath: ($fix.reportPath // ""),
      fixRange: "\($fix.startedAt // "")..\($fix.commit // "")",
