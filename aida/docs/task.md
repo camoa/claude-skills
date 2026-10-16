@@ -43,8 +43,9 @@ holds every task tree of that repository. The tree is named `<slug of the checko
 folder>-<task-id>`, on the task's branch, `feature/<task-id>`. The slug is the folder name
 lowercased, with every run of other characters made one hyphen and the end hyphens trimmed. So
 `sfup.newyorkcares` gives `sfup-newyorkcares.worktrees/sfup-newyorkcares-<task-id>`, and the site
-name is predictable. A tree made before this rule stays where it is. To put the group folder
-somewhere else, run the project skill's `set-worktree-base` with a folder outside the checkout.
+name is predictable. A tree made before this rule stays where it is. The folder beside the
+checkout is the default. You are asked once per project where the group folder goes, when the
+project is created or before its first task. The project skill's `set-worktree-base` changes it.
 
 Every stage action of the task runs inside that worktree, and refuses from anywhere else. AIDA
 can move this session into the tree, which asks for your approval, or start each call with

@@ -97,7 +97,7 @@ die() { printf 'project-actions: %s\n' "$2" >&2; exit "$1"; }
 usage() {
   cat <<'EOF' >&2
 usage: project-actions.sh create --name <name> --path <codePath> [--projects-home <dir>]
-                                  [--framework <fw>]...
+                                  [--framework <fw>]... [--worktree-base <dir>]
        project-actions.sh report
        project-actions.sh switch <name-or-path>
        project-actions.sh list [active|complete|archived]...
@@ -105,6 +105,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh set-code-path <name-or-path> <newCodePath>
        project-actions.sh set-frameworks <name-or-path> <framework>...
        project-actions.sh set-worktree-base <name-or-path> [<folder>]
+       project-actions.sh read-worktree-base <name-or-path>
        project-actions.sh git-init <name-or-path>
        project-actions.sh add-source <name-or-path> <kind> <folder|catalog>
        project-actions.sh recipe-source <projectFolder> <phase> <framework>
@@ -135,7 +136,7 @@ source "$SOURCES_LIB"  # the one source walk, for recipe-source and agentic-sour
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh"
 # shellcheck source=/dev/null
-source "${PLUGIN_ROOT}/scripts/lib/paths.sh"  # worktree_base_refusal, for set-worktree-base
+source "${PLUGIN_ROOT}/scripts/lib/paths.sh"  # worktree_base_refusal, for worktree_base_value
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.
@@ -285,16 +286,30 @@ EOF
 
 # The one writer of a new project file. create and the version 5 pickup both call it, so the
 # initial shape lives here once. frameworks is written when $4 is a JSON array. When $4 is null
-# the field is absent, and the check names it as missing for its producer to fill. Sources,
+# the field is absent, and the check names it as missing for its producer to fill. worktreeBase is
+# written when $5 is given, the same way. Sources,
 # playbook subscriptions, surfaces and the task rule start empty or null.
 # ideal/project.md declares each of them lazily, the first time a later stage needs it.
 write_project_file() {
   local project_path="$1" code_path="$2" name="$3" fw_json="$4"
-  jq -n --arg codePath "$code_path" --arg name "$name" --argjson frameworks "$fw_json" '
+  jq -n --arg codePath "$code_path" --arg name "$name" --argjson frameworks "$fw_json" --arg wb "${5:-}" '
     {schemaVersion: 1, codePath: $codePath, name: $name}
     + (if $frameworks == null then {} else {frameworks: $frameworks} end)
     + {state: "active", sources: [], playbookSubscriptions: {}, surfaces: null, taskRule: null}
+    + (if $wb == "" then {} else {worktreeBase: $wb} end)
   ' > "$project_path/project.json"
+}
+
+# The value worktreeBase records (gap row 350): $1 in canonical form when given, else `..`, the
+# default, which paths.sh reads as the parent of the code path $2. Stops the script when
+# worktree_base_refusal refuses it, so nothing is written. $3 the action's own name. create and
+# set-worktree-base both ask here.
+worktree_base_value() {
+  local base="${1:-..}" why
+  [ "$base" = ".." ] || base="$(canon_path "$base")"
+  why="$(worktree_base_refusal "$base" "$2")"
+  [ -z "$why" ] || die3 "$3: $base is refused ($why). A task tree never sits at or under the code path $2. Nothing was changed."
+  printf '%s' "$base"
 }
 
 # Makes a project folder a repository with its first commit. It writes the ignore file when the
@@ -348,13 +363,14 @@ project_line() {
 # ------------------------------------------------------------------------------------------------
 
 do_create() {
-  local name="" code_path="" frameworks=() projects_home="$PROJECTS_HOME_DEFAULT"
+  local name="" code_path="" frameworks=() projects_home="$PROJECTS_HOME_DEFAULT" worktree_base=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --name) name="${2:?--name needs a value}"; shift 2 ;;
       --path) code_path="${2:?--path needs a value}"; shift 2 ;;
       --projects-home) projects_home="${2:?--projects-home needs a value}"; shift 2 ;;
       --framework) frameworks+=("${2:?--framework needs a value}"); shift 2 ;;
+      --worktree-base) worktree_base="${2:?--worktree-base needs a value}"; shift 2 ;;
       *) die3 "create: unrecognized argument: $1" ;;
     esac
   done
@@ -372,6 +388,8 @@ do_create() {
   esac
 
   code_path="$(canon_path "$code_path")"
+  # Without the option the default is recorded, the way an unattended run takes the projects base.
+  worktree_base="$(worktree_base_value "$worktree_base" "$code_path" create)" || exit 3
 
   # The library's own reader, not a raw read of REGISTRY_FILE: registry__current tells a missing
   # store (fine, nothing registered yet) apart from a corrupt one (refuses and fails loudly), so
@@ -406,7 +424,7 @@ do_create() {
 
   mkdir -p "$project_path/records" || die3 "cannot create $project_path"
 
-  write_project_file "$project_path" "$code_path" "$name" "$(printf '%s\n' "${frameworks[@]}" | jq -R . | jq -s .)" \
+  write_project_file "$project_path" "$code_path" "$name" "$(printf '%s\n' "${frameworks[@]}" | jq -R . | jq -s .)" "$worktree_base" \
     || die3 "could not write $project_path/project.json"
 
   cat > "$project_path/project_state.md" <<EOF
@@ -855,33 +873,34 @@ do_set_frameworks() {
 # set-worktree-base: the folder that holds the project's group of task trees (gap row 350)
 # ------------------------------------------------------------------------------------------------
 
-# With a folder, records it as worktreeBase in its resolved form. With none, removes the field, so
-# the trees go beside the code path again. A refused folder writes nothing: worktree_base_refusal
-# in paths.sh is the one rule, and the check and task_worktree read the same one. A tree that a
-# task already records stays where it is, so this moves no tree.
+# Records the folder as worktreeBase, or the default, the parent of the code path, when none is
+# given. It is the repair the check names when the field is missing. A refused folder writes
+# nothing. A tree that a task already records stays where it is, so this moves no tree.
 do_set_worktree_base() {
-  local target="${1:?set-worktree-base: a name or a path is required}" base="${2:-}"
-  local match project_path code why
+  local target="${1:?set-worktree-base: a name or a path is required}" match project_path base
   match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
   project_path="$(printf '%s' "$match" | jq -r '.path')"
-  if [ -z "$base" ]; then
-    write_project_field "$project_path" "could not remove worktreeBase from $project_path/project.json" \
-      'del(.worktreeBase)'
-    commit_project "$project_path" "Clear the worktree base" "requested" "" "" "project" "worktree-base" project.json \
-      || printf 'project-actions: the worktree base was removed but not committed.\n' >&2
-    echo "WORKTREE BASE: none, new task trees go beside the code path"
-  else
-    code="$(jq -r '.codePath // empty' "$project_path/project.json")"
-    base="$(canon_path "$base")"
-    why="$(worktree_base_refusal "$base" "$code")"
-    [ -z "$why" ] || die3 "set-worktree-base: $base is refused ($why). A task tree never sits at or under the code path $code, nor in a location refused as a code path. Nothing was changed."
-    write_project_field "$project_path" "could not update worktreeBase in $project_path/project.json" \
-      --arg b "$base" '.worktreeBase = $b'
-    commit_project "$project_path" "Set the worktree base to ${base}" "requested" "" "" "project" "worktree-base" project.json \
-      || printf 'project-actions: the worktree base was written but not committed.\n' >&2
-    echo "WORKTREE BASE: $base"
-  fi
+  base="$(worktree_base_value "${2:-}" "$(printf '%s' "$match" | jq -r '.codePath')" set-worktree-base)" || exit 3
+  write_project_field "$project_path" "could not update worktreeBase in $project_path/project.json" \
+    --arg b "$base" '.worktreeBase = $b'
+  commit_project "$project_path" "Set the worktree base to ${base}" "requested" "" "" "project" "worktree-base" project.json \
+    || printf 'project-actions: the worktree base was written but not committed.\n' >&2
+  echo "WORKTREE BASE: $base"
   run_check "$project_path"
+}
+
+# read-worktree-base: prints the recorded worktreeBase as an absolute path and exits 0. When the
+# project records none, prints the default, the parent of the code path, and exits 1, so the skill
+# asks once and offers that default.
+do_read_worktree_base() {
+  local target="${1:?read-worktree-base: a name or a path is required}" match project_path base rc=0
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 3; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+  base="$(jq -r '.worktreeBase // empty' "$project_path/project.json" 2>/dev/null)"
+  [ -n "$base" ] || { base=".."; rc=1; }
+  worktree_base_path "$base" "$(printf '%s' "$match" | jq -r '.codePath')"
+  printf '\n'
+  return "$rc"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1584,6 +1603,7 @@ case "$action" in
   set-code-path) do_set_code_path "$@" ;;
   set-frameworks) do_set_frameworks "$@" ;;
   set-worktree-base) do_set_worktree_base "$@" ;;
+  read-worktree-base) do_read_worktree_base "$@" ;;
   git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
   recipe-source) do_recipe_source "$@" ;;

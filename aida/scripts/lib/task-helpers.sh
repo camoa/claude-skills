@@ -871,8 +871,9 @@ task_after_state() {
 }
 
 # The folder that holds every task tree of one repository: <base>/<slug of the code folder>.worktrees.
-# The base is the project's worktreeBase when set (gap row 350), else the parent of the code path,
-# so the trees do not lie loose among the other folders there (gap row 260). A refused base stops
+# The base is the project's worktreeBase (gap row 350). A project that records none gets the
+# default, the parent of the code path, so the trees do not lie loose among the other folders
+# there (gap row 260). The task skill asks for the field before it creates a task. A refused base stops
 # the action: worktree_base_refusal in paths.sh holds the rule. task_worktree makes a tree in the
 # group, and prune removes the group when empty. The base itself is never removed.
 # $1 the project folder, $2 the code path, $3 the action's own name. Dies through die3.
@@ -888,8 +889,8 @@ task_worktree_group() {
     command -v worktree_base_refusal >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/paths.sh" \
       || die3 "$3: the library failed to load: paths.sh"
     why="$(worktree_base_refusal "$base" "$code")"
-    [ -z "$why" ] || die3 "$3: the project's worktreeBase $base is refused ($why). A task tree never sits at or under the code path, nor in a location refused as a code path. Nothing was made. Run the project set-worktree-base action again."
-    base="$(cd "$base" 2>/dev/null && pwd -P)" || base="$(normalize_abs "$base")"
+    [ -z "$why" ] || die3 "$3: the project's worktreeBase $base is refused ($why). A task tree never sits at or under the code path. Nothing was made. Run the project set-worktree-base action again."
+    base="$(worktree_base_path "$base" "$code")"
   else
     base="$(dirname -- "$code")"
   fi

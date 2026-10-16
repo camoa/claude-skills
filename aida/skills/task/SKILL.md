@@ -3,7 +3,7 @@ name: task
 description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
 argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
 arguments: [action, target]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh distill *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh distill *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh read-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh --run-mode * set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh distill *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh distill *), Agent, EnterWorktree
 ---
 
 # Task
@@ -51,7 +51,22 @@ accomplish and why, not a ticket. Write it back in one or two sentences and conf
 yes or no before writing anything. Autonomous with no goal given or implied by the conversation:
 **halt.** A task with no stated goal is not a record of anything.
 
-**3. Write it.** Run, with the run mode set as decided above. Add `--after <task-id>` when the
+**3. Write it.** First the worktree base. A project made before this setting may record none. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh read-worktree-base "<projectPath>"
+```
+Exit 0: a base is recorded. Use it silently; this is never asked a second time. Exit 1: it
+printed the default. Interactive: ask once, "Where should task worktrees go? Default:
+`<printed folder>`." Accept the default on an empty answer, or a typed absolute path. Record it:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
+  set-worktree-base "<projectPath>" ["<folder>"]
+```
+Exit 3 refuses a folder at or under the code path: ask again. Autonomous: do not ask. Run the
+same action with no folder, so it records the default, and say that it did. This is asked here
+because the first tree is about to be made, and a tree once made stays where it is.
+
+Then run the create, with the run mode set as decided above. Add `--after <task-id>` when the
 person said this task builds on another task of this project:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
@@ -60,8 +75,8 @@ person said this task builds on another task of this project:
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree in one folder per repository beside the code path, at
 `<parent of codePath>/<slug of the code folder>.worktrees/<slug of the code folder>-<name>`.
-A project that sets a worktree base through the project skill gets `<base>` in place of
-`<parent of codePath>`. The script refuses a base at or under the code path.
+The worktree base recorded above takes the place of `<parent of codePath>`. The script refuses a
+base at or under the code path.
 The tree is on the branch `feature/<name>`. The script records both in `task.json` and commits. The folder name is the
 slug of the code folder plus the task name, so a site name is predictable and unique. The tree is
 outside the code path for one reason. A nested worktree is invisible to a tool that registers

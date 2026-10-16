@@ -12,7 +12,8 @@
     "codePath",
     "name",
     "frameworks",
-    "state"
+    "state",
+    "worktreeBase"
   ],
   "properties": {
     "schemaVersion": {
@@ -106,8 +107,7 @@
     "worktreeBase": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^/",
-      "description": "The folder that holds this project's group of task trees, `<worktreeBase>/<slug of the code folder>.worktrees`, in its resolved form. Absent means the parent of codePath, the default. Written and removed only by the project skill's set-worktree-base action. It may not be at or under codePath, because DDEV hands a nested tree to the parent project and a tool that registers projects by folder misses it, and it may not be a location refused as a code path. The check reports either as a cross-field fault, and task_worktree refuses to make a tree there. A tree task.json already records stays where it is; prune removes only the group folder, never this one."
+      "description": "The folder that holds this project's group of task trees, `<worktreeBase>/<slug of the code folder>.worktrees`, as an absolute path in its resolved form, or `..`, the default, read against codePath as its parent. The default stays relative so it follows codePath to another machine or a new code path. A person answers it once: at project create, or at the first task create of a project that has none. An unattended run records the default and says so. Written by `create --worktree-base` and by the project skill's set-worktree-base action, which is also the repair when the field is missing; read-worktree-base prints it, or the default. It may not be at or under codePath, because DDEV hands a nested tree to the parent project and a tool that registers projects by folder misses it. The check reports that as a cross-field fault, and task_worktree refuses to make a tree there. A tree task.json already records stays where it is; prune removes only the group folder, never this one. When the field is missing, task_worktree uses the default."
     }
   },
   "$defs": {

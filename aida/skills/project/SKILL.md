@@ -139,7 +139,7 @@ names with any framework names already given or mentioned, keeping the given one
 given and nothing detected, or the code path does not exist yet: interactive asks "What is the
 stack?"; autonomous **halts**, reporting that the frameworks are missing.
 
-**4. The projects-folder base.** Run
+**4. The two bases.** First the projects-folder base. Run
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh read-projects-base
 ```
@@ -148,14 +148,24 @@ Exit 1, interactive: ask once, "Where should project folders be stored? Default:
 `~/.claude/aida/projects`." Accept the default on an empty answer, or a typed absolute path.
 Exit 1, autonomous: use the default silently; this is not one of the three facts that halts.
 
-**5. Write it.** Once all four are known, run, with the run mode set as decided above:
+Then the worktree base, the folder that holds this project's task worktrees. Each tree goes in
+`<worktree base>/<slug of the code folder>.worktrees/<slug of the code folder>-<task id>`.
+Interactive: ask once, "Where should task worktrees go? Default: `<parent of the code path>`."
+Accept the default on an empty answer, or a typed absolute path. Asked here because the code
+path is known now, and a new project has no tree yet to move. Autonomous: do not ask. Pass no
+`--worktree-base`, so the script records the default. Say that it did, and that
+`set-worktree-base` changes it.
+
+**5. Write it.** Once these are known, run, with the run mode set as decided above:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   create --name "<name>" --path "<codePath>" --projects-home "<base>" \
-  --framework "<fw1>" [--framework "<fw2>" ...]
+  --framework "<fw1>" [--framework "<fw2>" ...] [--worktree-base "<folder>"]
 ```
 It writes every file, makes the first commit, adds the registry row, records the projects-home
-base the first time only, and runs the check itself. Show the whole output.
+base the first time only, and runs the check itself. It records the worktree base given, or the
+default. A worktree base at or under the code path exits 3 before anything is written: ask
+again. Show the whole output.
 
 Exit code 2 from the check here is normal, not a problem: the code path was just set from what
 was confirmed, and a brand-new project can go without code for a while. Say so and move on.
@@ -352,20 +362,22 @@ the list into the project file, commits the change, and runs the check. Show the
 
 ## `set-worktree-base <name-or-path> [<folder>]`
 
-Sets the folder that holds this project's task worktrees. By default each tree goes in
-`<parent of codePath>/<slug of the code folder>.worktrees`. With a folder, the group goes in
-`<folder>/<slug of the code folder>.worktrees` instead. The group name keeps the code folder, so
-site names stay unique on the machine. Run:
+Sets the folder that holds this project's task worktrees. Each tree goes in
+`<folder>/<slug of the code folder>.worktrees/<slug of the code folder>-<task id>`. The group name
+keeps the code folder, so site names stay unique on the machine. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   set-worktree-base "<target>" ["<folder>"]
 ```
 Looks the target up the same way `switch` does. Not found: say so and stop. Without a folder it
-removes the setting, and new trees go beside the code path again. The script refuses a folder at
-or under the code path, because DDEV hands a nested tree to the parent project. It also refuses a
-location that is refused as a code path. A refusal exits 3 and writes nothing. Otherwise it
-records the folder, commits the change, and runs the check. A tree that a task already records
-stays where it is. Show the whole output.
+records the default, `..`, which reads as the parent of the code path and follows it. This is the repair the check names when the
+field is missing. The script refuses a folder at or under the code path, because DDEV hands a
+nested tree to the parent project. A refusal exits 3 and writes nothing. Otherwise it records the
+folder, commits the change, and runs the check. A tree that a task already records stays where it
+is. Show the whole output.
+
+`read-worktree-base <name-or-path>` prints the recorded folder and exits 0. A project that records
+none prints the default and exits 1. The task skill reads it before a task is created.
 
 ## `add-source <name-or-path> <kind> <folder | catalog>`
 
