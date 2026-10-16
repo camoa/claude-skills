@@ -1248,6 +1248,33 @@ br_subtract_baseline() {
   [ -z "$selector" ] || rm -f "$base_sel" "$now_sel"
 }
 
+# For a tool row that failed now and whose baseline recorded it undeclared (gap row 359). The
+# baseline reads undeclared when no file of its scope existed at the baseline commit, so it ran
+# nothing and kept nothing to subtract. A file that did not exist then held no finding then. So
+# when every path in $5 is absent at commit $4 of repository $3, every finding in the run at $6 is
+# this task's own. This sets BR_SUB_VERDICT unmet, BR_SUB_DETAIL, BR_SUB_NEW and BR_SUB_COUNT as
+# br_subtract_baseline does. $1 a word for the message, $2 how the command failed, $7 its exit.
+# Returns 1 and sets nothing when the exit is 127 (the tool could not run), the commit or the list
+# is empty, a path lies outside the repository, or a path existed at the commit.
+# shellcheck disable=SC2034 # read by the sourcing script
+br_new_files_only() {
+  local label="$1" how="$2" repo="$3" commit="$4" paths="$5" now="$6" rc="$7" p
+  [ "$rc" != "127" ] && [ -n "$commit" ] || return 1
+  [ "$(printf '%s' "$paths" | jq 'length' 2>/dev/null)" != "0" ] || return 1
+  while IFS= read -r p; do
+    [ -n "$p" ] || return 1
+    case "$p" in "$repo"/*) p="${p#"$repo"/}" ;; /*) return 1 ;; esac
+    ! git -C "$repo" cat-file -e "$commit:./$p" 2>/dev/null || return 1
+  done <<BR_NEW_PATHS
+$(printf '%s' "$paths" | jq -r '.[]' 2>/dev/null)
+BR_NEW_PATHS
+  BR_SUB_VERDICT="unmet"
+  BR_SUB_COUNT="$(grep -c '[^[:space:]]' "$now" 2>/dev/null)"
+  case "$BR_SUB_COUNT" in ''|*[!0-9]*) BR_SUB_COUNT=0 ;; esac
+  BR_SUB_NEW="$(grep '[^[:space:]]' "$now" 2>/dev/null | head -20 | jq -Rsc 'split("\n") | map(select(length > 0))')"
+  BR_SUB_DETAIL="the $label command $how, and no file it read existed at the baseline commit $commit, so the baseline held no finding in them and every finding here is this task's own. newLines holds the first 20 lines."
+}
+
 # The place in baseline.json that holds one tool row's own earlier result, as a JSON path for jq's
 # getpath and setpath. The three floor rows keep their own fields. Every other row the check recipe
 # declares sits under toolRows by its id (gap row 353), so a row a project adds subtracts the way

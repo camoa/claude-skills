@@ -6782,7 +6782,8 @@ BRC_OBSERVED=""
 # introduced the finding; a baseline that was unmet has its own output subtracted line by line
 # (br_subtract_baseline), so a finding already there at the commit the build started from is not
 # this order's; a baseline that was unknown or undeclared makes this unknown, naming which,
-# because there is nothing to subtract from.
+# because there is nothing to subtract from. One case reads otherwise: an undeclared baseline over
+# files that did not exist at its commit held no finding in them (br_new_files_only).
 #
 # Two optional keys change that (dev-guides, process-recipes, `## Check commands` is parsed).
 # `extensions` narrows what {paths} expands to; a row whose expansion comes out empty did not apply
@@ -6954,8 +6955,14 @@ br_tool_check() {
               new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
               ;;
             unknown|undeclared)
-              verdict="unknown"
-              detail="the $label command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so there is nothing to subtract and this cannot tell an old finding from a new one."
+              if [ "$baseline_verdict" = "undeclared" ] && br_new_files_only "$label" "$how" "$BRC_CODEPATH" \
+                  "$(printf '%s' "$baseline_doc" | jq -r '.commit // ""')" "$paths_json" "$outfile" "$rc"; then
+                verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
+                new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
+              else
+                verdict="unknown"
+                detail="the $label command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so there is nothing to subtract and this cannot tell an old finding from a new one."
+              fi
               ;;
             *)
               verdict="unknown"
