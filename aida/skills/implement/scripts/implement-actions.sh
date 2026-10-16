@@ -12525,14 +12525,19 @@ do_restart() {
   removed="$(printf '%s' "$removed_ids_json" | jq -r 'join(", ")')"
   retaken="$(printf '%s' "$retaken_ids_json" | jq -r 'join(", ")')"
 
-  local head_short today target
+  local head_short today target n=2
   head_short="$(git -C "$RV_CODEPATH" rev-parse --short HEAD 2>/dev/null)"
   [ -n "$head_short" ] \
     || die 3 "restart: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
   today="$(date -u +%Y-%m-%d)"
   target="$TASK_PATH/implementation-$today-$head_short"
-  [ ! -e "$target" ] \
-    || die 3 "restart: $target already exists. A second restart on the same day at the same commit would write over the first one's records; move or remove it by hand first."
+  # A second restart on the same day at the same commit takes the next free number, so the first
+  # one's records stay where they are. Every reader finds the folders by `implementation-*`
+  # (gap row 347).
+  while [ -e "$target" ]; do
+    target="$TASK_PATH/implementation-$today-$head_short-$n"
+    n=$((n + 1))
+  done
 
   # The records move aside, and the code a halted order committed must leave the tree too, or its
   # next test author writes against it and its rebuild finds nothing to do (gap row 252). A record
