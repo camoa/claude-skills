@@ -473,7 +473,8 @@ This step runs all eight deciding checks. The record holds every one.
   own `verify` run entries run first, then the `## Configuration gate` lines of the implement
   recipe. The worse verdict stands. The first line that does not pass is named, with its
   output. A placeholder given several `--value` entries runs its line once per value. It reads
-  unknown when the task records no environment. An order with no verify lines also reads
+  unknown when the task records no environment. `task environment up` records a site the
+  worktree already runs, with no bring-up. An order with no verify lines also reads
   unknown when no `--implement-recipe` was passed, or when that recipe carries no such block.
   An order with verify lines runs them alone then, and the detail says the block did not run.
   A verify line that is not binding runs only when the person approved it at the design close.

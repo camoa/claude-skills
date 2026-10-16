@@ -180,6 +180,12 @@ out after the line. The implementation step runs the same line before an order's
 command as it ran and that command's own output in `records/environment-up.txt`, in this order,
 and one line in that record marking the address command, so `down` can find that command's output
 later.
+A site the worktree already runs is adopted. This applies when `task.json` records no address and
+no marker, and the recipe's `## Status` line says the site is up. Then `up` writes and commits the
+`## Files` blocks, runs the address command with its `root:` check, and records the address. It
+runs no precondition, token or bring-up line, because the seed would replace that site's database.
+It records no named file in `worktree.recipeChanges`, and prints `environment: adopted` in place of
+`environment: coming-up`. `show` then prints `precondition check: not run`.
 First it writes each `## Files` block absent from the worktree. A file that holds the block of an
 earlier version of the recipe is replaced. Any other file with other content refuses at 3. The
 earlier versions are the ones the navigator store holds, so nothing is fetched. Then it runs each

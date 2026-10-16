@@ -7533,7 +7533,7 @@ br_gate_check() {
   local back_lines="" back_note="" gate_n gate_why gate_rc gate_skipped
   br_verify_runs; own_json="$BRV_RUNS"; cites="$BRV_CITES"
   if [ -z "$(jq -r '.environment.address // empty' "$TASK_PATH/task.json" 2>/dev/null)" ]; then
-    detail="task.json records no environment address, so the worktree has no site and no snapshot for the first gate line to restore. Bring the environment up, then record the attempt again."
+    detail="task.json records no environment address, so the gate lines have no site to run on. Run task environment $(jq -r '.id // "<task-id>"' "$TASK_PATH/task.json" 2>/dev/null) up: a site the worktree already runs is recorded as it is, with no bring-up. Then record the attempt again."
     # The marker task environment up writes before its bring-up. A site may be half up, so the
     # bring-up is not the next step here; the tear-down is. The verdict is unknown either way.
     [ "$(jq -r '.environment.state // empty' "$TASK_PATH/task.json" 2>/dev/null)" != "coming-up" ] \
