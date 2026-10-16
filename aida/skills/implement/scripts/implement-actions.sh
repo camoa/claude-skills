@@ -112,7 +112,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # role's record carries the key.
 # A test author's record carries `denyCommand`, the runtime forms scripts/introspection-forms.txt
 # lists, which hooks/deny-prior-source.sh refuses in its Bash commands (gap row 231).
-#   implement-actions.sh dispatch-close <task_folder> [--no-report]
+#   implement-actions.sh dispatch-close <task_folder> [--no-report | --not-sent]
 #
 # `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. A
 # fixer or test author whose pinned report lacks its completion line takes that path unasked (112).
@@ -125,6 +125,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # reviewer or a row-checker, a plain close also refuses when its file is missing (111).
 # `dispatch-open --resume` reopens a record already closed for that one resume. It skips the
 # leftover check `dispatch-open` otherwise runs (exit 104) and writes `resumedAt` at once.
+# `dispatch-close --not-sent` removes a record whose role was never dispatched, and spends no
+# resume. It refuses when the role's file was written after the record opened, when the record
+# counts a resume, or when its code path has a commit after it opened (gap row 343).
 #   implement-actions.sh step <name>
 #
 # `step` prints one of this skill's own step files, from
@@ -976,6 +979,19 @@ order_fix_rounds_allowed() {
 # (gap row 250). dispatch-close reads its absence as a stop before the role finished.
 IM_REPORT_DONE="Report: complete"
 
+# im_report_line_fault <report> <line>: prints why the report does not end with the line after
+# other text, or nothing when it does. dispatch-close reads it as a stop before the role finished,
+# and dispatch-open as a finished report that a fresh dispatch must not remove (gap row 343).
+im_report_line_fault() {
+  local last
+  last="$(grep -v '^[[:space:]]*$' "$1" | tail -n 1 | sed 's/[[:space:]]*$//')"
+  if [ "$last" != "$2" ]; then
+    printf '%s' "$1 does not end with the line '$2'"
+  elif [ "$(grep -v '^[[:space:]]*$' "$1" | grep -c -v -x -F -e "$2")" -eq 0 ]; then
+    printf '%s' "$1 holds nothing but the line '$2'"
+  fi
+}
+
 # A light task allows a fake off the demo path, marked in the code with this text. The build brief
 # names it, and `close` logs every added line that carries it (gap row 197).
 FAKE_MARKER="AIDA-FAKE:"
@@ -1055,7 +1071,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--deny-read <path relative to codePath>]...
                             [--allow-write <path relative to codePath>]...
                             [--test-glob <glob from the implement recipe>]... [--resume]
-       implement-actions.sh dispatch-close <task_folder> [--no-report]
+       implement-actions.sh dispatch-close <task_folder> [--no-report | --not-sent]
        implement-actions.sh step <name>
 EOF
 }
@@ -13168,7 +13184,7 @@ TG_ROOTS
         else ((now - ($at | fromdateiso8601)) / 3600 | floor) as $h
           | if $h < 24 then "" else " It was opened at \($at), \($h) hours ago, so its role may never have returned." end
         end' "$dispatch_file" 2>/dev/null)"
-    die 37 "dispatch-open: $dispatch_file is already open, for role $held_role on unit $held_unit.$held_age Run dispatch-close first."
+    die 37 "dispatch-open: $dispatch_file is already open, for role $held_role on unit $held_unit.$held_age Run dispatch-close first, with --not-sent if its role was never dispatched."
   fi
 
   # A fresh role must not meet the files another role left (gap row 228, row 217's check). Three
@@ -13246,6 +13262,14 @@ TG_ROOTS
     case "$role_bare" in
       fixer|test-author)
         report_extra="$(jq -nc --arg p "$report_path" --arg l "$IM_REPORT_DONE" '{reportPath: $p, completionLine: $l}')"
+        # fix-record moves the round on, so a fixer's report for this round is never recorded. A
+        # finished one written after the brief is the round's answer, and removing it lost one
+        # (gap row 343). A ruling that changes the round writes the brief again, newer than it.
+        if [ "$role_bare" = "fixer" ] && [ "$resume" = false ] && [ -f "$report_path" ] \
+           && [ -z "$(im_report_line_fault "$report_path" "$IM_REPORT_DONE")" ] \
+           && [ "$(im_mtime "$report_path")" -ge "$(im_mtime "$report_brief")" ]; then
+          die 3 "dispatch-open: $report_path ends with '$IM_REPORT_DONE' and was written after $report_brief, so the fixer finished round $fx_round of $unit_id and fix-record has not read it. A fresh dispatch would remove it. Run fix-record on it. To dispatch the round again on a changed brief, run fix-brief first. Nothing was dispatched."
+        fi
         [ "$resume" = true ] || rm -f "$report_path" || die 3 "dispatch-open: could not remove the earlier report $report_path" ;;
       *) report_extra="$(jq -nc --arg p "$report_path" '{reportPath: $p}')" ;;
     esac
@@ -13324,11 +13348,14 @@ do_step() {
 
 do_dispatch_close() {
   [ "$#" -ge 1 ] || die 3 "dispatch-close: a task folder is required"
-  local task_path="$1" no_report=false
+  local task_path="$1" no_report=false not_sent=false
   if [ "$#" -ge 2 ]; then
-    [ "$2" = "--no-report" ] || die 3 "dispatch-close: unrecognized extra argument: $2"
+    case "$2" in
+      --no-report) no_report=true ;;
+      --not-sent) not_sent=true ;;
+      *) die 3 "dispatch-close: unrecognized extra argument: $2" ;;
+    esac
     [ "$#" -le 2 ] || die 3 "dispatch-close: unrecognized extra argument: $3"
-    no_report=true
   fi
   local resolve_rc
   TASK_PATH="$(resolve_task_folder "$task_path" "dispatch-close")"
@@ -13347,13 +13374,35 @@ do_dispatch_close() {
   # 307). A --no-report close runs the same test, because the runtime can mark a role stopped after
   # its last act (gap rows 309 and 322). A record from before the key existed names no file, and
   # nothing is checked.
-  local cut_off="" rp_path="" rp_line="" rp_cause="" rp_last rp_dirty rp_written rp_opened rp_unit rp_where rp_project rp_owned
+  local cut_off="" rp_path="" rp_line="" rp_cause="" rp_dirty rp_written rp_opened rp_unit rp_where rp_project rp_owned
   if [ -f "$dispatch_file" ]; then
     rp_path="$(jq -r '.reportPath // ""' "$dispatch_file" 2>/dev/null)"
     rp_line="$(jq -r '.completionLine // ""' "$dispatch_file" 2>/dev/null)"
     rp_opened="$(jq -r '(.openedAt // "") | fromdateiso8601? // ""' "$dispatch_file" 2>/dev/null)"
     [ -n "$rp_opened" ] || rp_opened="$(im_mtime "$dispatch_file")"
     rp_written="$(im_mtime "$rp_path" 2>/dev/null)"
+    # A record opened and never sent has no file its role wrote and no commit after it opened. It
+    # is removed and spends no resume (gap row 343). A record that counts a resume had a role return.
+    if [ "$not_sent" = true ]; then
+      local ns_head ns_why=""
+      ns_head="$(git -C "$(jq -r '.codePath // ""' "$dispatch_file")" log -1 --format=%ct 2>/dev/null)"
+      if [ -z "$rp_path" ]; then
+        ns_why="it names no file its role writes, so nothing shows that no role ran"
+      elif [ -f "$rp_path" ] && { [ -n "$rp_line" ] || [ "$rp_written" -ge "$rp_opened" ]; }; then
+        ns_why="$rp_path was written after it opened"
+      elif [ "$(jq -r 'has("resumes")' "$dispatch_file")" = "true" ]; then
+        ns_why="it counts a resume, so its role has returned"
+      elif [ -z "$ns_head" ]; then
+        ns_why="git could not read the last commit in its code path"
+      elif [ "$ns_head" -gt "$rp_opened" ]; then
+        ns_why="its code path has a commit at $(im_iso_of "$ns_head"), after it opened at $(im_iso_of "$rp_opened")"
+      fi
+      [ -z "$ns_why" ] \
+        || die 3 "dispatch-close: --not-sent refused, because $ns_why. A role may have run, so close the record as a returned role: run dispatch-close without --not-sent. The record stays open."
+      rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
+      echo "DISPATCH-CLOSE: removed $dispatch_file, opened at $(im_iso_of "$rp_opened") and never sent. No resume was spent."
+      exit 0
+    fi
     if [ -z "$rp_path" ]; then
       :
     elif [ ! -f "$rp_path" ]; then
@@ -13367,12 +13416,8 @@ do_dispatch_close() {
         "$(dirname "$dispatch_file")/brief-$(jq -r '.unit // ""' "$dispatch_file")-build.json" 2>/dev/null)")"
       rp_cause="${rp_cause%.}"
     elif [ -n "$rp_line" ]; then
-      rp_last="$(grep -v '^[[:space:]]*$' "$rp_path" | tail -n 1 | sed 's/[[:space:]]*$//')"
-      if [ "$rp_last" != "$rp_line" ]; then
-        rp_cause="$rp_path does not end with the line '$rp_line'"
-      elif [ "$(grep -v '^[[:space:]]*$' "$rp_path" | grep -c -v -x -F -e "$rp_line")" -eq 0 ]; then
-        rp_cause="$rp_path holds nothing but the line '$rp_line'"
-      elif [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "fixer" ]; then
+      rp_cause="$(im_report_line_fault "$rp_path" "$rp_line")"
+      if [ -z "$rp_cause" ] && [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "fixer" ]; then
         # A record order's fixer commits in the project folder, so its owned files there are read,
         # never the whole folder, where other tasks' records change (gap row 312). An unreadable
         # snapshot reads as a code order, so this adds no refusal.

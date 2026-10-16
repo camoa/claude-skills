@@ -201,6 +201,13 @@ that hold it. The refusal names the record's age when it opened over a day ago, 
 that never returned leaves one.
 `build-record` and `fix-record` refuse too while a record for their order is open.
 
+**Open the dispatch record just before the Agent call**, never ahead of a question to the person.
+The answer can change the brief, and the open record then blocks the record steps. A record whose
+role was never dispatched closes with `dispatch-close "<task_folder>" --not-sent`. That close
+spends no resume. It refuses when the role's file or a commit in the code path is newer than the
+record, because then a role may have run. A fresh `dispatch-open` refuses while a fixer's finished
+report waits for `fix-record`. Run `fix-record` first, or `fix-brief` again for a changed round.
+
 **A role the runtime stops at its turn limit is resumed once.** This holds for every role this
 skill dispatches. An implementer whose order's diff budget starts with `large` is resumed twice.
 The script reads that word from the frozen order. The signal is the runtime's own mark that the
