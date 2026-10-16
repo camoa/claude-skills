@@ -16,6 +16,7 @@ recorded.
 - the run mode, which is `autonomous` here
 - the path of the work order record whose `reasoning` holds the decisions
 - the path of the verdict file you write
+- the code path, which is the task's worktree, where the files that the reasoning cites are read
 
 Read the verdict file first, when it exists. It maps each candidate already judged to a value.
 
@@ -25,7 +26,8 @@ the reasoning's paragraphs that start `Candidate `. Skip an entry whose `runMode
 every other candidate.
 
 The order's reasoning holds one paragraph per candidate, appended in order. For each candidate,
-judge the last paragraph that starts `Candidate <that candidate> (`, and read the files it cites.
+judge the last paragraph that starts `Candidate <that candidate> (`, and read the files it cites
+under the code path.
 That paragraph names the candidate, its closeness, the cost dimensions cited, the verdict
 proposed, and the disposition a fixed table gave. Judge the disposition, the value that stands. **You are not
 given the account of the context that made the decision, and that is the point.** A decision checked against its own author's
@@ -57,5 +59,5 @@ right. Say which claim, and which file failed to support it.
 
 Write nothing except the verdict file. You do not fix the decision, and you do not rewrite the reasoning.
 
-When a paragraph cites a file that does not exist, say so, and leave that candidate out of the
-verdict file. Do not substitute a file you think it meant.
+When a paragraph cites a file that does not exist under the code path, say so, and leave that
+candidate out of the verdict file. Do not substitute a file you think it meant.

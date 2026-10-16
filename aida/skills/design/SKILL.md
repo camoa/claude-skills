@@ -322,7 +322,8 @@ A rejection that lives only in the conversation is not a rejection anyone can ch
 **Autonomous:** once every disposition of an order is recorded, dispatch `disposition-confirmer`
 once for that order, with the message this file names. One confirmer judges every candidate of
 the order. Its lines are the role and the run mode. Then the order file's path, from the
-`DISPOSED:` line. Then the verdict file's path, from the `confirmFile:` line. A dispatch that names
+`DISPOSED:` line. Then the verdict file's path, from the `confirmFile:` line. Then the code
+path, which is the task's worktree, from the `worktree:` line. A dispatch that names
 no role runs as the general agent with write tools and this session's model. This one must write
 nothing but its verdict file to mean anything.
 
