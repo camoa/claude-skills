@@ -7799,10 +7799,13 @@ br_seven_checks() {
   # --- the realized diff touches only the files this order owns ------------------------------------
   local ofc_verdict ofc_detail
   local diff_output owned_files_json owned_count unmatched="" p matched gi g set_aside=0 aside_noun
-  local own_count allowed_hit="" env_aside="" rerun_step=""
+  local own_count allowed_hit="" env_aside="" rerun_step="" others=""
   # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
   # the new path, so a deleted file this order does not own would never appear here.
   diff_output="$(git_diff_of "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$BRC_SCOPE" --no-renames --name-only)"
+  # Another order's commits inside the range are that order's to answer for (gap row 340).
+  [ -n "$BRC_SCOPE" ] || others="$(im_other_order_commits "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$BRC_UNIT_JSON")"
+  [ -z "$others" ] || diff_output="$(im_kept_paths "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$others" "$diff_output")"
   # The paths a person allowed for a fix round follow the order's own. So an index at or past
   # own_count is an allowed path, and the detail names it (live-run row 116).
   owned_files_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c --argjson a "$BRC_ALLOWED_JSON" '(.ownedFiles // []) + $a')"
@@ -7845,7 +7848,7 @@ BR_DIFF
     [ "$BRC_ALLOWED_JSON" = "[]" ] || ofc_detail="${ofc_detail%.}, nor the paths allowed for this round: $(printf '%s' "$BRC_ALLOWED_JSON" | jq -r 'join(", ")')"
     rerun_step="$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
     [ -z "$rerun_step" ] || ofc_detail="${ofc_detail%.}.$rerun_step"
-  elif [ -n "$env_aside" ]; then
+  elif [ -n "$env_aside" ] || [ -n "$others" ]; then
     ofc_verdict="met"
     ofc_detail="every other file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
   else
@@ -7853,6 +7856,7 @@ BR_DIFF
     ofc_detail="every file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
   fi
   [ -z "$env_aside" ] || ofc_detail="$ofc_detail Set aside as files \`task environment up\` recorded: ${env_aside%, }."
+  [ -z "$others" ] || ofc_detail="$ofc_detail Set aside as commits another order's record holds: $(printf '%s\n' "$others" | cut -c1-12 | tr '\n' ' ' | sed 's/ $//')."
   [ -z "$allowed_hit" ] || ofc_detail="$ofc_detail The paths a person allowed for this round that the diff touched: ${allowed_hit%, }."
   if [ "$BR_ORDER_RANGE" = "project" ]; then
     aside_noun="files"
@@ -9286,16 +9290,83 @@ ICC_PATHS
   else echo own; fi
 }
 
+# The commits after $2 up to $3 in the repository $1 that another order of this task built, one per
+# line. A build or fix record of that order names a range holding the commit, every file the commit
+# changes is that order's, owned or shared, and none is this order's. Orders of one task build
+# interleaved on one branch, so such a commit can sit inside this order's range (gap row 340).
+# Both records can hold the commit, so im_commit_claim, which reads a shared file by the records,
+# cannot tell whose it is. $4 the frozen work order.
+im_other_order_commits() {
+  local repo="$1" range id f b other other_json r c p theirs
+  range="$(git -C "$repo" rev-list "$2..$3" 2>/dev/null)"
+  [ -n "$range" ] || return 0
+  id="$(printf '%s' "$4" | jq -r '.id // ""')"
+  find "$TASK_PATH" -mindepth 2 -maxdepth 3 -type f \( -name 'build-wo*.json' -o -name 'fix-wo*-*.json' \) 2>/dev/null \
+    | while IFS= read -r f; do
+        b="$(basename "$f" .json)"
+        case "$b" in build-*) other="${b#build-}" ;; *) other="${b#fix-}"; other="${other%-*}" ;; esac
+        [ "$other" != "$id" ] || continue
+        other_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$other" '(.workOrders // []) | map(select(.id == $id)) | .[0] // empty')"
+        r="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$f" 2>/dev/null)"
+        [ -n "$other_json" ] && [ -n "$r" ] || continue
+        for c in $(git -C "$repo" rev-list "$r" 2>/dev/null); do
+          printf '%s\n' "$range" | grep -Fqx -- "$c" || continue
+          theirs=""
+          while IFS= read -r p; do
+            [ -n "$p" ] || continue
+            if [ -n "$(im_path_claim "$p" "$other_json")" ] && [ -z "$(im_path_claim "$p" "$4")" ]; then theirs=yes
+            else theirs=no; break; fi
+          done <<IOO_PATHS
+$(git -C "$repo" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)
+IOO_PATHS
+          [ "$theirs" != "yes" ] || printf '%s\n' "$c"
+        done
+      done | LC_ALL=C sort -u
+}
+
+# The paths among $5, one per line, that a commit after $2 up to $3 in the repository $1 changed,
+# leaving out the commits listed in $4. A path only another order's commits changed drops out.
+im_kept_paths() {
+  local kept="" c p
+  for c in $(git -C "$1" rev-list "$2..$3" 2>/dev/null); do
+    printf '%s\n' "$4" | grep -Fqx -- "$c" && continue
+    kept="$kept$(git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)
+"
+  done
+  while IFS= read -r p; do
+    [ -n "$p" ] && printf '%s' "$kept" | grep -Fqx -- "$p" && printf '%s\n' "$p"
+  done <<IKP_PATHS
+$5
+IKP_PATHS
+  return 0
+}
+
+# Succeeds when every commit after $2 up to $3 in the repository $1 is another order's, as
+# im_other_order_commits reads it, so HEAD moved for that order alone (gap row 340). $4 the frozen
+# work order.
+im_moved_for_others() {
+  local others c
+  git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
+  others="$(im_other_order_commits "$1" "$2" "$3" "$4")"
+  [ -n "$others" ] || return 1
+  for c in $(git -C "$1" rev-list "$2..$3" 2>/dev/null); do
+    printf '%s\n' "$others" | grep -Fqx -- "$c" || return 1
+  done
+  return 0
+}
+
 # The commits after $2 up to $3 in the repository $1, oldest first, one line each: "own <sha>" when
 # the commit is order $4's, "other <sha>" when it is not. A commit is the order's when a range one
 # of its records names holds it: the build record's, or a fix round's. Or when im_commit_claim
 # reads it as the order's, which is how an earlier attempt is found. Another order's freeze or
-# build changes a file this order does not own, so it reads as other.
+# build changes a file this order does not own, so it reads as other. A commit another order built
+# inside one of this order's ranges is read by its paths alone (gap row 340).
 # $4 the frozen work order, $5 the folder holding the order's build and fix records.
 im_order_commits() {
-  local repo="$1" from="$2" to="$3" unit_json="$4" dir="$5" id recorded="" taken f r c paths
+  local repo="$1" from="$2" to="$3" unit_json="$4" dir="$5" id recorded="" taken others f r c paths
   id="$(printf '%s' "$unit_json" | jq -r '.id // ""')"
   taken="$(im_taken_commits "$repo" "$id")"
+  others="$(im_other_order_commits "$repo" "$from" "$to" "$unit_json")"
   while IFS= read -r f; do
     [ -f "$f" ] || continue
     r="$(jq -r 'select(.startedAt != null and .commit != null) | .startedAt + ".." + .commit' "$f" 2>/dev/null)"
@@ -9306,7 +9377,9 @@ $dir/build-$id.json
 $(find "$dir" -mindepth 1 -maxdepth 1 -name "fix-$id-*.json" 2>/dev/null | sort)
 IOC_RECORDS
   for c in $(git -C "$repo" rev-list --reverse "$from..$to" 2>/dev/null); do
-    if printf '%s' "$recorded" | grep -Fqx "$c"; then echo "own $c"; continue; fi
+    if printf '%s' "$recorded" | grep -Fqx "$c" && ! printf '%s\n' "$others" | grep -Fqx -- "$c"; then
+      echo "own $c"; continue
+    fi
     paths="$(git -C "$repo" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)"
     if [ "$(im_commit_claim "$paths" "$unit_json" "$c" "$taken")" = "own" ]; then echo "own $c"; else echo "other $c"; fi
   done
@@ -9948,8 +10021,13 @@ do_review_record() {
   current_commit="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
     || die 3 "review-record: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
-  [ "$recorded_commit" = "$current_commit" ] \
-    || die 51 "review-record: $RV_RANGE_REPO is at $current_commit, and the build record for $unit_id was taken at $recorded_commit. The code moved while the review ran, so these findings are about code that is no longer there."
+  # Commits another order built after the record change none of this order's files, so the
+  # reviewed code is still there, and the record names the commit the review read (gap row 340).
+  if [ "$recorded_commit" != "$current_commit" ]; then
+    im_moved_for_others "$RV_RANGE_REPO" "$recorded_commit" "$current_commit" "$RV_UNIT_JSON" \
+      || die 51 "review-record: $RV_RANGE_REPO is at $current_commit, and the build record for $unit_id was taken at $recorded_commit. The code moved while the review ran, so these findings are about code that is no longer there."
+    current_commit="$recorded_commit"
+  fi
   dirty="$(git_status_of "$RV_RANGE_REPO" "$RV_RANGE_PATHS")"
   [ -z "$dirty" ] \
     || die 51 "review-record: the working tree at $RV_RANGE_REPO is dirty, and the review may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
@@ -10735,10 +10813,23 @@ RV_SCOPE
   br_require_check_count "fix-record" "$seven_file" 7
   checks_json="$(cat "$seven_file" 2>/dev/null)"
 
-  local diff_path
+  local diff_path fix_others="" fix_paths p
   diff_path="$IMPL_DIR/diff-$unit_id-fix$round_number.patch"
   git_diff_of "$RV_RANGE_REPO" "$started_at_full" "$current_commit" "$RV_RANGE_SCOPE" > "$diff_path" \
     || { rm -f "$seven_file"; die 3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."; }
+  # The patch leaves out the files only another order's commits changed, as owned-files does.
+  [ -n "$RV_RANGE_SCOPE" ] || fix_others="$(im_other_order_commits "$RV_RANGE_REPO" "$started_at_full" "$current_commit" "$RV_UNIT_JSON")"
+  if [ -n "$fix_others" ]; then
+    fix_paths="$(im_kept_paths "$RV_RANGE_REPO" "$started_at_full" "$current_commit" "$fix_others" \
+      "$(git -C "$RV_RANGE_REPO" diff --no-renames --name-only "$started_at_full" "$current_commit" 2>/dev/null)")"
+    set --
+    while IFS= read -r p; do [ -z "$p" ] || set -- "$@" "$p"; done <<FR_PATHS
+$fix_paths
+FR_PATHS
+    : > "$diff_path"
+    [ "$#" -eq 0 ] || git -C "$RV_RANGE_REPO" diff "$started_at_full" "$current_commit" -- "$@" > "$diff_path" 2>/dev/null \
+      || { rm -f "$seven_file"; die 3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."; }
+  fi
 
   local today record_json executed_count
   executed_count="$(br_executed_count "$checks_json")"
@@ -11451,20 +11542,6 @@ do_close() {
   [ -n "$head_now" ] \
     || die 3 "close: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
 
-  # A range holds every commit between its ends. When another order's commit sits between two of
-  # this order's attempts, the range starts after the last such commit, so it names none of that
-  # order's work. The earlier commits of this order are printed, not recorded (gap row 222).
-  local close_commits last_other earlier_own=""
-  if [ -z "$RV_RANGE_SCOPE" ]; then
-    close_commits="$(im_order_commits "$RV_RANGE_REPO" "$started_at" "$head_now" "$RV_UNIT_JSON" "$IMPL_DIR")"
-    last_other="$(printf '%s\n' "$close_commits" | sed -n 's/^other //p' | tail -1)"
-    if [ -n "$last_other" ]; then
-      earlier_own="$(printf '%s\n' "$close_commits" | sed -n "/^other $last_other\$/q;s/^own //p" \
-        | cut -c1-12 | tr '\n' ' ')"
-      started_at="$last_other"
-    fi
-  fi
-
   # Exit 61 and exit 63. Close writes the commit range this order produced, and a range is a claim
   # about what is in the repository. So the tree has to be clean, and HEAD has to be the commit the
   # last record for this order was written at: the build record when no round ran, the last fix
@@ -11482,8 +11559,27 @@ do_close() {
   last_commit="$(jq -r '.commit // ""' "$last_record" 2>/dev/null)"
   [ -n "$last_commit" ] \
     || die 3 "close: $last_record holds no commit, though the step that wrote it records one."
-  [ "$last_commit" = "$head_now" ] \
-    || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged. Nothing is open, so no fix round, repair round or test-wrong ruling can take the commits after $last_commit. A person moves the branch back to it, and that later work goes to a follow-up task, or runs restart, which sets every order's records aside."
+  # Commits another order built after the record change none of this order's files, so the range
+  # ends at the record's commit (gap row 340).
+  if [ "$last_commit" != "$head_now" ]; then
+    im_moved_for_others "$RV_RANGE_REPO" "$last_commit" "$head_now" "$RV_UNIT_JSON" \
+      || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged. Nothing is open, so no fix round, repair round or test-wrong ruling can take the commits after $last_commit. A person moves the branch back to it, and that later work goes to a follow-up task, or runs restart, which sets every order's records aside."
+    head_now="$last_commit"
+  fi
+
+  # A range holds every commit between its ends. When another order's commit sits between two of
+  # this order's attempts, the range starts after the last such commit, so it names none of that
+  # order's work. The earlier commits of this order are printed, not recorded (gap row 222).
+  local close_commits last_other earlier_own=""
+  if [ -z "$RV_RANGE_SCOPE" ]; then
+    close_commits="$(im_order_commits "$RV_RANGE_REPO" "$started_at" "$head_now" "$RV_UNIT_JSON" "$IMPL_DIR")"
+    last_other="$(printf '%s\n' "$close_commits" | sed -n 's/^other //p' | tail -1)"
+    if [ -n "$last_other" ]; then
+      earlier_own="$(printf '%s\n' "$close_commits" | sed -n "/^other $last_other\$/q;s/^own //p" \
+        | cut -c1-12 | tr '\n' ' ')"
+      started_at="$last_other"
+    fi
+  fi
 
   local new_ledger
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \

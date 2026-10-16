@@ -20,7 +20,7 @@ skills/implement/SKILL.md 275
 skills/implement/references/build.md 569
 skills/implement/references/finish.md 232
 skills/implement/references/preconditions.md 294
-skills/implement/references/review.md 488
+skills/implement/references/review.md 491
 skills/implement/references/start.md 138
 skills/implement/references/tests.md 553
 skills/next/SKILL.md 199

@@ -84,7 +84,8 @@ Run:
 It refuses when a review record already exists for this order, unless the ledger never moved past
 `checks-passed`: a crash between writing the record and writing the ledger leaves that one state,
 and this call then finishes the write rather than refusing forever. It also refuses when the code
-path moved, or its tree is dirty, since the build record. And it refuses when the findings file
+path moved, or its tree is dirty, since the build record. A commit that another order's record
+holds, on that order's files alone, does not count as a move. And it refuses when the findings file
 named by `--findings` is missing, empty, or not the shape it reads. A finding citing neither a
 criterion nor a non-goal, or an id the contract does not hold, is recorded but never reaches a
 fixer.
@@ -465,7 +466,9 @@ Run:
 ```
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
-the last record left it. Nothing is open then, so no round or ruling can take the later commits.
+the last record left it. Another order's commits, as review-record reads them, do not count, and
+the range then ends at the last record. Nothing is open then, so no round or ruling can take the
+later commits.
 A person moves the branch back, and that work goes to a follow-up task, or runs `restart`. On success it writes `lastStep = "closed"` and the commit range the
 order produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
