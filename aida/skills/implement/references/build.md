@@ -425,7 +425,9 @@ Run the checks again over the recorded range instead:
   [--nothing-ran <literal substring>]
 ```
 The recipe flags and `--interface` are `build-record`'s. The range and the report path are read
-from the build record, so neither is passed. The interface record is read again from its file,
+from the build record, so neither is passed. Pass every recipe the attempt took. A recipe the
+task's records name and this call leaves out refuses (exit 3), and nothing runs. The refusal
+names each flag with its path. The interface record is read again from its file,
 so an amended record is what the check reads. No implementer is dispatched and no attempt is
 spent. The `next:` line offers this route beside `build` when the last attempt was stopped by
 the tool rows, owned-files or interface-record alone. When interface-record is among them, the

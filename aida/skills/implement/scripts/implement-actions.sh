@@ -9027,6 +9027,27 @@ EOF_PATHS
   [ -n "$tests_doc" ] \
     || die 3 "build-recheck: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
+  # --- exit 3: a recipe the task's records name has no flag here (gap row 349). The check it feeds
+  # would read unknown or undeclared and replace the stop this re-check is meant to clear. An
+  # unknown configuration gate is outside the rows above, so the next re-check refuses on it. The
+  # records are preconditions' test and implement recipes and the baseline's check recipes ------
+  local rc_pre rc_base rc_slot missing_flags
+  rc_pre="$(jq -c '.' "$IMPL_DIR/preconditions.json" 2>/dev/null)"
+  rc_base="$(jq -c '.' "$IMPL_DIR/baseline.json" 2>/dev/null)"
+  rc_slot="$(printf '%s' "$RV_UNIT_JSON" | jq -r "$BR_ORDER_FACTS_JQ"' orderFacts.slot')"
+  missing_flags="$(jq -rn --argjson pre "${rc_pre:-null}" --argjson base "${rc_base:-null}" --arg slot "$rc_slot" \
+    --arg test "$test_recipes" --arg check "$check_recipes" --arg gate "$gate_recipes" '
+    def given($list; $fw): $list | split("\n") | any(split("\t")[0] == $fw);
+    [ (($pre.frameworks // [])[] | select(.lookup == "resolved" and (.recipePath // "") != "")
+        | select(given($test; .framework) | not) | "--test-recipe \(.framework)=\(.recipePath)"),
+      (($base.checkRecipes // [])[] | select(given($check; .framework) | not) | "--check-recipe \(.framework)=\(.path)"),
+      (if $slot != "configuration-gate" then empty else
+         ($pre.frameworks // [])[] | select((.implementRecipePath // "") != "")
+         | select(given($gate; .framework) | not) | "--implement-recipe \(.framework)=\(.implementRecipePath)" end)
+    ] | join(" ")')"
+  [ -z "$missing_flags" ] \
+    || die 3 "build-recheck: this call leaves out recipes the task's records name: $missing_flags. Without them a check reads unknown or undeclared, and the re-check would replace the stop it is meant to clear. Nothing ran, and $record_file is unchanged. Run build-recheck again with those flags."
+
   br_require_clean_tree "build-recheck" "$codepath" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 
   # A fix round reads no interface record, and its owned-files check reads the paths a person
