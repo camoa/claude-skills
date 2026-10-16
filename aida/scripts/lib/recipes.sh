@@ -1248,31 +1248,43 @@ br_subtract_baseline() {
   [ -z "$selector" ] || rm -f "$base_sel" "$now_sel"
 }
 
-# For a tool row that failed now and whose baseline recorded it undeclared (gap row 359). The
-# baseline reads undeclared when no file of its scope existed at the baseline commit, so it ran
-# nothing and kept nothing to subtract. A file that did not exist then held no finding then. So
-# when every path in $5 is absent at commit $4 of repository $3, every finding in the run at $6 is
-# this task's own. This sets BR_SUB_VERDICT unmet, BR_SUB_DETAIL, BR_SUB_NEW and BR_SUB_COUNT as
-# br_subtract_baseline does. $1 a word for the message, $2 how the command failed, $7 its exit.
-# Returns 1 and sets nothing when the exit is 127 (the tool could not run), the commit or the list
-# is empty, a path lies outside the repository, or a path existed at the commit.
+# For a tool row that failed now and whose baseline recorded it unknown or undeclared, $3, so the
+# baseline kept no output to subtract. Gap row 359: a file absent at the baseline commit held no
+# finding then. The rule rests on git alone: the baseline reads undeclared, the commit $5 is in
+# repository $4, and every path in $6 is absent at it. Then a line of the run at $7 that names
+# one of those paths is this task's own, and the row reads unmet. Only the lines naming a path
+# count, because a tool may report a file outside them, such as an old file a new one imports.
+# Any other case reads unknown, as before: the exit $8 is 127 (the tool could not run), the commit
+# is not in the repository, a path existed then or lies outside the repository, or no line names a
+# path. $1 a word for the message, $2 how the command failed. Sets BR_SUB_VERDICT, BR_SUB_DETAIL,
+# BR_SUB_NEW and BR_SUB_COUNT as br_subtract_baseline does.
 # shellcheck disable=SC2034 # read by the sourcing script
 br_new_files_only() {
-  local label="$1" how="$2" repo="$3" commit="$4" paths="$5" now="$6" rc="$7" p
-  [ "$rc" != "127" ] && [ -n "$commit" ] || return 1
-  [ "$(printf '%s' "$paths" | jq 'length' 2>/dev/null)" != "0" ] || return 1
+  local label="$1" how="$2" was="$3" repo="$4" commit="$5" paths="$6" now="$7" rc="$8" p names named ok=no
+  BR_SUB_VERDICT="unknown"; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
+  BR_SUB_DETAIL="the $label command $how, and the baseline recorded this tool $was at the commit the build started from, so there is nothing to subtract and this cannot tell an old finding from a new one."
+  [ "$was" = "undeclared" ] && [ "$rc" != "127" ] && [ -n "$commit" ] || return 0
+  git -C "$repo" cat-file -e "$commit^{commit}" 2>/dev/null || return 0
+  [ "$(printf '%s' "$paths" | jq 'length' 2>/dev/null)" != "0" ] || return 0
+  names="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
   while IFS= read -r p; do
-    [ -n "$p" ] || return 1
-    case "$p" in "$repo"/*) p="${p#"$repo"/}" ;; /*) return 1 ;; esac
-    ! git -C "$repo" cat-file -e "$commit:./$p" 2>/dev/null || return 1
+    ok=no
+    [ -n "$p" ] || break
+    printf '%s\n' "$p" >>"$names"
+    case "$p" in "$repo"/*) p="${p#"$repo"/}" ;; /*|../*|*/../*) break ;; esac
+    git -C "$repo" cat-file -e "$commit:./$p" 2>/dev/null && break
+    printf '%s\n' "$p" >>"$names"
+    ok=yes
   done <<BR_NEW_PATHS
 $(printf '%s' "$paths" | jq -r '.[]' 2>/dev/null)
 BR_NEW_PATHS
+  named="$(grep -a -F -f "$names" "$now" 2>/dev/null)"
+  rm -f "$names"
+  [ "$ok" = "yes" ] && [ -n "$named" ] || return 0
   BR_SUB_VERDICT="unmet"
-  BR_SUB_COUNT="$(grep -c '[^[:space:]]' "$now" 2>/dev/null)"
-  case "$BR_SUB_COUNT" in ''|*[!0-9]*) BR_SUB_COUNT=0 ;; esac
-  BR_SUB_NEW="$(grep '[^[:space:]]' "$now" 2>/dev/null | head -20 | jq -Rsc 'split("\n") | map(select(length > 0))')"
-  BR_SUB_DETAIL="the $label command $how, and no file it read existed at the baseline commit $commit, so the baseline held no finding in them and every finding here is this task's own. newLines holds the first 20 lines."
+  BR_SUB_COUNT="$(printf '%s\n' "$named" | grep -c '')"
+  BR_SUB_NEW="$(printf '%s\n' "$named" | head -20 | jq -Rsc 'split("\n") | map(select(length > 0))')"
+  BR_SUB_DETAIL="the $label command $how, and no file it read existed at the baseline commit $commit, so the baseline held no finding in them. $BR_SUB_COUNT of its lines name one of those files, and each is this task's own. newLines holds the first 20."
 }
 
 # The place in baseline.json that holds one tool row's own earlier result, as a JSON path for jq's

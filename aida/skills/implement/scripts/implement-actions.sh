@@ -6955,14 +6955,10 @@ br_tool_check() {
               new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
               ;;
             unknown|undeclared)
-              if [ "$baseline_verdict" = "undeclared" ] && br_new_files_only "$label" "$how" "$BRC_CODEPATH" \
-                  "$(printf '%s' "$baseline_doc" | jq -r '.commit // ""')" "$paths_json" "$outfile" "$rc"; then
-                verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
-                new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
-              else
-                verdict="unknown"
-                detail="the $label command $how, and the baseline recorded this tool $baseline_verdict at the commit the build started from, so there is nothing to subtract and this cannot tell an old finding from a new one."
-              fi
+              br_new_files_only "$label" "$how" "$baseline_verdict" "$BRC_CODEPATH" \
+                "$(printf '%s' "$baseline_doc" | jq -r '.commit // ""')" "$paths_json" "$outfile" "$rc"
+              verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
+              new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
               ;;
             *)
               verdict="unknown"
