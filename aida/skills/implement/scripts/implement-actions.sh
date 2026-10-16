@@ -2081,9 +2081,11 @@ do_start() {
 
     if [ "$live_hash" != "$snapshot_hash_on_disk" ]; then
       # A criterion's verdict is review's answer, written into the live contract at review's close.
-      # No test was written from it, so it is not a contract change (gap row 319).
+      # No test was written from it, so it is not a contract change (gap row 319). Its author is
+      # who approved it, and scope's approve turns every designer into owner. No test was written
+      # from that either, so a relabel alone halts no order (gap row 355).
       contract_changed="$(jq -n --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" \
-        'def nv: .criteria = [ (.criteria // [])[] | del(.verdict) ];
+        'def nv: .criteria = [ (.criteria // [])[] | del(.verdict, .author) ];
          if ($a | nv) == ($b | nv) then false else true end')"
       # Every drift halt reason begins with "design drift: ", which is what `restart` reads to tell
       # an order halted by a design change from one halted for a spent attempt counter or a
@@ -2111,8 +2113,8 @@ do_start() {
       # the file and the criterion keeps the order halted when only the file goes back.
       if [ "$contract_changed" = "true" ]; then
         changed_criteria_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
-            (($b.criteria // []) | map({(.id): del(.verdict)}) | add // {}) as $liveMap
-            | [ ($a.criteria // [])[] | del(.verdict) | select($liveMap[.id] != .) | .id ]')"
+            (($b.criteria // []) | map({(.id): del(.verdict, .author)}) | add // {}) as $liveMap
+            | [ ($a.criteria // [])[] | del(.verdict, .author) | select($liveMap[.id] != .) | .id ]')"
         drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" "$HALT_MERGE_JQ"'
             [ $snap[] | . as $s
               | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null) ]) as $hits
