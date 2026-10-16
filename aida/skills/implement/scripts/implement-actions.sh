@@ -126,8 +126,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # `dispatch-open --resume` reopens a record already closed for that one resume. It skips the
 # leftover check `dispatch-open` otherwise runs (exit 104) and writes `resumedAt` at once.
 # `dispatch-close --not-sent` removes a record whose role was never dispatched, and spends no
-# resume. It refuses when the role's file was written after the record opened, when the record
-# counts a resume, or when its code path has a commit after it opened (gap row 343).
+# resume. It refuses when a fixer's or test author's report exists, when another role's file was
+# written after the record opened, or when the record counts a resume. It also refuses on a commit
+# after the record opened, in the code path or in a record order's files (gap row 343).
 #   implement-actions.sh step <name>
 #
 # `step` prints one of this skill's own step files, from
@@ -13381,14 +13382,37 @@ do_dispatch_close() {
     rp_opened="$(jq -r '(.openedAt // "") | fromdateiso8601? // ""' "$dispatch_file" 2>/dev/null)"
     [ -n "$rp_opened" ] || rp_opened="$(im_mtime "$dispatch_file")"
     rp_written="$(im_mtime "$rp_path" 2>/dev/null)"
+    # A record order's range lives in the project folder, so its owned files there are read, never
+    # the whole folder, where other tasks' records change (gap row 312). An unreadable snapshot
+    # reads as a code order, so this adds no refusal.
+    rp_unit="$(jq -c --arg u "$(jq -r '.unit // ""' "$dispatch_file")" \
+      '[ .workOrders[]? | select(.id == $u) ][0] // {}' "$TASK_PATH/implementation/snapshot.json" 2>/dev/null)"
+    br_order_facts "$rp_unit"
+    rp_project=""; rp_owned=""
+    if [ "$BR_ORDER_RANGE" = "project" ] && rp_project="$(resolve_project_folder "$TASK_PATH")"; then
+      rp_owned="$(printf '%s' "$rp_unit" | jq -r '(.ownedFiles // [])[]')"
+    else
+      rp_project=""
+    fi
     # A record opened and never sent has no file its role wrote and no commit after it opened. It
     # is removed and spends no resume (gap row 343). A record that counts a resume had a role return.
+    # dispatch-open removes a fixer's or test author's report, so one there was written since. A
+    # record reopened with --resume keeps the report, and is read by time like the other roles.
     if [ "$not_sent" = true ]; then
-      local ns_head ns_why=""
+      local ns_head ns_proj="" ns_t ns_f ns_why=""
       ns_head="$(git -C "$(jq -r '.codePath // ""' "$dispatch_file")" log -1 --format=%ct 2>/dev/null)"
+      while IFS= read -r ns_f; do
+        [ -n "$ns_f" ] || continue
+        ns_t="$(git -C "$rp_project" log -1 --format=%ct -- "$ns_f" 2>/dev/null)"
+        if [ -n "$ns_t" ] && [ "$ns_t" -gt "${ns_proj:-0}" ]; then ns_proj="$ns_t"; fi
+      done <<NS_OWNED
+$rp_owned
+NS_OWNED
       if [ -z "$rp_path" ]; then
         ns_why="it names no file its role writes, so nothing shows that no role ran"
-      elif [ -f "$rp_path" ] && { [ -n "$rp_line" ] || [ "$rp_written" -ge "$rp_opened" ]; }; then
+      elif [ -f "$rp_path" ] && [ -n "$rp_line" ] && [ "$(jq -r 'has("resumedAt")' "$dispatch_file")" = "false" ]; then
+        ns_why="$rp_path exists, and dispatch-open removed it, so its role wrote it"
+      elif [ -f "$rp_path" ] && [ "$rp_written" -ge "$rp_opened" ]; then
         ns_why="$rp_path was written after it opened"
       elif [ "$(jq -r 'has("resumes")' "$dispatch_file")" = "true" ]; then
         ns_why="it counts a resume, so its role has returned"
@@ -13396,6 +13420,8 @@ do_dispatch_close() {
         ns_why="git could not read the last commit in its code path"
       elif [ "$ns_head" -gt "$rp_opened" ]; then
         ns_why="its code path has a commit at $(im_iso_of "$ns_head"), after it opened at $(im_iso_of "$rp_opened")"
+      elif [ -n "$ns_proj" ] && [ "$ns_proj" -gt "$rp_opened" ]; then
+        ns_why="the order's files in the project folder have a commit at $(im_iso_of "$ns_proj"), after it opened at $(im_iso_of "$rp_opened")"
       fi
       [ -z "$ns_why" ] \
         || die 3 "dispatch-close: --not-sent refused, because $ns_why. A role may have run, so close the record as a returned role: run dispatch-close without --not-sent. The record stays open."
@@ -13418,16 +13444,10 @@ do_dispatch_close() {
     elif [ -n "$rp_line" ]; then
       rp_cause="$(im_report_line_fault "$rp_path" "$rp_line")"
       if [ -z "$rp_cause" ] && [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "fixer" ]; then
-        # A record order's fixer commits in the project folder, so its owned files there are read,
-        # never the whole folder, where other tasks' records change (gap row 312). An unreadable
-        # snapshot reads as a code order, so this adds no refusal.
-        rp_unit="$(jq -c --arg u "$(jq -r '.unit // ""' "$dispatch_file")" \
-          '[ .workOrders[]? | select(.id == $u) ][0] // {}' "$TASK_PATH/implementation/snapshot.json" 2>/dev/null)"
-        br_order_facts "$rp_unit"
+        # A record order's fixer commits in the project folder, so its owned files there are read.
         rp_where="the code path"
-        if [ "$BR_ORDER_RANGE" = "project" ] && rp_project="$(resolve_project_folder "$TASK_PATH")"; then
+        if [ -n "$rp_project" ]; then
           rp_where="the order's files in the project folder"
-          rp_owned="$(printf '%s' "$rp_unit" | jq -r '(.ownedFiles // [])[]')"
           rp_dirty=0
           [ -z "$rp_owned" ] || rp_dirty="$(git_status_of "$rp_project" "$rp_owned" | grep -c .)"
         else
@@ -13496,7 +13516,11 @@ do_dispatch_close() {
     [ -n "$nr_ledger" ] || die 3 "dispatch-close: the halt on $nr_unit could not be written."
     write_atomic "$TASK_PATH/implementation/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
-    die 110 "dispatch-close: $nr_unit is halted. $nr_role $nr_what, $nr_after. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty A person reads what it left, runs clear-halt, then start to keep or set aside its files, then dispatches again."
+    # A fixer's complete report stops a fresh dispatch-open until fix-record reads it (gap row 343).
+    local nr_next="dispatches again"
+    [ "${nr_role##*:}" != "fixer" ] || [ ! -f "$rp_path" ] || [ -n "$(im_report_line_fault "$rp_path" "$IM_REPORT_DONE")" ] \
+      || nr_next="runs fix-record on $rp_path, which is complete. A fresh dispatch-open refuses until fix-record reads it, or until fix-brief writes the round again"
+    die 110 "dispatch-close: $nr_unit is halted. $nr_role $nr_what, $nr_after. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty A person reads what it left, runs clear-halt, then start to keep or set aside its files, then $nr_next."
   fi
   if [ -f "$dispatch_file" ]; then
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
