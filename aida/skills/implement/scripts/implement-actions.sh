@@ -2147,7 +2147,8 @@ do_start() {
       # not halted either (live-run row 91), nor by files it newly shares (gap row 287), and neither is one that only took research findings
       # from `account` (gap row 226), and neither is one whose reasoning only grew by
       # `update --append-reasoning`: the live value starts with the frozen one (gap row 227).
-      # Neither is one whose absence rows design marked reviewed (gap row 237). Its
+      # Neither is one whose absence rows design marked reviewed (gap row 237), nor one whose
+      # interface pairs design kept (gap row 345). Its
       # frozen tests were written from the criteria and the order's other fields, and none of
       # those changed, so the live copy is taken in place:
       # the ledger entry keeps its step and attempts, and its dependents are untouched. The next
@@ -2183,7 +2184,7 @@ REMOVED_PATHS
               | select(($started | index($d)) != null)
               | ($snapMap[$d]) as $s | ($liveMap[$d]) as $l
               | select($l != null)
-              | select(($l | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed)) == ($s | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed)))
+              | select(($l | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed, .choicesKept)) == ($s | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed, .choicesKept)))
               | select(($l.reasoning // "") | startswith($s.reasoning // ""))
               | select(((($s.ownedFiles // []) - ($l.ownedFiles // []) - $phantom) | length) == 0)
               | select(((($s.sharedFiles // []) - ($l.sharedFiles // []) - $phantom) | length) == 0)
@@ -2194,7 +2195,8 @@ REMOVED_PATHS
                     | if length > 0 then "dropped paths that name no file in the code: " + join(", ") else empty end),
                   (if $l.findings != $s.findings then "findings changed" else empty end),
                   (if $l.reasoning != $s.reasoning then "reasoning appended" else empty end),
-                  (if $l.absenceReviewed != $s.absenceReviewed then "absence rows marked reviewed changed" else empty end) ] as $why
+                  (if $l.absenceReviewed != $s.absenceReviewed then "absence rows marked reviewed changed" else empty end),
+                  (if $l.choicesKept != $s.choicesKept then "interface pairs kept changed" else empty end) ] as $why
               | select(($why | length) > 0)
               | {id: $d, why: $why} ]')"
       widened_ids_json="$(printf '%s' "$widened_json" | jq -c 'map(.id)')"
