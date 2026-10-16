@@ -39,7 +39,7 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and the frozen tests. It writes eleven things to
+It reads the frozen copy and the frozen tests. It writes twelve things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns and, under `findings`, the research findings
@@ -63,7 +63,9 @@ It reads the frozen copy and the frozen tests. It writes eleven things to
   whose proof is `record`;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null;
 - `beforeLookPath`, on an order whose proof is `observe` only: the folder the before-look goes
-  in, `implementation/observed-<order id>-before/`.
+  in, `implementation/observed-<order id>-before/`;
+- `deniedReads`, present only when the order's own text names a path the implementer's dispatch
+  denies: another order's owned file. The deny stands. Do not tell the implementer to read one.
 
 It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
 and counts, never the brief. The allowed count is two unless a person has granted this order one more; see

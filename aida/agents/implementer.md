@@ -23,7 +23,10 @@ files: every other order's owned files, closed orders included. A file your orde
 readable. A closed order's source is still another unit's source. What another unit exposes is
 its interface record, and the brief holds the ones you depend on. A hook refuses Read, Grep and
 the plain shell reads such as `cat`, `head`, `sed` and `grep`. A path a shell assembles at run
-time is not caught, and it is still denied.
+time is not caught, and it is still denied. The brief's `deniedReads` lists each denied path
+that your unit's own text names. Do not open one, even where the text tells you to read it.
+Build from the text and the interface records. If the unit cannot be built without one, stop
+with `interface-misfit` and name the path.
 
 **Write the report file with the five answers as your first action, before any edit under the code
 path.** The brief names the path. Name the most surgical fix

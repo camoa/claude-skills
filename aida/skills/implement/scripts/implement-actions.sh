@@ -6476,6 +6476,12 @@ IM_DEPS
     || die 41 "$who: $unit_id has already used $IM_ATTEMPTS_USED of $IM_ATTEMPTS_ALLOWED allowed attempts. Nothing more is handed over."
 }
 
+# The reads an implementer's or a fixer's dispatch denies: every other order's owned files, less
+# the ones this order shares (gap row 287). dispatch-open writes them; build-brief names the ones
+# its text names (gap row 344). Input the snapshot, $u the order.
+IM_OTHERS_OWNED_JQ='def others_owned($u): [ .workOrders[]? | select(.id == $u) | .ownedFiles[]? ] as $m
+  | [ .workOrders[]? | select(.id != $u) | .ownedFiles[]? ] - $m | unique;'
+
 do_build_brief() {
   [ "$#" -ge 2 ] || die 3 "build-brief: a task folder and a unit id are required"
   [ "$#" -le 2 ] || die 3 "build-brief: unrecognized extra argument: $3"
@@ -6559,6 +6565,19 @@ do_build_brief() {
   tests_out="$(printf '%s' "$IM_TESTS_DOC" | jq -c \
     '[ (.rows // [])[] | select(.kind == "machine") | .criterion as $c | (.tests // [])[]
        | {path, name, criterion: $c} ]')"
+  # A path the order's own text names and the builder's dispatch denies is a read the builder is
+  # told to make and cannot (gap row 344). The deny stands, because what another order exposes is
+  # its interface record. So the brief lists each such path. A dependency's record names its own
+  # files as a matter of course, so only the order's text is read. A path in the task folder is
+  # also matched as written from that folder. A name counts only where no path character touches it.
+  local denied_named_json
+  denied_named_json="$(printf '%s' "$snapshot_doc" | jq -c --arg u "$unit_id" --arg tf "$TASK_PATH/" \
+    --arg text "$(printf '%s' "$unit_out" | jq -c 'del(.ownedFiles)')" \
+    "$IM_OTHERS_OWNED_JQ"'
+    def named($p): ($p | rtrimstr("/") | gsub("(?<c>[.^$*+?()\\[\\]{}|\\\\])"; "\\\(.c)")) as $e
+      | $text | test("(^|[^A-Za-z0-9_./-])" + $e + "($|/|[^A-Za-z0-9_.-]|[.]($|[^A-Za-z0-9_]))");
+    [ others_owned($u)[] | select(named(.) or (startswith($tf) and named(ltrimstr($tf)))) ]')"
+  [ -n "$denied_named_json" ] || die 3 "build-brief: the reads denied to $unit_id could not be compared with its brief."
 
   # The caller needs the commit this attempt begins from, for --started-at when it records. It was
   # told to run `git rev-parse HEAD` itself, which needs a grant the skill does not carry. An
@@ -6608,12 +6627,14 @@ do_build_brief() {
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
         --arg beforeLookPath "$bb_before" \
         --argjson previousAttempt "$previous_attempt_json" \
+        --argjson deniedReads "$denied_named_json" \
         --arg fakeMarker "$(! task_is_light "$TASK_PATH" || printf '%s' "$FAKE_MARKER")" \
     '{unit: $unit, worktree: $worktree, tests: $tests, headNow: $headNow, commitIn: $commitIn,
       dependencyInterfaces: $dependencyInterfaces, dependencyInformation: $dependencyInformation,
       reportPath: $reportPath, interfacePath: $interfacePath, playbooksPath: $playbooksPath,
       attemptsUsed: $attemptsUsed, attemptsAllowed: $attemptsAllowed}
      + (if $beforeLookPath == "" then {} else {beforeLookPath: $beforeLookPath} end)
+     + (if $deniedReads == [] then {} else {deniedReads: $deniedReads} end)
      + (if $previousAttempt == null then {} else {previousAttempt: $previousAttempt} end)
      + (if $fakeMarker == "" then {} else {fakeMarker: $fakeMarker} end)')"
   [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
@@ -6636,6 +6657,7 @@ do_build_brief() {
      dependencyInterfaces: ([ .dependencyInterfaces[] | .id + (if has("interfaceRecord") then " (record)" else " (declared only)" end) ]),
      dependencyInformation: (.dependencyInformation | length)}
     + (if has("beforeLookPath") then {beforeLook: "\(.beforeLookPath) (\($beforeState))"} else {} end)
+    + (if has("deniedReads") then {deniedReads: "\(.deniedReads | join(", ")): the brief names them, and the dispatch denies them"} else {} end)
     + {next: (if $beforeState == "owed"
               then "take the before-look at headNow into the beforeLook folder, then dispatch implementer with the brief path and the implement recipe path, then build-record"
               else "dispatch implementer with the brief path and the implement recipe path, then build-record" end)}')"
@@ -13138,9 +13160,7 @@ TG_ROOTS
     [ -n "$mine_count" ] || mine_count=0
     [ "$mine_count" -gt 0 ] 2>/dev/null \
       || die 47 "dispatch-open: $unit_id declares no owned file in $IMPL_DIR/snapshot.json, so a $role_bare would be dispatched with nowhere it is meant to write. Design has to name what this order owns before its code is written."
-    # A file this order shares is another order's too, and this order still reads it (gap row 287).
-    others_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" --argjson m "$mine_json" \
-      '[ .workOrders[]? | select(.id != $u) | .ownedFiles[]? ] - $m | unique')"
+    others_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" "$IM_OTHERS_OWNED_JQ"' others_owned($u)')"
     deny_raw="$deny_raw$(printf '%s' "$others_json" | jq -r '.[]')
 "
     allow_raw="$allow_raw$(printf '%s' "$mine_json" | jq -r '.[]')
