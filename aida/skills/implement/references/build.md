@@ -418,16 +418,18 @@ Run the checks again over the recorded range instead:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-recheck "<task_folder>" <order id> \
   [--interface <path to the interface record>] \
-  --test-recipe <framework>=<path to the test-execution recipe> \
-  --check-recipe <framework>=<path to the review recipe> \
+  [--test-recipe <framework>=<path to the test-execution recipe>]... \
+  [--check-recipe <framework>=<path to the review recipe>]... \
   [--implement-recipe <framework>=<path to the implement recipe>]... \
   [--value <name>=<value>]... \
   [--nothing-ran <literal substring>]
 ```
 The recipe flags and `--interface` are `build-record`'s. The range and the report path are read
-from the build record, so neither is passed. Pass every recipe the attempt took. A recipe the
-task's records name and this call leaves out refuses (exit 3), and nothing runs. The refusal
-names each flag with its path. The interface record is read again from its file,
+from the build record, so neither is passed. A recipe flag left out is taken from its record:
+the test-execution recipe and a gate order's implement recipe from `preconditions.json`, the
+review recipe from `baseline.json`. The `filledFromRecords:` line names each flag taken. A flag
+that names another path than its record refuses (exit 91), and nothing runs. Pass the recorded
+path, or leave the flag out. The interface record is read again from its file,
 so an amended record is what the check reads. No implementer is dispatched and no attempt is
 spent. The `next:` line offers this route beside `build` when the last attempt was stopped by
 the tool rows, owned-files or interface-record alone. When interface-record is among them, the

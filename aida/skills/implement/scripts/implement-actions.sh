@@ -658,7 +658,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  91  `tests-freeze` was given a --test-recipe whose path is not the one preconditions.json
 #      records for that framework. The freeze reads reds against one recipe and build-record reads
 #      the record's, so two paths for one order would stand its two records on two recipes. The
-#      message names both paths and `recipe-refresh` as the route. Nothing is frozen.
+#      message names both paths and `recipe-refresh` as the route. Nothing is frozen. The same
+#      code refuses a `build-recheck` recipe flag that names another path than its record:
+#      preconditions.json for --test-recipe and --implement-recipe, baseline.json for
+#      --check-recipe (gap row 349). Nothing runs, and the build record is unchanged.
 # The codes the observe proof added (live-run row 104). An order whose proof is observe is judged
 # by a model's look through a browser after the build: the orchestrator opens each of the order's
 # surfaces at each viewport, judges each done-when row against what renders, and writes
@@ -4635,9 +4638,7 @@ do_tests_brief() {
   # lookup resolved; null, and the summary says so, when none did.
   local test_recipe_path=""
   if [ -f "$IMPL_DIR/preconditions.json" ]; then
-    test_recipe_path="$(jq -r '[ (.frameworks // [])[]
-        | select(.lookup == "resolved" and (.recipePath // "") != "") | .recipePath ] | .[0] // ""' \
-      "$IMPL_DIR/preconditions.json" 2>/dev/null)"
+    test_recipe_path="$(pre_test_recipes "$IMPL_DIR/preconditions.json" | head -n 1 | cut -f2)"
   fi
 
   # --- exit 24: an owned, machine-verified criterion with no declared test at all ------------------
@@ -5087,6 +5088,56 @@ tf_frozen_tests_of() {
   done
   jq -s '.' "$tests_out_tmp"
   rm -f "$tests_out_tmp"
+}
+
+# The test-execution recipe of each framework whose lookup resolved, from the preconditions record
+# $1: one `<framework>\t<path>` line each. Prints nothing when the file is absent or names none.
+pre_test_recipes() {
+  jq -r '[ (.frameworks // [])[] | select(.lookup == "resolved" and (.recipePath // "") != "")
+           | .framework + "\t" + .recipePath ] | join("\n")' "$1" 2>/dev/null
+}
+
+# One kind of recipe flag, read against the record that produced its paths (live-run row 99, gap
+# row 349). A framework the record names and the flags leave out takes the record's path. A flag
+# that names another path refuses with $6. A framework the record names no path for keeps its flag
+# as given, because nothing disagrees with it. A recorded path to be taken that is gone from disk
+# refuses at 3. $1 the action, $2 the flag, $3 the given list, $4 the recorded list, one
+# `<framework>\t<path>` line each, $5 the record's file, $6 the exit for a disagreement, $7 the
+# sentence that says what a disagreement costs, $8 the recipe-refresh flag for that record, empty
+# when none refreshes it. Sets RF_LIST, the given list with the taken lines added, and RF_FILLED,
+# one `<flag> <framework>=<path>` per taken line, comma-separated.
+RF_LIST=""; RF_FILLED=""
+rf_fill_from_record() {
+  local who="$1" flag="$2" given="$3" recorded="$4" record="$5" code="$6" cost="$7" refresh="$8"
+  local line fw rec_path given_path
+  RF_LIST="$given"; RF_FILLED=""
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    fw="${line%%	*}"; rec_path="${line#*	}"
+    given_path="$(cr_lookup "$given" "$fw")"
+    if [ -z "$given_path" ]; then
+      [ -f "$rec_path" ] || {
+        [ -n "$refresh" ] \
+          && die 3 "$who: the recipe $record records for $fw is not a file: $rec_path. Resolve it again and run recipe-refresh $refresh $fw=<path> first."
+        die 3 "$who: the recipe $record records for $fw is not a file: $rec_path. Resolve it again, then pass $flag $fw=<path>."
+      }
+      cr_recipe_pair "$who" "$flag from $record" "$fw=$rec_path"
+      RF_LIST="$RF_LIST$CR_PAIR
+"
+      RF_FILLED="${RF_FILLED:+$RF_FILLED, }$flag $fw=${CR_PAIR#*	}"
+      continue
+    fi
+    if [ -f "$rec_path" ]; then
+      cr_recipe_pair "$who" "$flag from $record" "$fw=$rec_path"
+      rec_path="${CR_PAIR#*	}"
+    fi
+    [ "$given_path" = "$rec_path" ] && continue
+    [ -n "$refresh" ] \
+      && die "$code" "$who: $flag names $given_path for $fw, and $record records $rec_path. $cost If the catalog republished the recipe, run recipe-refresh $refresh $fw=$given_path first, then run this again."
+    die "$code" "$who: $flag names $given_path for $fw, and $record records $rec_path. $cost Pass the recorded path, or leave the flag out and the record's path is taken."
+  done <<RF_EOF
+$recorded
+RF_EOF
 }
 
 do_tests_freeze() {
@@ -5867,38 +5918,14 @@ redAgain: $(printf '%s' "$stale_names" | jq -R -s -c 'split("\n") | map(select(l
   # The record is the one producer of a test-execution recipe path, and build-record reads it from
   # there for the same order. A --test-recipe is accepted only when it restates the record's path,
   # and a freeze with none reads the record's path itself, so the two records of one order never
-  # stand on two recipes. A framework the record holds no path for is left to the flag as given:
-  # there is nothing to disagree with. A recorded path gone from disk cannot be read either way,
-  # and that message names the refresh. Read only when a red is to be read, because the recipe
-  # serves nothing else here.
-  local tf_pre_file tf_pre_line tf_pre_fw tf_pre_path tf_given_path tf_from_record="" tf_fallback=""
+  # stand on two recipes. rf_fill_from_record holds the rule. Read only when a red is to be read,
+  # because the recipe serves nothing else here.
+  local tf_pre_file
   tf_pre_file="$IMPL_DIR/preconditions.json"
   if [ "$red_count" -gt 0 ] && [ -f "$tf_pre_file" ]; then
-    tf_from_record="$(jq -r '[ (.frameworks // [])[] | select(.lookup == "resolved" and (.recipePath // "") != "")
-                               | .framework + "\t" + .recipePath ] | join("\n")' "$tf_pre_file" 2>/dev/null)"
-    while IFS= read -r tf_pre_line; do
-      [ -n "$tf_pre_line" ] || continue
-      tf_pre_fw="${tf_pre_line%%	*}"; tf_pre_path="${tf_pre_line#*	}"
-      if [ -z "$test_recipes" ]; then
-        [ -f "$tf_pre_path" ] \
-          || die 3 "tests-freeze: the test-execution recipe $tf_pre_file records for $tf_pre_fw is not a file: $tf_pre_path. Resolve it again and run recipe-refresh --recipe $tf_pre_fw=<path> first."
-        cr_recipe_pair "tests-freeze" "frameworks[].recipePath in $tf_pre_file" "$tf_pre_fw=$tf_pre_path"
-        tf_fallback="$tf_fallback$CR_PAIR
-"
-        continue
-      fi
-      tf_given_path="$(cr_lookup "$test_recipes" "$tf_pre_fw")"
-      [ -n "$tf_given_path" ] || continue
-      if [ -f "$tf_pre_path" ]; then
-        cr_recipe_pair "tests-freeze" "frameworks[].recipePath in $tf_pre_file" "$tf_pre_fw=$tf_pre_path"
-        tf_pre_path="${CR_PAIR#*	}"
-      fi
-      [ "$tf_given_path" = "$tf_pre_path" ] \
-        || die 91 "tests-freeze: --test-recipe names $tf_given_path for $tf_pre_fw, and $tf_pre_file records $tf_pre_path. The reds would be read against one recipe and build-record would read the other, so the two records of one order would stand on two recipes. Nothing is frozen. If the catalog republished the recipe, run recipe-refresh --recipe $tf_pre_fw=$tf_given_path first, then freeze again."
-    done <<TF_EOF
-$tf_from_record
-TF_EOF
-    [ -n "$test_recipes" ] || test_recipes="$tf_fallback"
+    rf_fill_from_record "tests-freeze" "--test-recipe" "$test_recipes" "$(pre_test_recipes "$tf_pre_file")" "$tf_pre_file" 91 \
+      "The reds would be read against one recipe and build-record would read the other, so the two records of one order would stand on two recipes. Nothing is frozen." "--recipe"
+    test_recipes="$RF_LIST"
   fi
 
   # --- 80: a --red file must hold the failure signal the test-execution recipe declares ------------
@@ -9027,26 +9054,49 @@ EOF_PATHS
   [ -n "$tests_doc" ] \
     || die 3 "build-recheck: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
-  # --- exit 3: a recipe the task's records name has no flag here (gap row 349). The check it feeds
-  # would read unknown or undeclared and replace the stop this re-check is meant to clear. An
-  # unknown configuration gate is outside the rows above, so the next re-check refuses on it. The
-  # records are preconditions' test and implement recipes and the baseline's check recipes ------
-  local rc_pre rc_base rc_slot missing_flags
-  rc_pre="$(jq -c '.' "$IMPL_DIR/preconditions.json" 2>/dev/null)"
-  rc_base="$(jq -c '.' "$IMPL_DIR/baseline.json" 2>/dev/null)"
-  rc_slot="$(printf '%s' "$RV_UNIT_JSON" | jq -r "$BR_ORDER_FACTS_JQ"' orderFacts.slot')"
-  missing_flags="$(jq -rn --argjson pre "${rc_pre:-null}" --argjson base "${rc_base:-null}" --arg slot "$rc_slot" \
-    --arg test "$test_recipes" --arg check "$check_recipes" --arg gate "$gate_recipes" '
-    def given($list; $fw): $list | split("\n") | any(split("\t")[0] == $fw);
-    [ (($pre.frameworks // [])[] | select(.lookup == "resolved" and (.recipePath // "") != "")
-        | select(given($test; .framework) | not) | "--test-recipe \(.framework)=\(.recipePath)"),
-      (($base.checkRecipes // [])[] | select(given($check; .framework) | not) | "--check-recipe \(.framework)=\(.path)"),
-      (if $slot != "configuration-gate" then empty else
-         ($pre.frameworks // [])[] | select((.implementRecipePath // "") != "")
-         | select(given($gate; .framework) | not) | "--implement-recipe \(.framework)=\(.implementRecipePath)" end)
-    ] | join(" ")')"
-  [ -z "$missing_flags" ] \
-    || die 3 "build-recheck: this call leaves out recipes the task's records name: $missing_flags. Without them a check reads unknown or undeclared, and the re-check would replace the stop it is meant to clear. Nothing ran, and $record_file is unchanged. Run build-recheck again with those flags."
+  # --- the recipe flags, taken from the records that produced them (gap row 349). A flag left out
+  # would make its check read unknown or undeclared over the stop this re-check is meant to clear,
+  # and an unknown configuration gate then refuses the next re-check. A flag naming another path
+  # than its record refuses at 91. On a gate order the implement recipe taken is the gate's own:
+  # the one recorded recipe whose file carries the block br_gate_check reads. Two such recipes are
+  # two answers to one question, so the person names one. Given implement flags are compared and
+  # nothing is added to them, since a second recipe carrying the block refuses at 72 -------------
+  local pre_file="$IMPL_DIR/preconditions.json" base_file="$IMPL_DIR/baseline.json" filled=""
+  local gate_all gate_recorded="" gate_given="" gate_line
+  local rf_cost="The re-check would read one recipe and the task's records the other. Nothing ran, and $record_file is unchanged."
+  rf_fill_from_record "build-recheck" "--test-recipe" "$test_recipes" "$(pre_test_recipes "$pre_file")" "$pre_file" 91 "$rf_cost" "--recipe"
+  test_recipes="$RF_LIST"; filled="$RF_FILLED"
+  rf_fill_from_record "build-recheck" "--check-recipe" "$check_recipes" \
+    "$(jq -r '[ (.checkRecipes // [])[] | .framework + "\t" + .path ] | join("\n")' "$base_file" 2>/dev/null)" \
+    "$base_file" 91 "$rf_cost" "--check-recipe"
+  check_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
+  br_order_facts "$RV_UNIT_JSON"
+  if [ "$BR_ORDER_SLOT" = "configuration-gate" ]; then
+    gate_all="$(jq -r '[ (.frameworks // [])[] | select((.implementRecipePath // "") != "")
+                         | .framework + "\t" + .implementRecipePath ] | join("\n")' "$pre_file" 2>/dev/null)"
+    while IFS= read -r gate_line; do
+      [ -n "$gate_line" ] || continue
+      if [ -n "$(cr_lookup "$gate_recipes" "${gate_line%%	*}")" ]; then
+        gate_given="$gate_given$gate_line
+"
+      elif [ ! -f "${gate_line#*	}" ] || [ -n "$(sh_blocks_under "${gate_line#*	}" "Configuration gate" 1 | grep '[^[:space:]]')" ]; then
+        gate_recorded="$gate_recorded$gate_line
+"
+      fi
+    done <<RC_GATE
+$gate_all
+RC_GATE
+    if [ -n "$gate_recipes" ]; then
+      gate_recorded="$gate_given"
+    else
+      [ -n "$gate_all" ] \
+        || die 3 "build-recheck: $unit_id is proved by its configuration gate, no --implement-recipe was passed, and $pre_file records no implement recipe. Nothing ran, and $record_file is unchanged. Pass --implement-recipe <framework>=<path>."
+      [ "$(printf '%s' "$gate_recorded" | grep -c .)" -le 1 ] \
+        || die 3 "build-recheck: $pre_file records more than one implement recipe that carries a ## Configuration gate: $(printf '%s' "$gate_recorded" | tr '\t\n' '= ' | sed 's/ $//'). Nothing here may choose between two answers to one question. Nothing ran, and $record_file is unchanged. Pass the one --implement-recipe the attempt took."
+    fi
+    rf_fill_from_record "build-recheck" "--implement-recipe" "$gate_recipes" "$gate_recorded" "$pre_file" 91 "$rf_cost" ""
+    gate_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
+  fi
 
   br_require_clean_tree "build-recheck" "$codepath" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 
@@ -9153,9 +9203,10 @@ EOF_PATHS
   br_next="$(im_next_step "$new_ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")"
   im_print_summary "build-recheck" "$(printf '%s' "$record_json" | jq -c \
     --argjson count "$br_count" --arg state "$br_state" --arg name "$record_name" \
-    --arg record "$record_file" --arg next "$br_next" --argjson total "$checks_total" --arg halt "$br_halt" '
+    --arg record "$record_file" --arg next "$br_next" --argjson total "$checks_total" --arg halt "$br_halt" --arg filled "$filled" '
     {order: .unit}
     + $count
+    + (if $filled == "" then {} else {filledFromRecords: $filled} end)
     + {recheck: "\($name), checks replaced",
      range: "\(.startedAt)..\(.commit)",
      check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
@@ -11910,8 +11961,7 @@ do_finish() {
       test_recipes="$test_recipes$CR_PAIR
 "
     done <<FN_RECIPES
-$(jq -r '[ (.frameworks // [])[] | select(.lookup == "resolved" and (.recipePath // "") != "")
-           | .framework + "\t" + .recipePath ] | join("\n")' "$pre_file" 2>/dev/null)
+$(pre_test_recipes "$pre_file")
 FN_RECIPES
   fi
   # shellcheck disable=SC2034 # read by the sourced library
