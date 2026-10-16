@@ -9290,6 +9290,34 @@ ICC_PATHS
   else echo own; fi
 }
 
+# Succeeds when the paths in $1, one per line, are at least one, every one is order $2's, owned or
+# shared, and none is order $3's (gap row 340).
+im_paths_theirs() {
+  local p n=0
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    [ -n "$(im_path_claim "$p" "$2")" ] && [ -z "$(im_path_claim "$p" "$3")" ] || return 1
+    n=$((n + 1))
+  done <<IPT_PATHS
+$1
+IPT_PATHS
+  [ "$n" -gt 0 ]
+}
+
+# The id of the order of this task, other than order $3, whose files are every file commit $2 in the
+# repository $1 changes, read by im_paths_theirs. Nothing when no order is.
+im_commit_owner() {
+  local paths other
+  paths="$(git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames "$2" 2>/dev/null)"
+  while IFS= read -r other; do
+    [ -n "$other" ] || continue
+    im_paths_theirs "$paths" "$other" "$3" || continue
+    printf '%s' "$other" | jq -r '.id'; return 0
+  done <<ICO_ORDERS
+$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$(printf '%s' "$3" | jq -r '.id // ""')" '(.workOrders // [])[] | select(.id != $id)')
+ICO_ORDERS
+}
+
 # The commits after $2 up to $3 in the repository $1 that another order of this task built, one per
 # line. A build or fix record of that order names a range holding the commit, every file the commit
 # changes is that order's, owned or shared, and none is this order's. Orders of one task build
@@ -9297,7 +9325,7 @@ ICC_PATHS
 # Both records can hold the commit, so im_commit_claim, which reads a shared file by the records,
 # cannot tell whose it is. $4 the frozen work order.
 im_other_order_commits() {
-  local repo="$1" range id f b other other_json r c p theirs
+  local repo="$1" range id f b other other_json r c
   range="$(git -C "$repo" rev-list "$2..$3" 2>/dev/null)"
   [ -n "$range" ] || return 0
   id="$(printf '%s' "$4" | jq -r '.id // ""')"
@@ -9311,15 +9339,8 @@ im_other_order_commits() {
         [ -n "$other_json" ] && [ -n "$r" ] || continue
         for c in $(git -C "$repo" rev-list "$r" 2>/dev/null); do
           printf '%s\n' "$range" | grep -Fqx -- "$c" || continue
-          theirs=""
-          while IFS= read -r p; do
-            [ -n "$p" ] || continue
-            if [ -n "$(im_path_claim "$p" "$other_json")" ] && [ -z "$(im_path_claim "$p" "$4")" ]; then theirs=yes
-            else theirs=no; break; fi
-          done <<IOO_PATHS
-$(git -C "$repo" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)
-IOO_PATHS
-          [ "$theirs" != "yes" ] || printf '%s\n' "$c"
+          ! im_paths_theirs "$(git -C "$repo" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)" \
+            "$other_json" "$4" || printf '%s\n' "$c"
         done
       done | LC_ALL=C sort -u
 }
@@ -10491,8 +10512,9 @@ FB_ALLOW
     echo "FIX-BRIEF: round $((rounds_used + 1)) of $unit_id is its one repair round, for $repair_ids." >&2
   fi
 
-  local fb_head fb_last brief_file brief_json
+  local fb_head fb_last fb_now c brief_file brief_json
   fb_head="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
+  fb_now="$fb_head"
   # Gap row 339. Commits after the order's last record are this round's work, so the round begins
   # at that record, and fix-record puts them in the range a verifier reads.
   if [ "$rounds_used" -gt 0 ]; then
@@ -10502,6 +10524,13 @@ FB_ALLOW
   fi
   [ -z "$fb_last" ] || [ "$fb_last" = "$fb_head" ] \
     || ! git -C "$RV_RANGE_REPO" merge-base --is-ancestor "$fb_last" "$fb_head" 2>/dev/null || fb_head="$fb_last"
+  # Gap row 340. A commit after that record that changes only another order's files is that
+  # order's, recorded or not, so the round begins after the last such commit.
+  if [ "$fb_head" != "$fb_now" ] && [ -z "$RV_RANGE_SCOPE" ]; then
+    for c in $(git -C "$RV_RANGE_REPO" rev-list "$fb_last..$fb_now" 2>/dev/null); do
+      [ -z "$(im_commit_owner "$RV_RANGE_REPO" "$c" "$RV_UNIT_JSON")" ] || { fb_head="$c"; break; }
+    done
+  fi
   # One brief per round, because each round's open findings differ from the last round's and the
   # record of what a fixer was given is worth keeping beside its report.
   brief_file="$IMPL_DIR/brief-$unit_id-fix-$((rounds_used + 1)).json"
