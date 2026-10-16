@@ -50,11 +50,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, or a tool that is
 # none of Read, Grep and Bash: allow, silent. A payload with no agent_type, no project registered
-# for this working directory, or no dispatch.json: the same. Those last two are every read
-# outside an AIDA task, and a message on each would be noise, the rule version 5's guard kept.
+# for this working directory and no open record naming the agent's type, or no dispatch.json:
+# the same. Those last two are every read outside an AIDA task, and a message on each would be noise, the rule version 5's guard kept.
 # The record is the task's own, <project>/tasks/<task>/implementation/dispatch.json, found as the
 # one whose codePath holds the payload's working directory, else the one open record naming the
-# agent's type (scripts/lib/paths.sh, dispatch_record_for). Records open for other trees only: allow, through `systemMessage` naming
+# agent's type (scripts/lib/paths.sh, dispatch_record_for). With no project for the working
+# directory, it is the one open record naming that type in any registered project
+# (dispatch_record_resolve). Records open for other trees only: allow, through `systemMessage` naming
 # why. dispatch.json
 # unreadable, a record naming no role, an agent whose type is not the role the record names, or a
 # dispatch whose denyRead list is empty:
@@ -114,21 +116,23 @@ source "$RECIPES_LIB" 2>/dev/null \
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
 
-MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" || { echo '{}'; exit 0; }
-PROJECT_PATH="$(jq -r '.path // empty' <<<"$MATCH" 2>/dev/null)"
-[ -n "$PROJECT_PATH" ] || not_enforced "the matched project row carries no path"
-
 # Each task keeps its own record under its implementation folder (live-run row 139). The one this
 # agent works under is the one whose codePath holds the payload's working directory. A record
 # open for another tree is another task's dispatch, and it says so rather than passing in silence.
 # The directory is held in the same canonical form codePath is, so the two compare as strings.
-# The Bash door below resolves a relative operand against it too.
+# The Bash door below resolves a relative operand against it too. A session outside every code
+# path finds the record by the agent's type across the registered projects (gap row 358).
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
-dispatch_record_for "$PROJECT_PATH" "$CWD_CANON" "$AGENT"
+dispatch_record_resolve "$CWD_CANON" "$AGENT"
+case $? in
+  1) echo '{}'; exit 0 ;;
+  2) not_enforced "the matched project row carries no path" ;;
+esac
+PROJECT_PATH="$DISPATCH_PROJECT"
 DISPATCH_FILE="$DISPATCH_RECORD"
 if [ -z "$DISPATCH_FILE" ]; then
-  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in $PROJECT_PATH, none for a tree holding $CWD_CANON, so this read was allowed without being checked"
+  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $CWD_CANON, so this read was allowed without being checked"
   echo '{}'; exit 0
 fi
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \

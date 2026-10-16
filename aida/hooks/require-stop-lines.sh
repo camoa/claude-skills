@@ -32,11 +32,10 @@ source "$PLUGIN_ROOT/scripts/lib/builder-lines.sh" 2>/dev/null || exit 0
 
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
-PROJECT_PATH="$(registry_resolve_by_directory "$CWD" 2>/dev/null | jq -r '.path // empty' 2>/dev/null)"
-[ -n "$PROJECT_PATH" ] || exit 0
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
-dispatch_record_for "$PROJECT_PATH" "$CWD_CANON" "$AGENT"
+# A session outside every code path finds the record by the agent's type (gap row 358).
+dispatch_record_resolve "$CWD_CANON" "$AGENT" || exit 0
 [ -n "$DISPATCH_RECORD" ] || exit 0
 ROLE="$(jq -r '.role // empty' "$DISPATCH_RECORD" 2>/dev/null)"
 [ "${ROLE##*:}" = "implementer" ] && role_matches "$AGENT" "$ROLE" || exit 0

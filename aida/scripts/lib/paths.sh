@@ -21,7 +21,11 @@
 #                               sets DISPATCH_RECORD to the open dispatch record of the task whose
 #                               codePath holds dir, else to the one open record whose role is the
 #                               agent type, or empty, and DISPATCH_OPEN_COUNT to how many records
-#                               are open. One of the three functions here that read the disk.
+#                               are open. One of the functions here that read the disk.
+#   dispatch_record_resolve <canonical dir> [<agent type>]
+#                               dispatch_record_for under the project that owns dir, else the one
+#                               open record naming the agent type in any registered project. Sets
+#                               DISPATCH_PROJECT too. Needs registry.sh sourced.
 #   main_checkout <project codePath> <canonical record codePath>
 #                               prints the project's main checkout in canonical form, or nothing
 #                               when it is the record's own tree or is not on disk.
@@ -172,6 +176,63 @@ dispatch_record_for() {
 $(find "$project/tasks" -mindepth 3 -maxdepth 3 -type f -path '*/implementation/dispatch.json' 2>/dev/null | sort)
 DR_FILES
   if [ -z "$DISPATCH_RECORD" ] && [ "$by_role_count" -eq 1 ]; then DISPATCH_RECORD="$by_role"; fi
+}
+
+# The open dispatch record for an agent of type $2 whose tool call runs in the canonical directory
+# $1, wherever the session runs (gap row 358). The project that owns $1 answers first, through
+# dispatch_record_for. A session started outside the code path, such as a folder the person keeps
+# notes in, resolves no project. Then every registered project's open records are read, and the
+# one record whose role is $2 is the record. Two such records are two projects with that role out:
+# the one in the project remembered for $1 is chosen, and with no single one there, none is. An
+# empty $2 is the person, who never reaches that search. Sets DISPATCH_PROJECT to the owning
+# project, or the project the record is in, besides the two globals dispatch_record_for sets. On
+# the search, DISPATCH_OPEN_COUNT counts only records naming $2, so a non-AIDA agent stays quiet.
+# Returns 1 when no project owns $1 and no record names $2, and 2 when the owning row has no path.
+DISPATCH_PROJECT=""
+dispatch_record_resolve() {
+  local dir="$1" agent="${2:-}" row f matched="" name p choice choice_path="" chosen="" chosen_count=0
+  DISPATCH_PROJECT=""; DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
+  if row="$(registry_resolve_by_directory "$dir" 2>/dev/null)"; then
+    DISPATCH_PROJECT="$(jq -r '.path // empty' <<<"$row" 2>/dev/null)"
+    [ -n "$DISPATCH_PROJECT" ] || return 2
+    dispatch_record_for "$DISPATCH_PROJECT" "$dir" "$agent"
+    return 0
+  fi
+  [ -n "$agent" ] || return 1
+  # A glob, not find: find lists every file of every implementation folder, which doubled the cost
+  # of each tool call outside a project. NULL_GLOB keeps zsh going past a glob with no match.
+  [ -z "${ZSH_VERSION:-}" ] || setopt LOCAL_OPTIONS NULL_GLOB
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    for f in "$p"/tasks/*/implementation/dispatch.json; do
+      [ -f "$f" ] || continue
+      role_matches "$agent" "$(jq -r '.role // empty' "$f" 2>/dev/null)" || continue
+      DISPATCH_OPEN_COUNT=$((DISPATCH_OPEN_COUNT + 1))
+      matched="$matched$f
+"
+    done
+  done <<DRR_PROJECTS
+$(registry_list_projects 2>/dev/null | jq -r '.path // empty' 2>/dev/null)
+DRR_PROJECTS
+  if [ "$DISPATCH_OPEN_COUNT" -eq 1 ]; then
+    DISPATCH_RECORD="${matched%?}"
+  elif [ "$DISPATCH_OPEN_COUNT" -gt 1 ]; then
+    choice="$(registry_read_directory_choice "$dir" 2>/dev/null | jq -r '.project // empty' 2>/dev/null)"
+    while IFS="$(printf '\t')" read -r name p; do
+      [ -z "$choice" ] || [ "$name" != "$choice" ] || choice_path="$p"
+    done <<DRR_ROWS
+$(registry_list_projects 2>/dev/null | jq -r '[.name // "", .path // ""] | @tsv' 2>/dev/null)
+DRR_ROWS
+    while IFS= read -r f; do
+      [ -n "$f" ] && [ -n "$choice_path" ] && is_under "$f" "$choice_path" || continue
+      chosen="$f"; chosen_count=$((chosen_count + 1))
+    done <<DRR_MATCHED
+$matched
+DRR_MATCHED
+    [ "$chosen_count" -ne 1 ] || DISPATCH_RECORD="$chosen"
+  fi
+  [ -z "$DISPATCH_RECORD" ] || DISPATCH_PROJECT="${DISPATCH_RECORD%/tasks/*/implementation/dispatch.json}"
+  [ "$DISPATCH_OPEN_COUNT" -gt 0 ]
 }
 
 # The project's registered codePath is its main checkout, and a task's worktree is a second tree

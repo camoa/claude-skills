@@ -69,11 +69,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # directory that command runs in, so dropping that second test misses one the other way.
 #
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, no project
-# registered for this working directory, or no dispatch.json: allow, silent. Those last two are
+# registered for this working directory and no open record naming the agent's type, or no
+# dispatch.json: allow, silent. Those last two are
 # every write outside an AIDA task, and a message on each would be noise, the rule version 5's
 # guard kept. The record is the task's own, <project>/tasks/<task>/implementation/dispatch.json,
 # found as the one whose codePath holds the payload's working directory, else the one open record
-# naming the agent's type (scripts/lib/paths.sh, dispatch_record_for). Records open for other
+# naming the agent's type (scripts/lib/paths.sh, dispatch_record_for). With no project for the
+# working directory, it is the one open record naming that type in any registered project
+# (dispatch_record_resolve). Records open for other
 # trees only: allow, through `systemMessage` naming why. dispatch.json unreadable, missing
 # fields, or no unit has frozen anything yet for this task and rules two and three are off: allow, through `systemMessage` naming why. Nothing is frozen
 # before the third step of implementation runs, and that is a real state, not a fault, the same
@@ -177,21 +180,24 @@ source "$RECIPES_LIB" 2>/dev/null \
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
 
-MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" || { echo '{}'; exit 0; }
-PROJECT_PATH="$(jq -r '.path // empty' <<<"$MATCH" 2>/dev/null)"
-[ -n "$PROJECT_PATH" ] || not_enforced "the matched project row carries no path"
-
 # Each task keeps its own record under its implementation folder (live-run row 139). The one this
 # agent works under is the one whose codePath holds the payload's working directory. A record
 # open for another tree is another task's dispatch, and it says so rather than passing in silence.
 # The directory is held in the same canonical form codePath is, so the two compare as strings,
-# and a working directory that no longer exists still normalizes textually.
+# and a working directory that no longer exists still normalizes textually. A session outside
+# every code path finds the record by the agent's type across the registered projects (gap row
+# 358). The main thread has no type, so outside every code path it is not held to rule one.
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
-dispatch_record_for "$PROJECT_PATH" "$CWD_CANON" "$AGENT"
+dispatch_record_resolve "$CWD_CANON" "$AGENT"
+case $? in
+  1) echo '{}'; exit 0 ;;
+  2) not_enforced "the matched project row carries no path" ;;
+esac
+PROJECT_PATH="$DISPATCH_PROJECT"
 DISPATCH_FILE="$DISPATCH_RECORD"
 if [ -z "$DISPATCH_FILE" ]; then
-  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in $PROJECT_PATH, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
+  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
   echo '{}'; exit 0
 fi
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
