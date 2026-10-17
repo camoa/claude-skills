@@ -96,7 +96,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
 #                            [--deny-read <path relative to codePath>]... \
 #                            [--allow-write <path relative to codePath>]... \
-#                            [--test-glob <glob>]... [--resume]
+#                            [--test-glob <glob>]... [--recheck <order id>:<n>]... [--resume]
 #
 # `dispatch-open` checks <role> against the agent definitions this plugin ships and refuses a name
 # that matches none of them. For the four roles that read or write the code, it also derives the
@@ -112,6 +112,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # role's record carries the key.
 # A test author's record carries `denyCommand`, the runtime forms scripts/introspection-forms.txt
 # lists, which hooks/deny-prior-source.sh refuses in its Bash commands (gap row 231).
+# A row-checker on an order proved by its record prints which record rows to put to it. A row
+# whose done-when line the last close on that line confirmed is left out, and `--recheck` puts it
+# back. When no row is left, nothing is opened (gap row 361).
 #   implement-actions.sh dispatch-close <task_folder> [--no-report | --not-sent]
 #
 # `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. A
@@ -13389,8 +13392,33 @@ im_refuse_open_dispatch() {
     || die 37 "$1: the $od_role record for $2 is still open in $IMPL_DIR/dispatch.json, so the $od_role has not finished. Run dispatch-close. If it keeps the record open, resume the role as it says, then run dispatch-close again. Then run $1. Nothing is written."
 }
 
+# Gap row 361. dispatch-close keeps a record order's verdicts beside the line each one judged, in
+# row-check-<order>-lines.json, which dispatch-open reads. A key <order id>:<n> names done-when line
+# n. Other keys judge no line. $1 the implementation folder, $2 the order from the snapshot, $3 the
+# verdict file. An order that is not proved by its record, or a file that does not read, keeps nothing.
+im_keep_line_verdicts() {
+  local kl_file kl_old kl_doc
+  [ "$(printf '%s' "$2" | jq -r '.proof // ""')" = "record" ] || return 0
+  kl_file="$1/row-check-$(printf '%s' "$2" | jq -r '.id')-lines.json"
+  kl_old='{"rows":[]}'
+  [ ! -f "$kl_file" ] || kl_old="$(jq -c '.' "$kl_file" 2>/dev/null)" \
+    || die 3 "dispatch-close: $kl_file could not be read as JSON. Repair or remove it by hand, then run dispatch-close again."
+  kl_doc="$(jq -c --argjson u "$2" --argjson old "$kl_old" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+      ($u.doneWhen // []) as $dw
+      | [ (.rows // [])[] | (.criterion // "") as $k | ($k | ltrimstr($u.id + ":")) as $n
+          | select($n != $k and ($n | test("^[1-9][0-9]*$"))) | ($n | tonumber) as $i
+          | select($i <= ($dw | length))
+          | {line: $dw[$i - 1], verdict, note, at: $at} ] as $new
+      | {rows: (($old.rows // []) + $new)}' "$3" 2>/dev/null)"
+  if [ -z "$kl_doc" ]; then
+    echo "DISPATCH-CLOSE: $3 does not read as the checker's verdicts, so no record row verdict was kept."
+    return 0
+  fi
+  write_atomic "$kl_file" "$kl_doc"
+}
+
 do_dispatch_open() {
-  local task_arg="" role="" unit_id="" deny_raw="" allow_raw="" test_glob_raw="" resume=false
+  local task_arg="" role="" unit_id="" deny_raw="" allow_raw="" test_glob_raw="" recheck_raw="" resume=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --resume) resume=true; shift ;;
@@ -13407,6 +13435,11 @@ do_dispatch_open() {
       --test-glob)
         [ "$#" -ge 2 ] || die 3 "dispatch-open: --test-glob needs a glob from the implement recipe"
         test_glob_raw="$test_glob_raw$2
+"
+        shift 2 ;;
+      --recheck)
+        [ "$#" -ge 2 ] || die 3 "dispatch-open: --recheck needs a record row key, <order id>:<n>"
+        recheck_raw="$recheck_raw$2
 "
         shift 2 ;;
       -*) die 3 "dispatch-open: unrecognized argument: $1" ;;
@@ -13434,6 +13467,8 @@ do_dispatch_open() {
   # the part after the last colon is compared.
   local role_bare agents_dir known_list
   role_bare="${role##*:}"
+  [ -z "$recheck_raw" ] || { [ "$role_bare" = "row-checker" ] && [ "$resume" = false ]; } \
+    || die 3 "dispatch-open: --recheck is for a fresh row-checker dispatch, and this call names $role_bare$([ "$resume" = false ] || printf ' with --resume'). Nothing was dispatched."
   agents_dir="$PLUGIN_ROOT/agents"
   known_list="$(md_basenames_in "$agents_dir")"
   [ -n "$known_list" ] \
@@ -13840,6 +13875,36 @@ TG_ROOTS
   [ -z "${CLAUDE_CODE_SESSION_ID:-}" ] \
     || record_json="$(printf '%s' "$record_json" | jq -c --arg s "$CLAUDE_CODE_SESSION_ID" '.sessionId = $s')"
 
+  # Gap row 361. The checker's verdict on a record line drifts from pass to pass, so a line whose
+  # text the last close on it confirmed is not put to it again. The match is on the text, because a
+  # reworded line shifts the row numbers. restart moves the lines file into its archive with the
+  # order's other files, so the archives are searched too. --recheck puts a named row back.
+  local rc_split="" rc_dw="" rc_hist rc_recheck
+  [ "$role_bare" != "row-checker" ] || rc_dw="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
+    '[ .workOrders[]? | select(.id == $u and (.proof // "") == "record") ][0].doneWhen // empty' 2>/dev/null)"
+  if [ "$role_bare" = "row-checker" ] && [ -n "$rc_dw" ] && [ "$resume" = false ]; then
+    rc_hist="$(find "$TASK_PATH" -mindepth 2 -maxdepth 2 -name "row-check-$unit_id-lines.json" \
+        \( -path "*/implementation/*" -o -path "*/implementation-*/*" \) -exec cat {} + 2>/dev/null \
+      | jq -s -c '[ .[] | (.rows // [])[] ]')" \
+      || die 3 "dispatch-open: a row-check-$unit_id-lines.json under $TASK_PATH could not be read as JSON. Repair or remove it by hand. Nothing was dispatched."
+    rc_recheck="$(printf '%s' "$recheck_raw" | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+    rc_split="$(jq -nc --argjson h "${rc_hist:-[]}" --argjson dw "$rc_dw" --arg u "$unit_id" --argjson re "$rc_recheck" '
+      [ range(0; $dw | length) as $i | "\($u):\($i + 1)" as $k
+        | ([ $h[] | select(.line == $dw[$i]) ] | sort_by(.at) | last) as $last
+        | {key: $k, carried: (($last.verdict // "") == "confirmed" and ($re | index($k)) == null)} ]
+      | {carried: [ .[] | select(.carried) | .key ], check: [ .[] | select(.carried | not) | .key ],
+         unknown: ($re - map(.key))}')"
+    [ "$(printf '%s' "$rc_split" | jq '.unknown | length')" = "0" ] \
+      || die 3 "dispatch-open: --recheck names $(printf '%s' "$rc_split" | jq -r '.unknown | join(", ")'), and $unit_id's record rows are $unit_id:1 to $unit_id:$(printf '%s' "$rc_dw" | jq 'length'). Nothing was dispatched."
+    if [ "$(printf '%s' "$rc_split" | jq '.check | length')" = "0" ]; then
+      echo "DISPATCH-OPEN: no dispatch was opened. Each record row of $unit_id is confirmed earlier, and its line is unchanged: $(printf '%s' "$rc_split" | jq -r '.carried | join(", ")')."
+      echo "next: freeze with --row $unit_id=confirmed::model::<a note naming the rows confirmed earlier>. To put a row to the checker again, run dispatch-open with --recheck <row key>."
+      exit 0
+    fi
+  elif [ -n "$recheck_raw" ]; then
+    die 3 "dispatch-open: --recheck names a record row, and $unit_id is not proved by its record. Nothing was dispatched."
+  fi
+
   # The checker is denied every reused path and every other order's files, as the author is. The
   # author gets their interface text in the tests brief, so the checker gets that text too (gap
   # row 257). Only those two keys: the rest of the brief holds the person's words, earlier notes and
@@ -13864,6 +13929,8 @@ TG_ROOTS
   echo "DISPATCH-OPEN: the role works in the worktree $codepath. Put it in the dispatch message: the role starts each shell command with cd $codepath &&, and writes nothing in the main checkout."
   [ -z "$interfaces_file" ] \
     || echo "DISPATCH-OPEN: interfaces: $interfaces_file. Put it in the dispatch message as a path: the role reads the interface text of what a test calls there."
+  [ -z "$rc_split" ] || printf '%s' "$rc_split" | jq -r '"DISPATCH-OPEN: record rows to put to the checker: \(.check | join(", "))."
+    + (if (.carried | length) > 0 then " Confirmed earlier, with the line unchanged, and not put to it: \(.carried | join(", "))." else "" end)'
   local deny_count main
   main="$(main_checkout "$(project_code_path_value "$RV_PROJECT_FOLDER")" "$(cd "$codepath" && pwd -P)")"
   deny_count="$(printf '%s' "$deny_json" | jq 'length' 2>/dev/null)"
@@ -14092,6 +14159,8 @@ NS_OWNED
     die 110 "dispatch-close: $nr_unit is halted. $nr_role $nr_what, $nr_after. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty A person reads what it left, runs clear-halt, then start to keep or set aside its files, then $nr_next."
   fi
   if [ -f "$dispatch_file" ]; then
+    [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" != "row-checker" ] || [ ! -f "$rp_path" ] \
+      || im_keep_line_verdicts "$TASK_PATH/implementation" "$rp_unit" "$rp_path"
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
     echo "DISPATCH-CLOSE: removed $dispatch_file"
   else

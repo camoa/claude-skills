@@ -66,6 +66,13 @@ no `proof` at all is proved by tests; `start` names it on its `proofAbsent:` lin
 Its done-when rows are its checkpoint. Put them to the `row-checker`, or to the person, the way
 the checkpoint below puts a test's rows. The question is whether each row names something a reader
 can confirm from the deliverable alone.
+Key each row `<order id>:<n>`, with n its done-when row counted from 1.
+`dispatch-open` prints the rows to put to the checker. It leaves out a row whose line is unchanged
+since the last checker that judged that line confirmed it. The checker's verdict drifts from pass
+to pass, so a second reading of an unchanged line buys a new rejection and no new judgement (gap
+row 361). The match is on the line's text, because a reworded line shifts the numbers.
+`--recheck <order id>:<n>` puts a row back, when the person asks. When no row is left, nothing
+opens; the note on the `--row` names the rows confirmed earlier.
 Freeze with no `--test`, one `--row <order id>=...` carrying that judgement, and a `--checklist`
 for each criterion a person verifies. The build reads that row as the order's own check,
 `done-when`. `close` writes the row's judge, person or model, on the criteria the order owns.
