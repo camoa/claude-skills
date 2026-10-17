@@ -1337,6 +1337,25 @@ bring_up_half() {
   sh_blocks_under "$half" "Bring up"; rm -f "$half"
 }
 
+# Runs the address command in the worktree and checks its `root:`. It sets value, keys and root,
+# and adds the keys to TOKENS. It reads the locals of do_environment's `up`: outfile, capture, wt,
+# marker_at, address and tab. A failure exits 4, and a root that is not the worktree exits 3.
+environment_address() {
+  # The mark above the address command, so `down` reads that command's keys and no other output in
+  # this record. It goes in before the line count below, which `first:` quotes from.
+  printf '%s %s\n' "$ENV_ADDRESS_MARK" "$marker_at" >>"$outfile"
+  before="$(wc -l <"$outfile" | tr -d '[:space:]')"
+  run_recipe_capture environment "$RECIPE" "$(fill_tokens "$address")" "$wt" "$outfile" "$capture" "$ENV_TOKENS_HINT"; result=$?
+  value="$(sed -n 's/^address: //p' "$capture" | sed -n '1p')"
+  [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the address command failed or printed no address: line\n' >&2; recipe_output_summary 4 "$outfile" "$((before + 2))"; exit 4; }
+  keys="$(sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' "$capture" | grep -v '^address'"$tab")"; rm -f "$capture"
+  TOKENS="$TOKENS$keys
+"
+  root="$(cr_lookup "$keys" root)"
+  [ -z "$root" ] || [ "$(cd "$root" 2>/dev/null && pwd -P)" = "$wt" ] \
+    || die3 "environment: the address command's root: is $root, not the worktree $wt, so the environment resolved to another tree. Nothing after the address ran"
+}
+
 # Prints the line $1 with every `{name}` filled, for run_recipe_lines in scripts/lib/recipes.sh.
 # A line still holding a `{name}` after the fill exits 3 naming it, under the label $2: a token
 # nothing filled would otherwise run literally.
@@ -1513,7 +1532,7 @@ do_environment() {
   [ -n "$id" ] || die3 "environment: a task id is required"
   case "$sub" in show|up|down|not-applicable) ;; *) die3 "environment: the action is show, up, down or not-applicable, got: ${sub:-nothing}" ;; esac
 
-  local task_dir task_json wt outfile addr_mark restored
+  local task_dir task_json wt outfile addr_mark restored let_go_tear=""
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
@@ -1544,10 +1563,24 @@ do_environment() {
     RECIPE="$(jq -r '.environment.recipe // empty' "$task_json")" \
       || die3 "environment: could not read $task_json. Nothing was torn down"
     [ -n "$RECIPE" ] || { printf 'environment: none, nothing was up for %s\n' "$id"; return 0; }
+    # An adopted site was up before this task, and its database is no copy of the main checkout's,
+    # so a tear-down would lose it for good (gap row 351). `down` lets go of it and runs nothing.
+    # Completion and prune reach this too.
+    if [ "$(jq -r '.environment.adopted // false' "$task_json")" = true ]; then
+      wt="$(jq -r '.worktree.path // empty' "$task_json")"
+      [ ! -f "$RECIPE" ] || let_go_tear="$(fill_tokens_from "$TOKENS$(task_environment_tokens "$task_json")" \
+        "$(sh_blocks_under "$RECIPE" "Tear down")" | paste -s -d ';' -)"
+      write_atomic "$task_json" "$(jq 'del(.environment)' "$task_json")"
+      commit_task_change "$project_path" "Let go of the adopted site of ${id}" "its database is no copy" "" "" "$id" "environment" \
+        || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+      printf 'environment: let go of the adopted site of %s. It stays up in %s with its database. Remove that tree only after a person tears the site down, or the framework keeps it registered\n' "$id" "$wt"
+      [ -z "$let_go_tear" ] || printf 'environment: the tear-down lines, which delete that database: %s\n' "$let_go_tear"
+      return 0
+    fi
     [ -f "$RECIPE" ] || die3 "environment: the recipe the record names is gone: $RECIPE. Nothing was torn down"
     # The address keys the record kept, so `{worktreeProject}` reaches the tear-down. The marker's
     # own fields name no token, so they are left out with the three the up shape owns.
-    TOKENS="$TOKENS$(task_environment_tokens "$task_json" | grep -v -E "^(address|recipe|upAt|state|startedAt)$(printf '\t')")
+    TOKENS="$TOKENS$(task_environment_tokens "$task_json" | grep -v -E "^(address|recipe|upAt|state|startedAt|adopted)$(printf '\t')")
 "
     # A marker with no address holds none of those keys either, and a tear-down line may need one.
     # `up` marked the address command in records/environment-up.txt, with the line above, so the
@@ -1712,7 +1745,15 @@ TA_TOKEN_LIST
   # The folder of blocks stays until environment_cleanup removes it, because it keeps the earlier
   # versions a failed commit below puts back. An adopted site's preconditions are the bring-up's.
   [ -z "$adopt" ] || preconditions=""
+  local marker_doc marker_at
+  marker_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  capture="$(mktemp)" || die3 "environment: could not create a temporary file"
+  ENV_TMP="$ENV_TMP
+$capture"
   environment_check up "$wt" "$outfile"
+  # An adopted site answers its address before anything is committed, so a site that resolves to
+  # another tree leaves no file and no record behind.
+  [ -z "$adopt" ] || environment_address
   # Only the written and replaced files are staged and committed. A person's uncommitted or staged
   # work beside them is never taken into this commit and never refuses it.
   [ "$((RF_WRITTEN + RF_REPLACED))" -eq 0 ] || recipe_commit_if_changed "$wt" environment "the written files are ignored by git" \
@@ -1747,9 +1788,6 @@ TA_TOKEN_LIST
   write_atomic "$task_json" "$changes_doc"
   # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
   # refuses by the token's name at 4, before any bring-up line runs.
-  capture="$(mktemp)" || die3 "environment: could not create a temporary file"
-  ENV_TMP="$ENV_TMP
-$capture"
   if [ -z "$adopt" ]; then
     recipe_tokens_run environment "$RECIPE" "$outfile" "$wt" "$TOKENS" "$ENV_TOKENS_HINT" \
       || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$RT_FAILED" >&2; recipe_output_summary 4 "$outfile" "$((RT_BEFORE + 2))"; exit 4; }
@@ -1764,8 +1802,6 @@ $capture"
   # where they were before they ran `up`. The person's `not-applicable` reason is the one field
   # dropped, because `up` is the answer that replaces it. An adopted site was up before this run,
   # so it needs no marker.
-  local marker_doc marker_at
-  marker_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   if [ -z "$adopt" ]; then
     marker_doc="$(jq --arg r "$RECIPE" --arg t "$marker_at" \
       '.environment = ((.environment // {}) | del(.["not-applicable"]))
@@ -1780,27 +1816,18 @@ $capture"
     run_recipe_lines up "$RECIPE" "$up_lines" "$outfile" "environment: up" fill_line_or_refuse
   else
     printf 'environment: adopted, the site in %s was up, so no precondition, token or bring-up line ran and its database stays as it was\n' "$wt"
+    printf 'environment: no bring-up took a seed, so a configuration gate restores whatever seed the worktree already holds. Its age is unknown, and this plugin cannot check that one exists, because the recipe declares no line for it\n'
   fi
-  # The mark above the address command, so `down` reads that command's keys and no other output in
-  # this record. It goes in before the line count below, which `first:` quotes from.
-  printf '%s %s\n' "$ENV_ADDRESS_MARK" "$marker_at" >>"$outfile"
-  before="$(wc -l <"$outfile" | tr -d '[:space:]')"
-  run_recipe_capture environment "$RECIPE" "$(fill_tokens "$address")" "$wt" "$outfile" "$capture" "$ENV_TOKENS_HINT"; result=$?
-  value="$(sed -n 's/^address: //p' "$capture" | sed -n '1p')"
-  [ "$result" -eq 0 ] && [ -n "$value" ] || { printf 'environment: the address command failed or printed no address: line\n' >&2; recipe_output_summary 4 "$outfile" "$((before + 2))"; exit 4; }
-  keys="$(sed -n 's/^\([A-Za-z][A-Za-z0-9]*\): \(..*\)$/\1'"$tab"'\2/p' "$capture" | grep -v '^address'"$tab")"; rm -f "$capture"
-  TOKENS="$TOKENS$keys
-"
-  root="$(cr_lookup "$keys" root)"
-  [ -z "$root" ] || [ "$(cd "$root" 2>/dev/null && pwd -P)" = "$wt" ] \
-    || die3 "environment: the address command's root: is $root, not the worktree $wt, so the environment resolved to another tree. Nothing after the address ran"
+  # An adopted site answered its address before the commit above.
+  [ -n "$adopt" ] || environment_address
   # The record completes as soon as the address answers, so the marker covers the bring-up alone.
   # The root check above runs first, because a site in another tree is never recorded as this
   # task's. Its marker stays instead, and `down` tears that site down from the recipe it names.
   local up_doc
-  up_doc="$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  # `adopted` tells `down` and prune that the database is no copy of the main checkout's.
+  up_doc="$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg ad "$adopt" \
     --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \
-    '.environment = ($k + {address: $a, recipe: $r, upAt: $t})' "$task_json")"
+    '.environment = ($k + {address: $a, recipe: $r, upAt: $t} + (if $ad == "" then {} else {adopted: true} end))' "$task_json")"
   [ -n "$up_doc" ] || die3 "environment: the site of $id is up at $value. $task_json could not be written. The marker this run wrote before the bring-up still names $RECIPE. Run task environment $id down to tear this site down. It fills a tear-down token from the address command's lines in $outfile"
   write_atomic "$task_json" "$up_doc"
   if [ -z "$adopt" ]; then
@@ -1902,6 +1929,12 @@ do_prune() {
       || die3 "prune: could not read $task_json. Nothing was removed"
     [ "$state" = complete ] || die3 "prune: $id is $state, not complete, so its tree is where its work is. Nothing was removed"
     [ -n "$(jq -r '.worktree.path // empty' "$task_json")" ] || die3 "prune: $id records no worktree. Nothing was removed"
+    # An adopted site's database is no copy, so prune never tears it down, and a tree removed
+    # under a running site leaves the framework's registration behind (gap row 351). A person
+    # decides. A tree another task holds stays anyway, and `down` only lets go of the site.
+    [ "$(jq -r '.environment.adopted // false' "$task_json")" != true ] \
+      || [ -n "$(task_tree_others "$project_path" "$(jq -r '.worktree.path' "$task_json")" "$id" | head -1)" ] \
+      || die3 "prune: the site of $id was adopted, so its database is no copy, and removing $(jq -r '.worktree.path' "$task_json") under it leaves the framework's registration behind. Nothing was removed. If that database may go, tear the site down with the recipe's ## Tear down lines there, then run task environment $id down, then prune again"
   done <<TA_IDS
 $ids
 TA_IDS

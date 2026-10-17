@@ -7602,6 +7602,9 @@ BR_GATE
   fi
   verdict="$(br_worst_verdict "$(jq -nc --arg a "$own_verdict" --arg b "$gate_verdict" '[ $a, $b ] | map(select(. != ""))')")"
   detail="$own_detail${own_detail:+${gate_detail:+ }}$gate_detail"
+  # No bring-up took the seed of an adopted site, so the gate cannot vouch for it (gap row 351).
+  [ -z "$gate_recipe" ] || [ "$(jq -r '.environment.adopted // false' "$TASK_PATH/task.json" 2>/dev/null)" != true ] \
+    || detail="$detail The site was adopted, so the gate restored the seed the worktree already held. Its age is unknown, and a seed taken after the change lets the gate pass on nothing."
   case "$back_note" in
     ' '*) detail="$detail$back_note" ;;
     ?*)   detail="$back_note$detail" ;;

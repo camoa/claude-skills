@@ -182,10 +182,13 @@ and one line in that record marking the address command, so `down` can find that
 later.
 A site the worktree already runs is adopted. This applies when `task.json` records no address and
 no marker, and the recipe's `## Status` line says the site is up. Then `up` writes and commits the
-`## Files` blocks, runs the address command with its `root:` check, and records the address. It
-runs no precondition, token or bring-up line, because the seed would replace that site's database.
+`## Files` blocks, runs the address command with its `root:` check, and records the address with
+`adopted: true`. The root check runs before the commit, so a site in another tree leaves nothing.
+It runs no precondition, token or bring-up line, because the seed would replace that site's database.
 It records no named file in `worktree.recipeChanges`, and prints `environment: adopted` in place of
-`environment: coming-up`. `show` then prints `precondition check: not run`.
+`environment: coming-up`. It also says that no bring-up took a seed. A configuration gate then
+restores the seed the worktree already holds, whose age is unknown. Say so to the person.
+`show` then prints `precondition check: not run`.
 First it writes each `## Files` block absent from the worktree. A file that holds the block of an
 earlier version of the recipe is replaced. Any other file with other content refuses at 3. The
 earlier versions are the ones the navigator store holds, so nothing is fetched. Then it runs each
@@ -226,7 +229,10 @@ It prints `environment: coming-up`, then `address:`. Running it twice is safe: t
 promises every step runs again cleanly.
 
 `down` runs the tear-down lines, each one and its output to `records/environment-down.txt`, and removes
-`environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. With
+`environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. An
+adopted site is no copy, so `down` runs no tear-down line for it. It removes the record, commits,
+and says the site stays up in the worktree, with the tear-down lines filled. Prune refuses a tree
+whose adopted site is recorded, unless another task holds the tree. With
 nothing up it says so and exits 0. It reads the recipe from the marker as it reads it from a
 finished record, so a site that was coming up is torn down the same way. A marker with no address
 key holds none of the other address keys either. `up` marks the address command in
