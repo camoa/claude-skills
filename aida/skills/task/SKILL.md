@@ -233,8 +233,9 @@ promises every step runs again cleanly.
 adopted site is no copy, so `down` runs no tear-down line for it. It keeps `adopted` and the filled
 tear-down lines, commits, and says the site stays up in the worktree. Prune refuses a tree whose
 record says `adopted`. A tree another task holds stays, and that record stays with it. A second
-`down` is a person's answer that the site is gone: it removes the mark, so prune can remove the
-tree. With
+`down` runs the recipe's `## Status` line in the worktree. A site that is down loses the mark, so
+prune can remove the tree. A site still up is refused at 3 with the tear-down lines. With no
+`## Status` line, only a person can say the site is gone, so it refuses unattended at 70. With
 nothing up it says so and exits 0. It reads the recipe from the marker as it reads it from a
 finished record, so a site that was coming up is torn down the same way. A marker with no address
 key holds none of the other address keys either. `up` marks the address command in

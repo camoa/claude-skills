@@ -63,8 +63,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Pass --run-mode autonomous as the very first argument to mark this run as made with no person
 # present. Absent, or any other value, means interactive, the safe default (foundations.md, Run
 # mode). Nothing below asks a question, so only `environment up`, `environment not-applicable`,
-# `prune` and the `environment:` line of `start` read it. A site coming up, a tree going and a
-# task needing no site are a person's answer, so the three refuse unattended at 70. It is
+# `prune`, the second `environment down` of an adopted site and the `environment:` line of `start`
+# read it. A site coming up, a tree going, a task needing no site and an adopted site gone with no
+# `## Status` line to tell are a person's answer, so the four refuse unattended at 70. It is
 # accepted in the same place and shape project-actions.sh accepts it, because a later check-task.sh will want it passed the same way,
 # and because Claude Code matches a Bash permission rule against the whole command line, so
 # writing it as an environment-variable prefix would stop matching a rule naming this script.
@@ -1562,14 +1563,32 @@ do_environment() {
     # failure reads as an absent recipe, and a person hears that no site is up while it still is.
     RECIPE="$(jq -r '.environment.recipe // empty' "$task_json")" \
       || die3 "environment: could not read $task_json. Nothing was torn down"
-    # The let-go below leaves `adopted` with no recipe. Only a person knows the site is gone since,
-    # and this second `down` is that answer, which lets prune remove the tree (gap row 360).
+    # The let-go below leaves `adopted` with no recipe. A second `down` forgets the site once it
+    # is gone, which lets prune remove the tree (gap row 360). The recipe's `## Status` line
+    # answers that in the worktree, as up's adopt probe does. A person answers when no line can:
+    # no block, no recipe, no tree, a line that refuses, or files put back that name the main
+    # checkout's site.
     if [ -z "$RECIPE" ] && [ "$(jq -r '.environment.adopted // false' "$task_json")" = true ]; then
-      cr_require_person "down" "a person tore down the adopted site"
+      wt="$(jq -r '.worktree.path // empty' "$task_json")"
+      RECIPE="$(jq -r '.environment.adoptedRecipe // empty' "$task_json")"
+      local probe_dir rc=2
+      if [ -f "$RECIPE" ] && [ -n "$wt" ] && [ -d "$wt" ] && ! task_env_restore_commit "$task_dir" "$wt" worktree >/dev/null; then
+        probe_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
+        ( ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"; rc=0
+          recipe_status_run environment "$RECIPE" "$wt" "$task_json" "$probe_dir" 2>/dev/null || rc=$?
+          environment_cleanup quiet || exit 3
+          exit "$rc" ); rc=$?
+        rm -rf "$probe_dir"
+      fi
+      case "$rc" in
+        0) die3 "environment: the ## Status line of $RECIPE says the adopted site of $id is still up in $wt. Nothing was written. If that database may go, tear the site down there with $(jq -r '.environment.tearDown // "the recipe'"'"'s ## Tear down lines"' "$task_json"), then run this again" ;;
+        1) ;;
+        *) cr_require_person "down" "the adopted site is gone, and no ## Status line can tell. A person runs task environment $id down" ;;
+      esac
       write_atomic "$task_json" "$(jq 'del(.environment)' "$task_json")"
-      commit_task_change "$project_path" "Forget the adopted site of ${id}" "a person tore it down" "" "" "$id" "environment" \
+      commit_task_change "$project_path" "Forget the adopted site of ${id}" "it is gone" "" "" "$id" "environment" \
         || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
-      printf 'environment: none, the adopted site of %s is forgotten, so prune may remove its tree\n' "$id"
+      printf 'environment: none, the adopted site of %s is gone and forgotten, so prune may remove its tree\n' "$id"
       return 0
     fi
     [ -n "$RECIPE" ] || { printf 'environment: none, nothing was up for %s\n' "$id"; return 0; }
@@ -1581,7 +1600,7 @@ do_environment() {
       wt="$(jq -r '.worktree.path // empty' "$task_json")"
       [ ! -f "$RECIPE" ] || let_go_tear="$(fill_tokens_from "$TOKENS$(task_environment_tokens "$task_json")" \
         "$(sh_blocks_under "$RECIPE" "Tear down")" | paste -s -d ';' -)"
-      write_atomic "$task_json" "$(jq --arg t "$let_go_tear" '.environment = {adopted: true} + (if $t == "" then {} else {tearDown: $t} end)' "$task_json")"
+      write_atomic "$task_json" "$(jq --arg r "$RECIPE" --arg t "$let_go_tear" '.environment = {adopted: true, adoptedRecipe: $r} + (if $t == "" then {} else {tearDown: $t} end)' "$task_json")"
       commit_task_change "$project_path" "Let go of the adopted site of ${id}" "its database is no copy" "" "" "$id" "environment" \
         || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
       printf 'environment: let go of the adopted site of %s. It stays up in %s with its database. Prune refuses that tree until a person tears the site down and runs task environment %s down again, or the framework keeps it registered\n' "$id" "$wt" "$id"
@@ -1815,7 +1834,7 @@ $capture"
   # so it needs no marker.
   if [ -z "$adopt" ]; then
     marker_doc="$(jq --arg r "$RECIPE" --arg t "$marker_at" \
-      '.environment = ((.environment // {}) | del(.["not-applicable"], .adopted, .tearDown))
+      '.environment = ((.environment // {}) | del(.["not-applicable"], .adopted, .adoptedRecipe, .tearDown))
          + {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
     [ -n "$marker_doc" ] || die3 "environment: $task_json could not be read, so no marker can name the site $RECIPE brings up. Nothing was brought up"
     write_atomic "$task_json" "$marker_doc"
@@ -1881,6 +1900,7 @@ prune_list() {
       | [.id, .worktree.path, .worktree.branch,
          (if .environment.address != null then "yes"
           elif .environment.state == "coming-up" then "coming-up"
+          elif .environment.adopted == true then "adopted"
           else "no" end)] | @tsv' \
       "$d/task.json" 2>/dev/null)"
     [ -n "$row" ] || continue
