@@ -212,11 +212,13 @@ The fixer's dispatch record carries it, and the owned-files check after the roun
 Unattended, `--allow` refuses (exit 100). A path the order owns needs no grant. When no fix
 scope names it, it joins the scope union in any round, and not `allowedFiles`. A finding with
 origin `repair` needs this, because its fix scope is the one file the stopped build named.
-Three paths refuse (exit 3):
+Four paths refuse (exit 3):
 
 - a frozen test or a support file;
 - an owned path that a fix scope already names;
-- a path outside the order's files that no open finding's fix scope names.
+- a path outside the order's files that no open finding's fix scope names;
+- a path only another order owns, in any round. A restart cannot revert a commit that changes
+  two orders' files for one order alone.
 
 A finding whose whole fix scope is withheld is still handed over. The fixer reports it
 scope-insufficient in round one, and the ruling route below opens for it. When an
@@ -234,8 +236,7 @@ present. A commit that answers the verifier then gets a fresh verifier, not a ru
 present when the task's implement stage is interactive. A light task reads unattended until
 `task set-run-mode` sets it interactive. In
 that round `--allow` may name a path that no fix scope names, because the fixer's report names
-it. A path only another order owns refuses (exit 3). `fix-brief` opens the round only when the round
-can take every open finding. The ledger records it, and the order's allowed rounds rise by one.
+it. `fix-brief` opens the round only when the round can take every open finding. The ledger records it, and the order's allowed rounds rise by one.
 Otherwise `fix-brief` refuses (exit 54), and the message names what to rule or allow first. A second `fix-brief` call
 reuses the open repair round, so a mistyped `--allow` can be corrected. A second repair round
 never opens.

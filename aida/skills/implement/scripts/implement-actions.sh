@@ -89,7 +89,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]... \
 #                            [--accept-warnings <the person's reason>]
 #   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
-#   implement-actions.sh restart <task_folder> --reason <text>
+#   implement-actions.sh restart <task_folder> --reason <text> [--split <commit>]...
 #   implement-actions.sh unattributed <task_folder>
 #   implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
 #   implement-actions.sh retake-tests <task_folder> <unit_id>
@@ -820,7 +820,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      or a merge that changes the order's files. A revert of the first would undo that other work
 #      too, and a revert of a merge needs a person to choose its parent. So nothing is reverted,
 #      moved or written. The message names each such commit, its order and the other files. A
-#      person splits or reverts the commit, then runs restart again.
+#      person runs restart again with `--split <commit>` for a commit that is no merge, which
+#      reverts only the order's files in it, in one commit. Or a person splits or reverts the
+#      commit, then runs restart again (gap row 354).
 # The code the implementer's freeze check added (gap row 267).
 # 114  `dispatch-open` was given the implementer role for an order with no
 #      <task_folder>/implementation/tests-<unit_id>.json. The same fact exit 39 names for
@@ -1122,7 +1124,7 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh finish <task_folder> [--value <name>=<value>]...
                             [--accept-warnings <the person's reason>]
        implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
-       implement-actions.sh restart <task_folder> --reason <text>
+       implement-actions.sh restart <task_folder> --reason <text> [--split <commit>]...
        implement-actions.sh unattributed <task_folder>
        implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
        implement-actions.sh retake-tests <task_folder> <unit_id>
@@ -10598,19 +10600,21 @@ FB_FROZEN
     [ -n "$(rv_scope_outside "$(jq -nc --arg p "$ap" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] || ap_owned=yes
     [ -z "$ap_owned" ] || [ "$named" = "0" ] || [ -n "$repair_ids" ] \
       || die 3 "fix-brief: --allow names $ap, which $unit_id already owns and an open finding's fixScope names, so the fixer has it. An owned path no fix scope names joins the scope."
-    # A file the order shares with another order is still its own (gap row 287).
-    if [ -n "$repair_ids" ] && [ -z "$ap_owned" ]; then
+    # A repair round's grant answers a fixer's scope report, which names paths no fixScope holds.
+    [ "$named" != "0" ] || [ -n "$repair_ids" ] || [ -n "$ap_owned" ] \
+      || die 3 "fix-brief: --allow names $ap, which no open finding's fixScope names. A grant is for a finding; the open findings name: $(printf '%s' "$open_json" | jq -r '[ .[] | (.fixScope // [])[] ] | unique | join(", ")')"
+    # A file the order shares with another order is still its own (gap row 287). Another order's
+    # file is refused in every round: a fix commit that changes two orders' files cannot be
+    # reverted for one of them, so a later restart of either stops at exit 113 (gap row 354).
+    if [ -z "$ap_owned" ]; then
       while IFS= read -r other; do
         [ -n "$other" ] || continue
         [ -z "$(im_path_claim "${ap_abs#"$RV_CODEPATH"/}" "$other")" ] \
-          || die 3 "fix-brief: --allow names $ap, which $(printf '%s' "$other" | jq -r '.id') owns. A repair round may not change another order's file."
+          || die 3 "fix-brief: --allow names $ap, which $(printf '%s' "$other" | jq -r '.id') owns. A fix round may not change another order's file, because a restart could not revert that commit for one order alone. Rule the finding instead."
       done <<FB_OTHERS
 $(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" '.workOrders[] | select(.id != $u)')
 FB_OTHERS
     fi
-    # A repair round's grant answers a fixer's scope report, which names paths no fixScope holds.
-    [ "$named" != "0" ] || [ -n "$repair_ids" ] || [ -n "$ap_owned" ] \
-      || die 3 "fix-brief: --allow names $ap, which no open finding's fixScope names. A grant is for a finding; the open findings name: $(printf '%s' "$open_json" | jq -r '[ .[] | (.fixScope // [])[] ] | unique | join(", ")')"
     # Stored resolved and relative to codePath, whatever form was typed: the withhold, the
     # owned-files check and the hook all read that one spelling.
     granted_json="$(printf '%s' "$granted_json" | jq -c --arg p "${ap_abs#"$RV_CODEPATH"/}" '. + [$p] | unique')"
@@ -12898,7 +12902,7 @@ RS_ORDERS
 }
 
 do_restart() {
-  local task_arg="" reason=""
+  local task_arg="" reason="" split_raw=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --reason)
@@ -12906,6 +12910,12 @@ do_restart() {
         [ -n "$2" ] || die 3 "restart: --reason was given an empty reason."
         halt_refuse_separator "restart" "--reason" "$2"
         reason="$2"; shift 2 ;;
+      --split)
+        [ "$#" -ge 2 ] || die 3 "restart: --split needs a commit that exit 113 named"
+        [ -n "$2" ] || die 3 "restart: --split was given an empty commit."
+        split_raw="$split_raw$2
+"
+        shift 2 ;;
       -*) die 3 "restart: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then
@@ -12942,6 +12952,17 @@ do_restart() {
 
   rv_load_codepath "restart"
   br_require_clean_tree "restart" "$RV_CODEPATH"
+  # A commit a person names with --split is one exit 113 named. Its halted order's files are
+  # reverted alone, in one commit, and its other files stay (gap row 354).
+  local split_json='[]' sp sp_full
+  while IFS= read -r sp; do
+    [ -n "$sp" ] || continue
+    sp_full="$(git -C "$RV_CODEPATH" rev-parse --verify --quiet "$sp^{commit}" 2>/dev/null)"
+    [ -n "$sp_full" ] || die 3 "restart: --split names $sp, which is not one commit in $RV_CODEPATH."
+    split_json="$(printf '%s' "$split_json" | jq -c --arg c "$sp_full" '. + [$c] | unique')"
+  done <<RS_SPLIT
+$split_raw
+RS_SPLIT
 
   # Only the halted orders start over. Their records move aside, their ledger entries go back to
   # not started, and the snapshot takes their live copies, which design must have closed on: the
@@ -12993,9 +13014,10 @@ do_restart() {
   # is the order's as well. im_commit_claim decides, the rule review-brief and close read too, so
   # a change to a shared file is the order's unless another order's record holds it (gap row 287).
   # A commit that is the order's and changes a file it does not own would take other work with it, so the restart stops before it changes anything and names the files.
+  # A commit --split names is no stop: its order's files are reverted alone.
   # Otherwise the script reverts each one, newest first, one revert commit each. A revert keeps the
   # history, and AIDA's own command hook refuses the hard reset that would drop it.
-  local revert_json='[]' mixed="" stale="" one_id unit taken rec freezes from gone c paths p claim outside merge s l
+  local revert_json='[]' mixed="" stale="" one_id unit taken rec freezes from gone c paths p claim outside merge s l mine split_used='[]'
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
     unit="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0] // {}')"
     taken="$(im_taken_commits "$RV_CODEPATH" "$one_id")"
@@ -13052,16 +13074,24 @@ RS_ADDED
         none) outside=" $(printf '%s' "$paths" | tr '\n' ' ' | sed 's/ $//')" ;;
         *) outside="${claim#mixed}" ;;
       esac
+      mine="$(printf '%s\n' "$paths" | grep -Fvx -f <(printf '%s' "$outside" | tr ' ' '\n' | sed '/^$/d') | sed '/^$/d')"
       if [ -z "$outside" ] && [ -z "$merge" ]; then
         revert_json="$(printf '%s' "$revert_json" | jq -c --arg id "$one_id" --arg c "$c" \
           'if any(.[]; .commit == $c) then . else . + [{order: $id, commit: $c}] end')"
+      elif [ -z "$merge" ] && [ -n "$mine" ] && printf '%s' "$split_json" | jq -e --arg c "$c" 'index($c) != null' >/dev/null; then
+        split_used="$(printf '%s' "$split_used" | jq -c --arg c "$c" '. + [$c] | unique')"
+        revert_json="$(printf '%s' "$revert_json" | jq -c --arg id "$one_id" --arg c "$c" --arg p "$mine" \
+          'if any(.[]; .commit == $c and .order == $id) then . else . + [{order: $id, commit: $c, paths: ($p | split("\n"))}] end')"
       else
         mixed="$mixed; $(git -C "$RV_CODEPATH" rev-parse --short "$c") ($one_id)$(if [ -n "$merge" ]; then printf ' is a merge that changes its files'; fi)$(if [ -n "$outside" ]; then printf ' also changes%s' "$outside"; fi)"
       fi
     done
   done
+  sp="$(jq -rn --argjson a "$split_json" --argjson u "$split_used" '$a - $u | map(.[0:7]) | join(", ")')"
+  [ -z "$sp" ] \
+    || die 3 "restart: --split names $sp, which no halted order's commit stops this restart on. Nothing was reverted or moved."
   [ -z "$mixed" ] \
-    || die 113 "restart: these commits change the halted order's files and files it does not own, so a revert would undo other work too: ${mixed#; }. Nothing was reverted or moved. A person splits or reverts them, then runs restart again."
+    || die 113 "restart: these commits change the halted order's files and files it does not own, so a revert would undo other work too: ${mixed#; }. Nothing was reverted or moved. Run restart again with --split <commit> for each commit that is no merge: it reverts only the halted order's files in it. Or a person splits or reverts them, then runs restart again."
   # Newest first, so each revert applies to the tree its commit left.
   revert_json="$(jq -cn --argjson have "$revert_json" --argjson order "$(git -C "$RV_CODEPATH" rev-list --topo-order HEAD 2>/dev/null \
     | grep -F -x -f <(printf '%s' "$revert_json" | jq -r '.[].commit') | jq -R -s 'split("\n") | map(select(length > 0))')" \
@@ -13099,8 +13129,28 @@ RS_ADDED
   # hook or a person made during the loop is never dropped.
   local reverted_json='[]' said orig failed made
   orig="$(git -C "$RV_CODEPATH" rev-parse HEAD)"
+  local i=0 e split_msg
   for c in $(printf '%s' "$revert_json" | jq -r '.[].commit'); do
-    said="$(git -C "$RV_CODEPATH" revert --no-edit "$c" 2>&1)" || {
+    e="$(printf '%s' "$revert_json" | jq -c --argjson i "$i" '.[$i]')"
+    i=$((i + 1))
+    paths="$(printf '%s' "$e" | jq -r '(.paths // [])[]')"
+    # A split commit's message holds no "This reverts commit" line, so rs_reverted never pairs it.
+    if [ -n "$paths" ]; then
+      split_msg="Revert the $(printf '%s' "$e" | jq -r '.order') part of \"$(git -C "$RV_CODEPATH" log -1 --format=%s "$c")\"
+
+Restart reverts the files $(printf '%s' "$e" | jq -r '.order') owns in commit $c: $(printf '%s' "$paths" | paste -sd ' ' -). The commit's other files stay."
+      said="$( {
+        set --
+        while IFS= read -r p; do set -- "$@" ":(literal)$p"; done <<RS_SPLIT_PATHS
+$paths
+RS_SPLIT_PATHS
+        git -C "$RV_CODEPATH" diff --binary --no-renames "$c^" "$c" -- "$@" \
+          | git -C "$RV_CODEPATH" apply -R --index \
+          && git -C "$RV_CODEPATH" commit -q -m "$split_msg"; } 2>&1)"
+    else
+      said="$(git -C "$RV_CODEPATH" revert --no-edit "$c" 2>&1)"
+    fi
+    [ "$?" -eq 0 ] || {
       failed="restart: git revert of $(git -C "$RV_CODEPATH" rev-parse --short "$c") failed: $said."
       if ! git -C "$RV_CODEPATH" revert --abort >/dev/null 2>&1 \
         && { [ -e "$(git -C "$RV_CODEPATH" rev-parse --git-path REVERT_HEAD)" ] || [ -e "$(git -C "$RV_CODEPATH" rev-parse --git-path sequencer)" ]; }; then
@@ -13113,7 +13163,7 @@ RS_ADDED
       fi
       die 3 "$failed Every revert was taken back, so the branch is at ${orig:0:7} as before, and no record moved. A person resolves it, then runs restart again."
     }
-    reverted_json="$(printf '%s' "$reverted_json" | jq -c --argjson e "$(printf '%s' "$revert_json" | jq -c --arg c "$c" '.[] | select(.commit == $c)')" \
+    reverted_json="$(printf '%s' "$reverted_json" | jq -c --argjson e "$e" \
       --arg r "$(git -C "$RV_CODEPATH" rev-parse HEAD)" '. + [$e + {revert: $r}]')"
   done
 
@@ -13124,7 +13174,9 @@ RS_ADDED
     --argjson drifted "$drifted_ids_json" --argjson removed "$removed_ids_json" \
     --argjson reverted "$reverted_json" \
     '{schemaVersion: 1, restartedAt: $restartedAt, reason: $reason, headCommit: $head,
-      ordersHaltedForDrift: $drifted, ordersRemoved: $removed, reverted: $reverted}')"
+      ordersHaltedForDrift: $drifted, ordersRemoved: $removed,
+      reverted: [ $reverted[] | select(has("paths") | not) ]}
+     + (if any($reverted[]; has("paths")) then {split: [ $reverted[] | select(has("paths")) ]} else {} end)')"
   write_atomic "$target/restarted.json" "$restart_json"
   # Every per-order file is <kind>-<id>.<ext> or <kind>-<id>-<rest>: the frozen tests, the red
   # runs, the briefs, the build, review, fix and verify records, the diffs, the reports and the
@@ -13151,7 +13203,8 @@ RS_ADDED
   if [ "$reverted_json" = "[]" ]; then
     echo "reverted: none, no commit of a halted order is in the tree"
   else
-    printf '%s' "$reverted_json" | jq -r '.[] | "reverted: " + .commit[0:7] + " " + .order + " by " + .revert[0:7]'
+    printf '%s' "$reverted_json" | jq -r '.[] | "reverted: " + .commit[0:7] + " " + .order + " by " + .revert[0:7]
+      + (if has("paths") then ", its files only: " + (.paths | join(" ")) else "" end)'
   fi
   printf '%s' "$stale"
   echo "RESTART: run start on this task to continue."
@@ -13184,7 +13237,7 @@ do_unattributed() {
     printf '%s' "$FN_LEDGER_DOC" | jq -r '(.orders // [])[] | select(.lastStep == "closed") | .commitRange // empty' \
       | while IFS= read -r one; do [ -z "$one" ] || git -C "$RV_CODEPATH" rev-list "$one" 2>/dev/null; done
     find "$TASK_PATH" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" \
-      -exec jq -r '(.reverted // [])[] | .commit, .revert' {} ';' 2>/dev/null)"
+      -exec jq -r '((.reverted // [])[] | .commit, .revert), ((.split // [])[] | .revert)' {} ';' 2>/dev/null)"
   for c in $(git -C "$RV_CODEPATH" rev-list --reverse "$started..HEAD" 2>/dev/null); do
     printf '%s\n' "$known" | grep -Fqx -- "$c" && continue
     ours=true

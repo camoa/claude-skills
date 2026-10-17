@@ -200,8 +200,12 @@ When a commit also changes a file the order does not own, the restart stops with
 names the commit, the order and the other files. A merge that changes the order's files stops it
 the same way, because a revert of a merge needs a person to choose its parent. Nothing is reverted, moved or written. Put it
 to the person, opening with: "This unit's code sits in a commit that also changes other files.
-A revert would undo that other work too, so only you can separate them." When they say it is
-done, run restart again. A revert that stops on a conflict is taken back, and the restart stops.
+A revert would undo that other work too, so only you can separate them." Offer `--split
+<commit>` for each named commit that is no merge. Run restart again with it when they agree.
+The restart then reverts only the halted order's files in that commit, in one commit, and the
+other files stay. The `reverted:` line for it ends with `its files only:` and those files, and
+`restarted.json` lists it under `split`. Or the person separates the commit by hand. When they
+say it is done, run restart again. A revert that stops on a conflict is taken back, and the restart stops.
 The reverts it committed before that are taken back too, so the branch is where it was.
 
 ## Clear any other halt, once the person has acted on it
