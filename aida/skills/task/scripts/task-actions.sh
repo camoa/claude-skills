@@ -972,6 +972,8 @@ do_set_run_mode() {
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  local was_light=no
+  ! task_is_light "$task_dir" || was_light=yes
 
   local tmp
   tmp="$(mktemp)" || die3 "set-run-mode: cannot create a temp file"
@@ -1009,6 +1011,11 @@ do_set_run_mode() {
   if [ "$value" != "light" ] && [ ! -f "$task_dir/records/scope-distill.json" ] \
       && [ -n "$(jq -r '.pluginVersion // empty' "$task_dir/alignment.json" 2>/dev/null)" ]; then
     echo "distill: scope closed in light mode with no distiller, so this task reads stage scope. Dispatch one distiller for stage scope, then run scope's distill."
+  fi
+  # Light scope wrote automatedTests false (gap row 197). Leaving light does not undo it, so the
+  # orders keep their confirm or record proofs and finish runs no suite (gap row 362).
+  if [ "$was_light" = yes ] && [ "$value" != "light" ] && [ "$(automated_tests "$task_dir")" = "no" ]; then
+    echo "light-contract: the contract still says this task has no automated tests, so each order stays confirm or record and no suite runs. To change it, a person runs scope's set-tests --automated yes, then design's update --proof tests on each code order. A started implementation takes the new orders through restart."
   fi
   # Light keeps one script that walks the demo path. It is the project's end to end
   # setup, which a person installs (gap row 197).
