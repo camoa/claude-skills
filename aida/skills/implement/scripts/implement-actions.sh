@@ -10600,21 +10600,19 @@ FB_FROZEN
     [ -n "$(rv_scope_outside "$(jq -nc --arg p "$ap" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] || ap_owned=yes
     [ -z "$ap_owned" ] || [ "$named" = "0" ] || [ -n "$repair_ids" ] \
       || die 3 "fix-brief: --allow names $ap, which $unit_id already owns and an open finding's fixScope names, so the fixer has it. An owned path no fix scope names joins the scope."
-    # A repair round's grant answers a fixer's scope report, which names paths no fixScope holds.
-    [ "$named" != "0" ] || [ -n "$repair_ids" ] || [ -n "$ap_owned" ] \
-      || die 3 "fix-brief: --allow names $ap, which no open finding's fixScope names. A grant is for a finding; the open findings name: $(printf '%s' "$open_json" | jq -r '[ .[] | (.fixScope // [])[] ] | unique | join(", ")')"
-    # A file the order shares with another order is still its own (gap row 287). Another order's
-    # file is refused in every round: a fix commit that changes two orders' files cannot be
-    # reverted for one of them, so a later restart of either stops at exit 113 (gap row 354).
-    if [ -z "$ap_owned" ]; then
+    # A file the order shares with another order is still its own (gap row 287).
+    if [ -n "$repair_ids" ] && [ -z "$ap_owned" ]; then
       while IFS= read -r other; do
         [ -n "$other" ] || continue
         [ -z "$(im_path_claim "${ap_abs#"$RV_CODEPATH"/}" "$other")" ] \
-          || die 3 "fix-brief: --allow names $ap, which $(printf '%s' "$other" | jq -r '.id') owns. A fix round may not change another order's file, because a restart could not revert that commit for one order alone. Rule the finding instead."
+          || die 3 "fix-brief: --allow names $ap, which $(printf '%s' "$other" | jq -r '.id') owns. A repair round may not change another order's file."
       done <<FB_OTHERS
 $(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" '.workOrders[] | select(.id != $u)')
 FB_OTHERS
     fi
+    # A repair round's grant answers a fixer's scope report, which names paths no fixScope holds.
+    [ "$named" != "0" ] || [ -n "$repair_ids" ] || [ -n "$ap_owned" ] \
+      || die 3 "fix-brief: --allow names $ap, which no open finding's fixScope names. A grant is for a finding; the open findings name: $(printf '%s' "$open_json" | jq -r '[ .[] | (.fixScope // [])[] ] | unique | join(", ")')"
     # Stored resolved and relative to codePath, whatever form was typed: the withhold, the
     # owned-files check and the hook all read that one spelling.
     granted_json="$(printf '%s' "$granted_json" | jq -c --arg p "${ap_abs#"$RV_CODEPATH"/}" '. + [$p] | unique')"
@@ -12682,6 +12680,19 @@ RS_REVERTS
     | ($p | map(.[1])) as $t | $p[] | select(.[0] as $r | $t | index($r) | not) | .[0], .[1]'
 }
 
+# rs_split_pairs <task folder> <codepath> <order>: the full ids, one per line, of each commit a
+# restart split for <order> and of the commit that reverted its files, read from every
+# restarted.json `split` entry whose revert HEAD holds (gap row 354). For that order the pair leaves
+# the tree as it was, as rs_reverted's pairs do. The commit's other files stay another order's.
+rs_split_pairs() {
+  find "$1" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" \
+    -exec jq -r --arg id "$3" '(.split // [])[] | select(.order == $id) | .commit + " " + .revert' {} ';' 2>/dev/null \
+    | while read -r c r; do
+        [ -n "$r" ] && git -C "$2" merge-base --is-ancestor "$r" HEAD >/dev/null 2>&1 || continue
+        printf '%s\n%s\n' "$c" "$r"
+      done
+}
+
 # The commits one order's records name that HEAD still holds, as a JSON array of
 # {order, kind, commit, range}. $1 the task folder, $2 the code repository, $3 the order, $4 the
 # ledger document.
@@ -12830,9 +12841,9 @@ RS_PRIOR
 $(find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/restarted.json" 2>/dev/null | sort)
 RS_ARCHIVES
   # A commit reverted on this branch, by `restart` or by a person, is code the tree no longer holds
-  # (gap row 252).
+  # (gap row 252). So is a commit a restart split for this order (gap row 354).
   if [ "$(printf '%s' "$out" | jq 'length')" -gt 0 ]; then
-    out="$(jq -cn --argjson have "$out" --arg gone "$(rs_reverted "$codepath" "$span" "$table")" \
+    out="$(jq -cn --argjson have "$out" --arg gone "$(rs_reverted "$codepath" "$span" "$table"; rs_split_pairs "$task" "$codepath" "$one_id")" \
       '($gone | split("\n")) as $g | [ $have[] | select(.commit as $c | $g | index($c) | not) ]')"
   fi
   # The blocks above read the records wherever they sit, and a restart moves them, so one order's
@@ -13017,7 +13028,7 @@ RS_SPLIT
   # A commit --split names is no stop: its order's files are reverted alone.
   # Otherwise the script reverts each one, newest first, one revert commit each. A revert keeps the
   # history, and AIDA's own command hook refuses the hard reset that would drop it.
-  local revert_json='[]' mixed="" stale="" one_id unit taken rec freezes from gone c paths p claim outside merge s l mine split_used='[]'
+  local revert_json='[]' mixed="" stale="" one_id unit taken rec freezes from gone c paths p claim outside merge s l mine held split_used='[]'
   for one_id in $(printf '%s' "$drifted_ids_json" | jq -r '.[]'); do
     unit="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0] // {}')"
     taken="$(im_taken_commits "$RV_CODEPATH" "$one_id")"
@@ -13050,7 +13061,8 @@ RS_ADDED
     [ -n "$from" ] || from="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.startedFrom // empty')"
     git -C "$RV_CODEPATH" merge-base --is-ancestor "$from" HEAD >/dev/null 2>&1 \
       || die 3 "restart: $one_id has no freeze commit and no startedFrom on this branch, so the commits made for it cannot be told apart."
-    gone="$(rs_reverted "$RV_CODEPATH" "$from..HEAD" "$(rs_rebase_table "$RV_CODEPATH" "$from..HEAD" "$FN_LEDGER_DOC")")"
+    gone="$(rs_reverted "$RV_CODEPATH" "$from..HEAD" "$(rs_rebase_table "$RV_CODEPATH" "$from..HEAD" "$FN_LEDGER_DOC")"
+      rs_split_pairs "$TASK_PATH" "$RV_CODEPATH" "$one_id")"
     for c in $(git -C "$RV_CODEPATH" rev-list --reverse --first-parent "$from..HEAD" 2>/dev/null); do
       printf '%s\n%s\n' "$gone" "$freezes" | grep -Fqx "$c" && continue
       # A merge is read by what it brought to the first parent. A revert of a merge needs a
@@ -13064,8 +13076,10 @@ RS_ADDED
       fi
       # A commit this order's own record names is its own, so no other order's record is asked.
       if printf '%s\n' "$rec" | grep -Fqx -e "build $c" -e "fix $c"; then
+        held=""
         claim="$(im_commit_claim "$paths" "$unit" "$c" "")"
       else
+        held="$taken"
         claim="$(im_commit_claim "$paths" "$unit" "$c" "$taken")"
         [ "$claim" != "none" ] || continue
       fi
@@ -13074,11 +13088,27 @@ RS_ADDED
         none) outside=" $(printf '%s' "$paths" | tr '\n' ' ' | sed 's/ $//')" ;;
         *) outside="${claim#mixed}" ;;
       esac
-      mine="$(printf '%s\n' "$paths" | grep -Fvx -f <(printf '%s' "$outside" | tr ' ' '\n' | sed '/^$/d') | sed '/^$/d')"
+      # A split takes the paths im_commit_claim counts as the order's, read one path at a time.
+      mine=""
+      if [ -n "$outside" ] && [ -z "$merge" ] && printf '%s' "$split_json" | jq -e --arg c "$c" 'index($c) != null' >/dev/null; then
+        while IFS= read -r p; do
+          [ -n "$p" ] || continue
+          case "$(im_path_claim "$p" "$unit")" in
+            own) mine="$mine$p
+" ;;
+            shared) printf '%s\n' "$held" | grep -Fqx -- "$c" || mine="$mine$p
+" ;;
+          esac
+        done <<RS_MINE
+$paths
+RS_MINE
+        mine="${mine%
+}"
+      fi
       if [ -z "$outside" ] && [ -z "$merge" ]; then
         revert_json="$(printf '%s' "$revert_json" | jq -c --arg id "$one_id" --arg c "$c" \
           'if any(.[]; .commit == $c) then . else . + [{order: $id, commit: $c}] end')"
-      elif [ -z "$merge" ] && [ -n "$mine" ] && printf '%s' "$split_json" | jq -e --arg c "$c" 'index($c) != null' >/dev/null; then
+      elif [ -n "$mine" ]; then
         split_used="$(printf '%s' "$split_used" | jq -c --arg c "$c" '. + [$c] | unique')"
         revert_json="$(printf '%s' "$revert_json" | jq -c --arg id "$one_id" --arg c "$c" --arg p "$mine" \
           'if any(.[]; .commit == $c and .order == $id) then . else . + [{order: $id, commit: $c, paths: ($p | split("\n"))}] end')"
@@ -13129,7 +13159,7 @@ RS_ADDED
   # hook or a person made during the loop is never dropped.
   local reverted_json='[]' said orig failed made
   orig="$(git -C "$RV_CODEPATH" rev-parse HEAD)"
-  local i=0 e split_msg
+  local i=0 e split_msg patch
   for c in $(printf '%s' "$revert_json" | jq -r '.[].commit'); do
     e="$(printf '%s' "$revert_json" | jq -c --argjson i "$i" '.[$i]')"
     i=$((i + 1))
@@ -13144,9 +13174,12 @@ Restart reverts the files $(printf '%s' "$e" | jq -r '.order') owns in commit $c
         while IFS= read -r p; do set -- "$@" ":(literal)$p"; done <<RS_SPLIT_PATHS
 $paths
 RS_SPLIT_PATHS
-        git -C "$RV_CODEPATH" diff --binary --no-renames "$c^" "$c" -- "$@" \
-          | git -C "$RV_CODEPATH" apply -R --index \
-          && git -C "$RV_CODEPATH" commit -q -m "$split_msg"; } 2>&1)"
+        patch="$(git -C "$RV_CODEPATH" diff --binary --no-renames "$c^" "$c" -- "$@")" || exit 1
+        printf '%s\n' "$patch" | git -C "$RV_CODEPATH" apply -R --index || exit 1
+        # A commit that fails puts the files back, so nothing stays staged for the rollback below.
+        git -C "$RV_CODEPATH" commit -q -m "$split_msg" && exit 0
+        printf '%s\n' "$patch" | git -C "$RV_CODEPATH" apply --index
+        exit 1; } 2>&1)"
     else
       said="$(git -C "$RV_CODEPATH" revert --no-edit "$c" 2>&1)"
     fi
