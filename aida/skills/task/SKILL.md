@@ -423,6 +423,13 @@ fails the task without it. When end to end is off, say that a person sets it up 
 `/aida:surfaces e2e` before the run. When the project declined end to end, light keeps no
 such script.
 
+A light or autonomous run still stops for a person, and a dispatched agent cannot answer for one.
+So when one session coordinates agents that run the tasks, that session holds every person-only
+call. An agent never runs `set-run-mode` and never writes a person's answer. It reports the stop
+to the coordinator once and stops. The coordinator puts the stop to the person. Then it runs the
+call itself. For an implement call it can instead write the person's answer as a record. The
+implement skill's `references/finish.md` says how.
+
 When the mode covers review, two lines can follow, on light or autonomous. The `sign-off:` line
 names the criteria a person answers, so an unattended review writes no verdict. The
 `review-tools:` line names the review tools that preconditions found absent. Before

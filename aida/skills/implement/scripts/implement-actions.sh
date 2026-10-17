@@ -448,7 +448,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      `fix-brief` opens when it can take every open finding, and the message names what blocks it
 #      (gap row 314).
 #  55  `verify-record` was given a --ruling on an unattended run. A ruling is a person's judgement,
-#      and an unattended run has none to offer (decision 12).
+#      and an unattended run has none to offer (decision 12), unless person-answer.json holds it.
 #  56  `verify-record` reached the round cap on an unattended run with findings still open. The
 #      order is halted with them named, and the verification itself is recorded first, so a refusal
 #      never throws away the verdicts it already read. On a light task a low finding goes pending
@@ -525,7 +525,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  68  `grant-attempt`, `restart` or `clear-halt` was called on an autonomous run. Each is a
 #      person's judgement, and an unattended run has none to offer. One number, because it is one
 #      fact. `review-record --accept-deviation` is the same fact (gap row 224), and so is
-#      `build-record --accept-deviation` (gap row 266).
+#      `build-record --accept-deviation` (gap row 266). A matching person-answer.json passes it,
+#      and the same record passes exit 55 (gap row 357).
 #  69  `restart` found no order halted for design drift. There is nothing to restart from, and a
 #      restart that reset an order anyway would throw away a build that is fine.
 #  70  `tests-freeze` was given a `--row` judged by a person on an autonomous run. An autonomous run
@@ -8591,7 +8592,7 @@ do_build_record() {
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
   im_refuse_open_dispatch "build-record" "$unit_id"
-  [ -z "$accept" ] || fn_require_interactive "build-record" "keeping a deviation the builder declared"
+  [ -z "$accept" ] || fn_require_interactive "build-record" "keeping a deviation the builder declared" "$unit_id" "$accept"
 
   tt_load_snapshot "build-record"
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "build-record"
@@ -10088,7 +10089,7 @@ do_review_record() {
 
   local answers=""
   if [ -n "$accept" ]; then
-    fn_require_interactive "review-record" "accepting a departure the builder declared"
+    fn_require_interactive "review-record" "accepting a departure the builder declared" "$unit_id" "$accept"
     answers="$RR_DEPARTURE_PREFIXES"
   fi
   rv_load_state "review-record" "$unit_id" "$answers"
@@ -11323,8 +11324,10 @@ do_verify_record() {
   # Exit 55: a ruling is a person's judgement. An unattended run has none to offer, so it refuses
   # the flag outright rather than recording a model's own word as a person's (decision 12). Read
   # before the round is looked up, so a ruling on a round already recorded meets the same refusal.
-  if [ -n "$rulings_raw" ] && [ "$RV_RUN_MODE" = "autonomous" ]; then
-    die 55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding."
+  # A person's answer record naming these rulings, one per line, passes it (gap row 357).
+  if [ -n "$rulings_raw" ] && [ "$RV_RUN_MODE" = "autonomous" ] \
+     && ! fn_person_answered "verify-record" "$unit_id" "$(printf '%s' "$rulings_raw")"; then
+    die 55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding. Or the main session writes the person's rulings to $FN_ANSWER_FILE, as references/finish.md says."
   fi
 
   # Exit 45: a round is verified once. A second verification of the same round would record a
@@ -11992,12 +11995,34 @@ fn_load_task_state() {
 
 # Exit 68. The grant, the restart and the clearing of a halt are a person's judgement, so an
 # autonomous run refuses. The mode read is the task's own for this stage, not the ledger's copy,
-# so a person who sets the task interactive after a halt runs the action at once.
-# $1 the action's own name, $2 what the caller would have been deciding.
+# so a person who sets the task interactive after a halt runs the action at once. A person's
+# answer written as a record passes it too, without a change of mode (gap row 357).
+# $1 the action's own name, $2 what the caller would have been deciding, $3 the order or empty
+# for a task-wide action, $4 the person's words the call carries.
 fn_require_interactive() {
-  local who="$1" what="$2"
+  local who="$1" what="$2" held=""
   [ "$(task_run_mode "$TASK_PATH" implement)" = "autonomous" ] || return 0
-  die 68 "$who: this task's implement stage is autonomous, and $what is a person's judgement. Nothing is written. Run task set-run-mode interactive on this task, then this action again, or let the halt stand."
+  fn_person_answered "$who" "$3" "$4" && return 0
+  [ ! -f "$FN_ANSWER_FILE" ] || held=" $FN_ANSWER_FILE answers another call, so it was not used."
+  die 68 "$who: this task's implement stage is autonomous, and $what is a person's judgement. Nothing is written.$held Run task set-run-mode interactive on this task, then this action again. Or the main session writes the person's answer to $FN_ANSWER_FILE, as references/finish.md says. Or let the halt stand."
+}
+
+# Gap row 357. A person's answer, held as a record, stands in for an interactive run on one call.
+# The record is {"task", "step", "order", "answer"}: this task's id, the action, the order ("" for
+# a task-wide action) and the exact words the call carries. A match removes the file, so one answer
+# serves one call. Only the main session writes it: hooks/deny-frozen-test-writes.sh refuses the
+# file to every agent type. $1 the action, $2 the order or empty, $3 the words.
+FN_ANSWER_FILE=""
+fn_person_answered() {
+  local task_id
+  FN_ANSWER_FILE="$IMPL_DIR/person-answer.json"
+  [ -f "$FN_ANSWER_FILE" ] || return 1
+  task_id="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  jq -e --arg task "$task_id" --arg step "$1" --arg order "$2" --arg answer "$3" \
+    '.task == $task and .step == $step and (.order // "") == $order and .answer == $answer' \
+    "$FN_ANSWER_FILE" >/dev/null 2>&1 || return 1
+  rm -f "$FN_ANSWER_FILE"
+  echo "$1: the person's answer at $FN_ANSWER_FILE stood in for an interactive run, and it is now removed." >&2
 }
 
 # finish: the implementation stage is done for this task. The task is not. It goes to the review
@@ -12028,7 +12053,7 @@ do_finish() {
   IMPL_DIR="$TASK_PATH/implementation"
 
   fn_load_task_state "finish"
-  [ -z "$accept_warnings" ] || fn_require_interactive "finish" "accepting a suite that failed on runner warnings alone"
+  [ -z "$accept_warnings" ] || fn_require_interactive "finish" "accepting a suite that failed on runner warnings alone" "" "$accept_warnings"
 
   # --- exit 66: every order closed, and every machine-verified criterion confirmed ----------------
   local open_orders unconfirmed
@@ -12315,7 +12340,7 @@ do_grant_attempt() {
   IMPL_DIR="$TASK_PATH/implementation"
 
   fn_load_task_state "grant-attempt"
-  fn_require_interactive "grant-attempt" "another attempt on one order"
+  fn_require_interactive "grant-attempt" "another attempt on one order" "$unit_id" "$reason"
 
   local unit_present order_entry
   unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) ] | length')"
@@ -12429,7 +12454,7 @@ do_clear_halt() {
   IMPL_DIR="$TASK_PATH/implementation"
 
   fn_load_task_state "clear-halt"
-  fn_require_interactive "clear-halt" "clearing a halt on one order"
+  fn_require_interactive "clear-halt" "clearing a halt on one order" "$unit_id" "$because"
 
   local unit_present order_entry
   unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) ] | length')"
@@ -12913,7 +12938,7 @@ do_restart() {
   IMPL_DIR="$TASK_PATH/implementation"
 
   fn_load_task_state "restart"
-  fn_require_interactive "restart" "restarting a build against a changed design"
+  fn_require_interactive "restart" "restarting a build against a changed design" "" "$reason"
 
   # Exit 69. Every drift halt `start` writes begins with "design drift: ", so this reads the halt
   # reasons rather than re-deriving the drift itself: the drift was already worked out, order by

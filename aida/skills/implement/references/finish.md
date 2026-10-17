@@ -230,3 +230,24 @@ refuses when the task's implement stage is autonomous (exit 68), because clearin
 person's judgement. The person sets the task interactive first. The reason may not hold
 `; earlier: `, for the same cause as the grant's. Then run `start` again and take the `next:`
 line.
+
+## A person's answer in an unattended run
+
+A light or autonomous implement stage refuses a person's call (exit 68, or 55 for a ruling). The
+calls are `grant-attempt`, `clear-halt`, `restart`, `finish --accept-warnings`, the two
+`--accept-deviation` keeps and `verify-record --ruling`. Two routes reach them. The person sets the
+task interactive with `task set-run-mode`. Or the person's answer travels as a record, and the
+run mode stays as it is.
+
+The record is `<task_folder>/implementation/person-answer.json`. Only the main session writes it,
+the session the person types in, and only with words the person gave there. A hook refuses the
+file to every dispatched agent. An agent that meets the refusal reports the halt to the main
+session and stops. It never asks again. The record holds four keys:
+```
+{"task": "<task id>", "step": "<action>", "order": "<order id, or empty for finish and restart>",
+ "answer": "<the exact value of the call's flag>"}
+```
+For `verify-record`, the answer is every `--ruling` value in the call's order, one per line. The
+action reads the record only on an unattended stage. A record that names this task, this action,
+this order and these exact words passes the refusal once, and the action removes it. A record
+for another call stays, and the refusal says so.

@@ -41,8 +41,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # cp's -t names, and tar's extract folder and created archive. The person, and any other agent
 # type, is not its concern.
 #
-# Rule four, added for gap row 293, holds three roles to their own records. It is stated where it
-# runs, before the others.
+# Rule four, added for gap row 293, holds three roles to their own records. Since gap row 357 it
+# also keeps a person's answer record to the main session. It is stated where it runs, before the
+# others.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -133,6 +134,19 @@ deny_own_record() {
   jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
   exit 0
 }
+# Gap row 357. implementation/person-answer.json carries a person's answer into an unattended
+# run, so only the main session, the thread the person types in, writes it. Every agent type is
+# refused it through the file tools, and refused any Bash command that names it. A name built at
+# run time passes the Bash test.
+if [ -n "$AGENT" ]; then
+  case "$TOOL" in
+    Bash) ANSWER_TARGET="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)" ;;
+    *) ANSWER_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" ;;
+  esac
+  case "$ANSWER_TARGET" in
+    *person-answer.json*) deny_own_record "person-answer.json holds a person's answer, and only the main session writes it. This write's agent_type is $AGENT. Report the halt to the main session and stop." ;;
+  esac
+fi
 if [ "$TOOL" != "Bash" ]; then
   OWN_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
   OWN_OWNER="$(own_record_owner "$OWN_TARGET")"
