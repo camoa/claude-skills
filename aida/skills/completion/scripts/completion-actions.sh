@@ -519,7 +519,17 @@ cp_render_body() {
                 ($restore | split(" ")) as $ids
                 | [(if ($ids | length) == 1 then "Commit " + $ids[0] + " puts" else "Commits " + ($ids | join(" and ")) + " put" end)
                    + " back the files `task environment up` changed for the site of this worktree, so trunk keeps its own: " + $restorePaths + "."] end)
-            + (if ($taskDoc.environment.recipe // null) == null
+            # An adopted site stays up with its own database, and prune refuses its tree (gap row
+            # 360). After `down` let go of it, the record keeps the filled tear-down lines.
+            + (if ($taskDoc.environment.adopted // false) == true
+               then ["The site of this task was adopted: it ran in the worktree before the task, so its database is no copy and nothing tears it down. It stays up and registered after the merge.",
+                     "`task prune " + $task + "` refuses the tree until a person "
+                     + (if ($taskDoc.environment.recipe // null) != null
+                        then "runs `task environment " + $task + " down`, which lets go of the site and prints its tear-down lines, runs those lines in the worktree, and runs `task environment " + $task + " down` again."
+                        else "tears the site down in the worktree with "
+                          + (if ($taskDoc.environment.tearDown // null) != null then "these lines, which delete that database: `" + $taskDoc.environment.tearDown + "`," else "the recipe'"'"'s ## Tear down lines," end)
+                          + " and runs `task environment " + $task + " down`." end)]
+             elif ($taskDoc.environment.recipe // null) == null
                then ["After the merge: `task prune " + $task + "` from the main checkout removes the tree and the merged branch."]
                else [(if ($taskDoc.environment.address // null) == null
                       then "A site of this task is coming up: the record holds the marker `up` writes before the bring-up, and no address."
@@ -645,6 +655,8 @@ CP_RECIPE_ROWS
       || { printf '%s\n' "$said" >&2; die 3 "$who: task environment down refused $CP_TASK_ID, so the site is still up and nothing was put back. Its own line is above."; }
     CP_TASK_DOC="$(jq -c '.' "$TASK_PATH/task.json" 2>/dev/null)"
     [ -n "$CP_TASK_DOC" ] || die 3 "$who: $TASK_PATH/task.json could not be read after the site went down."
+    # A let-go leaves the site up, so its lines are the person's to read (gap row 360).
+    [ "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.adopted // false')" != true ] || printf '%s\n' "$said"
   fi
   while IFS= read -r p; do
     [ -n "$p" ] || continue

@@ -230,9 +230,11 @@ promises every step runs again cleanly.
 
 `down` runs the tear-down lines, each one and its output to `records/environment-down.txt`, and removes
 `environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. An
-adopted site is no copy, so `down` runs no tear-down line for it. It removes the record, commits,
-and says the site stays up in the worktree, with the tear-down lines filled. Prune refuses a tree
-whose adopted site is recorded, unless another task holds the tree. With
+adopted site is no copy, so `down` runs no tear-down line for it. It keeps `adopted` and the filled
+tear-down lines, commits, and says the site stays up in the worktree. Prune refuses a tree whose
+record says `adopted`. A tree another task holds stays, and that record stays with it. A second
+`down` is a person's answer that the site is gone: it removes the mark, so prune can remove the
+tree. With
 nothing up it says so and exits 0. It reads the recipe from the marker as it reads it from a
 finished record, so a site that was coming up is torn down the same way. A marker with no address
 key holds none of the other address keys either. `up` marks the address command in

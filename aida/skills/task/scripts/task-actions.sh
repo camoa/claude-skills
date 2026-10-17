@@ -1562,18 +1562,29 @@ do_environment() {
     # failure reads as an absent recipe, and a person hears that no site is up while it still is.
     RECIPE="$(jq -r '.environment.recipe // empty' "$task_json")" \
       || die3 "environment: could not read $task_json. Nothing was torn down"
+    # The let-go below leaves `adopted` with no recipe. Only a person knows the site is gone since,
+    # and this second `down` is that answer, which lets prune remove the tree (gap row 360).
+    if [ -z "$RECIPE" ] && [ "$(jq -r '.environment.adopted // false' "$task_json")" = true ]; then
+      cr_require_person "down" "a person tore down the adopted site"
+      write_atomic "$task_json" "$(jq 'del(.environment)' "$task_json")"
+      commit_task_change "$project_path" "Forget the adopted site of ${id}" "a person tore it down" "" "" "$id" "environment" \
+        || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
+      printf 'environment: none, the adopted site of %s is forgotten, so prune may remove its tree\n' "$id"
+      return 0
+    fi
     [ -n "$RECIPE" ] || { printf 'environment: none, nothing was up for %s\n' "$id"; return 0; }
     # An adopted site was up before this task, and its database is no copy of the main checkout's,
     # so a tear-down would lose it for good (gap row 351). `down` lets go of it and runs nothing.
-    # Completion and prune reach this too.
+    # Completion and prune reach this too. The record keeps `adopted` and the filled lines, so
+    # prune still refuses the tree and completion's body names them.
     if [ "$(jq -r '.environment.adopted // false' "$task_json")" = true ]; then
       wt="$(jq -r '.worktree.path // empty' "$task_json")"
       [ ! -f "$RECIPE" ] || let_go_tear="$(fill_tokens_from "$TOKENS$(task_environment_tokens "$task_json")" \
         "$(sh_blocks_under "$RECIPE" "Tear down")" | paste -s -d ';' -)"
-      write_atomic "$task_json" "$(jq 'del(.environment)' "$task_json")"
+      write_atomic "$task_json" "$(jq --arg t "$let_go_tear" '.environment = {adopted: true} + (if $t == "" then {} else {tearDown: $t} end)' "$task_json")"
       commit_task_change "$project_path" "Let go of the adopted site of ${id}" "its database is no copy" "" "" "$id" "environment" \
         || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
-      printf 'environment: let go of the adopted site of %s. It stays up in %s with its database. Remove that tree only after a person tears the site down, or the framework keeps it registered\n' "$id" "$wt"
+      printf 'environment: let go of the adopted site of %s. It stays up in %s with its database. Prune refuses that tree until a person tears the site down and runs task environment %s down again, or the framework keeps it registered\n' "$id" "$wt" "$id"
       [ -z "$let_go_tear" ] || printf 'environment: the tear-down lines, which delete that database: %s\n' "$let_go_tear"
       return 0
     fi
@@ -1799,12 +1810,12 @@ $capture"
   # nothing can find. The marker names the recipe, which is all `down` needs to tear the site
   # down. It keeps whatever the record held, so a second `up` over a site that is already up does
   # not drop that site's address while the bring-up runs again. A failure then leaves the person
-  # where they were before they ran `up`. The person's `not-applicable` reason is the one field
-  # dropped, because `up` is the answer that replaces it. An adopted site was up before this run,
+  # where they were before they ran `up`. The person's `not-applicable` reason and the let-go mark
+  # of an adopted site are dropped, because `up` replaces them. An adopted site was up before this run,
   # so it needs no marker.
   if [ -z "$adopt" ]; then
     marker_doc="$(jq --arg r "$RECIPE" --arg t "$marker_at" \
-      '.environment = ((.environment // {}) | del(.["not-applicable"]))
+      '.environment = ((.environment // {}) | del(.["not-applicable"], .adopted, .tearDown))
          + {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
     [ -n "$marker_doc" ] || die3 "environment: $task_json could not be read, so no marker can name the site $RECIPE brings up. Nothing was brought up"
     write_atomic "$task_json" "$marker_doc"
@@ -1918,7 +1929,7 @@ do_prune() {
 
   # Every named task is checked before any tree goes: a task that is not complete is a reason to
   # remove nothing, because its tree is where its work is.
-  local id task_dir task_json state wt branch said branch_word group held
+  local id task_dir task_json state wt branch said branch_word group held other
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     task_json="$(task_dir_for "$project_path" "$id")/task.json"
@@ -1931,10 +1942,14 @@ do_prune() {
     [ -n "$(jq -r '.worktree.path // empty' "$task_json")" ] || die3 "prune: $id records no worktree. Nothing was removed"
     # An adopted site's database is no copy, so prune never tears it down, and a tree removed
     # under a running site leaves the framework's registration behind (gap row 351). A person
-    # decides. A tree another task holds stays anyway, and `down` only lets go of the site.
+    # decides. A tree another task holds stays anyway, and the record below keeps the mark. A
+    # holder this run also prunes does not count, because then the tree goes (gap row 360).
     [ "$(jq -r '.environment.adopted // false' "$task_json")" != true ] \
-      || [ -n "$(task_tree_others "$project_path" "$(jq -r '.worktree.path' "$task_json")" "$id" | head -1)" ] \
-      || die3 "prune: the site of $id was adopted, so its database is no copy, and removing $(jq -r '.worktree.path' "$task_json") under it leaves the framework's registration behind. Nothing was removed. If that database may go, tear the site down with the recipe's ## Tear down lines there, then run task environment $id down, then prune again"
+      || [ -n "$(task_tree_others "$project_path" "$(jq -r '.worktree.path' "$task_json")" "$id" \
+        | while IFS= read -r other; do printf '%s\n' "$ids" | grep -Fqx -e "$other" || printf '%s\n' "$other"; done | head -1)" ] \
+      || die3 "prune: the site of $id was adopted, so its database is no copy, and removing $(jq -r '.worktree.path' "$task_json") under it leaves the framework's registration behind. Nothing was removed. If that database may go, $(jq -r --arg id "$id" '.environment
+          | if .recipe != null then "run task environment " + $id + " down, which lets go of the site and prints its tear-down lines. Run those lines there, then run task environment " + $id + " down again"
+            else "tear the site down there with " + (if .tearDown != null then "these lines: " + .tearDown else "the recipe'"'"'s ## Tear down lines" end) + ", then run task environment " + $id + " down" end' "$task_json"), then prune again"
   done <<TA_IDS
 $ids
 TA_IDS
@@ -1945,6 +1960,11 @@ TA_IDS
     wt="$(jq -r '.worktree.path' "$task_json")"; branch="$(jq -r '.worktree.branch' "$task_json")"
     # A later task made with --in-tree builds in this tree now, so the tree stays (gap row 302).
     held="$(task_tree_others "$project_path" "$wt" "$id" | head -1)"
+    # The last prune of this tree must still see the adopted site, so this record keeps it all.
+    if [ -n "$held" ] && [ "$(jq -r '.environment.adopted // false' "$task_json")" = true ]; then
+      printf 'kept: %s %s, task %s builds in it, and the adopted site stays recorded here until that tree is pruned\n' "$id" "$wt" "$held"
+      continue
+    fi
     # Git's refusal is checked first, so a dirty tree loses nothing: not its site, not its record.
     [ -n "$held" ] || [ ! -d "$wt" ] || [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ] \
       || die3 "prune: $wt has uncommitted changes. Commit or stash there first; prune never forces"
