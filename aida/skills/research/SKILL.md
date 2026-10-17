@@ -272,7 +272,7 @@ For every finding an agent returns, record it under that search's own name:
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh record "<task_folder>" \
   --search <slug> --searched-for "<the words this search searched for>" \
   --text "<what was found, or that nothing was>" \
-  --source "<where it came from>" [--criteria-served <id[,id...]>] [--catalog named|none]
+  --source "<where it came from>" [--criteria-served <id[,id...]>]
 ```
 `<slug>` is lowercase letters, digits and single hyphens, and it names the file: a search called
 `prior-art-internal` writes its findings to `research/prior-art-internal.json`, and `record` then
@@ -303,12 +303,6 @@ framework", and `--searched-for` holds the words it used. It serves the criterio
 dispatched for, so `--criteria-served` names that id. Silence and a negative result look
 identical from outside; only the recorded negative tells design it is safe to decide without
 searching again.
-
-Give `--catalog` on every finding a `catalog-identifier` search returned, and on no other.
-`named` means the finding names a guide or a recipe, of this framework or another. `none` means
-the catalog matched nothing for the words. Review reads it. When every catalog finding reads
-none and design opened no guide, the guides check reads undeclared, because no guide existed.
-Without the flag, review cannot tell that the catalog was asked, and the check reads unknown.
 
 Never write a finding from memory. If nothing was dispatched to check something, it is not
 recorded as found; it is either dispatched or left for the next pass.

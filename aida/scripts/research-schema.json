@@ -62,11 +62,6 @@
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
           "description": "The UTC date this finding was looked at, YYYY-MM-DD. Set by the script at the moment the finding is recorded, not typed by hand, so a source that was searched and came back empty stays dated distinctly from one nobody has searched yet (ideal/research.md, 'Grounding a claim about a mechanism')."
         },
-        "catalog": {
-          "type": "string",
-          "enum": ["named", "none"],
-          "description": "Set only on a finding a catalog-identifier search returned, by `record --catalog`. named: the finding names a guide or a recipe, of this framework or another. none: the catalog matched nothing for the words. Review reads it (live-run row 363): a task whose catalog findings are all none, with no guide body opened, reads the guides and practices checks undeclared, because no guide existed to follow."
-        },
         "criteriaServed": {
           "type": "array",
           "default": [],

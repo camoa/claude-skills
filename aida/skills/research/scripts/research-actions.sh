@@ -23,7 +23,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   research-actions.sh start  <task_folder>
 #   research-actions.sh record <task_folder> \
 #                          --search <slug> --searched-for <text> --text <text> \
-#                          --source <text> [--criteria-served <id[,id...]>] [--catalog <named|none>] \
+#                          --source <text> [--criteria-served <id[,id...]>] \
 #                          [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
 #   research-actions.sh serve  <task_folder> --finding <search>#<n> --criteria-served <id[,id...]>
 #   research-actions.sh drop   <task_folder> --finding <search>#<n>
@@ -44,7 +44,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # (scripts/research-schema.json). Its fields are schemaVersion, search, searchedFor and
 # findings, plus recipeFit when the three --recipe-* flags were given (ideal/tooling.md, 'whether
 # a resolved method fits the task'); a finding
-# holds text, source, lookedAt and criteriaServed, plus catalog when --catalog was given. `record` writes that JSON, then renders
+# holds text, source, lookedAt and criteriaServed. `record` writes that JSON, then renders
 # <search>.md from it by calling research-render.sh, the same way scope-actions.sh writes
 # alignment.json and then calls alignment-render.sh. Nothing reads <search>.md back: it is for
 # the design stage to read, and it says so on itself. `record` only appends, so `serve` and
@@ -165,7 +165,7 @@ usage: research-actions.sh read   <task_folder>
        research-actions.sh start  <task_folder>
        research-actions.sh record <task_folder> --search <slug> --searched-for <text> \
                                    --text <text> --source <text> \
-                                   [--criteria-served <id[,id...]>] [--catalog <named|none>] \
+                                   [--criteria-served <id[,id...]>] \
                                    [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
        research-actions.sh serve  <task_folder> --finding <search>#<n> --criteria-served <id[,id...]>
        research-actions.sh drop   <task_folder> --finding <search>#<n>
@@ -427,7 +427,7 @@ resolve_finding() {
 # ------------------------------------------------------------------------------------------------
 
 do_record() {
-  local search="" searched_for="" text="" source_val="" criteria_served="" fit="" fit_path="" fit_reason="" catalog=""
+  local search="" searched_for="" text="" source_val="" criteria_served="" fit="" fit_path="" fit_reason=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --search)
@@ -450,10 +450,6 @@ do_record() {
         [ $# -ge 2 ] || die3 "record: --criteria-served needs a value"
         looks_like_flag "$2" && die3 "record: --criteria-served needs a value, got the option $2 instead"
         criteria_served="$2"; shift 2 ;;
-      --catalog)
-        [ $# -ge 2 ] || die3 "record: --catalog needs a value"
-        case "$2" in named|none) ;; *) die3 "record: --catalog must be named or none, got '$2'" ;; esac
-        catalog="$2"; shift 2 ;;
       --recipe-fit|--recipe-path|--recipe-reason)
         [ $# -ge 2 ] || die3 "record: $1 needs a value"
         looks_like_flag "$2" && die3 "record: $1 needs a value, got the option $2 instead"
@@ -490,9 +486,8 @@ do_record() {
 
   local finding_json
   finding_json="$(jq -n --arg text "$text" --arg source "$source_val" --arg lookedAt "$looked_at" \
-      --argjson criteriaServed "$ids_json" --arg catalog "$catalog" \
-      '{text: $text, source: $source, lookedAt: $lookedAt, criteriaServed: $criteriaServed}
-       + (if $catalog == "" then {} else {catalog: $catalog} end)')"
+      --argjson criteriaServed "$ids_json" \
+      '{text: $text, source: $source, lookedAt: $lookedAt, criteriaServed: $criteriaServed}')"
 
   local doc
   if [ -f "$file" ]; then

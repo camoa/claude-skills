@@ -2011,19 +2011,13 @@ do_findings() {
   # an agentic recipe is a sentence inside the finding's own text, so no script decides it and both
   # lenses read the same count (ideal/review.md, check 16).
   local research_count research_sources one_research found_here
-  local catalog_named catalog_none catalog_here
   research_count=0; research_sources=0; one_research=""; found_here=0
-  catalog_named=0; catalog_none=0
   while IFS= read -r one_research; do
     [ -n "$one_research" ] || continue
     research_count=$((research_count + 1))
     found_here="$(jq -r '[ (.findings // [])[] | select((.source // "") != "") ] | length' "$one_research" 2>/dev/null)"
     case "$found_here" in ''|*[!0-9]*) found_here=0 ;; esac
     research_sources=$((research_sources + found_here))
-    catalog_here="$(jq -r '[ (.findings // [])[] | .catalog? // empty ] | "\([ .[] | select(. == "named") ] | length) \([ .[] | select(. == "none") ] | length)"' "$one_research" 2>/dev/null)"
-    case "$catalog_here" in [0-9]*' '[0-9]*) ;; *) catalog_here="0 0" ;; esac
-    catalog_named=$((catalog_named + ${catalog_here% *}))
-    catalog_none=$((catalog_none + ${catalog_here#* }))
   done <<RW_RESEARCH_FILES
 $(find "$TASK_PATH/research" -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)
 RW_RESEARCH_FILES
@@ -2054,22 +2048,14 @@ RW_RESEARCH_FILES
   # lens reads the same bodies, since design opens the agentic recipes too, and also the playbook
   # record, so a loaded source there is a body it opened.
   #
-  # A catalog search that matched nothing leaves design no body to open. Research marks each
-  # catalog finding named or none, and only none with no named reads undeclared. A task with no
-  # marked finding stays unknown, because nothing says the catalog was asked (live-run row 363).
-  local body_floor body_word practices_body bodies_on_disk
-  body_floor=""; body_word="unknown"; practices_body=""
+  # Only a person can say no guide applies, because the catalog's identify scores any shared word
+  # as a match. So the check reads unknown and waits for close --row, the way a lens check with low
+  # findings does (live-run row 363).
+  local body_floor practices_body bodies_on_disk
+  body_floor=""; practices_body=""
   bodies_on_disk="$(jq -r '[ (.guideBodies // [])[] | select(.onDisk == true) ] | length' "$BRIEF_FILE" 2>/dev/null)"
-  if [ "${bodies_on_disk:-0}" = "0" ]; then
-    if [ "$catalog_named" -eq 0 ] && [ "$catalog_none" -gt 0 ]; then
-      body_word="undeclared"
-      body_floor="research's catalog search found no guide or recipe: $catalog_none finding(s) in $TASK_PATH/research record catalog none and none records catalog named, so design opened no guide body and this lens had no guide to judge the diff against."
-    else
-      body_floor="no guide body is on disk: $BRIEF_FILE lists none from $TASK_PATH/design-guides-read.json, so this lens judged the research finding text alone. Design records each guide body it opens with design-actions.sh read-guide; once one is recorded and on disk, run brief and findings again."
-      [ "$catalog_named" -ne 0 ] \
-        || body_floor="$body_floor No research finding records a catalog search either. When the catalog matched nothing, research-actions.sh record --catalog none records that search, and this check then reads undeclared."
-    fi
-  fi
+  [ "${bodies_on_disk:-0}" != "0" ] \
+    || body_floor="no guide body is on disk: $BRIEF_FILE lists none from $TASK_PATH/design-guides-read.json, so this lens judged the research finding text alone. Design records each guide body it opens with design-actions.sh read-guide; once one is recorded and on disk, run brief and findings again."
   [ ! -f "$playbooks_record" ] \
     || [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ] \
     || practices_body="loaded"
@@ -2091,7 +2077,8 @@ RW_RESEARCH_FILES
     elif [ -n "$diff_floor" ]; then
       rw_check_row "$check_id" "undeclared" "$diff_floor" >>"$rows_file"
     elif [ -n "$body_floor" ] && { [ "$lens_word" = "guides" ] || { [ "$lens_word" = "practices" ] && [ -z "$practices_body" ]; }; }; then
-      rw_check_row "$check_id" "$body_word" "$body_floor" >>"$rows_file"
+      rw_check_row "$check_id" "unknown" "$body_floor When no guide covers this task, the person judges the diff at close with --row $check_id=met or --row $check_id=unmet. A light or autonomous run takes that answer from $REVIEW_DIR/person-answer.json, written by the main session with step close." \
+        | jq -c '. + {answeredBy: "nobody"}' >>"$rows_file"
     else
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff of $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange')." >>"$rows_file"
     fi
@@ -3037,6 +3024,11 @@ RW_ROWS
                            "test-wrong": " The person ruled a frozen test wrong, so the check reads unmet. Correct the test on the task branch, then finish and review again.",
                            "keep": " The person kept the departure.",
                            "rebuild": " The person did not keep the departure, so the check reads unmet. Rebuild the order on the task branch, then finish and review again."}[$g.word]))
+        elif ($c.detail | startswith("no guide body is on disk")) then
+          $c | .verdict = $g.verdict | .answeredBy = "person"
+          | .detail = ((.detail | sub(" The person judged the diff (with no guide to follow|and found it does not follow the practice it should)\\.$"; ""))
+                       + (if $g.verdict == "met" then " The person judged the diff with no guide to follow."
+                          else " The person judged the diff and found it does not follow the practice it should." end))
         else $c | .verdict = $g.verdict | .answeredBy = "person"
           | .detail = ((.detail | sub(" The person (confirmed them, and they stay follow-up|rejected them, so the check reads unmet)\\.$"; ""))
                        + (if $g.verdict == "met" then " The person confirmed them, and they stay follow-up."

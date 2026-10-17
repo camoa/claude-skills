@@ -113,8 +113,8 @@ had a guide or an accepted practice to judge against. A task with no research re
 both unknown, because nobody looked. Met means a judgement happened. So where the brief puts no
 guide body on disk, both read unknown when their lens raised nothing. A code file research cites
 is not a guide body. Check 16 escapes that floor when the playbook record has a loaded source.
-One case reads undeclared instead. Research marked at least one catalog finding none and none
-named, so the catalog held no guide and design had nothing to open.
+Only a person can say that no guide covers the task, so each such check waits for the person at
+close.
 
 ## Classify every finding
 
