@@ -67,12 +67,18 @@ Its done-when rows are its checkpoint. Put them to the `row-checker`, or to the 
 the checkpoint below puts a test's rows. The question is whether each row names something a reader
 can confirm from the deliverable alone.
 Key each row `<order id>:<n>`, with n its done-when row counted from 1.
-`dispatch-open` prints the rows to put to the checker. It leaves out a row whose line is unchanged
-since the last checker that judged that line confirmed it. The checker's verdict drifts from pass
-to pass, so a second reading of an unchanged line buys a new rejection and no new judgement (gap
-row 361). The match is on the line's text, because a reworded line shifts the numbers.
-`--recheck <order id>:<n>` puts a row back, when the person asks. When no row is left, nothing
-opens; the note on the `--row` names the rows confirmed earlier.
+`dispatch-open` prints the rows to put to the checker. Put those rows and no other.
+It leaves out a row that the last checker to judge it confirmed. That holds while three things
+are unchanged: the line's text, the order's owned files and the checker's rules.
+The checker's verdict drifts from pass to pass, so a second reading of an unchanged line buys a new
+rejection and no new judgement (gap row 361). The match is on the text, because a reworded line
+shifts the numbers. `dispatch-close` keeps verdicts only on the rows `dispatch-open` named.
+A line whose meaning rests on another line's wording keeps its verdict when only that line changes.
+Put it back with `--recheck <order id>:<n>`, which puts back any row the person asks for.
+A person's answer on a row is not carried, because no record keeps it per line.
+When no row is left, nothing opens.
+`tests-freeze` refuses a model's confirmed `--row` while any line's latest checker verdict is not
+a confirmation. It names on the judgement the rows carried from an earlier pass.
 Freeze with no `--test`, one `--row <order id>=...` carrying that judgement, and a `--checklist`
 for each criterion a person verifies. The build reads that row as the order's own check,
 `done-when`. `close` writes the row's judge, person or model, on the criteria the order owns.

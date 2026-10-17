@@ -112,9 +112,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # role's record carries the key.
 # A test author's record carries `denyCommand`, the runtime forms scripts/introspection-forms.txt
 # lists, which hooks/deny-prior-source.sh refuses in its Bash commands (gap row 231).
-# A row-checker on an order proved by its record prints which record rows to put to it. A row
-# whose done-when line the last close on that line confirmed is left out, and `--recheck` puts it
-# back. When no row is left, nothing is opened (gap row 361).
+# A row-checker on an order proved by its record prints which record rows to put to it, and its
+# record holds them under `rowsToCheck`. A row whose carry key the last kept verdict confirmed is
+# left out, and `--recheck` puts it back. When no row is left, nothing is opened. dispatch-close
+# keeps the verdicts on the rows in `rowsToCheck` alone (gap row 361).
 #   implement-actions.sh dispatch-close <task_folder> [--no-report | --not-sent]
 #
 # `dispatch-close --no-report` is for a role the runtime marks as stopped at its turn limit. A
@@ -498,7 +499,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      machine-verified criterion a --test names with no row, a doneWhen test with no doneWhen row,
 #      an --absence clause with no row on an order that has other rows (gap row 273), a row
 #      naming a criterion no --test claims or the doneWhen with no doneWhen test, a row naming a
-#      criterion a person verifies, or two rows naming one thing. The message names
+#      criterion a person verifies, or two rows naming one thing. A model's confirmed row on a
+#      record order whose done-when line has a latest checker verdict that is no confirmation
+#      refuses too (gap row 361). The message names
 #      which. A row set this script half understands would put a judgement on the wrong criterion,
 #      which nothing later could tell from a real one. On missing rows the confirmed rows given
 #      are recorded as `rowsConfirmed` first, the same way exit 65 records them (gap row 259).
@@ -5691,6 +5694,21 @@ TF_EOF
       || die 70 "tests-freeze: these rows say a person judged them, and this run is autonomous: $wrong_judge. No person is here to read a row, and a row recorded as a person's is one nobody can list again later. Nothing is written."
   fi
 
+  # --- 64: a model's confirmation of a record stands on the checker's kept verdicts (gap row 361) --
+  # The note on the --row is the caller's word. Each done-when line's latest kept verdict decides,
+  # read the way dispatch-open reads it. A row the last checker pass did not judge was carried, and
+  # the judgement names it, so review sees which rows rest on an earlier pass.
+  local tf_line_carried='[]' tf_line_open
+  if [ "$BR_ORDER_SLOT" = "done-when" ] && [ "$(printf '%s' "$rows_meta_json" | jq -r --arg u "$unit_id" \
+       '[ .[] | select(.criterion == $u and .verdict == "confirmed" and .judgedBy == "model") ] | length')" != "0" ]; then
+    im_line_verdicts "$UNIT_JSON" "tests-freeze"
+    tf_line_open="$(printf '%s' "$IM_LINE_ROWS" | jq -r \
+      '[ .[] | select(.verdict != "confirmed") | "\(.key) (\(.verdict // "never judged"))" ] | join(", ")')"
+    [ -z "$tf_line_open" ] \
+      || die 64 "tests-freeze: the --row says a model confirmed $unit_id's record, and the latest checker verdict on these done-when rows is no confirmation: $tf_line_open. Run dispatch-open for the row-checker, which names the rows to put to it. Nothing is written."
+    tf_line_carried="$(printf '%s' "$IM_LINE_ROWS" | jq -c '(map(.at) | max) as $last | [ .[] | select(.at < $last) | .key ]')"
+  fi
+
   # --- 64: the --row set and this order's tests must correspond, in all four ways ------------------
   # Rows follow the tests' claims. A machine-verified criterion a --test names needs exactly one
   # row: the checkpoint asks, per order, whether these tests observe the part of the verify clause
@@ -6395,7 +6413,8 @@ TF_EOF
   # clauses are replaced the same way, and removed when this freeze routed none. A freeze that gets
   # here had no rejected row, so the rows a person rejected earlier are answered and removed.
   ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
-    --arg unit "$unit_id" --argjson rows "$rows_meta_json" --argjson absences "$absence_json" '
+    --arg unit "$unit_id" --argjson rows "$rows_meta_json" --argjson absences "$absence_json" \
+    --argjson carried "$tf_line_carried" '
     ([ $rows[] | select(.criterion == $unit) ][0]) as $dw
     | .criteria = ((.criteria // []) | map(
       . as $c
@@ -6408,7 +6427,8 @@ TF_EOF
     | .orders = ((.orders // []) | map(
       if .id != $unit then .
       else ((if $dw == null then del(.doneWhenJudgement)
-             else .doneWhenJudgement = {verdict: $dw.verdict, judgedBy: $dw.judgedBy, note: $dw.note} end)
+             else .doneWhenJudgement = ({verdict: $dw.verdict, judgedBy: $dw.judgedBy, note: $dw.note}
+               + (if $carried == [] then {} else {rowsCarried: $carried} end)) end)
             | (if ($absences | length) == 0 then del(.absenceClauses)
                else .absenceClauses = $absences end)
             | del(.rowsRejected, .rowsConfirmed))
@@ -13392,23 +13412,53 @@ im_refuse_open_dispatch() {
     || die 37 "$1: the $od_role record for $2 is still open in $IMPL_DIR/dispatch.json, so the $od_role has not finished. Run dispatch-close. If it keeps the record open, resume the role as it says, then run dispatch-close again. Then run $1. Nothing is written."
 }
 
-# Gap row 361. dispatch-close keeps a record order's verdicts beside the line each one judged, in
-# row-check-<order>-lines.json, which dispatch-open reads. A key <order id>:<n> names done-when line
-# n. Other keys judge no line. $1 the implementation folder, $2 the order from the snapshot, $3 the
-# verdict file. An order that is not proved by its record, or a file that does not read, keeps nothing.
+# Gap row 361. The checker's verdict on a record order's done-when line drifts from pass to pass,
+# so a line it confirmed is carried while its carry key is unchanged. The key is the line's text,
+# the order's owned files and the hash of the checker's own rule file, so a changed document target
+# or a changed rule judges the line again. The text is the key and not the row number, because a
+# reworded line shifts the numbers. The verdicts sit in row-check-<order>-lines.json, which restart
+# and retake-tests move with the order's other files, so those folders are searched too.
+# im_line_verdicts <order from the snapshot> <action>: sets IM_LINE_RULE to that hash, and
+# IM_LINE_ROWS to one entry per done-when line, {key, line, verdict, at}, with the latest kept
+# verdict under the line's carry key, or null for both. TASK_PATH is set.
+im_line_verdicts() {
+  local lv_id lv_hist
+  lv_id="$(printf '%s' "$1" | jq -r '.id')"
+  records_hash__resolve_sha256_cmd \
+    || die 3 "$2: neither sha256sum nor 'shasum -a 256' was found on PATH, so the checker's rule file cannot be hashed."
+  IM_LINE_RULE="$(tf_sha256_of "$PLUGIN_ROOT/agents/row-checker.md")"
+  [ -n "$IM_LINE_RULE" ] \
+    || die 3 "$2: $PLUGIN_ROOT/agents/row-checker.md could not be hashed. This plugin's own files are incomplete; nothing about the task is wrong."
+  lv_hist="$(find "$TASK_PATH" -mindepth 2 -maxdepth 3 -name "row-check-$lv_id-lines.json" \
+      \( -path "*/implementation/row-check-*" -o -path "*/implementation-*/row-check-*" \
+         -o -path "*/retaken-$lv_id-*/row-check-*" \) -exec cat {} + 2>/dev/null \
+    | jq -s -c '[ .[] | (.rows // [])[] ]')" \
+    || die 3 "$2: a row-check-$lv_id-lines.json under $TASK_PATH could not be read as JSON. Repair or remove it by hand. Nothing is written."
+  IM_LINE_ROWS="$(jq -nc --argjson h "${lv_hist:-[]}" --argjson u "$1" --arg rule "$IM_LINE_RULE" '
+      (($u.ownedFiles // []) | sort) as $owned
+      | [ ($u.doneWhen // []) | to_entries[] | .value as $l
+          | ([ $h[] | select(.line == $l and .owned == $owned and .rule == $rule) ] | sort_by(.at) | last) as $last
+          | {key: "\($u.id):\(.key + 1)", line: $l, verdict: ($last.verdict // null), at: ($last.at // null)} ]')"
+  [ -n "$IM_LINE_ROWS" ] || die 3 "$2: the record rows of $lv_id could not be listed."
+}
+
+# dispatch-close keeps the verdicts on the rows dispatch-open put to the checker, each under its
+# carry key. A row it left out keeps its earlier verdict, even when the checker judged it anyway.
+# $1 the implementation folder, $2 the order from the snapshot, $3 the verdict file, $4 the
+# record's rowsToCheck. An order not proved by its record keeps nothing.
 im_keep_line_verdicts() {
   local kl_file kl_old kl_doc
   [ "$(printf '%s' "$2" | jq -r '.proof // ""')" = "record" ] || return 0
+  im_line_verdicts "$2" "dispatch-close"
   kl_file="$1/row-check-$(printf '%s' "$2" | jq -r '.id')-lines.json"
   kl_old='{"rows":[]}'
   [ ! -f "$kl_file" ] || kl_old="$(jq -c '.' "$kl_file" 2>/dev/null)" \
     || die 3 "dispatch-close: $kl_file could not be read as JSON. Repair or remove it by hand, then run dispatch-close again."
-  kl_doc="$(jq -c --argjson u "$2" --argjson old "$kl_old" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
-      ($u.doneWhen // []) as $dw
-      | [ (.rows // [])[] | (.criterion // "") as $k | ($k | ltrimstr($u.id + ":")) as $n
-          | select($n != $k and ($n | test("^[1-9][0-9]*$"))) | ($n | tonumber) as $i
-          | select($i <= ($dw | length))
-          | {line: $dw[$i - 1], verdict, note, at: $at} ] as $new
+  kl_doc="$(jq -c --argjson rows "$IM_LINE_ROWS" --argjson u "$2" --argjson put "$4" --argjson old "$kl_old" \
+      --arg rule "$IM_LINE_RULE" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+      [ (.rows // [])[] | .criterion as $k | select(($put | index($k)) != null)
+        | ([ $rows[] | select(.key == $k) ][0]) as $r | select($r != null)
+        | {line: $r.line, owned: (($u.ownedFiles // []) | sort), rule: $rule, verdict, note, at: $at} ] as $new
       | {rows: (($old.rows // []) + $new)}' "$3" 2>/dev/null)"
   if [ -z "$kl_doc" ]; then
     echo "DISPATCH-CLOSE: $3 does not read as the checker's verdicts, so no record row verdict was kept."
@@ -13467,8 +13517,8 @@ do_dispatch_open() {
   # the part after the last colon is compared.
   local role_bare agents_dir known_list
   role_bare="${role##*:}"
-  [ -z "$recheck_raw" ] || { [ "$role_bare" = "row-checker" ] && [ "$resume" = false ]; } \
-    || die 3 "dispatch-open: --recheck is for a fresh row-checker dispatch, and this call names $role_bare$([ "$resume" = false ] || printf ' with --resume'). Nothing was dispatched."
+  [ -z "$recheck_raw" ] || [ "$role_bare" = "row-checker" ] \
+    || die 3 "dispatch-open: --recheck is for a row-checker dispatch, and this call names $role_bare. Nothing was dispatched."
   agents_dir="$PLUGIN_ROOT/agents"
   known_list="$(md_basenames_in "$agents_dir")"
   [ -n "$known_list" ] \
@@ -13875,32 +13925,26 @@ TG_ROOTS
   [ -z "${CLAUDE_CODE_SESSION_ID:-}" ] \
     || record_json="$(printf '%s' "$record_json" | jq -c --arg s "$CLAUDE_CODE_SESSION_ID" '.sessionId = $s')"
 
-  # Gap row 361. The checker's verdict on a record line drifts from pass to pass, so a line whose
-  # text the last close on it confirmed is not put to it again. The match is on the text, because a
-  # reworded line shifts the row numbers. restart moves the lines file into its archive with the
-  # order's other files, so the archives are searched too. --recheck puts a named row back.
-  local rc_split="" rc_dw="" rc_hist rc_recheck
-  [ "$role_bare" != "row-checker" ] || rc_dw="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
-    '[ .workOrders[]? | select(.id == $u and (.proof // "") == "record") ][0].doneWhen // empty' 2>/dev/null)"
-  if [ "$role_bare" = "row-checker" ] && [ -n "$rc_dw" ] && [ "$resume" = false ]; then
-    rc_hist="$(find "$TASK_PATH" -mindepth 2 -maxdepth 2 -name "row-check-$unit_id-lines.json" \
-        \( -path "*/implementation/*" -o -path "*/implementation-*/*" \) -exec cat {} + 2>/dev/null \
-      | jq -s -c '[ .[] | (.rows // [])[] ]')" \
-      || die 3 "dispatch-open: a row-check-$unit_id-lines.json under $TASK_PATH could not be read as JSON. Repair or remove it by hand. Nothing was dispatched."
+  # Gap row 361. A record line whose carry key the last kept verdict confirmed is not put to the
+  # checker again, and --recheck puts a named row back. The record holds the rows put to it.
+  local rc_split="" rc_unit="" rc_recheck
+  [ "$role_bare" != "row-checker" ] || rc_unit="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
+    '[ .workOrders[]? | select(.id == $u and (.proof // "") == "record") ][0] // empty' 2>/dev/null)"
+  if [ -n "$rc_unit" ]; then
+    im_line_verdicts "$rc_unit" "dispatch-open"
     rc_recheck="$(printf '%s' "$recheck_raw" | jq -R -s -c 'split("\n") | map(select(length > 0))')"
-    rc_split="$(jq -nc --argjson h "${rc_hist:-[]}" --argjson dw "$rc_dw" --arg u "$unit_id" --argjson re "$rc_recheck" '
-      [ range(0; $dw | length) as $i | "\($u):\($i + 1)" as $k
-        | ([ $h[] | select(.line == $dw[$i]) ] | sort_by(.at) | last) as $last
-        | {key: $k, carried: (($last.verdict // "") == "confirmed" and ($re | index($k)) == null)} ]
+    rc_split="$(jq -nc --argjson rows "$IM_LINE_ROWS" --argjson re "$rc_recheck" '
+      [ $rows[] | .key as $k | {key: $k, carried: (.verdict == "confirmed" and ($re | index($k)) == null)} ]
       | {carried: [ .[] | select(.carried) | .key ], check: [ .[] | select(.carried | not) | .key ],
          unknown: ($re - map(.key))}')"
     [ "$(printf '%s' "$rc_split" | jq '.unknown | length')" = "0" ] \
-      || die 3 "dispatch-open: --recheck names $(printf '%s' "$rc_split" | jq -r '.unknown | join(", ")'), and $unit_id's record rows are $unit_id:1 to $unit_id:$(printf '%s' "$rc_dw" | jq 'length'). Nothing was dispatched."
+      || die 3 "dispatch-open: --recheck names $(printf '%s' "$rc_split" | jq -r '.unknown | join(", ")'), and $unit_id's record rows are $unit_id:1 to $unit_id:$(printf '%s' "$IM_LINE_ROWS" | jq 'length'). Nothing was dispatched."
     if [ "$(printf '%s' "$rc_split" | jq '.check | length')" = "0" ]; then
       echo "DISPATCH-OPEN: no dispatch was opened. Each record row of $unit_id is confirmed earlier, and its line is unchanged: $(printf '%s' "$rc_split" | jq -r '.carried | join(", ")')."
       echo "next: freeze with --row $unit_id=confirmed::model::<a note naming the rows confirmed earlier>. To put a row to the checker again, run dispatch-open with --recheck <row key>."
       exit 0
     fi
+    record_json="$(printf '%s' "$record_json" | jq -c --argjson s "$rc_split" '.rowsToCheck = $s.check')"
   elif [ -n "$recheck_raw" ]; then
     die 3 "dispatch-open: --recheck names a record row, and $unit_id is not proved by its record. Nothing was dispatched."
   fi
@@ -14160,7 +14204,7 @@ NS_OWNED
   fi
   if [ -f "$dispatch_file" ]; then
     [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" != "row-checker" ] || [ ! -f "$rp_path" ] \
-      || im_keep_line_verdicts "$TASK_PATH/implementation" "$rp_unit" "$rp_path"
+      || im_keep_line_verdicts "$TASK_PATH/implementation" "$rp_unit" "$rp_path" "$(jq -c '.rowsToCheck // []' "$dispatch_file")"
     rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
     echo "DISPATCH-CLOSE: removed $dispatch_file"
   else
