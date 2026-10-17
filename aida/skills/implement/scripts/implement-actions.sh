@@ -713,7 +713,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The code a fix scope outside the order's files added (live-run row 116).
 # 100  `fix-brief` was given `--allow` on an unattended run. An allow is a person's grant of one
 #      path outside the order's ownedFiles to one fix round. An unattended run has nobody to
-#      grant it. Nothing is written. Three argument faults stay exit 3: an owned path a fixScope
+#      grant it, unless person-answer.json holds the grant. Nothing is written. Three argument faults stay exit 3: an owned path a fixScope
 #      already names, a frozen test or support file, and an unowned path no fixScope names.
 #
 # The code the commit form of a locks-in reason added (live-run row 183).
@@ -1439,8 +1439,8 @@ ledger_required_string() {
 # or a hash holds no space and prints whole. An array of strings joins with ", ", and an empty one
 # prints "none". An array of objects prints one line per element, `key(first value): the other
 # values joined by " | "`, which is how a check, a finding, a framework or an order gets its own
-# line. Every action builds one object and calls this once, so there is one writer and not one per
-# action.
+# line. Every action builds one object and calls this once, after its writes, so there is one
+# writer and not one per action. A person's answer record the action used is removed here too.
 im_print_summary() {
   local who="$1" fields="$2"
   printf '%s' "$fields" | jq -r --arg who "$who" '
@@ -1456,6 +1456,7 @@ im_print_summary() {
              ($v[] | [ .[] ] | "\($k)(\(.[0] | one)): \(.[1:] | map(one) | join(" | "))")
            else "\($k): \($v | one)" end ])
     | .[]'
+  task_answer_consume
 }
 
 # True while a retake is still unanswered: `retake-tests` recorded the freeze commit the order's
@@ -10562,10 +10563,12 @@ do_fix_brief() {
   # Live-run row 116. A fixScope path outside the order's ownedFiles is withheld from the fixer
   # unless a person allows it here. An allow is a person's grant, so unattended refuses it
   # (exit 100). A path already owned needs no grant. A frozen test or a support file may never
-  # be granted. An unowned path no open finding names is a grant for nothing (exit 3, each).
+  # be granted. An unowned path no open finding names is a grant for nothing (exit 3, each). A
+  # person's answer record naming the --allow values, one per line, passes it (gap row 357).
   local allowed_json='[]' granted_json='[]' ap ap_abs ap_owned other tf fp frozen_list frozen_hit named
   [ -z "$allow_raw" ] || [ "$RV_RUN_MODE" != "autonomous" ] \
-    || die 100 "fix-brief: --allow is a person's grant, and this run is unattended. Nobody is present to allow a path outside $unit_id's own files."
+    || task_person_answered "$IMPL_DIR/person-answer.json" "$TASK_PATH" "fix-brief" "$unit_id" "$allow_raw" \
+    || die 100 "fix-brief: --allow is a person's grant, and this run is unattended. Nobody is present to allow a path outside $unit_id's own files. Or the main session writes the person's grant to $IMPL_DIR/person-answer.json, as references/finish.md says."
   # Every frozen test and support path of the task, the list the write hook reads.
   frozen_list=""
   for tf in "$IMPL_DIR"/tests-*.json; do
@@ -11326,8 +11329,8 @@ do_verify_record() {
   # before the round is looked up, so a ruling on a round already recorded meets the same refusal.
   # A person's answer record naming these rulings, one per line, passes it (gap row 357).
   if [ -n "$rulings_raw" ] && [ "$RV_RUN_MODE" = "autonomous" ] \
-     && ! fn_person_answered "verify-record" "$unit_id" "$(printf '%s' "$rulings_raw")"; then
-    die 55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding. Or the main session writes the person's rulings to $FN_ANSWER_FILE, as references/finish.md says."
+     && ! task_person_answered "$IMPL_DIR/person-answer.json" "$TASK_PATH" "verify-record" "$unit_id" "$rulings_raw"; then
+    die 55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding. Or the main session writes the person's rulings to $IMPL_DIR/person-answer.json, as references/finish.md says."
   fi
 
   # Exit 45: a round is verified once. A second verification of the same round would record a
@@ -11996,33 +11999,15 @@ fn_load_task_state() {
 # Exit 68. The grant, the restart and the clearing of a halt are a person's judgement, so an
 # autonomous run refuses. The mode read is the task's own for this stage, not the ledger's copy,
 # so a person who sets the task interactive after a halt runs the action at once. A person's
-# answer written as a record passes it too, without a change of mode (gap row 357).
-# $1 the action's own name, $2 what the caller would have been deciding, $3 the order or empty
-# for a task-wide action, $4 the person's words the call carries.
+# answer at implementation/person-answer.json passes it too, without a change of mode (gap row
+# 357, task_person_answered). $1 the action's own name, $2 what the caller would have been
+# deciding, $3 the order or empty for a task-wide action, $4 the person's words the call carries.
 fn_require_interactive() {
-  local who="$1" what="$2" held=""
+  local who="$1" what="$2" held="" answer_file="$IMPL_DIR/person-answer.json"
   [ "$(task_run_mode "$TASK_PATH" implement)" = "autonomous" ] || return 0
-  fn_person_answered "$who" "$3" "$4" && return 0
-  [ ! -f "$FN_ANSWER_FILE" ] || held=" $FN_ANSWER_FILE answers another call, so it was not used."
-  die 68 "$who: this task's implement stage is autonomous, and $what is a person's judgement. Nothing is written.$held Run task set-run-mode interactive on this task, then this action again. Or the main session writes the person's answer to $FN_ANSWER_FILE, as references/finish.md says. Or let the halt stand."
-}
-
-# Gap row 357. A person's answer, held as a record, stands in for an interactive run on one call.
-# The record is {"task", "step", "order", "answer"}: this task's id, the action, the order ("" for
-# a task-wide action) and the exact words the call carries. A match removes the file, so one answer
-# serves one call. Only the main session writes it: hooks/deny-frozen-test-writes.sh refuses the
-# file to every agent type. $1 the action, $2 the order or empty, $3 the words.
-FN_ANSWER_FILE=""
-fn_person_answered() {
-  local task_id
-  FN_ANSWER_FILE="$IMPL_DIR/person-answer.json"
-  [ -f "$FN_ANSWER_FILE" ] || return 1
-  task_id="$(jq -r '.id // empty' "$TASK_PATH/task.json" 2>/dev/null)"
-  jq -e --arg task "$task_id" --arg step "$1" --arg order "$2" --arg answer "$3" \
-    '.task == $task and .step == $step and (.order // "") == $order and .answer == $answer' \
-    "$FN_ANSWER_FILE" >/dev/null 2>&1 || return 1
-  rm -f "$FN_ANSWER_FILE"
-  echo "$1: the person's answer at $FN_ANSWER_FILE stood in for an interactive run, and it is now removed." >&2
+  task_person_answered "$answer_file" "$TASK_PATH" "$who" "$3" "$4" && return 0
+  [ ! -f "$answer_file" ] || held=" $answer_file answers another call, so it was not used."
+  die 68 "$who: this task's implement stage is autonomous, and $what is a person's judgement. Nothing is written.$held Run task set-run-mode interactive on this task, then this action again. Or the main session writes the person's answer to $answer_file, as references/finish.md says. Or let the halt stand."
 }
 
 # finish: the implementation stage is done for this task. The task is not. It goes to the review
@@ -13153,6 +13138,7 @@ RS_ADDED
   done
   write_atomic "$IMPL_DIR/snapshot.json" "$new_snapshot"
   write_atomic "$FN_LEDGER_FILE" "$new_ledger"
+  task_answer_consume
 
   echo "RESTART: records of $drifted moved to $target; every other order keeps its records."
   [ -z "$removed" ] \

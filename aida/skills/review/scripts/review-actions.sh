@@ -425,12 +425,16 @@ rw_refuse_moved_code() {
 }
 
 # Exit 70. A person's answer is accepted only when a person is present, which is the rule
-# tests-freeze already applies to its own rows and the number it already uses. $1 the action, $2 the
-# flag, $3 what the flag would have decided.
+# tests-freeze already applies to its own rows and the number it already uses. A person's answer at
+# review/person-answer.json passes it too, without a change of mode (gap row 357,
+# task_person_answered). $1 the action, $2 the flag, $3 what the flag would have decided, $4 the
+# flag's values, one per line, or empty where no record may stand in.
 rw_require_person() {
-  local who="$1" flag="$2" what="$3"
+  local who="$1" flag="$2" what="$3" answer_file="$REVIEW_DIR/person-answer.json" route=""
   [ "$RW_RUN_MODE" = "autonomous" ] || return 0
-  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written."
+  task_person_answered "$answer_file" "$TASK_PATH" "$who" "" "${4:-}" && return 0
+  [ -z "${4:-}" ] || route=" Or the main session writes the person's answer to $answer_file, as the implement skill's references/finish.md says."
+  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written.$route"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -509,7 +513,8 @@ rw_reviewer_skip_reason() {
 # line that a person may want to read in full is named by a path instead.
 #
 # $1 the record, $2 the action. The detail each check carries is this script's own wording, cut to one
-# line, and the record holds the whole of it beside the command's own output.
+# line, and the record holds the whole of it beside the command's own output. Each action prints
+# after its writes, so a person's answer record the action used is removed here.
 rw_print_summary() {
   local doc="$1" who="$2"
   printf '%s' "$doc" | jq -r --arg who "$who" --arg record "$RECORD_FILE" '
@@ -540,6 +545,7 @@ rw_print_summary() {
        else [] end)
     + [ line("record"; $record) ]
     | .[]'
+  task_answer_consume
 }
 
 do_read() {
@@ -2787,7 +2793,7 @@ RW_SURFACE_VERDICTS
 # ------------------------------------------------------------------------------------------------
 
 do_close() {
-  local task_arg="" rows="" arg cid value
+  local task_arg="" rows="" rows_raw="" arg cid value
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --row)
@@ -2802,6 +2808,8 @@ do_close() {
           *) die 3 "close: --row takes met or unmet, not: $value. A row nobody could answer is left out, and it reads unanswered." ;;
         esac
         rows="$rows$(printf '%s\t%s' "$cid" "$value")
+"
+        rows_raw="$rows_raw$2
 "
         shift 2 ;;
       -*) die 3 "close: unrecognized argument: $1" ;;
@@ -2818,7 +2826,7 @@ do_close() {
   rw_load_record "close"
   rw_require_step "close" "$CHECK_E2E" "surfaces"
   rw_refuse_moved_code "close" "commit-only"
-  [ -z "$rows" ] || rw_require_person "close" "--row" "a person read a checklist row and judged it"
+  [ -z "$rows" ] || rw_require_person "close" "--row" "a person read a checklist row and judged it" "$rows_raw"
 
   # A person rules a finding that fails a criterion, with the words a build's ruling takes (gap row
   # 329). wrong: the reviewer was mistaken, so the criterion reads its own answer. deferred: the

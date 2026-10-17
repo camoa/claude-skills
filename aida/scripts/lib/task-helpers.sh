@@ -422,6 +422,33 @@ task_run_mode() {
   if [ "$answer" = "autonomous" ]; then printf 'autonomous'; else printf 'interactive'; fi
 }
 
+# Gap row 357. A person's answer, held as a record, stands in for an interactive run on one call.
+# The record is {"task", "step", "order", "answer"}: the task's id, the action, the order ("" for a
+# task-wide action) and the exact words the call carries. Final newlines on either side are not
+# words. An empty answer never matches. Only the main session writes the record:
+# hooks/deny-frozen-test-writes.sh refuses it to every agent type. A match is held, not removed,
+# so a later refusal keeps the person's answer. task_answer_consume removes it once the action wrote.
+# $1 the record file, $2 the task folder, $3 the action, $4 the order or empty, $5 the words.
+TASK_ANSWER_MATCHED=""
+task_person_answered() {
+  local task_id
+  [ -n "$5" ] && [ -f "$1" ] || return 1
+  task_id="$(jq -r '.id // empty' "$2/task.json" 2>/dev/null)"
+  jq -e --arg task "$task_id" --arg step "$3" --arg order "$4" --arg answer "$5" \
+    '.task == $task and .step == $step and (.order // "") == $order
+     and ((.answer // "") | sub("\n+$"; "")) == ($answer | sub("\n+$"; ""))' "$1" >/dev/null 2>&1 || return 1
+  TASK_ANSWER_MATCHED="$1"
+}
+
+# Removes the record task_person_answered matched, so one answer serves one call. The two summary
+# printers call it, because an action prints its summary only after its writes.
+task_answer_consume() {
+  [ -n "$TASK_ANSWER_MATCHED" ] || return 0
+  rm -f "$TASK_ANSWER_MATCHED"
+  printf "task-helpers: the person's answer at %s stood in for an interactive run, and it is now removed.\n" "$TASK_ANSWER_MATCHED" >&2
+  TASK_ANSWER_MATCHED=""
+}
+
 # True when the task's runMode is light (task-schema.json, runMode). Every light rule is behind
 # this one test, so an interactive or autonomous task never reaches one. $1 the task folder.
 task_is_light() {

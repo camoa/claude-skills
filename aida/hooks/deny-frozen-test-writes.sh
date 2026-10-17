@@ -134,8 +134,9 @@ deny_own_record() {
   jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
   exit 0
 }
-# Gap row 357. implementation/person-answer.json carries a person's answer into an unattended
-# run, so only the main session, the thread the person types in, writes it. Every agent type is
+# Gap row 357. person-answer.json, under implementation/ or review/, carries a person's answer into
+# an unattended run, so only the main session, the thread the person types in, writes it. A main
+# session started with --agent carries an agent type and is refused too. Every agent type is
 # refused it through the file tools, and refused any Bash command that names it. A name built at
 # run time passes the Bash test.
 if [ -n "$AGENT" ]; then
