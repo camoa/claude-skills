@@ -372,8 +372,9 @@ that way, and the finding is checked the same way as every other:
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh record "<task_folder>" \
   --search design-lookup-<name> --searched-for "<the words this lookup searched for>" \
   --text "<what was found, or that nothing was>" --source "<where it came from>" \
-  --criteria-served <id[,id...]>
+  --criteria-served <id[,id...]> [--catalog named|none]
 ```
+Give `--catalog` when the lookup was a `catalog-identifier` dispatch, as research does.
 
 **One lookup is one search, with a name of its own.** `<name>` is the thing you looked up, in
 lowercase letters, digits and single hyphens: `design-lookup-responsive-image`. Never put two
