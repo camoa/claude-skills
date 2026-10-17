@@ -12089,7 +12089,8 @@ do_finish() {
   # more than an argument or a reader can carry. A task whose every order is proved by its
   # record, or confirmed by a person, ran no test and took no suite baseline. So did a task with
   # no automated tests whose other orders are gates. The suite is then recorded not-needed and
-  # never run, the same reading preconditions makes of the snapshot (BR_HARNESS_JQ).
+  # never run, the same reading preconditions makes of the snapshot (BR_HARNESS_JQ). The detail
+  # names each order with its snapshot proof, so a reader sees the orders the rule counted.
   local pre_file recipe_line test_recipes="" suite_file suite_json suite_verdict sidecar="" harness_needed
   harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ harnessNeeded")"
   pre_file="$IMPL_DIR/preconditions.json"
@@ -12120,8 +12121,10 @@ FN_RECIPES
   BRC_END_OF_TASK=true
   suite_file="$(mktemp)" || die 3 "finish: could not create a temporary file"
   if [ "$harness_needed" = "no" ]; then
-    jq -nc '{id: "suite-regression", verdict: "not-needed",
-             detail: "the suite was not run: every order in the snapshot is proved by its record or confirmed by a person, or is a configuration gate on a task with no automated tests, so no test exists and no suite baseline was taken."}' >"$suite_file"
+    printf '%s' "$SNAPSHOT_DOC" | jq -c '{id: "suite-regression", verdict: "not-needed",
+             detail: ("the suite was not run: every order in the snapshot is proved by its record or confirmed by a person, or is a configuration gate on a task with no automated tests ("
+                      + ([ (.workOrders // [])[] | .id + " " + (.proof // "tests") ] | join(", "))
+                      + "), so no test exists and no suite baseline was taken.")}' >"$suite_file"
   else
     br_test_check "suite-regression" "suite" "suite" >"$suite_file"
   fi
