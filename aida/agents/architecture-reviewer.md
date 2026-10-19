@@ -78,7 +78,9 @@ its text, its source sentence, its `paths` and its `urls`, and the criteria it s
 marked `onDisk`. The text says whether the source is a guide or an agentic recipe. A body that is not
 on disk is named as unread, and you answer from the text. A URL is never on disk. The brief's
 `guideBodies` lists each guide body design opened, marked `onDisk`. Open each one on disk.
-Ask no catalog for anything; you have no way to reach one and no need.
+When none is on disk and `practiceSearch` is not null, its research file holds current practice
+for this stack, each finding with its source. Judge the diff against those findings for both
+lenses, and cite the finding's source and text. Ask no catalog for anything; you have no way to reach one and no need.
 
 For `practices` the brief also carries `playbooksPath`: the playbook record that research loaded,
 or null. When it is not null, open it. Report one finding per play the diff contradicts, citing the

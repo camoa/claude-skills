@@ -76,8 +76,11 @@ change no test catches is a survivor. The reviewer also judges every hunk for pu
 those survivors, so two of the contract checks are half script and half reviewer. The guides
 check reads unknown, not met, when no guide body design opened is on disk, because the reviewer
 then had only the research text. Research names guides and never opens them. The practices check
-follows the same rule unless the playbook record holds a loaded source. When no guide covers the
-task, you answer either check at close, met or unmet.
+follows the same rule unless the playbook record holds a loaded source. With no guide body on
+disk, the review first searches the web for current practice for your stack, in every run mode.
+It records each finding with its source, beside the research records. A practice found with a
+source becomes what both lenses judge against. When the search finds none, you answer either
+check at close, met or unmet.
 
 A lens check fails on any medium or high finding. When every finding of one of those six lens
 checks is low, you decide the check at close. The same holds for "everything serves a criterion" and

@@ -13,8 +13,8 @@ pass, and ask for each one only once.
 
 Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. A lens
 check names the low findings of one lens. The person confirms them, met, or rejects them, unmet.
-The guides check and the practices check wait the same way when no guide body is on disk. Ask
-whether any guide covers the task. When none does, the person judges the diff, met or unmet.
+The guides check and the practices check wait the same way when no guide body is on disk and the
+review's own search found no practice with a source. Ask whether any guide covers the task. When none does, the person judges the diff, met or unmet.
 
 A check whose id begins `decision-` is a decision a build left. Ask it in the
 words of `references/review.md` under the implement skill, under Rulings for a finding and under

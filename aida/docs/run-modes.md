@@ -229,7 +229,8 @@ it proves. What light skips:
   made, unattended too. With you present, it also takes a finding the fixer reported out of its
   scope, when you grant the files with `fix-brief --allow`. The
   implementer may build a fake off the demo path, marked in the code with `AIDA-FAKE:`.
-- **Review** runs no visual regression.
+- **Review** runs no visual regression. It still runs its one web search for current practice
+  when no guide body is on disk.
 
 What light keeps: the code review of each order, and the project's own checks, including its
 security check. It also keeps one script that walks the demo path. That script is the project's

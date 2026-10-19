@@ -175,6 +175,11 @@ done
 # empty, so a finding naming one is refused rather than recorded.
 LENS_WORDS="non-goals solid dry architecture guides practices mutation purpose"
 
+# The search review records, through research-actions.sh record, when no guide body is on disk:
+# current practice for the stack, found by the outward searcher (gap row 364). It is a research
+# file, so the brief carries it with the others, and findings reads it by this name.
+PRACTICE_SEARCH="review-practices"
+
 # The sixteen checks, by the id each one carries in the record. The tool rows a recipe declares
 # beyond coding-standards, static-analysis and security carry their own row ids, because the check
 # commands block is a floor and never the list.
@@ -1743,6 +1748,15 @@ RW_SOURCES
   research_json="$(printf '%s' "$research_json" | jq -c --argjson found "$on_disk" '
     [ .[] | .findings = [ .findings[]
       | .paths = [ .paths[] | . as $p | {path: $p, onDisk: (($found | index($p)) != null)} ] ] ]')"
+  # Review's own practice search, when one is recorded. A finding counts as a practice found when
+  # it names a URL and is no fetch-failed snippet, so a searched and empty finding counts none.
+  # findings reads this count and never recounts it.
+  local practice_json
+  practice_json="$(printf '%s' "$research_json" | jq -c --arg ps "$PRACTICE_SEARCH" '
+    [ .[] | select(.search == $ps) ][0]
+    | if . == null then null
+      else {file, sourced: ([ .findings[] | select((.urls | length) > 0)
+                                          | select(.text | test("fetch-failed") | not) ] | length)} end')"
   # The guide bodies design opened. Research names a guide and never opens it, so design's read
   # is the only record of a guide body, and the guides lens opens these (live-run row 272).
   local guide_bodies='[]' guide_path
@@ -1762,7 +1776,7 @@ RW_GUIDES
     --arg findings "$FINDINGS_TARGET" --arg codePath "$RV_CODEPATH" \
     --argjson alignment "$(rw_alignment)" --argjson snap "$RW_SNAPSHOT_DOC" \
     --slurpfile record "$RECORD_FILE" --argjson research "$research_json" \
-    --argjson guideBodies "$guide_bodies" \
+    --argjson guideBodies "$guide_bodies" --argjson practiceSearch "$practice_json" \
     --argjson finished "$RW_FINISHED_DOC" --arg lenses "$LENS_WORDS" \
     --argjson absenceClauses "$RW_ABSENCE_CLAUSES" \
     --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" "$REASONING_JQ"'
@@ -1782,6 +1796,7 @@ RW_GUIDES
      absenceClauses: $absenceClauses,
      research: $research,
      guideBodies: $guideBodies,
+     practiceSearch: $practiceSearch,
      deferredFindings: ($finished.deferred // []),
      pendingDecisions: ($finished.pendingDecisions // []),
      checks: [ ($record.checks // [])[]
@@ -1817,6 +1832,8 @@ RW_GUIDES
       line("researchUrls"; ([ .research[].findings[].urls[] ] | unique | length)),
       line("guideBodies(onDisk)"; ([ .guideBodies[] | select(.onDisk) ] | length)),
       line("guideBodies(notOnDisk)"; ([ .guideBodies[] | select(.onDisk | not) ] | length)),
+      line("practiceSearch"; (if .practiceSearch == null then "none"
+                              else "\(.practiceSearch.sourced) sourced finding(s) in \(.practiceSearch.file)" end)),
       line("deferredFindings"; (.deferredFindings | length)),
       line("pendingDecisions"; (.pendingDecisions | length)) ] | .[]'
   local skip_reason
@@ -1825,6 +1842,13 @@ RW_GUIDES
     printf 'reviewer: skip | %s\n' "$skip_reason"
     echo "BRIEF: do not dispatch the reviewer. Run findings with no --findings; the record keeps the reason." >&2
   else
+    # No guide body on disk and no practice search yet: the review looks before the reviewer runs,
+    # since a missing guide is a reason to look, never to skip the check (gap row 364).
+    if [ "$practice_json" = "null" ] \
+      && [ "$(printf '%s' "$guide_bodies" | jq '[ .[] | select(.onDisk) ] | length')" = "0" ]; then
+      printf 'practice-search: dispatch\n'
+      echo "BRIEF: no guide body is on disk. Dispatch outward-searcher for current practice, record each finding with research-actions.sh record --search $PRACTICE_SEARCH, then run brief again." >&2
+    fi
     printf 'reviewer: dispatch\n'
     echo "BRIEF: give the reviewer $BRIEF_FILE, and tell it to write its findings to $FINDINGS_TARGET and nowhere else." >&2
   fi
@@ -2014,6 +2038,7 @@ do_findings() {
   research_count=0; research_sources=0; one_research=""; found_here=0
   while IFS= read -r one_research; do
     [ -n "$one_research" ] || continue
+    [ "${one_research##*/}" != "$PRACTICE_SEARCH.json" ] || continue
     research_count=$((research_count + 1))
     found_here="$(jq -r '[ (.findings // [])[] | select((.source // "") != "") ] | length' "$one_research" 2>/dev/null)"
     case "$found_here" in ''|*[!0-9]*) found_here=0 ;; esac
@@ -2021,6 +2046,13 @@ do_findings() {
   done <<RW_RESEARCH_FILES
 $(find "$TASK_PATH/research" -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)
 RW_RESEARCH_FILES
+  # Review's own practice search is no research record, so it never stands in for research that
+  # was not run. Each practice it found with a source is a source the two lenses read, though.
+  local practice_sourced practice_file
+  practice_sourced="$(jq -r '.practiceSearch.sourced // 0' "$BRIEF_FILE" 2>/dev/null)"
+  case "$practice_sourced" in ''|*[!0-9]*) practice_sourced=0 ;; esac
+  practice_file="$(jq -r '.practiceSearch.file // empty' "$BRIEF_FILE" 2>/dev/null)"
+  research_sources=$((research_sources + practice_sourced))
   local source_floor source_note
   source_floor=""; source_note=""
   if [ "$research_count" -eq 0 ]; then
@@ -2048,19 +2080,30 @@ RW_RESEARCH_FILES
   # lens reads the same bodies, since design opens the agentic recipes too, and also the playbook
   # record, so a loaded source there is a body it opened.
   #
-  # Only a person can say no guide applies, because the catalog's identify scores any shared word
-  # as a match. So the check reads unknown and waits for close --row, the way a lens check with low
-  # findings does (live-run row 363).
-  local body_floor practices_body bodies_on_disk
-  body_floor=""; practices_body=""
+  # With no guide body, review's own practice search is the body: each practice it found with a
+  # source is one the lens judged the diff against (gap row 364). A search that found none, or no
+  # search, leaves the check unknown for close --row. Only a person can then say no guide applies,
+  # because the catalog's identify scores any shared word as a match (live-run row 363).
+  local body_floor practices_body bodies_on_disk practice_note
+  body_floor=""; practices_body=""; practice_note=""
   bodies_on_disk="$(jq -r '[ (.guideBodies // [])[] | select(.onDisk == true) ] | length' "$BRIEF_FILE" 2>/dev/null)"
-  [ "${bodies_on_disk:-0}" != "0" ] \
-    || body_floor="no guide body is on disk: $BRIEF_FILE lists none from $TASK_PATH/design-guides-read.json, so this lens judged the research finding text alone. Design records each guide body it opens with design-actions.sh read-guide; once one is recorded and on disk, run brief and findings again."
+  if [ "${bodies_on_disk:-0}" = "0" ]; then
+    if [ "$practice_sourced" -gt 0 ]; then
+      practice_note=" No guide body is on disk, so it judged the diff against $practice_sourced current practice finding(s) with a source, in $practice_file."
+    else
+      body_floor="no guide body is on disk: $BRIEF_FILE lists none from $TASK_PATH/design-guides-read.json, so this lens judged the research finding text alone. Design records each guide body it opens with design-actions.sh read-guide; once one is recorded and on disk, run brief and findings again."
+      if [ -n "$practice_file" ]; then
+        body_floor="$body_floor The review's own search, $practice_file, found no current practice with a source."
+      else
+        body_floor="$body_floor The review's own search for current practice is not recorded either: brief prints practice-search: dispatch, and its findings go to research-actions.sh record --search $PRACTICE_SEARCH."
+      fi
+    fi
+  fi
   [ ! -f "$playbooks_record" ] \
     || [ "$(jq -r '[ (.sources // [])[] | select(.state == "loaded") ] | length' "$playbooks_record" 2>/dev/null)" = "0" ] \
     || practices_body="loaded"
 
-  local rows_file lens_word check_id lens_row updated
+  local rows_file lens_word check_id lens_row updated lens_note
   rows_file="$(mktemp)" || die 3 "findings: could not create a temporary file"
   for lens_word in non-goals solid dry architecture guides practices; do
     check_id="$(rw_check_for_lens "$lens_word")"
@@ -2080,7 +2123,9 @@ RW_RESEARCH_FILES
       rw_check_row "$check_id" "unknown" "$body_floor When no guide covers this task, the person judges the diff at close with --row $check_id=met or --row $check_id=unmet. A light or autonomous run takes that answer from $REVIEW_DIR/person-answer.json, written by the main session with step close." \
         | jq -c '. + {answeredBy: "nobody"}' >>"$rows_file"
     else
-      rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff of $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange')." >>"$rows_file"
+      lens_note=""
+      case "$lens_word" in guides|practices) lens_note="$practice_note" ;; esac
+      rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff of $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange').$lens_note" >>"$rows_file"
     fi
   done
   # What a build left for a person, one check each, which reads unknown until the
