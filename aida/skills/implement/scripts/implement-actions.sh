@@ -14086,9 +14086,9 @@ TG_ROOTS
   # them and writes what the brief still asks for. Nothing is copied into the tree, so nothing stale
   # reaches a freeze and nothing overwrites committed work. A copy older than the path's last commit
   # is stale, such as one from before a freeze, and is not named. Only a test glob's file is named,
-  # because the author never reads production source.
-  local ra_rows ra_at ra_rel ra_folder ra_glob ra_own ra_last ra_is ra_said=""
-  if [ "$role_bare" = "test-author" ] && [ "$resume" = false ] && [ -n "$test_glob_raw" ] \
+  # because the author never reads production source. A resume names them again for the denial below.
+  local ra_rows ra_at ra_rel ra_folder ra_glob ra_own ra_last ra_is ra_said="" ra_named=""
+  if [ "$role_bare" = "test-author" ] && [ -n "$test_glob_raw" ] \
      && [ "$(task_run_mode "$TASK_PATH" implement)" = "autonomous" ]; then
     ra_rows="$(jq -r '
         [ (.setAside // []) | to_entries[] | .key as $i | .value as $e
@@ -14111,6 +14111,8 @@ RA_OWNED
         [ -n "$ra_glob" ] || continue
         tf_path_matches_catalog_glob "$ra_rel" "$ra_glob" || continue
         ra_said="$ra_said$ra_folder/$ra_rel for $ra_rel, "
+        ra_named="$ra_named$ra_folder/$ra_rel
+"
         break
       done <<RA_GLOBS
 $test_glob_raw
@@ -14119,13 +14121,20 @@ RA_GLOBS
 $ra_rows
 RA_ROWS
   fi
+  # The set-aside folder can hold an implementer's file beside the tests (gap row 379). So the test
+  # author is denied every file there but the earlier tests named above.
+  if [ "$role_bare" = "test-author" ] && [ -d "$IMPL_DIR/set-aside" ]; then
+    deny_json="$(find "$IMPL_DIR/set-aside" ! -type d 2>/dev/null | jq -R -s -c --argjson d "$deny_json" \
+      --arg n "$ra_named" '$d + ((split("\n") - ($n | split("\n"))) | map(select(length > 0))) | unique')"
+    record_json="$(printf '%s' "$record_json" | jq -c --argjson d "$deny_json" '.denyRead = $d')"
+  fi
 
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
   echo "DISPATCH-OPEN: the role works in the worktree $codepath. Put it in the dispatch message: the role starts each shell command with cd $codepath &&, and writes nothing in the main checkout."
   [ -z "$interfaces_file" ] \
     || echo "DISPATCH-OPEN: interfaces: $interfaces_file. Put it in the dispatch message as a path: the role reads the interface text of what a test calls there."
-  [ -z "$ra_said" ] \
+  [ -z "$ra_said" ] || [ "$resume" = true ] \
     || echo "DISPATCH-OPEN: earlier tests: ${ra_said%, }. Put them in the dispatch message as paths: an earlier author wrote them before design reopened, and start set them aside."
   [ -z "$rc_split" ] || printf '%s' "$rc_split" | jq -r '"DISPATCH-OPEN: record rows to put to the checker: \(.check | join(", "))."
     + (if (.carried | length) > 0 then " Confirmed earlier, with the line unchanged, and not put to it: \(.carried | join(", "))." else "" end)'
