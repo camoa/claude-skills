@@ -3565,7 +3565,7 @@ do_preconditions() {
   local frameworks fw_count entries_file fw_json_file tc_rows_file
   local lookup recipe_path section_state fw_verdict entries_json run_verdict
   local tc_state tc_rows_json
-  local smoke_verdict smoke_reason smoke_output smoke_truncated smoke_exit_code_json
+  local smoke_verdict smoke_reason smoke_output smoke_truncated smoke_exit_code_json smoke_token
   local smoke_row_json smoke_argv_json smoke_out_file smoke_result smoke_kind smoke_payload
   local smoke_raw_len smoke_json smoke_first tokens_json token_failures tokens_out token_first token_entry
   local record_file record_json today
@@ -3869,7 +3869,7 @@ EOF
     # The smoke row is run, never merely recorded, and only once this framework's own conditions
     # have already answered `met` or `undeclared`. Running it any earlier would only fail for a
     # reason a condition already named.
-    smoke_verdict=""; smoke_reason=""; smoke_output=""; smoke_truncated=false; smoke_first=""
+    smoke_verdict=""; smoke_reason=""; smoke_output=""; smoke_truncated=false; smoke_first=""; smoke_token=""
     smoke_exit_code_json="null"
     smoke_state="$fw_verdict"; [ "$harness_needed" = "yes" ] || smoke_state="not-needed"
     case "$smoke_state" in
@@ -3911,8 +3911,10 @@ EOF
                 smoke_verdict="unknown"
                 smoke_reason="the token {$smoke_payload} in the smoke command has no supplied value; pass --value $smoke_payload=<value>"
                 token_first="$(cr_lookup "$token_failures" "$smoke_payload")"
-                [ -z "$token_first" ] \
-                  || smoke_reason="the token {$smoke_payload} in the smoke command has no value, because the recipe's ## Tokens block for it failed or printed nothing ($token_first); pass --value $smoke_payload=<value>"
+                [ -z "$token_first" ] || {
+                  smoke_reason="the token {$smoke_payload} in the smoke command has no value, because the recipe's ## Tokens block for it failed or printed nothing ($token_first); pass --value $smoke_payload=<value>"
+                  smoke_token="$smoke_payload"
+                }
               elif [ "$smoke_kind" = "EMPTY" ]; then
                 smoke_verdict="unknown"
                 smoke_reason="the smoke row's argv holds no token at all, so there was nothing to run"
@@ -3948,13 +3950,14 @@ EOF
 
     smoke_json="$(jq -n --arg verdict "$smoke_verdict" --arg reason "$smoke_reason" \
           --arg output "$smoke_output" --argjson truncated "$smoke_truncated" \
-          --argjson exitCode "$smoke_exit_code_json" --arg first "$smoke_first" '
+          --argjson exitCode "$smoke_exit_code_json" --arg first "$smoke_first" --arg token "$smoke_token" '
       {verdict: $verdict}
       + (if $reason == "" then {} else {reason: $reason} end)
       + (if $output == "" then {} else {output: $output} end)
       + (if $truncated == true then {truncated: true} else {} end)
       + (if $exitCode == null then {} else {exitCode: $exitCode} end)
       + (if $first == "" then {} else {firstLine: $first} end)
+      + (if $token == "" then {} else {token: $token} end)
     ')"
 
     jq -n --arg framework "$fw" --arg lookup "$lookup" --arg recipePath "$recipe_path" \
@@ -4176,7 +4179,7 @@ PC_TOOL_ROWS
   # its own, so the 240-character cut of a long argv never takes the cause or the instruction.
   # A suite the baseline recorded unmet or unknown takes the `baselineRed:` line (gap row 261):
   # the build goes on, but finish meets that red again, and only a person can decide it.
-  local pc_next pc_advice="none" pc_failed="none" pc_cause
+  local pc_next pc_advice="none" pc_failed="none" pc_cause pc_token
   pc_next="$(im_next_step "$STARTED_LEDGER_DOC" "$SNAPSHOT_DOC" "$task_folder/implementation" "true" "false")"
   case "$run_verdict" in
     met|undeclared|not-needed) ;;
@@ -4203,6 +4206,12 @@ PC_TOOL_ROWS
       pc_failed="$(printf '%s' "$pc_cause" | jq -r '.output')"
       printf '%s' "$record_json" | jq -e '[ .frameworks[].entries[] | select(.reason == "check-command-not-found") ] | length > 0' >/dev/null \
         && pc_advice="A condition's tool is absent. Run the tool skill's install from the worktree, which holds tracked files only: $codepath"
+      # A ## Tokens block reads the tree, and a worktree with no site can lack what it looks for.
+      # A --value then names a folder that is not there (live-run row 368).
+      pc_token="$(printf '%s' "$record_json" | jq -r '[ .frameworks[].smoke.token // empty ][0] // empty')"
+      [ -n "$pc_token" ] && jq -e '(.worktree.path // "") != "" and (.environment.address // "") == ""' \
+          "$task_folder/task.json" >/dev/null 2>&1 \
+        && pc_advice="The {$pc_token} block reads the worktree, which records no site. Run task environment $(jq -r '.id' "$task_folder/task.json") up, then preconditions again. If no catalog recipe fits, run project add-source <project> processRecipes <folder> first."
       # The catalog comes first, as the tool skill's exit 2 wins over its exit 4.
       pc_no_recipe="$(printf '%s' "$record_json" | jq -r '[ .frameworks[].entries[]
         | select(.verdict == "unknown" and ((.firstLine // "") | startswith("no recipe"))) | .id | ltrimstr("requires_tooling: ") ] | join(", ")')"
