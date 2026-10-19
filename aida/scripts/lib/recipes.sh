@@ -1562,16 +1562,18 @@ SW_LINES
 : "${RECIPE:=}"; : "${RECIPE_FW:=}"; : "${VIEWPORTS_ARG:=}"
 
 # Exit 70. $1 the flag, $2 what it says a person did. A caller with a task passes $3 the task
-# folder and $4 the person's words the call carries. Then the person's answer at
-# <task>/person-answer.json, step "$ACTION $1", passes it too, without a change of mode (gap row
-# 380, task_person_answered). The caller removes it with task_answer_consume once it wrote, and
-# before its commit, which stages the task folder.
+# folder and $4 the person's words the call carries. Then the task's own run mode for implement
+# also counts, so a call that leaves out --run-mode is not interactive by that alone; the site
+# serves the build, as fn_require_interactive reads it. And the person's answer at
+# <task>/person-answer.json, step "$ACTION $1", passes the refusal without a change of mode (gap
+# row 380, task_person_answered). The caller removes it with task_answer_consume once it wrote.
 cr_require_person() {
-  local route=""
-  [ "$RUN_MODE" = "autonomous" ] || return 0
+  local mode="$RUN_MODE" route=""
+  [ -z "${3:-}" ] || [ "$(task_run_mode "$3" implement)" != "autonomous" ] || mode="autonomous"
+  [ "$mode" = "autonomous" ] || return 0
   if [ -n "${3:-}" ]; then
     task_person_answered "$3/person-answer.json" "$3" "$ACTION $1" "" "$4" && return 0
-    route=" Or the main session writes the person's answer to $3/person-answer.json as $(jq -nc --arg task "$(jq -r '.id // empty' "$3/task.json" 2>/dev/null)" --arg step "$ACTION $1" --arg answer "$4" '{task: $task, step: $step, order: "", answer: $answer}'), as the implement skill's references/finish.md says."
+    route="$(task_answer_route "$3/person-answer.json" "$3" "$ACTION $1" "$4")"
   fi
   die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written.$route"
 }

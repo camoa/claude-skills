@@ -462,6 +462,16 @@ task_person_answered() {
   TASK_ANSWER_MATCHED="$1"
 }
 
+# The end of a refusal that a record may pass: a clause when $1 answers another call, then the
+# record the main session writes, whole. $1 the record file, $2 the task folder, $3 the step, $4
+# the words.
+task_answer_route() {
+  [ ! -f "$1" ] || printf ' %s answers another call, so it was not used.' "$1"
+  printf " Or the main session writes the person's answer to %s as %s, as the implement skill's references/finish.md says." "$1" \
+    "$(jq -nc --arg task "$(jq -r '.id // empty' "$2/task.json" 2>/dev/null)" --arg step "$3" --arg answer "$4" \
+      '{task: $task, step: $step, order: "", answer: ($answer | sub("\n+$"; ""))}')"
+}
+
 # Removes the record task_person_answered matched, so one answer serves one call. The two summary
 # printers call it, because an action prints its summary only after its writes.
 task_answer_consume() {
@@ -669,13 +679,16 @@ mark_task_in_progress() {
 # another task's uncommitted file, left beside it (live run, row 120: `tasks` whole took another
 # window's pending file). Moved here from task-actions.sh so the stage closes commit the same
 # way the task actions do. project-commit.sh is sourced here because only task-actions.sh
-# sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller.
+# sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller. A person's answer
+# record is left out at any depth, so one that matched no call never enters the history (gap row
+# 380). task_answer_consume removes the one that matched.
 commit_task_change() {
   local project="$1" subject="$2" why="$3" principle="$4" ruled_out="$5" task="$6" stage="$7"
   shift 7
   # shellcheck source=/dev/null
   source "${PLUGIN_ROOT}/scripts/lib/project-commit.sh" || die3 "the project-commit library failed to load"
-  commit_project "$project" "$subject" "$why" "$principle" "$ruled_out" "$task" "$stage" "tasks/$task" "$@"
+  commit_project "$project" "$subject" "$why" "$principle" "$ruled_out" "$task" "$stage" "tasks/$task" \
+    ":(exclude,glob)tasks/$task/**/person-answer.json" "$@"
 }
 
 # The stage-boundary commit (foundations.md, History: "AIDA commits at stage boundaries, and the

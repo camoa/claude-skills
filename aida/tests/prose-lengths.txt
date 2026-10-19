@@ -13,12 +13,12 @@ agents/playbook-loader.md 85
 agents/reviewer.md 174
 agents/row-checker.md 122
 agents/test-author.md 167
-skills/completion/SKILL.md 112
+skills/completion/SKILL.md 114
 skills/completion/references/close.md 136
 skills/design/SKILL.md 971
 skills/implement/SKILL.md 285
 skills/implement/references/build.md 586
-skills/implement/references/finish.md 262
+skills/implement/references/finish.md 268
 skills/implement/references/preconditions.md 296
 skills/implement/references/review.md 511
 skills/implement/references/start.md 151

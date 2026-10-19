@@ -386,12 +386,16 @@ cp_refuse_complete() {
 }
 
 # Exit 70. A person's answer is accepted only when a person is present. Review and tests-freeze
-# apply the same rule under the same number. $1 the action, $2 the flag, $3 what the flag would
-# have decided.
+# apply the same rule under the same number. A person's answer at completion/person-answer.json
+# passes it too, without a change of mode (gap row 380, task_person_answered). It sits in the
+# stage's own folder, as implement's and review's do, so it never shares a file with a review
+# record still waiting. One record answers the whole call. $1 the action, $2 the flag, $3 what the
+# flag would have decided, $4 every person's flag of the call, one "<flag> <value>" per line.
 cp_require_person() {
-  local who="$1" flag="$2" what="$3"
+  local who="$1" flag="$2" what="$3" answer_file="$COMPLETION_DIR/person-answer.json"
   [ "$CP_RUN_MODE" = "autonomous" ] || return 0
-  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written."
+  task_person_answered "$answer_file" "$TASK_PATH" "$who" "" "$4" && return 0
+  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written.$(task_answer_route "$answer_file" "$TASK_PATH" "$who" "$4")"
 }
 
 # The one follow up row for finding $1, or nothing when the review holds no follow up finding of
@@ -689,8 +693,10 @@ CP_RESTORE_TODO
 
 do_close() {
   local task_arg="" reason="" leaves="" captures_offered="" captures_skipped="" fid value
-  local observed_answers="" observed_skipped="" cid
+  local observed_answers="" observed_skipped="" cid person_words=""
   while [ "$#" -gt 0 ]; do
+    case "$1" in --observed-accepted|--captures-offered|--reason|--leave) person_words="$person_words$1 ${2:-}
+" ;; esac
     case "$1" in
       --observed-accepted)
         # A person's answer to one criterion a model observed through a browser (live-run row 104).
@@ -733,14 +739,15 @@ do_close() {
   cp_paths "close" "$task_arg"
   cp_load "close"
   cp_refuse_complete "close"
-  [ -z "$reason" ] || cp_require_person "close" "--reason" "a person decided to close without a passed review"
-  [ -z "$leaves" ] || cp_require_person "close" "--leave" "a person decided to leave a finding without a task"
-  [ -z "$captures_offered" ] || cp_require_person "close" "--captures-offered" "a person was offered the notes as plays"
-  [ -z "$observed_answers" ] || cp_require_person "close" "--observed-accepted" "a person accepted or rejected what a model observed"
-  # Unattended, nothing is offered and the record says why; a person names a play, a script never does.
-  [ "$CP_RUN_MODE" != "autonomous" ] || captures_skipped="autonomous"
+  [ -z "$reason" ] || cp_require_person "close" "--reason" "a person decided to close without a passed review" "$person_words"
+  [ -z "$leaves" ] || cp_require_person "close" "--leave" "a person decided to leave a finding without a task" "$person_words"
+  [ -z "$captures_offered" ] || cp_require_person "close" "--captures-offered" "a person was offered the notes as plays" "$person_words"
+  [ -z "$observed_answers" ] || cp_require_person "close" "--observed-accepted" "a person accepted or rejected what a model observed" "$person_words"
+  # Unattended with no answer record, nothing is offered and the record says why; a person names a
+  # play, a script never does.
+  [ "$CP_RUN_MODE" != "autonomous" ] || [ -n "$captures_offered" ] || captures_skipped="autonomous"
   # Unattended, nothing a model observed is put to anyone, and the record says so the same way.
-  [ "$CP_RUN_MODE" != "autonomous" ] || observed_skipped="autonomous"
+  [ "$CP_RUN_MODE" != "autonomous" ] || [ -n "$observed_answers" ] || observed_skipped="autonomous"
 
   # A parent refuses to close while a child is open, and the person closes the parent.
   local open_children
@@ -828,9 +835,10 @@ CP_LEAVES2
   # Last of the refusals, because it takes the site down and commits.
   cp_restore_env_files "close"
 
+  # A person's answer record that passed a refusal is the person's word, so the person closed it.
   local closed_by record
   case "$CP_RUN_MODE" in
-    autonomous) closed_by="nobody" ;;
+    autonomous) [ -n "$TASK_ANSWER_MATCHED" ] && closed_by="person" || closed_by="nobody" ;;
     *)          closed_by="person" ;;
   esac
   record="$(jq -nc --arg task "$CP_TASK_ID" --arg today "$(date -u +%Y-%m-%d)" --arg verdict "$CP_REVIEW_VERDICT" \
@@ -871,6 +879,7 @@ CP_LEAVES2
       complete --project "$PROJECT_DIR" "$CP_TASK_ID" -- "$summary" 2>&1)" \
     || { printf '%s\n' "$said" >&2; die 3 "close: task complete refused $CP_TASK_ID after the body and the record were written. Run close again once the task script's own line above is answered."; }
   CP_STATE="$(jq -r '.state // ""' "$TASK_PATH/task.json" 2>/dev/null)"
+  task_answer_consume
 
   cp_print_summary "close" "$(jq -nc --arg closedBy "$closed_by" --arg reason "$reason" --arg body "$BODY_FILE" --arg record "$RECORD_FILE" \
     --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" \

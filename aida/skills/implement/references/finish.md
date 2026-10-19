@@ -240,23 +240,29 @@ line.
 A light or autonomous run refuses a person's call. In implement the calls are `grant-attempt`,
 `clear-halt`, `restart`, `finish --accept-warnings`, the two `--accept-deviation` keeps (exit 68),
 `verify-record --ruling` (exit 55) and `fix-brief --allow` (exit 100). In review the call is
-`close --row` (exit 70). In the task skill the calls are `environment` `up`, `not-applicable` and
-`down` (exit 70). Two routes reach them. The person sets the task interactive with
-`task set-run-mode`. Or the person's answer travels as a record, and the run mode stays as it is.
+`close --row` (exit 70). In completion it is `close` with `--reason`, `--leave`,
+`--captures-offered` or `--observed-accepted` (exit 70). In the task skill the calls are
+`environment` `up`, `not-applicable` and `down` (exit 70). Two routes reach them. The person sets
+the task interactive with `task set-run-mode`. Or the person's answer travels as a record, and the
+run mode stays as it is.
 
-The record is `person-answer.json`, in the task's `implementation/` folder for an implement call,
-in its `review/` folder for `close`, and in the task folder itself for `environment`. Only the main session writes it, the session the person
-types in, and only with words the person gave there. A hook refuses the file to every dispatched
-agent. A main session started with `claude --agent` carries an agent name, so the hook refuses it
-too. An agent that meets the refusal reports the halt to the main session and stops. It never
-asks again. The record holds four keys:
+The record is `person-answer.json`. It sits in the task's `implementation/` folder for an
+implement call, in `review/` for review's `close`, and in `completion/` for completion's `close`.
+For `environment` it sits in the task folder itself. Only the main session writes it, the session
+the person types in, and only with words the person gave there. A hook refuses the file to every
+dispatched agent. A main session started with `claude --agent` carries an agent name, so the hook
+refuses it too. An agent that meets the refusal reports the halt to the main session and stops. It
+never asks again. The record holds four keys:
 ```
 {"task": "<task id>", "step": "<action>", "order": "<order id, or empty for finish, restart and close>",
  "answer": "<the exact value of the call's flag>"}
 ```
 For a repeated flag, `--ruling`, `--allow` or `--row`, the answer is every value in the call's
-order, one per line. For `environment` the step is `environment up`, `environment not-applicable`
-or `environment down`. The answer is the reason for `not-applicable`, and `yes` for the other two. A final newline does not count. The action reads the record only on an
+order, one per line. For completion's `close`, the answer is one `<flag> <value>` line per person's
+flag, in the call's order. For `environment`, the step is `environment up`, `environment
+not-applicable` or `environment down`. The answer is the reason for `not-applicable`. It is `yes`
+for the other two. A final newline does not count. The action reads the record only on an
 unattended stage. A record that names this task, this action, this order and these exact words
 passes the refusal. The action removes it once its own writes are done, so a later refusal keeps
-it. A record for another call stays, and the refusal says so.
+it. A record for another call stays. The refusals of completion and the task skill say so, and
+print the record to write. No task commit takes the record.
