@@ -407,7 +407,8 @@ cp_follow_up_row() {
 # Creates the task for the follow up finding whose row is $2, through task-actions.sh create, the
 # one producer of a task. The id is `<source task>-<finding id>`, so nobody has to name it. The
 # goal is the evidence, then one sentence naming the finding, the source task, the lens, the file
-# and the lines. The task script's own output is relayed only when it refuses. $1 the action.
+# and the lines. The task script's own output is relayed only when it refuses, but for the line
+# naming the commit the tree was cut from (gap row 382). $1 the action.
 cp_create_follow_up_task() {
   local who="$1" row="$2" fid task_id goal said
   fid="$(printf '%s' "$row" | jq -r '.finding')"
@@ -418,6 +419,7 @@ cp_create_follow_up_task() {
   said="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$TASK_SCRIPT" --run-mode "$CP_RUN_MODE" \
       create --project "$PROJECT_DIR" --name "$task_id" -- "$goal" 2>&1)" \
     || { printf '%s\n' "$said" >&2; die 3 "$who: task create refused $task_id, so nothing was written for $fid. Its own line is above."; }
+  printf '%s\n' "$said" | grep '^base: ' | sed "s/^/$task_id /" >&2
   printf '%s' "$task_id"
 }
 

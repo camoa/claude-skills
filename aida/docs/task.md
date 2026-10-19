@@ -57,9 +57,10 @@ the action computes the path here. It makes the tree there and records it. That 
 on a second machine, where the record holds the first machine's path. A tree you moved with
 `git worktree move` is found rather than made again.
 
-A new tree is cut from the commit of the folder you create the task in, when that folder is in
-the code repository. So a task created from inside another task's tree starts from that task's
-work. To plan a chain of tasks up front, name the earlier task when you create the later one:
+A new tree is cut from the trunk, the commit checked out in the code path. Created from inside
+another task's tree, it starts from that task's work only while that task is open and its branch
+is not merged into the trunk. So a follow-up finding gets its parent's unmerged work, and once the
+parent is merged it gets every later task too. The create output names the base and why. To plan a chain of tasks up front, name the earlier task when you create the later one:
 `--after <task-id>`. AIDA records the link. It cuts the later task's tree from the earlier task's
 branch, once the earlier task's build is finished. Until then the later task has no tree and
 refuses to start. `/aida:next` shows the task each one waits on.

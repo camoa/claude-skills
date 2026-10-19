@@ -89,9 +89,9 @@ slug of the code folder plus the task name, so a site name is predictable and un
 outside the code path for one reason. A nested worktree is invisible to a tool that registers
 projects by folder, and DDEV hands it to the parent project. A tree that `task.json` already
 records on disk stays where it is.
-The tree is cut from HEAD of the folder this call runs in, when that folder is in the code
-repository. So a task made from inside another task's tree starts from that task's work. From
-anywhere else the tree is cut from HEAD of the code path. With `--after`, the tree is cut from
+The tree is cut from the trunk, HEAD of the code path. Made from inside another task's tree, it
+starts from that task's work only while that task is open and its branch is not in the trunk.
+The `base:` line names the commit and the reason. Show it. With `--after`, the tree is cut from
 that task's branch, and `task.json` records `after`. Use it for a chain of tasks made up front,
 because a tree cut now from trunk holds none of the earlier builds. While that task's build is
 unfinished, no tree is made: `worktree:` reads `none` and `after-build:` reads `unfinished`. Skip

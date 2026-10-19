@@ -21,6 +21,7 @@ each yes, run:
 Several accepted findings can go in one call, with one `--create` each. The script creates each
 task through the task skill, with a goal made of the evidence and one sentence naming the finding.
 It prints `created:` with the new ids, and `existing:` when a named finding already has a task.
+Each new tree prints one `<id> base:` line with the commit it was cut from and why. Show it.
 A name collision comes back at exit 3 with the task script's own line above; relay that line.
 
 Autonomous: run `follow-ups` once with no flag. Every finding still without a task is created
