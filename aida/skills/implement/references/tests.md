@@ -369,7 +369,9 @@ agent's answer.
 Close the dispatch record as soon as it returns, per SKILL.md.
 
 **A confirmed row is the checker's, in both modes.** It becomes
-`--row <criterion id>=confirmed::model::<its note>` for the freeze below. The done-when row is keyed
+`--row <criterion id>=confirmed::model::<its note>` for the freeze below. `tests-freeze` refuses
+(exit 64) a model's confirmed row that the verdict file rejects, because no model settles the
+checker's rejection (gap row 373). The done-when row is keyed
 by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. Do not put a
 confirmed row to the person. There is one exception: an interactive run where another row of this
 order goes back to the test author. Then list this order's confirmed rows, each with the checker's

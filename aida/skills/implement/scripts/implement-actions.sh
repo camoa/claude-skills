@@ -501,7 +501,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      naming a criterion no --test claims or the doneWhen with no doneWhen test, a row naming a
 #      criterion a person verifies, or two rows naming one thing. A model's confirmed row on a
 #      record order whose done-when line has a latest checker verdict that is no confirmation
-#      refuses too (gap row 361). The message names
+#      refuses too (gap row 361). So does a model's confirmed row on any other order whose
+#      verdict file `row-check-<order>.json` rejects it (gap row 373). The message names
 #      which. A row set this script half understands would put a judgement on the wrong criterion,
 #      which nothing later could tell from a real one. On missing rows the confirmed rows given
 #      are recorded as `rowsConfirmed` first, the same way exit 65 records them (gap row 259).
@@ -5724,6 +5725,20 @@ TF_EOF
     [ -z "$tf_line_open" ] \
       || die 64 "tests-freeze: the --row says a model confirmed $unit_id's record, and the latest checker verdict on these done-when rows is no confirmation: $tf_line_open. Run dispatch-open for the row-checker, which names the rows to put to it. Nothing is written."
     tf_line_carried="$(printf '%s' "$IM_LINE_ROWS" | jq -c '(map(.at) | max) as $last | [ .[] | select(.at < $last) | .key ]')"
+  fi
+  # On any other order the verdict file decides the same way (gap row 373). Only a checker writes
+  # it, and checkAgain puts every rejected row back to the next one, so a model's confirmed --row
+  # on a row the file rejects is a model settling the checker's rejection. A carried row has no
+  # --row, so it is not read here.
+  local tf_overruled
+  if [ "$BR_ORDER_SLOT" != "done-when" ] && [ -f "$IMPL_DIR/row-check-$unit_id.json" ]; then
+    tf_overruled="$(jq -r --argjson rows "$rows_meta_json" '
+        (if (.rows | type) == "array" then .rows else [] end) as $v
+        | [ $rows[] | select(.verdict == "confirmed" and .judgedBy == "model") | .criterion as $c
+            | select(any($v[]; type == "object" and .criterion == $c and .verdict == "rejected")) | $c ]
+        | join(", ")' "$IMPL_DIR/row-check-$unit_id.json" 2>/dev/null)"
+    [ -z "$tf_overruled" ] \
+      || die 64 "tests-freeze: the --row says a model confirmed $tf_overruled, and the checker's verdict file $IMPL_DIR/row-check-$unit_id.json rejects it. No model settles the checker's rejection. Send the row back to the test author, then put it to the checker again. Nothing is written."
   fi
 
   # --- 64: the --row set and this order's tests must correspond, in all four ways ------------------
