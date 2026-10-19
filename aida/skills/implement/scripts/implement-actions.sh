@@ -4807,8 +4807,10 @@ do_tests_brief() {
   criteria_out="$(printf '%s' "$CRITERIA_JSON" | jq -c \
     '[ .[] | {id, text, verification, verifiedBy} ]')"
   # ownedFiles names the test file design chose, so the author writes there (gap row 249).
+  # provedByVerify names the criteria a verify run line proves, which take no test (gap row 370).
   unit_out="$(printf '%s' "$UNIT_JSON" | jq -c \
     '{id, title, tests: (.tests // []), doneWhen: (.doneWhen // []), criteriaOwned: (.criteriaOwned // []),
+      provedByVerify: ('"$BRV_KEEP_JQ"' | map(.criterion // empty) | unique),
       ownedFiles: (.ownedFiles // []), interface: (.interface // ""), diffBudget: (.diffBudget // "")}')"
 
   # `reuses` is the existing code design's dispose recorded on this order, with the interface the
@@ -5676,18 +5678,21 @@ TF_EOF
   # --- 29: every machine-verified criterion the unit owns needs a --test row ----------------------
   # Owns, not serves. Exactly one order owns a criterion and most own none (ideal/design.md), and
   # the owner is the order whose tests can observe it. A served criterion's proof lives with its
-  # owner, and this order's own tests are frozen against its doneWhen.
+  # owner, and this order's own tests are frozen against its doneWhen. A criterion that a run entry
+  # of the order's verify list names, and that runs, is proved by that line's tool output inside
+  # the order-tests check, so it needs no test (gap row 370).
   local owned_ids_json missing_machine
   owned_ids_json="$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaOwned // []')"
-  missing_machine="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" --argjson owned "$owned_ids_json" '
-      ($tests | map(.criteria) | add // []) as $named
+  missing_machine="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" --argjson owned "$owned_ids_json" \
+      --argjson byRun "$(printf '%s' "$UNIT_JSON" | jq -c "$BRV_KEEP_JQ | map(.criterion // empty)")" '
+      (($tests | map(.criteria) | add // []) + $byRun) as $named
       | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid
           | select(($owned | index($cid)) != null)
           | select(($named | index($cid)) == null) | $cid ]
       | join(", ")
     ')"
   [ -z "$missing_machine" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
-    || die 29 "tests-freeze: these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine"
+    || die 29 "tests-freeze: these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine. A criterion that tool output proves needs no test: design names it on a verify run line with --criterion, and a person approves that line at the design close."
 
   # --- 30: every person-verified criterion the unit serves or owns needs a --checklist row ---------
   local missing_person
@@ -7515,10 +7520,12 @@ br_test_check() {
 # entry came from a recipe this project accepts and runs. An entry that is not binding was
 # written by a model from research, and runs only when a person approved it at the design close.
 # Without that stamp it never runs, attended or not: the reviewer judges it as a check. Reads
-# BRC_UNIT_JSON.
+# BRC_UNIT_JSON. BRV_KEEP_JQ is that selection on a work order. tests-brief, tests-freeze and
+# close read it too, because a run entry that names a criterion proves it only when it runs.
 BRV_RUNS="[]"; BRV_CITES=""; BRV_SOURCES=""
+BRV_KEEP_JQ='[ (.verify // [])[] | select(has("run") and (.binding != false or has("approved"))) ]'
 br_verify_runs() {
-  local keep='[ (.verify // [])[] | select(has("run") and (.binding != false or has("approved"))) ]'
+  local keep="$BRV_KEEP_JQ"
   BRV_RUNS="$(printf '%s' "$BRC_UNIT_JSON" | jq -c "$keep | map({run, pass})")"
   BRV_SOURCES="$(printf '%s' "$BRC_UNIT_JSON" | jq -r "$keep | map(.cites) | unique | .[]")"
   BRV_CITES="$(printf '%s\n' "$BRV_SOURCES" | awk 'NF { printf "%s%s", sep, $0; sep = ", " }')"
@@ -12051,25 +12058,34 @@ do_close() {
   # model looked at the page, and completion puts the look to a person (live-run row 104).
   # A confirm order writes nothing here: its check reads deferred, never met, and the person
   # answers its criteria at review (gap row 196).
-  local slot_check slot_verdict slot_judge slot_detail
+  local slot_check slot_verdict slot_judge slot_detail slot_owned
   br_order_facts "$RV_UNIT_JSON"
   slot_check="$BR_ORDER_SLOT"
-  # An order proved by its own tests has its criteria judged by the checkpoint rows it froze.
-  [ "$slot_check" != "order-tests" ] || slot_check=""
+  slot_owned="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.criteriaOwned // []')"
+  # An order proved by its own tests has its criteria judged by the checkpoint rows it froze. A
+  # criterion one of its verify run lines names has no row: the order-tests check ran that line,
+  # so it is judged here as a gate order's lines are. A criterion a row judged keeps that row
+  # (gap row 370).
+  if [ "$slot_check" = "order-tests" ]; then
+    slot_owned="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson owned "$slot_owned" \
+      "$BRV_KEEP_JQ | map(.criterion // empty | select(. as \$c | \$owned | index(\$c) != null)) | unique")"
+    [ "$slot_owned" != "[]" ] || slot_check=""
+  fi
   if [ -n "$slot_check" ]; then
     slot_verdict="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].verdict // ""' "$last_record" 2>/dev/null)"
     slot_detail="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].detail // ""' "$last_record" 2>/dev/null)"
-    if [ "$slot_check" = "configuration-gate" ]; then
+    if [ "$slot_check" = "configuration-gate" ] || [ "$slot_check" = "order-tests" ]; then
       slot_judge="gate"
     else
       slot_judge="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].judgedBy // ""' "$last_record" 2>/dev/null)"
     fi
     if [ "$slot_verdict" = "met" ] && [ -n "$slot_judge" ]; then
       new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg unit "$unit_id" --arg judge "$slot_judge" --arg note "$slot_detail" \
-        --argjson owned "$(printf '%s' "$RV_UNIT_JSON" | jq -c '.criteriaOwned // []')" \
+        --argjson owned "$slot_owned" --arg slot "$slot_check" \
         --argjson kinds "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id ]')" '
         .criteria = ((.criteria // []) | map(
           if ((.id as $i | $owned | index($i)) != null) and ((.id as $i | $kinds | index($i)) != null)
+             and ($slot != "order-tests" or (((.judgements // []) | map(.unit) | index($unit)) == null))
           then . + {judgements: ((((.judgements // []) | map(select(.unit != $unit))))
                                  + [{unit: $unit, verdict: "confirmed", judgedBy: $judge, note: $note}])}
           else . end))')"
@@ -12086,7 +12102,8 @@ do_close() {
   # it froze against its own doneWhen instead (live-run row 59). Two clauses are defensive, and
   # neither is reachable through the actions. The rejection cannot arrive, because `tests-freeze`
   # refuses a rejected row outright. An owner closed without leaving a judgement cannot arrive
-  # either, because the freeze asks a test and a row of every owned machine criterion and an order
+  # either, because the freeze asks a test and a row, or a verify run line judged above, of every
+  # owned machine criterion, and an order
   # reaches `close` only through the freeze. Both are derived rather than assumed: a state nothing
   # can produce today is still a state to read correctly, and a hand-edited ledger can produce
   # either. A criterion a person verifies is left where it is, at not-judged. It carries a

@@ -627,7 +627,7 @@ Pass `--not-binding` when research said the source is not one this project accep
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
   --id <woId> --run "<one command>" [--pass "<exit 0 | stdout empty | stdout contains <text>>"] \
-  [--kind <config-assert|live-site|self-fixture>] --cite "<the source research recorded>"
+  [--kind <config-assert|live-site|self-fixture>] [--criterion <cN>] --cite "<the source research recorded>"
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
   --id <woId> --check "<one sentence to judge>" [--kind <config-assert|live-site|self-fixture>] \
   --cite "<the source research recorded>"
@@ -637,6 +637,10 @@ source that describes a result in words gives a `--check`. Such an entry is neve
 Give `--kind live-site` when the check needs a served site; the source says so or it does not.
 A research `--run` never runs until a person approves it at the close. Without that, the
 reviewer judges it as a check.
+Give `--criterion` when the command's output alone proves a machine criterion the order owns.
+Examples are a linter run or a check of which paths the diff touched. A `tests` order then owes
+no test for that criterion, and the order-tests check confirms it once the line runs and passes.
+So the criterion stays on the `tests` order and needs no `record` order of its own.
 `--clear` empties the list, and `--recipe` replaces it.
 
 A run line is argv, never a shell, so the script refuses a shell character. It also refuses a

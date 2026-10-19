@@ -336,6 +336,11 @@
                 }
               },
               "description": "Present only on an entry that is not binding, once a person approved the command at the design close: `design-actions.sh close --approve-runs`, attended alone, stamps it before the hash. A model wrote such a command from research, so without this stamp it never runs. The build hands it to the reviewer as a check instead."
+            },
+            "criterion": {
+              "type": "string",
+              "pattern": "^c[1-9][0-9]*$",
+              "description": "A machine-verified criterion this order owns that the line's tool output proves, written by `verify --run --criterion` (gap row 370). On a `tests` order, `tests-freeze` then asks no test for it, once the line runs. `close` confirms it, judged by `gate`, when the order-tests check was met. Absent on a line that proves no criterion of its own."
             }
           }
         },

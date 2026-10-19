@@ -77,7 +77,8 @@ An interface record is prose a builder wrote about its own code. It is not the c
 only thing you get that came from one.
 
 For each machine-verified criterion this order owns, write at least one test. The brief names
-them in `criteriaOwned`. A criterion the order serves but does not own is proved by its owner. The
+them in `criteriaOwned`. A criterion also in `provedByVerify` is proved by a verify line the
+build runs, so write no test for it. A criterion the order serves but does not own is proved by its owner. The
 thing it observes is built by a later order, so do not name it on a test that cannot observe it.
 Write this order's own tests against its `doneWhen` instead. For each criterion verified by a
 person, write a checklist line, copying its verification sentence whole. A base class or a fixture

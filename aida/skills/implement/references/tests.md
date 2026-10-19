@@ -493,7 +493,9 @@ from here, not back.
 
 The script checks the file exists, sits inside the code repository, and matches the framework's
 own declared pattern. It checks every machine-verified criterion this order owns has
-a test (a `gate` or `record` order excepted), and every criterion a person verifies has a checklist line. A criterion this order only
+a test (a `gate` or `record` order excepted), and every criterion a person verifies has a checklist line.
+A criterion that a verify run line of the order names, and that runs, needs no test. `close`
+confirms it from the order-tests check, judged by `gate`. A criterion this order only
 serves needs no test from it, because its proof lives with its owner (exit 29 reads the owned
 list). A person-verified criterion is different: each order that serves it needs its checklist
 line, owned or not (exit 30). A test that names neither a criterion this order serves or owns nor

@@ -54,7 +54,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh remove         <task_folder> --id <woId> --reason <text> [--merged-into <woId>]
 #   design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
 #   design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
-#   design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] --cite <source>
+#   design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] [--criterion <cN>] --cite <source>
 #   design-actions.sh verify         <task_folder> --id <woId> --check <text> [--kind <kind>] --cite <source>
 #   design-actions.sh verify         <task_folder> --id <woId> --clear
 #   design-actions.sh render     <task_folder> --id <woId>
@@ -305,7 +305,7 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh remove         <task_folder> --id <woId> --reason <text> [--merged-into <woId>]
        design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
        design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
-       design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] --cite <source>
+       design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] [--criterion <cN>] --cite <source>
        design-actions.sh verify         <task_folder> --id <woId> --check <text> [--kind <kind>] --cite <source>
        design-actions.sh verify         <task_folder> --id <woId> --clear
        design-actions.sh render         <task_folder> --id <woId>
@@ -1510,10 +1510,11 @@ verify_flush_entry() {
 }
 
 do_verify() {
-  local id="" recipe="" run="" check="" cite="" pass="" kind="" binding=true clear=false modes=0
+  local id="" recipe="" run="" check="" cite="" pass="" kind="" criterion="" binding=true clear=false modes=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)     need_value "verify" "--id" "$#" "${2:-}"; id="$2"; shift 2 ;;
+      --criterion) need_value "verify" "--criterion" "$#" "${2:-}"; criterion="$2"; shift 2 ;;
       --recipe) need_value "verify" "--recipe" "$#" "${2:-}"; recipe="$2"; modes=$((modes + 1)); shift 2 ;;
       --run)    need_value "verify" "--run" "$#" "${2:-}"; run="$2"; modes=$((modes + 1)); shift 2 ;;
       --check)  need_value "verify" "--check" "$#" "${2:-}"; check="$2"; modes=$((modes + 1)); shift 2 ;;
@@ -1528,6 +1529,7 @@ do_verify() {
   require_wo_id_arg "verify" "$id"
   [ "$modes" -eq 1 ] || die3 "verify: pass exactly one of --recipe, --run, --check or --clear"
   [ -z "$pass" ] || [ -n "$run" ] || die3 "verify: --pass belongs to --run"
+  [ -z "$criterion" ] || [ -n "$run" ] || die3 "verify: --criterion belongs to --run. Only a command's output proves a criterion with no test"
   [ -z "$kind" ] || [ -n "$run$check" ] || die3 "verify: --kind belongs to --run and --check. A recipe's entries carry their own"
   verify_kind_ok "verify" "$kind"
   [ "$binding" = "true" ] || [ -n "$recipe" ] || die3 "verify: --not-binding belongs to --recipe. A research line is never binding"
@@ -1589,6 +1591,15 @@ do_verify() {
       verify_pass_ok "verify" "$pass"
       refuse_if_unsafe "design-actions" "--run" "$run" || die3 "verify: the run line above is refused"
       entry="$(jq -nc --arg r "$run" --arg p "$pass" --arg c "$cite" '{run: $r, pass: $p, cites: $c, binding: false}')"
+      if [ -n "$criterion" ]; then
+        # The freeze reads the link only on a machine criterion this order owns, so the writer
+        # refuses any other rather than leave a link nothing reads.
+        [ "$(jq -r --argjson wo "$doc" --arg c "$criterion" '
+            ([ (.criteria // [])[]? | select(type == "object") | select(.verifiedBy == "machine") | .id ] | index($c) != null)
+            and (($wo.criteriaOwned // []) | index($c) != null)' "$ALIGNMENT_FILE" 2>/dev/null)" = "true" ] \
+          || die3 "verify: $criterion is not a machine-verified criterion $id owns. --criterion names one, and update --criteria-owned comes first"
+        entry="$(printf '%s' "$entry" | jq -c --arg k "$criterion" '. + {criterion: $k}')"
+      fi
     else
       entry="$(jq -nc --arg k "$check" --arg c "$cite" '{check: $k, cites: $c, binding: false}')"
     fi
