@@ -204,10 +204,11 @@ is renamed beside its original path, dated, and a fresh distiller runs with the 
 second malformed record stops for you. A reader's answer older than the last change to the
 record is stale. The close says so, shows none of its old gaps, and asks for the reader again.
 
-**A task with no automated tests.** When the contract says the task has none, the search in
-your own code also asks whether a test runner covers the changed code. When one does, research
-names it before design and asks once: keep "no automated tests", or change it to yes. An
-unattended run keeps the answer and names the runner for you to see later.
+**A task with no automated tests.** When the contract says the task has none, research runs the
+checks the framework's test recipe declares, in the task's worktree. When they all pass and the
+recipe has a suite command, research names it before design and asks once: keep "no automated
+tests", or change it to yes. An unattended run keeps the answer and names the command for you to
+see later. A light run changes the answer to yes itself.
 
 ## What research shows at the close
 

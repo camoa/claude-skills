@@ -1050,7 +1050,7 @@ do_set_run_mode() {
         || { [ "$value" = "light" ] && [ "$(automated_tests "$task_dir")" != "yes" ]; }; }; then
       # No design yet: with no automated tests each code order's proof will be a person's answer.
       # Light's scope writes that answer itself, so a light contract not yet asked reads no too.
-      echo "sign-off: the run ends at review. Each code order's proof is a person's answer, so a person closes this task. When research finds a test runner that covers the changed code, it changes the answer to yes, and the code orders take tests."
+      echo "sign-off: the run ends at review. Each code order's proof is a person's answer, so a person closes this task. When the test recipe's own checks find a runner, research changes the answer to yes, and the code orders take tests."
     fi
     if [ -f "$task_dir/implementation/preconditions.json" ]; then
       absent_tools="$(jq -r "$PC_END_ABSENT_JQ"' endAbsentTools | join(", ")' \

@@ -226,10 +226,6 @@ Typical search subjects, named by what they read, not by a fixed roster:
   check refuses (exit 6) while it exists, so nothing throwaway ships. Carry the idea forward,
   never the code: design authors it fresh.
 
-When `automated-tests:` reads `no`, the search inside this project asks one more thing. Is there a
-test runner that covers the changed code? Name it in the searcher's words, with its
-configuration file as the source. Serve the finding to the criteria the changed code serves.
-
 How many searches run is set by what these criteria actually need. A task with three criteria
 that all rest on the same library may need one search, not three. The search inside this project
 is the exception: run it on every task that changes code.
@@ -411,24 +407,30 @@ to what can be checked.
 ## Check the automated tests answer
 
 Do this before the coverage check, so its commit carries any change. It applies only when
-`automated-tests:` reads `no` and a finding names a test runner that covers the changed code.
-Interactive: say the runner and its source in one line. Ask one question: keep "no automated
-tests", or change it to yes. On a change, run:
+`automated-tests:` reads `no`. For each of the project's frameworks, dispatch `catalog-identifier`
+with `point: test-execution`, that framework, and the project folder. Then run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh runner "<task_folder>" \
+  --recipe <framework>=<path>
+```
+Give `--lookup-failed <framework>=<reason>` in place of `--recipe` when the lookup answered no
+path. The script runs the recipe's own conditions in the worktree and reads its suite row. It
+writes the record and prints `test-runner:`. Only `met` says this project can run tests. Any other
+word keeps the answer no, so stop here.
+
+Interactive: say the suite command from the record in one line. Ask one question: keep "no
+automated tests", or change it to yes. On a change, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   set-tests "<task_folder>" --automated yes
 ```
-Autonomous, not light: keep the answer, and say the runner in one line. A person decides at the
-next window.
+Autonomous, not light: keep the answer, and say the suite command in one line. A person decides
+at the next window.
 
-Light: change the answer to yes, and say the runner in one line. A light run meets no person
-before review, so a kept no would send every criterion to a person by hand. Run:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
-  set-tests "<task_folder>" --automated yes
-```
-It records the decision and takes the skipped tests out of the compromises log. The code orders
-then take tests, and the build writes them.
+Light: `runner` changed the answer to yes itself and printed `automated-tests: yes`. A light run
+meets no person before review, so a kept no would send every criterion to a person by hand. The
+change records the decision and takes the skipped tests out of the compromises log. The code
+orders then take tests, and the build writes them.
 
 ## Run the coverage check
 

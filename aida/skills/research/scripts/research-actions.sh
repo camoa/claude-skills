@@ -27,9 +27,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                          [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
 #   research-actions.sh serve  <task_folder> --finding <search>#<n> --criteria-served <id[,id...]>
 #   research-actions.sh drop   <task_folder> --finding <search>#<n>
+#   research-actions.sh runner <task_folder> \
+#                          (--recipe <framework>=<path> | --lookup-failed <framework>=<reason>)...
 #   research-actions.sh check  <task_folder>
 #   research-actions.sh distill <task_folder>
 #   research-actions.sh split-read <task_folder>
+#
+# `runner` runs each test-execution recipe's `## Preconditions` checks in the task's worktree, and
+# reads its `## Test commands` suite row. It writes records/test-runner.json (TEST_RUNNER_RECORD).
+# A light task whose answer is no and whose check reads met takes yes through scope's set-tests.
 #
 # Depends on, shipped by the same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/research-render.sh   called by `record`, `serve` and `drop`, unmodified
@@ -156,6 +162,8 @@ die1() { printf 'research-actions: %s\n' "$1" >&2; exit 1; }
 die2() { printf 'research-actions: %s\n' "$1" >&2; exit 2; }
 die3() { printf 'research-actions: %s\n' "$1" >&2; exit 3; }
 die4() { printf 'research-actions: %s\n' "$1" >&2; exit 4; }
+# The refusal recipes.sh calls. `runner` reaches only its exit 3 paths.
+die() { printf 'research-actions: %s\n' "$2" >&2; exit "$1"; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { printf 'research-actions: %s\n' "$1" >&2; exit 79; }
 
@@ -169,6 +177,8 @@ usage: research-actions.sh read   <task_folder>
                                    [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
        research-actions.sh serve  <task_folder> --finding <search>#<n> --criteria-served <id[,id...]>
        research-actions.sh drop   <task_folder> --finding <search>#<n>
+       research-actions.sh runner <task_folder> \
+                                   (--recipe <framework>=<path> | --lookup-failed <framework>=<reason>)...
        research-actions.sh check  <task_folder>
        research-actions.sh distill <task_folder>
        research-actions.sh split-read <task_folder>
@@ -626,6 +636,91 @@ do_drop() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# runner: whether this project can run tests at all, from the test-execution recipe, before design
+# chooses each order's proof (gap row 366). The searcher's prose named a runner, and nothing read
+# it. The recipe's own conditions decide here instead, run the way implementation's preconditions
+# step runs them. Whether the runner covers the changed code is not asked: the build's tests are
+# new files, and the suite row runs the whole project's tests.
+# ------------------------------------------------------------------------------------------------
+
+do_runner() {
+  local recipes="" failures="" fw rpath reason state verdict worst="" entries suite out record frameworks_json='[]'
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --recipe|--lookup-failed)
+        [ $# -ge 2 ] || die3 "runner: $1 needs a value"
+        if [ "$1" = "--recipe" ]; then
+          cr_recipe_pair runner --recipe "$2"; recipes="$recipes$CR_PAIR"$'\n'
+        else
+          cr_lookup_failure_pair runner --lookup-failed "$2"; failures="$failures$CR_PAIR"$'\n'
+        fi
+        shift 2 ;;
+      *) die3 "runner: unrecognized argument: $1" ;;
+    esac
+  done
+  local project_folder worktree
+  project_folder="$(resolve_project_folder "$TASK_PATH")" \
+    || die3 "runner: no project.json two levels up from $TASK_PATH"
+  worktree="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  [ -n "$worktree" ] && [ -d "$worktree" ] || die3 "runner: task.json records no worktree on disk"
+  out="$(mktemp)" || die3 "runner: could not create a temporary file"
+
+  echo "action: runner"
+  while IFS= read -r fw; do
+    [ -n "$fw" ] || continue
+    rpath="$(printf '%s' "$recipes" | awk -F '\t' -v f="$fw" '$1 == f { print $2; exit }')"
+    reason="$(printf '%s' "$failures" | awk -F '\t' -v f="$fw" '$1 == f { print $2; exit }')"
+    entries='[]'; suite='null'
+    if [ -n "$rpath" ]; then
+      : >"$out"
+      state="$(pc_parse_recipe "$rpath" "$out" "$worktree")" || exit $?
+      case "$state" in
+        undeclared) verdict="undeclared" ;;
+        unparseable) verdict="unknown" ;;
+        *) entries="$(jq -sc '.' "$out")"; verdict="met"
+           while IFS= read -r state; do verdict="$(pc_worse "$verdict" "$state")"; done \
+             < <(printf '%s' "$entries" | jq -r '.[].verdict') ;;
+      esac
+      : >"$out"
+      tc_parse_recipe "$rpath" "$out"
+      suite="$(jq -sc 'map(select(.id == "suite" and has("argv")))[0].argv' "$out")"
+      [ "$suite" != "null" ] || verdict="$(pc_worse "$verdict" undeclared)"
+    elif [ -n "$reason" ]; then
+      verdict="unknown"; [ "$reason" = "no-recipe" ] && verdict="undeclared"
+    else
+      rm -f "$out"
+      die3 "runner: the project records the framework $fw, and neither --recipe nor --lookup-failed names it"
+    fi
+    worst="$(pc_worse "${worst:-met}" "$verdict")"
+    echo "framework: $fw $verdict ${rpath:-$reason}"
+    printf '%s' "$entries" | jq -r --arg fw "$fw" '.[] | select(.verdict != "met")
+      | "condition: \($fw) \(.id) \(.verdict)" + (if .firstLine then ": " + .firstLine else "" end)'
+    frameworks_json="$(printf '%s' "$frameworks_json" | jq -c --arg fw "$fw" --arg v "$verdict" \
+      --arg p "$rpath" --arg r "$reason" --argjson e "$entries" --argjson s "$suite" '. + [{framework: $fw,
+        verdict: $v, conditions: $e, suite: $s} + (if $p == "" then {lookup: $r} else {recipePath: $p} end)]')"
+  done < <(jq -r '.frameworks // [] | .[]' "$project_folder/project.json" 2>/dev/null)
+  rm -f "$out"
+  [ -n "$worst" ] || die3 "runner: $project_folder/project.json records no frameworks"
+
+  record="$TASK_PATH/$TEST_RUNNER_RECORD"
+  mkdir -p "$TASK_PATH/records" || die3 "runner: could not create $TASK_PATH/records"
+  write_atomic "$record" "$(jq -n --arg d "$(date -u +%Y-%m-%d)" --arg w "$worktree" --arg v "$worst" \
+    --argjson f "$frameworks_json" '{schemaVersion: 1, takenAt: $d, worktree: $w, verdict: $v, frameworks: $f}')"
+  echo "test-runner: $worst"
+  echo "record: $record"
+  # A light run meets no person before review, so the record answers for it. Other modes ask.
+  if [ "$worst" = "met" ] && task_is_light "$TASK_PATH" && [ "$(automated_tests "$TASK_PATH")" = "no" ]; then
+    bash "$PLUGIN_ROOT/skills/scope/scripts/scope-actions.sh" --run-mode autonomous \
+      set-tests "$TASK_PATH" --automated yes >/dev/null \
+      || die3 "runner: scope-actions.sh set-tests could not record yes"
+    echo "automated-tests: yes, set by this check"
+  else
+    echo "automated-tests: $(automated_tests "$TASK_PATH")"
+  fi
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # check: calls check-research.sh and remaps its exit code onto this script's own vocabulary, so
 # exit 1 keeps one meaning across every action here (see the exit-code table above).
 # ------------------------------------------------------------------------------------------------
@@ -788,6 +883,7 @@ case "$ACTION" in
   record)  do_record  "$@" ;;
   serve)   do_serve   "$@" ;;
   drop)    do_drop    "$@" ;;
+  runner)  do_runner  "$@" ;;
   check)   do_check   "$@" ;;
   distill) do_distill "$@" ;;
   split-read) do_split_read "$@" ;;

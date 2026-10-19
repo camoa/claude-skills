@@ -213,9 +213,9 @@ task. With nobody present, review records each of those criteria as unanswered, 
 halts. The task then waits for you. Answer the rows when you run review again, or close the task
 with a reason. `set-run-mode` says this in its `sign-off:` line.
 The path script does not stand in for your answer. Its lines are written by the build it judges,
-and no record says which criteria it proves. When research finds a test runner that covers the
-changed code, it changes the answer to yes. The code orders then take tests, and the build writes
-and freezes them as on any task. The scope row leaves the compromises log. What light skips:
+and no record says which criteria it proves. When the test recipe's own checks find a runner in
+the worktree, research changes the answer to yes. The code orders then take tests, and the build
+writes and freezes them as on any task. The scope row leaves the compromises log. What light skips:
 
 - **Research** searches this project and the catalog, and runs no outward search on the web.
 - **Design** runs no critique. The first work order, `wo1`, is the walking skeleton: a tiny

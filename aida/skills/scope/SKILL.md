@@ -272,7 +272,7 @@ later, and the person may change it there.
 decision itself, so do not run `record-decision` for it.
 
 **Light:** do not ask, and do not run `set-tests`. `init` wrote no on a light task and logged the
-skip. Research changes it to yes when it finds a test runner that covers the changed code.
+skip. Research changes it to yes when the test recipe's own checks find a runner.
 
 ## Tests and checks
 

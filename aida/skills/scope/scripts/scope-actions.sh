@@ -109,8 +109,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      match either id format, or that is already present when `add` tries to mint it; a given
 #      --verified-by that is not machine or person; a given --author that add does not recognise,
 #      or that update is asked to set to anything but owner; `approve` under --run-mode
-#      autonomous; a given --automated that is not yes or no; a missing
-#      or unusable nextCriterionId or nextNonGoalId; a name in --field record-decision does not know;
+#      autonomous; a given --automated that is not yes or no, or yes on a light task whose
+#      runner check in records/test-runner.json does not read met; a missing or unusable nextCriterionId or nextNonGoalId; a name in --field record-decision does not know;
 #      `retire` under --run-mode autonomous, or on an entry already superseded or retired; the
 #      plugin root could not be resolved; or a write that failed.
 #   4  a script this action calls ran and failed. `render`, and every action that writes
@@ -434,6 +434,10 @@ do_set_tests() {
   esac
 
   require_alignment_exists "set-tests"
+  # A light task meets no person before review, so its yes rests on research's runner check.
+  [ "$value" = "false" ] || ! task_is_light "$TASK_PATH" \
+    || [ "$(jq -r '.verdict' "$TASK_PATH/$TEST_RUNNER_RECORD" 2>/dev/null)" = "met" ] \
+    || die3 "set-tests: a light task takes yes only when research's runner check reads met in $TASK_PATH/$TEST_RUNNER_RECORD. Run research-actions.sh runner"
 
   local updated
   updated="$(jq --argjson v "$value" '.automatedTests = $v' "$ALIGNMENT_FILE")" \

@@ -107,6 +107,11 @@
 #   recipe_files_take_out <tree> <saved> <written> <replaced> <dirs>  puts back, removes and
 #                                             removes the empty folders; prints what it did
 #   recipe_commit_if_changed <tree> <who> <nothing> <message> [<paths>]  commits the tree, or the paths; prints committed:
+#   pc_check_is_unsafe <check>               true when a condition's check carries a shell metacharacter
+#   pc_run_check <check> <dir> <out>         runs one check as arguments; prints its exit status
+#   pc_flush_entry <out> <dir>               runs the held condition and appends its JSON object
+#   pc_parse_recipe <recipe> <out> <dir>     runs every ## Preconditions check; prints the section state
+#   pc_rank <verdict>, pc_worse <a> <b>      the worse of two condition verdicts
 #
 # What this library takes from its caller, and never defines itself:
 #
@@ -275,7 +280,7 @@ recipe_block_into() {
   printf 'ok'
 }
 
-# The entry being read, held between lines, the same reason PC_* is held between lines above.
+# The entry being read, held between lines, the same reason PC_* is held between lines below.
 TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""; TC_WARNING_LINE=""
 
 # Appends one JSON object to $1 for the held row and clears it, so a second call with nothing held
@@ -406,7 +411,7 @@ tc_parse_recipe() {
 # instead, and the caller hands over the recipe path rather than the command.
 # ------------------------------------------------------------------------------------------------
 
-# The entry being read, held between lines, the same way PC_* and TC_* are held above.
+# The entry being read, held between lines, the same way TC_* is held above and PC_* below.
 CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""; CC_SILENT_TEXT=""
 
 # Appends one JSON object to $1 for the held row and clears it. `argv` and `extensions` are read as
@@ -2189,4 +2194,163 @@ rv_read_findings_array() {
   done
   # shellcheck disable=SC2034 # read by the sourcing script
   RV_FINDINGS_ARRAY="$arr"
+}
+
+# ------------------------------------------------------------------------------------------------
+# `## Preconditions`: the conditions a test-execution recipe declares, run from inside a tree.
+# Moved unchanged from implement-actions.sh, because research runs them too (gap row 366).
+# ------------------------------------------------------------------------------------------------
+
+# True when a check value would mean something other than what its author read. A recipe body is
+# data written elsewhere, and nothing here reaches a shell: the value is split on whitespace and
+# run as arguments. A value carrying a shell metacharacter is refused by name rather than run with
+# that character passed through as a literal, because either reading surprises whoever wrote it.
+pc_check_is_unsafe() {
+  case "$1" in
+    *[\;\|\&\$\`\<\>\(\)\{\}\*\?\[\]\~\!\\\"\']*) return 0 ;;
+  esac
+  return 1
+}
+
+# Runs one check as arguments from inside $2, and prints only its exit status. Globbing is off for
+# the split, so a `*` that survived the refusal above could not expand against the working
+# directory anyway. Standard input is empty. The caller reads the framework names from a pipe.
+# A command that reads its input would swallow the frameworks still to come (live-run row 137).
+pc_run_check() {
+  local value="$1" dir="$2" outfile="$3"
+  (
+    cd "$dir" || exit 127
+    # zsh does not split an unquoted expansion on whitespace the way bash and every other
+    # POSIX-family shell do (foundations.md, Honesty: this script runs under both). Scoped to
+    # this subshell only, so it never changes how the rest of the script's own expansions behave.
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      setopt SH_WORD_SPLIT 2>/dev/null
+    fi
+    set -f
+    # shellcheck disable=SC2086
+    set -- $value
+    set +f
+    # An `exec` with no operands returns 0 without replacing the shell, so a check whose command
+    # came out empty would read as a condition that passed. Exit 126 instead.
+    [ "$#" -gt 0 ] || exit 126
+    exec "$@"
+  ) >"$outfile" 2>/dev/null </dev/null
+  printf '%s' "$?"
+}
+
+# The entry being read, held between lines. Bash 3.2 has no nameref, so the parse loop and its
+# flush share these rather than passing a record around.
+PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""; PC_ANY=0
+
+# Runs the held entry's check and appends one JSON object to $1. Clears the entry afterwards, so a
+# second call with nothing held writes nothing.
+pc_flush_entry() {
+  local out="$1" codepath="$2"
+  local verdict reason rc exitjson first
+  [ -n "$PC_ID" ] || return 0
+  PC_ANY=1
+  verdict=""; reason=""; exitjson="null"; first=""
+  if [ -z "$PC_WHAT" ]; then
+    verdict="unknown"; reason="entry-unparseable"
+  elif [ -z "$PC_CHECK" ]; then
+    verdict="unknown"; reason="no-check-declared"
+  elif pc_check_is_unsafe "$PC_CHECK"; then
+    verdict="unknown"; reason="unsafe-check-shape"
+  else
+    rc="$(pc_run_check "$PC_CHECK" "$codepath" "$out.stdout")"
+    exitjson="$rc"
+    case "$rc" in
+      0)   verdict="met" ;;
+      127) verdict="unknown"; reason="check-command-not-found" ;;
+      *)   verdict="unmet" ;;
+    esac
+    # The exit status is read first and keeps every meaning it has. Only on a zero exit does an
+    # expected string decide, and it decides one way: the string is in what the command wrote, or
+    # the condition answered no. A substring test and nothing more, for the same reason the command
+    # never reaches a shell. An unmet carrying exit code 0 and an expected string is this test
+    # deciding, which is why it needs no reason of its own.
+    if [ "$verdict" = "met" ] && [ -n "$PC_EXPECT" ]; then
+      if ! pc_output_holds "$out.stdout" "$PC_EXPECT"; then
+        verdict="unmet"
+      fi
+    fi
+    [ "$verdict" = "met" ] || first="$(grep -m1 '[^[:space:]]' "$out.stdout" 2>/dev/null)"
+    rm -f "$out.stdout"
+  fi
+  jq -n --arg id "$PC_ID" --arg what "$PC_WHAT" --arg owner "$PC_OWNER" --arg check "$PC_CHECK" \
+        --arg expect "$PC_EXPECT" --arg first "$first" \
+        --arg verdict "$verdict" --arg reason "$reason" --argjson exitCode "$exitjson" '
+    {id: $id, what: (if $what == "" then $id else $what end), verdict: $verdict}
+    + (if $check    == ""   then {} else {check: ([$check | splits("[ \t]+")] | map(select(length > 0)))} end)
+    + (if $expect   == ""   then {} else {expect: $expect} end)
+    + (if $owner    == ""   then {} else {owner: $owner} end)
+    + (if $reason   == ""   then {} else {reason: $reason} end)
+    + (if $exitCode == null then {} else {exitCode: $exitCode} end)
+    + (if $first    == ""   then {} else {firstLine: $first} end)
+  ' >>"$out" || die 3 "preconditions: could not record the entry $PC_ID"
+  PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""
+}
+
+# Reads the `## Preconditions` section of the recipe at $1, runs each check from inside $3, and
+# appends one JSON object per entry to $2. Prints the section's own state: `undeclared` when the
+# heading is absent, `unparseable` when the heading is there with nothing readable under it, or
+# `ok`.
+pc_parse_recipe() {
+  local recipe_file="$1" out="$2" codepath="$3"
+  local section_file block_file line trimmed
+
+  section_file="$out.section"
+  sed -n '/^##[[:space:]]*Preconditions[[:space:]]*$/,/^##[[:space:]]/p' "$recipe_file" >"$section_file" 2>/dev/null
+  if [ ! -s "$section_file" ]; then
+    rm -f "$section_file"
+    printf 'undeclared'
+    return 0
+  fi
+
+  # The key's presence and the entries under it are two facts. A recipe that wrote the key and put
+  # nothing in it has declared there are none. A recipe with no key at all may have misspelled it,
+  # and nobody can tell that from a recipe that meant to declare nothing, so it is unknown. That
+  # difference is the only thing standing between a misspelled `check:` and a run that reads clean
+  # while checking less than its author wrote.
+  if ! grep -q '^preconditions:' "$section_file"; then
+    rm -f "$section_file"
+    printf 'unparseable'
+    return 0
+  fi
+
+  block_file="$out.block"
+  sed -n '/^preconditions:/,$p' "$section_file" | sed '1d' >"$block_file"
+  rm -f "$section_file"
+
+  PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""; PC_ANY=0
+  while IFS= read -r line; do
+    case "$line" in
+      '##'*) break ;;
+    esac
+    trimmed="$(pc_trim "$line")"
+    [ -n "$trimmed" ] || continue
+    case "$trimmed" in
+      '- id:'*)   pc_flush_entry "$out" "$codepath"; PC_ID="$(pc_trim "${trimmed#- id:}")" ;;
+      'what:'*)   PC_WHAT="$(pc_trim "${trimmed#what:}")" ;;
+      'check:'*)  PC_CHECK="$(pc_trim "${trimmed#check:}")" ;;
+      'owner:'*)  PC_OWNER="$(pc_trim "${trimmed#owner:}")" ;;
+      'expect:'*) PC_EXPECT="$(pc_unquote "$(pc_trim "${trimmed#expect:}")")" ;;
+    esac
+  done <"$block_file"
+  pc_flush_entry "$out" "$codepath"
+  rm -f "$block_file"
+
+  if [ "$PC_ANY" = "1" ]; then printf 'ok'; else printf 'declared-empty'; fi
+}
+
+# The worse of two verdicts, best to worst: met, undeclared, unknown, unmet. A recipe that declared
+# nothing is a smaller hole than a check that could not answer, and a check that answered no is the
+# only one of the four that names something a person can fix.
+pc_rank() {
+  case "$1" in
+    met) printf '0' ;; undeclared) printf '1' ;; unknown) printf '2' ;; *) printf '3' ;;
+  esac
+}
+pc_worse() {
+  if [ "$(pc_rank "$1")" -ge "$(pc_rank "$2")" ]; then printf '%s' "$1"; else printf '%s' "$2"; fi
 }

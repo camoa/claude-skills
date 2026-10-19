@@ -634,6 +634,10 @@ automated_tests() {
   printf '%s' "$answer"
 }
 
+# Research's runner check, under the task folder (gap row 366). Research `runner` writes it, and
+# scope `set-tests` reads it before a light task takes yes.
+TEST_RUNNER_RECORD="records/test-runner.json"
+
 # The orders implementation has started, as a JSON array of ids. Started means a ledger step
 # reached or an attempt spent, a frozen test record, or a build record. Design's `remove` and
 # implementation's `start` both read it. $1 the canonical task folder.
