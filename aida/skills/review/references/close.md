@@ -46,8 +46,9 @@ person's word. A medium or high finding that cites no criterion still fails its 
 the person to rule it `wrong` or `deferred`. A lens check whose medium and high findings are all ruled
 then waits for the person, the way a lens check with low findings only does.
 
-The person answers met or unmet per criterion, from its rows. Their answer becomes one flag
-below. Autonomous, there is
+The person answers met or unmet per criterion, from its rows. When a criterion's verify clause
+names a command, run it once the person says the step before it is done. Show its output with
+the question. Their answer becomes one flag below. Autonomous, there is
 nobody to ask: each such criterion reads unanswered, and the task gets no sign off. A run with
 nobody present cannot sign off a task carrying one person verified criterion. `close` names each
 one and its route. When the person answers, `close` runs again at the same commit with the rows.
