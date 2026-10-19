@@ -345,12 +345,14 @@ run_check() {
 # with a note. A folder that is not a repository, or an own file the commit missed, keeps exit 6.
 # $1 the project folder, then the files the action wrote, relative to it.
 check_after_write() {
-  local project_path="$1" rc
+  local project_path="$1" rc own
   shift
   run_check "$project_path"; rc=$?
   [ "$rc" -eq 6 ] || return "$rc"
   git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1 || return 6
-  [ -z "$(git -C "$project_path" status --porcelain -- "$@" 2>/dev/null)" ] || return 6
+  # A git status that fails says nothing about the own files, so it keeps exit 6.
+  own="$(git -C "$project_path" status --porcelain -- "$@")" || return 6
+  [ -z "$own" ] || return 6
   echo "NOTE: this action committed its own change. The uncommitted work listed above is not its own, and it was left as it is."
   return 0
 }
@@ -1283,8 +1285,8 @@ do_task_rule() {
       "project" "task-rule" project.json \
       || printf 'project-actions: the task-rule field was written but not committed.\n' >&2
     echo "DECLINED: the task rule was offered for ${project_name} and will not be offered again."
-    run_check "$project_path"
-    return 0
+    check_after_write "$project_path" project.json
+    return
   fi
 
   # ideal/project.md, "Starting a new project": everything opted into can be set at any time, but
