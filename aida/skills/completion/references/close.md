@@ -39,6 +39,10 @@ review, in one sentence, and pass it as `--reason`. Say the verdict you read, in
 review that failed, one that ran and did not close, or none at all. Autonomous: do not run
 `close`. Say the verdict and that a person closes this task with a reason, and stop.
 
+When `read` prints `personRoute`, a criterion waits for a person's met or unmet in review. In
+both modes, give the person that line first. Their answer in review can pass the review, and then
+no reason is needed.
+
 ## Put each observed criterion to the person
 
 `read` printed one `observed(<criterion>)` line per criterion a model judged through a browser.

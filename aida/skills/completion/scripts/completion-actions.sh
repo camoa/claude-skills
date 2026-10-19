@@ -177,7 +177,7 @@ cp_paths() {
 CP_TASK_DOC=""; CP_TASK_ID=""; CP_STATE=""; CP_RUN_MODE="interactive"
 CP_ALIGNMENT_STATE=""; CP_FINISHED_STATE=""; CP_REVIEW_STATE=""; CP_RECORD_STATE=""
 CP_ALIGNMENT_DOC="null"; CP_FINISHED_DOC="null"; CP_REVIEW_DOC="null"
-CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=""; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"; CP_OBSERVED="[]"
+CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=""; CP_PERSON_ROUTE=""; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"; CP_OBSERVED="[]"
 
 # Reads one record as JSON text into the named variable, or dies when it is present and
 # unreadable. Missing is a real state every action reports in words, never a refusal. $1 the
@@ -306,6 +306,13 @@ cp_load() {
   # A review of an earlier build is no review of this one (gap row 335).
   CP_REVIEW_WHY="$(task_review_outdated "$TASK_PATH")" \
     && { CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=" ($CP_REVIEW_WHY, so run the review stage again)"; }
+  # A criterion only a person answers, such as one checked after a gated push, waits for that
+  # answer in review, not for a reason here (gap row 378). A review of an earlier build runs
+  # again first, so it names no route.
+  local waiting
+  waiting="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.criteria // [])[] | select(.verdict == "unanswered" and .answeredBy == "nobody") | .id ] | join(", ")' 2>/dev/null)"
+  [ -z "$waiting" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
+    || CP_PERSON_ROUTE="These criteria wait for a person to answer met or unmet: $waiting. The person answers each with review close --row <criterion>=met|unmet at the reviewed commit. A light or autonomous run takes that answer from $TASK_PATH/review/person-answer.json, written by the main session with step close."
   cp_load_children "$who"
   cp_load_follow_ups "$who"
   cp_load_observed "$who"
@@ -360,7 +367,8 @@ do_read() {
     passed) closes="on the review verdict, with nothing asked" ;;
     *)      closes="on a person's reason (--reason), because the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY" ;;
   esac
-  cp_print_summary "read" "$(jq -nc --arg closes "$closes" --arg next "$next_step" '{closes: $closes, nextStep: $next}')"
+  cp_print_summary "read" "$(jq -nc --arg closes "$closes" --arg next "$next_step" --arg route "$CP_PERSON_ROUTE" \
+    '{closes: $closes, nextStep: $next} + (if $route == "" then {} else {personRoute: $route} end)')"
   if [ "$CP_STATE" = "complete" ]; then
     echo "READ: $CP_TASK_ID is already complete. Nothing is left to close." >&2
   fi
@@ -755,6 +763,7 @@ do_close() {
     local decide_route=""
     [ -z "$undecided" ] \
       || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. A --reason here closes the task with every one of those decisions unmade."
+    decide_route="$decide_route${CP_PERSON_ROUTE:+ $CP_PERSON_ROUTE A --reason here closes the task with those criteria unanswered.}"
     case "$CP_RUN_MODE" in
       autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}$decide_route" ;;
       *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it.$decide_route" ;;

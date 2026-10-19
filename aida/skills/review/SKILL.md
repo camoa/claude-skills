@@ -136,7 +136,8 @@ branch is recorded rather than assumed.
 | A new baseline for a surface | plan, show, confirm, then write | refused, and recorded as refused |
 | Setting up a surface | offered once | not offered, and recorded as not offered |
 
-`surfaces` refuses `--accept-baseline` on an autonomous run, and `close` refuses a `--row` there.
+`surfaces` refuses `--accept-baseline` on an autonomous run, and `close` refuses a `--row` there
+unless `review/person-answer.json` holds the person's answer.
 A command surface needs no walk, because its exit status is the whole answer.
 A run with nobody present cannot sign off a task carrying one person verified criterion. That is
 intended: a check that could not run has established nothing.
