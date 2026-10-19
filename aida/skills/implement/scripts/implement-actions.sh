@@ -13968,11 +13968,54 @@ TG_ROOTS
     fi
   fi
 
+  # An unattended start sets aside the unfrozen tests of an order each time design reopens, and a
+  # fresh test author then starts from nothing (gap row 372). So each test file of this order that
+  # the latest set-aside holds comes back once, while the order has no frozen tests. Only a test
+  # file comes back, because the author never reads production source. A path the tree has
+  # changed since stays as it is. Placed after the last refusal, so a refused dispatch moves nothing.
+  local ra_rows ra_i ra_j ra_rel ra_folder ra_glob ra_marks='[]' ra_said="" ra_ledger
+  if [ "$role_bare" = "test-author" ] && [ "$resume" = false ] && [ -n "$test_glob_raw" ] \
+     && [ ! -f "$IMPL_DIR/tests-$unit_id.json" ] \
+     && [ "$(task_run_mode "$TASK_PATH" implement)" = "autonomous" ]; then
+    ra_rows="$(jq -r --arg u "$unit_id" '
+        [ (.setAside // []) | to_entries[] | .key as $i | .value.folder as $f
+          | .value.paths | to_entries[]
+          | {i: $i, j: .key, rel: .value.path, f: $f, own: ((.value.orders // []) | index($u) != null),
+             done: (.value | has("restoredAt"))} ]
+        | group_by(.rel) | map(max_by(.i)) | .[] | select(.own and (.done | not))
+        | "\(.i)\t\(.j)\t\(.rel)\t\(.f)"' "$IMPL_DIR/ledger.json" 2>/dev/null)"
+    while IFS="$(printf '\t')" read -r ra_i ra_j ra_rel ra_folder; do
+      [ -n "$ra_rel" ] && [ -f "$ra_folder/$ra_rel" ] || continue
+      [ -z "$(git -C "$codepath" status --porcelain --untracked-files=all -- "$ra_rel" 2>/dev/null)" ] || continue
+      while IFS= read -r ra_glob; do
+        [ -n "$ra_glob" ] || continue
+        tf_path_matches_catalog_glob "$ra_rel" "$ra_glob" || continue
+        mkdir -p "$(dirname -- "$codepath/$ra_rel")" && cp -- "$ra_folder/$ra_rel" "$codepath/$ra_rel" \
+          || die 3 "dispatch-open: could not copy $ra_folder/$ra_rel back to $codepath. Nothing was dispatched."
+        ra_marks="$(printf '%s' "$ra_marks" | jq -c --argjson i "$ra_i" --argjson j "$ra_j" '. + [[$i, $j]]')"
+        ra_said="$ra_said$ra_rel from $ra_folder, "
+        break
+      done <<RA_GLOBS
+$test_glob_raw
+RA_GLOBS
+    done <<RA_ROWS
+$ra_rows
+RA_ROWS
+    if [ "$ra_marks" != "[]" ]; then
+      ra_ledger="$(jq -c --argjson m "$ra_marks" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          'reduce $m[] as $p (.; .setAside[$p[0]].paths[$p[1]].restoredAt = $at)' "$IMPL_DIR/ledger.json" 2>/dev/null)"
+      [ -n "$ra_ledger" ] || die 3 "dispatch-open: copied back ${ra_said%, }, and the ledger could not record it. Nothing was dispatched."
+      write_atomic "$IMPL_DIR/ledger.json" "$ra_ledger"
+    fi
+  fi
+
   write_atomic "$dispatch_file" "$record_json"
   echo "DISPATCH-OPEN: written (role $role, task $task_id, unit $unit_id)"
   echo "DISPATCH-OPEN: the role works in the worktree $codepath. Put it in the dispatch message: the role starts each shell command with cd $codepath &&, and writes nothing in the main checkout."
   [ -z "$interfaces_file" ] \
     || echo "DISPATCH-OPEN: interfaces: $interfaces_file. Put it in the dispatch message as a path: the role reads the interface text of what a test calls there."
+  [ -z "$ra_said" ] \
+    || echo "DISPATCH-OPEN: copied back the tests an earlier author left, which start set aside: ${ra_said%, }. The author starts from them."
   [ -z "$rc_split" ] || printf '%s' "$rc_split" | jq -r '"DISPATCH-OPEN: record rows to put to the checker: \(.check | join(", "))."
     + (if (.carried | length) > 0 then " Confirmed earlier, with the line unchanged, and not put to it: \(.carried | join(", "))." else "" end)'
   local deny_count main

@@ -113,7 +113,8 @@
             "required": ["path", "orders"],
             "properties": {
               "path": {"type": "string", "minLength": 1, "description": "The file's path relative to the tree."},
-              "orders": {"type": "array", "items": {"type": "string", "pattern": "^wo[1-9][0-9]*$"}, "description": "The orders whose owned files hold the path. Empty when none does."}
+              "orders": {"type": "array", "items": {"type": "string", "pattern": "^wo[1-9][0-9]*$"}, "description": "The orders whose owned files hold the path. Empty when none does."},
+              "restoredAt": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "description": "The UTC time `dispatch-open` copied this test file back for a fresh test author on an unattended run (gap row 372). Present only once it did. A path is copied back once."}
             }
           }
         }

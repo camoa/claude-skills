@@ -42,6 +42,10 @@ deleted. Any other change, such as a deleted file or a staged new one, refuses w
 both modes. The ledger records each move under `setAside`. The `setAside:` line names the folder,
 so give the person that path. The `leftovers:` line names each file that was kept or set aside.
 
+Unattended, a start after a design reopen sets aside the tests an author has not frozen yet. Do
+not copy them back by hand. The next fresh `dispatch-open` of a test author copies back each test
+file of that order from the latest set-aside, once. Its `copied back` line names them.
+
 The freeze keeps its own warning about uncommitted files. It names a file that the test author
 made during its own run, after this check.
 
