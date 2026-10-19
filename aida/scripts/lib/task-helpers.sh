@@ -30,6 +30,8 @@
 #   task_is_light <folder>                true when the task's mode is light
 #   log_compromise <folder> <stage> <skipped> <normal>
 #                                         adds one row to COMPROMISES.md in the task folder
+#   unlog_compromise <folder> <stage> <skipped> <normal>
+#                                         takes that row out of COMPROMISES.md again
 #   task_env_recipe_change <folder> <path> <tree> <commit>
 #                                         true when `environment up` recorded the path and the
 #                                         commit still holds that content
@@ -475,9 +477,13 @@ OWNED_OVERLAP_JQ='
 # $1 the task folder, $2 the stage, $3 what was skipped, $4 what a normal run would do.
 # COMPROMISES_FILE is the file's one name.
 COMPROMISES_FILE="COMPROMISES.md"
+compromise_row() {
+  printf '| %s | %s | %s | %s |' "$(basename -- "$1")" "$2" "$(printf '%s' "$3" | sed 's/|/\\|/g')" \
+    "$(printf '%s' "$4" | sed 's/|/\\|/g')"
+}
 log_compromise() {
   local file="$1/$COMPROMISES_FILE" row
-  row="| $(basename -- "$1") | $2 | $(printf '%s' "$3" | sed 's/|/\\|/g') | $(printf '%s' "$4" | sed 's/|/\\|/g') |"
+  row="$(compromise_row "$@")"
   [ -f "$file" ] && grep -qxF -- "$row" "$file" && return 0
   if [ ! -f "$file" ]; then
     printf '%s\n' "# Compromises" "" \
@@ -488,6 +494,17 @@ log_compromise() {
   fi
   printf '%s\n' "$row" >>"$file"
   printf 'compromise: %s: %s\n' "$2" "$3"
+}
+
+# Takes one row out of the log, when the step it names runs after all (gap row 365). The
+# arguments are log_compromise's. A missing row or file is left as it is.
+unlog_compromise() {
+  local file="$1/$COMPROMISES_FILE" row kept
+  row="$(compromise_row "$@")"
+  [ -f "$file" ] && grep -qxF -- "$row" "$file" || return 0
+  kept="$(grep -vxF -- "$row" "$file")"
+  printf '%s\n' "$kept" >"$file" || { printf 'task-helpers: could not write %s\n' "$file" >&2; return 0; }
+  printf 'compromise withdrawn: %s: %s\n' "$2" "$3"
 }
 
 # True when $2, a changed path, is one `task environment up` recorded in worktree.recipeChanges of

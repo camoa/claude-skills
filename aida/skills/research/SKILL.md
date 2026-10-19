@@ -414,6 +414,15 @@ tests", or change it to yes. On a change, run:
 ```
 Autonomous: keep the answer, and say the runner in one line. A person decides at the next window.
 
+Light: change the answer to yes, and say the runner in one line. A light run meets no person
+before review, so a kept no would send every criterion to a person by hand. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode autonomous \
+  set-tests "<task_folder>" --automated yes
+```
+It records the decision and takes the skipped tests out of the compromises log. The code orders
+then take tests, and the build writes them.
+
 ## Run the coverage check
 
 Once every planned search has been dispatched and recorded, run:

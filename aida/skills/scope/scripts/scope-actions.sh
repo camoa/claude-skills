@@ -334,6 +334,11 @@ do_read() {
   exit 0
 }
 
+# The compromises log row for a light task with no automated tests: init writes it, and
+# set-tests takes it out on yes.
+LIGHT_TESTS_SKIPPED="tests for each work order, and the checker that confirms each test row"
+LIGHT_TESTS_NORMAL="write and freeze tests for each code order before its code, and have a checker confirm each row"
+
 # ------------------------------------------------------------------------------------------------
 # init: writes a new alignment.json with no criteria and no non-goals, both id counters starting
 # at 1, and no decisions recorded yet. Refuses to overwrite one that already exists; scope has an
@@ -352,11 +357,11 @@ do_init() {
   local empty
   empty="$(jq -n '{schemaVersion: 1, goal: "", expectedResult: "", criteria: [], nonGoals: [],
                    nextCriterionId: 1, nextNonGoalId: 1, decidedWithoutAPerson: []}')"
-  # A light task has no automated tests, so each code order takes the confirm proof (gap row 197).
+  # A light task starts with no automated tests, so each code order takes the confirm proof (gap
+  # row 197). Research may change the answer to yes when it finds a test runner (gap row 365).
   if task_is_light "$TASK_PATH"; then
     empty="$(printf '%s' "$empty" | jq '.automatedTests = false')"
-    log_compromise "$TASK_PATH" scope "tests for each work order, and the checker that confirms each test row" \
-      "write and freeze tests for each code order before its code, and have a checker confirm each row"
+    log_compromise "$TASK_PATH" scope "$LIGHT_TESTS_SKIPPED" "$LIGHT_TESTS_NORMAL"
   fi
   write_atomic "$ALIGNMENT_FILE" "$empty"
 
@@ -429,8 +434,6 @@ do_set_tests() {
   esac
 
   require_alignment_exists "set-tests"
-  [ "$value" = "false" ] || ! task_is_light "$TASK_PATH" \
-    || die3 "set-tests: a light task has no automated tests. Set the task interactive or autonomous first"
 
   local updated
   updated="$(jq --argjson v "$value" '.automatedTests = $v' "$ALIGNMENT_FILE")" \
@@ -438,6 +441,14 @@ do_set_tests() {
   write_contract set-tests "$updated"
   [ "$RUN_MODE" = "interactive" ] \
     || append_decision "Automated tests: $automated, the recommended answer, taken" automatedTests
+  # On a light task the scope row of the compromises log holds only while the answer is no.
+  if task_is_light "$TASK_PATH"; then
+    if [ "$value" = "true" ]; then
+      unlog_compromise "$TASK_PATH" scope "$LIGHT_TESTS_SKIPPED" "$LIGHT_TESTS_NORMAL"
+    else
+      log_compromise "$TASK_PATH" scope "$LIGHT_TESTS_SKIPPED" "$LIGHT_TESTS_NORMAL"
+    fi
+  fi
 
   echo "TESTS SET"
   contract_summary
