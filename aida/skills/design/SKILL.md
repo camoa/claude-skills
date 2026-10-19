@@ -685,6 +685,8 @@ zero it adds one `open:` line naming what is open. The report holds:
 - every work order whose proof is `observe` and that declares a test, names no surface, or has
   no done-when row;
 - every work order whose proof is `confirm` and that declares a test, or has no done-when row;
+- every work order whose proof is `confirm` and that owns a file a test glob matches. The globs
+  are the ones this project's earlier freezes recorded;
 - every work order whose proof is `confirm` on a task whose contract does not say it has no
   automated tests;
 - every work order that owns nothing and that no owning order depends on, directly or through
@@ -787,6 +789,9 @@ problem. Read the report file when the line is not enough, and fix the specific 
     row is a sentence the person confirms at review, so write it as one thing they can check. A
     `confirm` order on a task whose contract does not say it has no automated tests needs
     `update --proof tests` and its tests;
+  - a `confirm` order that owns a test file needs `remove-owned-file` for it. Nothing runs that
+    file, and the freeze never sees it. When the task does have tests, a person answers yes in
+    scope instead, and the order takes `update --proof tests` and its tests;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the
     other way. An order no owner needs is dead work, unless it owns a criterion of its own. The

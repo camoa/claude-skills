@@ -514,6 +514,7 @@ open_summary_of() {
         ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
         ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
         ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person, and the contract does not say the task has no automated tests: update --proof tests"),
+        ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
         ((.graph.ordersNotAfterSkeleton // [])[] | "order " + . + " does not come after wo1, the walking skeleton: add wo1 to its dependsOn"),
