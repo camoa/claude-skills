@@ -307,7 +307,8 @@ only. Review and close read the order's range from the freeze, so a second attem
 one line is reviewed with the code the first attempt wrote.
 One equal commit is not refused. When it is this order's own freeze commit and every frozen test
 locks in, the freeze commit holds the order's work. A tests order whose deliverable is its test
-file is this case. The range then starts at the parent of the freeze commit, and review and close
+file is this case. So is a code order whose tests all pass on the code that is there already, and
+its range then holds its test files alone. The range then starts at the parent of the freeze commit, and review and close
 read it from there.
 
 **`build-record` refuses when the code repository's tree is not clean.** The implementer commits

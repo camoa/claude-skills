@@ -545,6 +545,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      began from: it is the commit HEAD is at now, so the diff would be empty and every check would
 #      answer about nothing, or it is not an ancestor of HEAD, so the range between the two is not
 #      this order's own work. Exit 43 stays the separate fact that the value is not a commit at all.
+#      `build-record` takes HEAD when it is the order's own freeze commit and every frozen test
+#      locks in: the range starts at that commit's parent (live-run row 371).
 #      `fix-record` records a round with no commit when its fix brief exists and every open finding
 #      is named by --scope-insufficient or by an `Outcome: <id>: already-correct` line in the report
 #      (gap row 341). The message names the findings that are neither.
@@ -6837,7 +6839,8 @@ br_require_real_base() {
 # The parent of commit $2 when $2 is order $3's own freeze commit and holds the order's whole work
 # (live-run row 371). Every test the freeze record $4 holds locks in, so it passes on the code it
 # froze and the builder has nothing to commit. A tests order whose owned file is the frozen test
-# is that case. The record must name $2, and its subject must be the one tests-freeze writes for
+# is that case. So is a code order whose tests all lock in on code that already passes: its range
+# then holds its test files alone. The record must name $2, and its subject must be the one tests-freeze writes for
 # the order, because a freeze of tests already in HEAD makes no commit and records whatever HEAD
 # was. Prints nothing otherwise. $1 the code repository.
 im_freeze_holds_work() {
