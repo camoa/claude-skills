@@ -412,7 +412,8 @@ tests", or change it to yes. On a change, run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   set-tests "<task_folder>" --automated yes
 ```
-Autonomous: keep the answer, and say the runner in one line. A person decides at the next window.
+Autonomous, not light: keep the answer, and say the runner in one line. A person decides at the
+next window.
 
 Light: change the answer to yes, and say the runner in one line. A light run meets no person
 before review, so a kept no would send every criterion to a person by hand. Run:

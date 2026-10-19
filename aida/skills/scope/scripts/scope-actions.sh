@@ -109,7 +109,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      match either id format, or that is already present when `add` tries to mint it; a given
 #      --verified-by that is not machine or person; a given --author that add does not recognise,
 #      or that update is asked to set to anything but owner; `approve` under --run-mode
-#      autonomous; a given --automated that is not yes or no, or yes on a light task; a missing
+#      autonomous; a given --automated that is not yes or no; a missing
 #      or unusable nextCriterionId or nextNonGoalId; a name in --field record-decision does not know;
 #      `retire` under --run-mode autonomous, or on an entry already superseded or retired; the
 #      plugin root could not be resolved; or a write that failed.
