@@ -2098,10 +2098,7 @@ do_close() {
       --recipe-path)   need_value "close" "--recipe-path" "$#" "${2:-}";   fit_path="$2"; shift 2 ;;
       --recipe-reason) need_value "close" "--recipe-reason" "$#" "${2:-}"; fit_reason="$2"; shift 2 ;;
       --no-recipe)     no_recipe=true; shift ;;
-      --approve-runs)
-        [ "$RUN_MODE" != "autonomous" ] \
-          || die3 "close: --approve-runs is a person's yes to the commands research wrote, and an autonomous close has nobody to give it"
-        approve_runs=true; shift ;;
+      --approve-runs) approve_runs=true; shift ;;
       --critique-outcome)
         need_value "close" "--critique-outcome" "$#" "${2:-}"
         is_blank "$2" && die3 "close: --critique-outcome must not be blank"
@@ -2227,7 +2224,20 @@ $choices"
   # between it and the worktree. The person approves such lines at this close, the design's
   # approval, and the stamp lands on each entry before the hash covers it. A line with no stamp
   # never runs: the build hands it to the reviewer as a check.
-  local wo_file approved_count=0 n_approved
+  # An autonomous close has nobody to give that approval. A person's answer, held as a record,
+  # stands in (gap row 357): person-answer.json in the task folder, not under design/, which the
+  # hash reads. It holds step close, no order, and as its answer each line this close would stamp,
+  # one per line, as the refusal lists them (gap row 370).
+  local wo_file approved_count=0 n_approved answer_file="$TASK_PATH/person-answer.json" to_stamp
+  if [ "$approve_runs" = true ] && [ "$RUN_MODE" = "autonomous" ]; then
+    to_stamp="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+      | while IFS= read -r wo_file; do
+          jq -r '(.verify // [])[] | select(has("run") and .binding == false and (has("approved") | not)) | .run' "$wo_file"
+        done)"
+    task_person_answered "$answer_file" "$TASK_PATH" "close" "" "$to_stamp" \
+      || die3 "close: --approve-runs is a person's yes to the commands research wrote, and an autonomous close has nobody to give it. Or the main session writes the person's answer to $answer_file: step close, order empty, and as its answer these lines, one per line:
+$to_stamp"
+  fi
   if [ "$approve_runs" = true ]; then
     while IFS= read -r wo_file; do
       [ -n "$wo_file" ] || continue
@@ -2240,6 +2250,7 @@ $choices"
       approved_count=$((approved_count + n_approved))
     done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort)
     echo "approvedRuns: $approved_count"
+    task_answer_consume
   fi
 
   local hash

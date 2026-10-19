@@ -637,10 +637,12 @@ source that describes a result in words gives a `--check`. Such an entry is neve
 Give `--kind live-site` when the check needs a served site; the source says so or it does not.
 A research `--run` never runs until a person approves it at the close. Without that, the
 reviewer judges it as a check.
-Give `--criterion` when the command's output alone proves a machine criterion the order owns.
-Examples are a linter run or a check of which paths the diff touched. A `tests` order then owes
-no test for that criterion, and the order-tests check confirms it once the line runs and passes.
-So the criterion stays on the `tests` order and needs no `record` order of its own.
+Give `--criterion` when the command's output alone proves a machine criterion the order owns,
+such as a linter run. A `tests` order then owes no test for that criterion, so the criterion
+stays on it. The freeze runs the line over the test author's files, and the row-checker judges
+whether the line proves the whole clause. A clause that names two tools needs a line for each.
+A line runs unattended when it equals, word for word, an `argv` in the project's check recipe
+`check_commands`. Any other research line needs the person's approval at the close.
 `--clear` empties the list, and `--recipe` replaces it.
 
 A run line is argv, never a shell, so the script refuses a shell character. It also refuses a
@@ -708,8 +710,10 @@ zero it adds one `open:` line naming what is open. The report holds:
 Interactive: before the close, show each such order's entries with their sources. Say that the
 source is not one this project accepted. The person keeps each entry, drops it with `--clear`,
 or asks for another source. A kept run entry runs only when the person also approves it: pass
-`--approve-runs` to the close on that yes, and the close stamps each such entry. Autonomous: the line and the rendered order carry it to a person
-later.
+`--approve-runs` to the close on that yes, and the close stamps each such entry. Autonomous: the
+line and the rendered order carry it to a person later. An autonomous `--approve-runs` refuses and
+lists the lines. It passes once the main session writes the person's answer to
+`person-answer.json` in the task folder, step `close`, with those lines as the answer.
 
 `check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
 proof is `tests` that owns criteria of which none is machine-verified. The design still closes with

@@ -76,13 +76,15 @@ production code.
 An interface record is prose a builder wrote about its own code. It is not the code, and it is the
 only thing you get that came from one.
 
-For each machine-verified criterion this order owns, write at least one test. The brief names
-them in `criteriaOwned`. A criterion also in `provedByVerify` is proved by a verify line the
-build runs, so write no test for it. A criterion the order serves but does not own is proved by its owner. The
-thing it observes is built by a later order, so do not name it on a test that cannot observe it.
-Write this order's own tests against its `doneWhen` instead. For each criterion verified by a
-person, write a checklist line, copying its verification sentence whole. A base class or a fixture
-you write beside the tests is a support file. The tests stand on it, and it is not a test.
+For each machine-verified criterion this order owns, write at least one test. The brief names them
+in `criteriaOwned`. A criterion in `provedByVerify` is proved by the command beside it, so write no
+test for it. The freeze runs that command over your files. Leave your files so that it passes,
+because the implementer cannot edit a frozen test. A criterion the order serves but does not own is
+proved by its owner. The thing it observes is built by a later order, so do not name it on a test
+that cannot observe it. Write this order's own tests against its `doneWhen` instead. For each
+criterion verified by a person, write a checklist line, copying its verification sentence whole. A
+base class or a fixture you write beside the tests is a support file. The tests stand on it, and it
+is not a test.
 
 **An absence gets no test.** When the brief holds `absenceCandidates`, read each clause it names.
 A clause that asserts an absence says the change added nothing of a named kind. Write no test for

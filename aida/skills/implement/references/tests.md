@@ -491,16 +491,17 @@ would rewind the step and leave a spent attempt counter and a stale build record
 longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward
 from here, not back.
 
-The script checks the file exists, sits inside the code repository, and matches the framework's
-own declared pattern. It checks every machine-verified criterion this order owns has
-a test (a `gate` or `record` order excepted), and every criterion a person verifies has a checklist line.
-A criterion that a verify run line of the order names, and that runs, needs no test. `close`
-confirms it from the order-tests check, judged by `gate`. A criterion this order only
-serves needs no test from it, because its proof lives with its owner (exit 29 reads the owned
-list). A person-verified criterion is different: each order that serves it needs its checklist
-line, owned or not (exit 30). A test that names neither a criterion this order serves or owns nor
-this order's id refuses (exit 31).
-A record that would hold no row refuses (exit 74).
+The script checks the file exists, sits inside the code repository, and matches the framework's own
+declared pattern. It checks every machine-verified criterion this order owns has a test (a `gate`
+or `record` order excepted), and every criterion a person verifies has a checklist line. A
+criterion that a verify run line of the order names, and that runs, needs no test. It needs a row:
+`dispatch-open` names the line, and the row-checker judges whether it proves the clause. The freeze
+runs the line over the files it freezes, and refuses while it fails (exit 121), so the test author
+repairs the files first. A criterion this order only serves needs no test from it, because its
+proof lives with its owner (exit 29 reads the owned list). A person-verified criterion is
+different: each order that serves it needs its checklist line, owned or not (exit 30). A test that
+names neither a criterion this order serves or owns nor this order's id refuses (exit 31). A record
+that would hold no row refuses (exit 74).
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
 place. A test with neither refuses (exit 33). A `--locks-in` reason written `commit:<id>` must
 name one of this order's own build or fix commits on the branch. An id that is not hexadecimal,

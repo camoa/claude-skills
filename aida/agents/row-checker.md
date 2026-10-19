@@ -70,6 +70,13 @@ has no rule for this row. Answer one question: could a reader confirm the line f
 alone? Reject a line that does not say what an output must read. Reject a line that names a thing
 the document, once written, would not hold. A rejection's note names the words the line must add.
 
+**A verify-line row names a criterion and one or more commands, not a test.** The dispatch names
+each command and what passing means. The freeze runs them over the order's files, and the build
+runs them again. Answer one question: if every command passes, is the verify clause true? Reject
+when the clause names a tool or a check that no command runs. Reject when a command reads less
+than the clause asks, such as other files. Key your verdict by the criterion id. A rejected
+verify-line row is `row`, because only design can change a command.
+
 For each row, answer confirmed or rejected, with a note. A rejected row also carries `repair`.
 Write `"repair": "tests"` when a rewrite of the tests alone, as your note names it, could earn a
 confirmation. Write `"repair": "row"` when no test could: the clause is too vague, it cannot be

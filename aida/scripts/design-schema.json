@@ -340,7 +340,7 @@
             "criterion": {
               "type": "string",
               "pattern": "^c[1-9][0-9]*$",
-              "description": "A machine-verified criterion this order owns that the line's tool output proves, written by `verify --run --criterion` (gap row 370). On a `tests` order, `tests-freeze` then asks no test for it, once the line runs. `close` confirms it, judged by `gate`, when the order-tests check was met. Absent on a line that proves no criterion of its own."
+              "description": "A machine-verified criterion this order owns that the line's tool output proves, written by `verify --run --criterion` (gap row 370). On a `tests` order, `tests-freeze` then asks no test for it once the line runs: when it is binding, approved, or equal to a `check_commands` argv of the project's check recipe. The freeze runs the line, and the row-checker judges whether it proves the clause. Absent on a line that proves no criterion of its own."
             }
           }
         },
