@@ -592,6 +592,10 @@ registered the folder and that was its job. A folder it registers has fields no 
 filled yet, so the check is never 0 there. Read the report it printed for the findings. Name each
 missing field and its producer, as the table above says.
 
+An action that writes the project file does not pass exit 6 on either, when it committed its own
+change. The uncommitted work belongs to someone else, so the action exits 0 and prints a `NOTE:`
+line. Show the uncommitted work the report lists, and say the action succeeded.
+
 A retired field comes under "Retired fields", with exit 1. The report names `drop-retired` as its
 repair. Interactive: offer it once, in one line, and on yes run `drop-retired` above. Autonomous:
 name the repair and continue. Never edit the project file by hand.

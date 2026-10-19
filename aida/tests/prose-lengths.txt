@@ -25,7 +25,7 @@ skills/implement/references/start.md 142
 skills/implement/references/tests.md 566
 skills/next/SKILL.md 199
 skills/playbooks/SKILL.md 96
-skills/project/SKILL.md 621
+skills/project/SKILL.md 625
 skills/research/SKILL.md 585
 skills/review/SKILL.md 239
 skills/review/references/checks.md 144

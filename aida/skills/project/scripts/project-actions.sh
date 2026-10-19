@@ -339,6 +339,22 @@ run_check() {
   return $?
 }
 
+# The check closes every action that writes project.json. It exits 6 on uncommitted work anywhere
+# in the folder, such as a stage's edits in progress. That made a write that landed read as a
+# failure. When the files the action wrote are committed, the action did its job, so this returns 0
+# with a note. A folder that is not a repository, or an own file the commit missed, keeps exit 6.
+# $1 the project folder, then the files the action wrote, relative to it.
+check_after_write() {
+  local project_path="$1" rc
+  shift
+  run_check "$project_path"; rc=$?
+  [ "$rc" -eq 6 ] || return "$rc"
+  git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1 || return 6
+  [ -z "$(git -C "$project_path" status --porcelain -- "$@" 2>/dev/null)" ] || return 6
+  echo "NOTE: this action committed its own change. The uncommitted work listed above is not its own, and it was left as it is."
+  return 0
+}
+
 # The one name refusal, for every route that writes a registry row. $1 the name, $2 what to tell
 # the person when a row already holds it. Returns when the name is free, and stops the script
 # otherwise. The two outcomes stay apart. An unreadable store is not a name collision. Saying it
@@ -769,7 +785,7 @@ do_state() {
     echo "OPEN TASKS: unknown. No task system has been built yet in this project, so nothing here can be listed as open or closed."
   fi
 
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -820,7 +836,7 @@ do_set_code_path() {
     "project" "code-path" project.json \
     || printf 'project-actions: the code-path change was written but not committed.\n' >&2
 
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
   local check_rc=$?
 
   # Exit 5 is the check's own safety refusal, the same one create undoes. A refused code path is
@@ -869,7 +885,7 @@ do_set_frameworks() {
     || printf 'project-actions: the frameworks were written but not committed.\n' >&2
 
   echo "FRAMEWORKS: $*"
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -889,7 +905,7 @@ do_set_worktree_base() {
   commit_project "$project_path" "Set the worktree base to ${base}" "requested" "" "" "project" "worktree-base" project.json \
     || printf 'project-actions: the worktree base was written but not committed.\n' >&2
   echo "WORKTREE BASE: $base"
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # read-worktree-base: prints the recorded worktreeBase as an absolute path and exits 0. When the
@@ -988,7 +1004,7 @@ do_add_source() {
     || printf 'project-actions: the source was written but not committed.\n' >&2
 
   echo "SOURCE: ${folder} provides ${kind}"
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1112,7 +1128,7 @@ do_subscription() {
   commit_project "$project_path" "$(printf '%s' "$op" | sed 's/^s/S/; s/^u/U/') $fw playbook $set_id" "requested" "" "" "project" "playbook" project.json \
     || printf 'project-actions: the subscription was written but not committed.\n' >&2
   echo "SUBSCRIPTIONS: $(jq -r --arg k "$fw" '$k + " " + ((.playbookSubscriptions[$k] // []) | join(" "))' "$project_path/project.json")"
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1142,7 +1158,7 @@ do_drop_retired() {
       || printf 'project-actions: the retired fields were dropped but not committed.\n' >&2
     echo "DROPPED: $present"
   fi
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1339,7 +1355,7 @@ do_task_rule() {
     "project" "task-rule" project.json \
     || printf 'project-actions: the task-rule field was written but not committed.\n' >&2
 
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 do_task_rule_remove() {
@@ -1380,7 +1396,7 @@ do_task_rule_remove() {
   commit_project "$project_path" "Remove the task rule" "requested" "" "" "project" "task-rule" project.json \
     || printf 'project-actions: the task-rule removal was written but not committed.\n' >&2
 
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
