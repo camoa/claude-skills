@@ -22,8 +22,10 @@ placeholder is always a whole token.
 The catalog's id list is closed. It grows only when the catalog validator and its index change
 together. A project's own copy of the review recipe may add a `## Check commands` row with an id of
 its own. Add one for a tool that no catalog id fits, such as a spell checker. Do not leave that
-tool as a command a person runs by hand. Review runs the added row and the baseline keeps its
-result. A verify run line that equals its argv runs with no approval.
+tool as a command a person runs by hand. `skills/review/references/checks.md` says how review and
+the baseline treat the added row. A verify run line that equals its argv runs with no approval. A
+task past preconditions adopts the changed copy with `implement-actions.sh recipe-refresh
+--check-recipe <framework>=<path>`, or every check stops at exit 73.
 
 ## The verdicts
 
