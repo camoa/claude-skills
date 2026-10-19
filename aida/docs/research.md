@@ -205,10 +205,11 @@ second malformed record stops for you. A reader's answer older than the last cha
 record is stale. The close says so, shows none of its old gaps, and asks for the reader again.
 
 **A task with no automated tests.** When the contract says the task has none, research runs the
-checks the framework's test recipe declares, in the task's worktree. When they all pass and the
-recipe has a suite command, research names it before design and asks once: keep "no automated
-tests", or change it to yes. An unattended run keeps the answer and names the command for you to
-see later. A light run changes the answer to yes itself.
+checks the framework's test recipe declares, in the task's worktree, and then in your project's
+code folder when the worktree falls short. When they all pass and the recipe has a suite command,
+research names it before design and asks once: keep "no automated tests", or change it to yes.
+When they do not, research tells you which check failed. An unattended run keeps the answer and
+names the command for you to see later. A light run changes the answer to yes itself.
 
 ## What research shows at the close
 

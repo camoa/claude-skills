@@ -3688,12 +3688,7 @@ PC_RECIPES
         # below and reads as met, so the code is re-raised here. This loop's own `done || exit $?`
         # carries it out of the pipeline.
         section_state="$(pc_parse_recipe "$recipe_path" "$entries_file" "$codepath")" || exit $?
-        case "$section_state" in
-          undeclared)     fw_verdict="undeclared" ;;
-          declared-empty) fw_verdict="undeclared" ;;
-          unparseable)    fw_verdict="unknown" ;;
-          *)              fw_verdict="met" ;;
-        esac
+        fw_verdict="$(pc_section_verdict "$section_state")"
       fi
       # The test-commands block never affects a verdict; it is read here only because it lives in
       # the same recipe file this framework already resolved, and the record already has a place

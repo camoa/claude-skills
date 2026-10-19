@@ -111,6 +111,7 @@
 #   pc_run_check <check> <dir> <out>         runs one check as arguments; prints its exit status
 #   pc_flush_entry <out> <dir>               runs the held condition and appends its JSON object
 #   pc_parse_recipe <recipe> <out> <dir>     runs every ## Preconditions check; prints the section state
+#   pc_section_verdict <state>               the verdict that section state gives before its entries
 #   pc_rank <verdict>, pc_worse <a> <b>      the worse of two condition verdicts
 #
 # What this library takes from its caller, and never defines itself:
@@ -2341,6 +2342,17 @@ pc_parse_recipe() {
   rm -f "$block_file"
 
   if [ "$PC_ANY" = "1" ]; then printf 'ok'; else printf 'declared-empty'; fi
+}
+
+# The verdict a ## Preconditions section state gives before its entries fold in: a section that
+# declared nothing, or declared an empty list, is undeclared, and one this parser cannot read is
+# unknown. Preconditions and research both read it here, so the two never disagree (gap row 366).
+pc_section_verdict() {
+  case "$1" in
+    undeclared|declared-empty) printf 'undeclared' ;;
+    unparseable) printf 'unknown' ;;
+    *) printf 'met' ;;
+  esac
 }
 
 # The worse of two verdicts, best to worst: met, undeclared, unknown, unmet. A recipe that declared

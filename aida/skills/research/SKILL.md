@@ -407,23 +407,28 @@ to what can be checked.
 ## Check the automated tests answer
 
 Do this before the coverage check, so its commit carries any change. It applies only when
-`automated-tests:` reads `no`. For each of the project's frameworks, dispatch `catalog-identifier`
-with `point: test-execution`, that framework, and the project folder. Then run:
+`automated-tests:` reads `no`. The coverage check refuses (exit 7) until it has run. For each of
+the project's frameworks, dispatch `catalog-identifier` with `point: test-execution`, that
+framework, and the project folder. Pass each path it returns as `--recipe`. When the lookup
+answered no path, pass `--lookup-failed <framework>=<reason>` in its place. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh runner "<task_folder>" \
   --recipe <framework>=<path>
 ```
-Give `--lookup-failed <framework>=<reason>` in place of `--recipe` when the lookup answered no
-path. The script runs the recipe's own conditions in the worktree and reads its suite row. It
-writes the record and prints `test-runner:`. Only `met` says this project can run tests. Any other
-word keeps the answer no, so stop here.
+The script runs the recipe's own conditions in the worktree. When they fall short of met there, it
+runs them again in the project's codePath. It reads the suite row and writes the record. It
+prints `test-runner:`, the tree that answered, each condition short of met, and a `suite:` line.
+Only `met` says this project can run tests. Any other word keeps the answer no.
 
-Interactive: say the suite command from the record in one line. Ask one question: keep "no
-automated tests", or change it to yes. On a change, run:
+Interactive, on `met`: say the `suite:` line in one line. Ask one question: keep "no automated
+tests", or change it to yes. On a change, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   set-tests "<task_folder>" --automated yes
 ```
+Interactive, on any other word: say the word and each `condition:` line, and ask nothing. The
+person can set up the runner and run `runner` again.
+
 Autonomous, not light: keep the answer, and say the suite command in one line. A person decides
 at the next window.
 
