@@ -25,6 +25,12 @@ Dispatch `catalog-identifier` once more, with `point: review` and each framework
 second recipe, never the same file as the `test-execution` one above. Pass its path straight
 through; the script reads its `## Check commands` block itself, per SKILL.md.
 
+A folder that holds one of these two recipes and not the other leaves the other to the catalog.
+The catalog's commands can assume another environment, and review then reads its tools
+undeclared. The script walks the folders itself and names each such folder on the
+`folderRecipeMissing:` line. A missing `test-execution` file counts only when an order needs the
+harness. Read that line to the person.
+
 Dispatch it a third time, with `point: implement` and each framework. Do not read that recipe
 here and do not pass it to anyone. The per-order tests step resolves it again for its globs. This
 dispatch exists so the freeze wall below is named before any order is built.

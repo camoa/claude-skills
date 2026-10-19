@@ -3484,6 +3484,7 @@ do_preconditions() {
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
   local harness_needed harness_reason env_asked=no env_owner="" tooling_entries
   local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc build_json build_entries unchecked_json review_tools smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
+  local pc_folder_gap="" pc_te_source pc_rv_source
   local pc_build_doc tool_rows_json pc_row_id pc_row_json
 
   while [ "$#" -gt 0 ]; do
@@ -3916,6 +3917,27 @@ EOF
 $catalog_recipes
 PC_CATALOG
 
+  # A project folder that holds one of the two command recipes and not the other (gap row 383).
+  # The missing one then comes from the catalog, whose commands may assume another environment,
+  # and review reads its rows undeclared with nothing said before. The walk is the one the lookup
+  # ran, so the script reads the fact itself. Review is always needed; test-execution only when an
+  # order needs the harness. Reported only.
+  while IFS= read -r fw; do
+    [ -n "$fw" ] || continue
+    pc_te_source=""; pc_rv_source=""
+    ! sw_probe "$project_folder/project.json" processRecipes process-recipes "$fw" test-execution yes \
+      || pc_te_source="$SW_SOURCE"
+    ! sw_probe "$project_folder/project.json" processRecipes process-recipes "$fw" review yes \
+      || pc_rv_source="$SW_SOURCE"
+    if [ -n "$pc_te_source" ] && [ -z "$pc_rv_source" ]; then
+      pc_folder_gap="$pc_folder_gap${pc_folder_gap:+ }$fw: $pc_te_source holds test-execution.md and no review.md."
+    elif [ -n "$pc_rv_source" ] && [ -z "$pc_te_source" ] && [ "$harness_needed" = "yes" ]; then
+      pc_folder_gap="$pc_folder_gap${pc_folder_gap:+ }$fw: $pc_rv_source holds review.md and no test-execution.md."
+    fi
+  done <<PC_FOLDER
+$frameworks
+PC_FOLDER
+
   # The freeze wall, announced here rather than at the first order's freeze. `tests-freeze` takes
   # its test globs from the implement recipe's `## Oracle files` block, so with no such recipe a
   # test-proved order dies at exit 27, after the design closed, the build started and the test
@@ -4132,7 +4154,8 @@ PC_TOOL_ROWS
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
         --arg baselineNote "$baseline_note" --arg baselineCommit "$baseline_commit_report" \
         --argjson baselineSummary "$baseline_summary_json" --arg next "$pc_next" --arg nextAdvice "$pc_advice" \
-        --arg failedOutput "$pc_failed" --arg staleRecipe "$pc_stale" "$PC_END_ABSENT_JQ"'
+        --arg failedOutput "$pc_failed" --arg staleRecipe "$pc_stale" \
+        --arg folderRecipeMissing "$pc_folder_gap" "$PC_END_ABSENT_JQ"'
     def named($v): [ .entries[] | select(.verdict == $v) | .id + (if (.owner // "") == "" then "" else " (owner: " + .owner + ")" end) ]
                    | if length == 0 then "none" else join(", ") end;
     {verdict: $verdict,
@@ -4174,6 +4197,8 @@ PC_TOOL_ROWS
                        | if length == 0 then "none"
                          else join(", ") + ": the review recipe names no tool under requires_tooling that this row runs, so nothing checked its program before the build. A missing program reads unknown at build-record." end),
      staleRecipe: (if $staleRecipe == "" then "none" else $staleRecipe end),
+     folderRecipeMissing: (if $folderRecipeMissing == "" then "none"
+                           else $folderRecipeMissing + " The other one comes from the catalog. Add the file there, or confirm the catalog recipe fits." end),
      failedOutput: $failedOutput,
      nextAdvice: $nextAdvice,
      next: $next}')"
