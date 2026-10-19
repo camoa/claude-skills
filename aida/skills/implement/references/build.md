@@ -305,6 +305,10 @@ Equal to the code repository's own current commit, or not an ancestor of it, ref
 either makes the range this attempt claims false. The build record keeps this attempt's range
 only. Review and close read the order's range from the freeze, so a second attempt that changes
 one line is reviewed with the code the first attempt wrote.
+One equal commit is not refused. When it is this order's own freeze commit and every frozen test
+locks in, the freeze commit holds the order's work. A tests order whose deliverable is its test
+file is this case. The range then starts at the parent of the freeze commit, and review and close
+read it from there.
 
 **`build-record` refuses when the code repository's tree is not clean.** The implementer commits
 its own work before it returns. A dirty tree means that commit did not happen. This attempt is not

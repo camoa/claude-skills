@@ -6834,6 +6834,23 @@ br_require_real_base() {
     || die 71 "$who: --started-at ($given, $full) is not an ancestor of HEAD ($head_now) in $repo, so the range between the two is not this order own work."
 }
 
+# The parent of commit $2 when $2 is order $3's own freeze commit and holds the order's whole work
+# (live-run row 371). Every test the freeze record $4 holds locks in, so it passes on the code it
+# froze and the builder has nothing to commit. A tests order whose owned file is the frozen test
+# is that case. The record must name $2, and its subject must be the one tests-freeze writes for
+# the order, because a freeze of tests already in HEAD makes no commit and records whatever HEAD
+# was. Prints nothing otherwise. $1 the code repository.
+im_freeze_holds_work() {
+  [ "$(jq -r '.commit // ""' "$4" 2>/dev/null)" = "$2" ] || return 0
+  jq -e '[ (.rows // [])[] | (.tests // [])[] ] | length > 0 and all(has("locksIn"))' "$4" >/dev/null 2>&1 \
+    || return 0
+  case "$(git -C "$1" log -1 --format=%s "$2" 2>/dev/null)" in
+    "Freeze the tests of $3 through the implement skill:"*)
+      git -C "$1" rev-parse --verify --quiet "$2^" 2>/dev/null ;;
+  esac
+  return 0
+}
+
 # ------------------------------------------------------------------------------------------------
 # The seven computable deciding checks (ideal/implementation.md, "The deciding checks run before
 # anything judges"). `build-record` runs these seven and the interface check below it.
@@ -8802,6 +8819,11 @@ do_build_record() {
       || stop_commit_text="$stop_commit_text Revert them, or have the person keep them, before the next build."
     die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route$BR_REPAIR_NOTE$row_note"
   fi
+  if [ "$started_at_full" = "$current_commit" ]; then
+    local br_freeze_parent
+    br_freeze_parent="$(im_freeze_holds_work "$codepath" "$current_commit" "$unit_id" "$tests_file")"
+    [ -z "$br_freeze_parent" ] || started_at_full="$br_freeze_parent"
+  fi
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
   # --- exit 45: refuse a duplicate of an attempt already recorded, before anything else runs -------
@@ -9400,6 +9422,11 @@ rv_load_order_start() {
     RV_ORDER_START="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')"
   else
     RV_ORDER_START="$(jq -r '.commit // ""' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
+    # A freeze commit that holds the order's work is in the range build-record recorded (row 371).
+    local freeze_parent
+    freeze_parent="$(im_freeze_holds_work "$RV_RANGE_REPO" "$RV_ORDER_START" "$unit_id" "$IMPL_DIR/tests-$unit_id.json")"
+    [ -z "$freeze_parent" ] || [ "$(printf '%s' "$RV_BUILD_DOC" | jq -r '.startedAt // ""')" != "$freeze_parent" ] \
+      || RV_ORDER_START="$freeze_parent"
   fi
   [ -n "$RV_ORDER_START" ] \
     || die 3 "$who: the start of $unit_id's range could not be read from its freeze record or its build record, though both steps write it."
