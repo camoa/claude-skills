@@ -328,9 +328,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  27  `tests-freeze` was given a --test whose path matches none of the given --test-glob patterns.
 #      A test written outside the framework's own pattern is not protected by anything later.
 #      Or its path is not a file the order owns (gap row 249); the refusal names the owned one.
-#  28  `tests-freeze` was given a --test whose test name does not carry, at its own end, the
-#      criterion id (or ids, chained from the right) it claims, or the unit's own id when the test
-#      proves the unit's doneWhen instead of a criterion.
+#  28  retired on 2026-10-19 (live-run row 374). `tests-freeze` refused a test name that did not
+#      end in the criterion id or the order id it claimed. The --test flag already names that id,
+#      the record keeps it, and every reader joins on the recorded name. The test-authoring recipe
+#      says how a name reads, so a project can carry its upstream convention.
 #  29  `tests-freeze` found a criterion the unit owns whose verifiedBy is machine with no --test
 #      row naming it. A criterion the unit only serves needs no test from it: exactly one order
 #      owns a criterion, and that order's tests are the ones that can observe it (live-run row
@@ -4960,54 +4961,6 @@ TB_OWNED
 # and the exit code this whole file promises for that die would never reach the caller.
 # ------------------------------------------------------------------------------------------------
 
-# True when test name $1 ends with every criterion id in comma list $2, chained from the right: the
-# last-listed id must be the name's own trailing characters, the id before it must trail what is
-# left once that is stripped, and so on. A test naming only one criterion is the common case and
-# this degrades to it directly. The leading letter of an id may appear as c or C in the name, since
-# a test method's own naming convention may capitalise it; every other character, all digits, must
-# match exactly, which is also what keeps `c3` from matching a trailing `c30`: the last two
-# characters of `c30` are `3` and `0`, never equal to the two characters of `c3`. Prints nothing;
-# returns 1 on the first id that does not fit and 0 once every id has been stripped from the end.
-# Never uses `for x in $unquoted` or `set -- $unquoted`: zsh does not word-split those by default,
-# so every list here is walked by peeling one comma-separated token off the front instead.
-tf_name_carries() {
-  # A `local` statement's own assignment words are all evaluated before any of them takes effect
-  # (true in bash and zsh alike), so declaring and reading a value back in the same statement (as
-  # `remaining="$name"` would be here) is never safe; and zsh separately reports a variable declared
-  # and initialised to an empty string in the very same `local` statement as "parameter not set" on
-  # its first `-z`/`-n` test under this file's own `set -u` and `KSH_ARRAYS` (Honesty: proven while
-  # building tf_segments_match). Every local below is therefore declared bare, then assigned.
-  local name csv remaining reversed id first rest lower upper
-  name="$1"
-  csv="$2"
-  remaining="$name"
-  reversed=""
-  while [ -n "$csv" ]; do
-    case "$csv" in
-      *,*) id="${csv%%,*}"; csv="${csv#*,}" ;;
-      *)   id="$csv"; csv="" ;;
-    esac
-    [ -n "$id" ] || continue
-    reversed="$id${reversed:+,$reversed}"
-  done
-  while [ -n "$reversed" ]; do
-    case "$reversed" in
-      *,*) id="${reversed%%,*}"; reversed="${reversed#*,}" ;;
-      *)   id="$reversed"; reversed="" ;;
-    esac
-    lower="$id"
-    first="$(printf '%s' "$id" | cut -c1 | tr '[:lower:]' '[:upper:]')"
-    rest="$(printf '%s' "$id" | cut -c2-)"
-    upper="${first}${rest}"
-    case "$remaining" in
-      *"$lower") remaining="${remaining%$lower}" ;;
-      *"$upper") remaining="${remaining%$upper}" ;;
-      *) return 1 ;;
-    esac
-  done
-  return 0
-}
-
 # Parses --test values, one per line of $1 (`<path>::<test name>=<criterion id>[,<criterion
 # id>...]`), appending one `{path, name, criteria}` JSON object per line to file $2. `criteria` is
 # always a JSON array, however many ids the line named.
@@ -5661,22 +5614,6 @@ TF_EOF
   local support_json
   support_json="$(jq -s 'unique_by(.path)' "$support_tmp")"
   rm -f "$support_tmp"
-
-  # --- 28: a test name must carry, at its own end, the criterion id(s) it claims, or the unit's own
-  # id when it proves the doneWhen. The same check either way: an order id is one more token the
-  # name ends with, and the case rule for its first letter is the one a criterion id already gets.
-  local test_rows_count ti name id_list bad_carry=""
-  test_rows_count="$(printf '%s' "$tests_json" | jq 'length')"
-  ti=0
-  while [ "$ti" -lt "$test_rows_count" ]; do
-    name="$(printf '%s' "$tests_json" | jq -r --argjson ti "$ti" '.[$ti].name')"
-    id_list="$(printf '%s' "$tests_json" | jq -r --argjson ti "$ti" --arg unit "$unit_id" \
-      'if .[$ti].provesDoneWhen == true then $unit else (.[$ti].criteria | join(",")) end')"
-    tf_name_carries "$name" "$id_list" || bad_carry="$bad_carry$name (claims $id_list), "
-    ti=$((ti + 1))
-  done
-  [ -z "$bad_carry" ] \
-    || die 28 "tests-freeze: these test names do not carry, at the end, the criterion id they claim, or $unit_id for a test of its own doneWhen: ${bad_carry%, }"
 
   # --- 29: every machine-verified criterion the unit owns needs a --test row ----------------------
   # Owns, not serves. Exactly one order owns a criterion and most own none (ideal/design.md), and

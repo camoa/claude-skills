@@ -147,11 +147,11 @@ the run command and the failure markers. The author reads a red against that rec
 guessed runner. A framework with no such recipe has no path through this step,
 and AIDA says so rather than writing tests from habit.
 
-Each test carries the id of the criterion it proves at the end of its name. A script can then
-check a row with a string comparison, and a runner can select one criterion's tests by name.
+The freeze records the criterion each test proves, so a test's name follows the test-authoring
+recipe and your project's own convention, not AIDA's ids.
 Exactly one order owns each criterion, and most orders own none. An order that serves a criterion
 without owning it cannot observe an outcome a later order builds. Its tests prove its own
-done-when instead, and those names end with the order's id. An order that neither serves nor owns
+done-when instead, and they claim the order's id. An order that neither serves nor owns
 any criterion refuses here; the repair is the work order, so close design again. A criterion a
 person verifies gets no test. The author writes a checklist line for it, copying the verification
 sentence whole, and the review stage asks you those lines at its close.

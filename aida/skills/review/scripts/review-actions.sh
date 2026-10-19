@@ -2977,8 +2977,8 @@ do_close() {
       answered="script"
       state="$(printf '%s' "$RW_FINISHED_DOC" | jq -r --arg id "$cid" \
         '[ (.criteria // [])[] | select(.id == $id) ][0].rowState // ""')"
-      # Check 1 joins on the test name: implementation puts the criterion id at the end of each
-      # test's name, delimited, so this compares strings and never re-derives the join. One question
+      # Check 1 joins on the test name: the freeze record names the tests each criterion froze,
+      # so this compares strings and never re-derives the join. One question
       # per criterion: does the suite output name any test this criterion froze.
       # The suite output is read from the record on disk, never passed as an argument.
       hit="$(jq -nr --argjson rows "$RW_TEST_ROWS" --arg id "$cid" --slurpfile record "$RECORD_FILE" '

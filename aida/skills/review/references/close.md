@@ -57,9 +57,9 @@ On a light or autonomous run, a row passes only through `review/person-answer.js
 ## Check 1 joins on the test name
 
 A machine verified criterion reads met when its row state is confirmed and no failing test in check 8
-carries its id. It reads unmet when a failing test carries the id. It reads unanswered when the suite
-could not run. Implementation puts the criterion id at the end of each test's name, delimited, so the
-script compares strings. Do not re-derive that join by hand.
+is one it froze. It reads unmet when a failing test is one it froze. It reads unanswered when the
+suite could not run. The freeze record names the tests each criterion froze, so the script compares
+strings. Do not re-derive that join by hand.
 
 A suite reading not-needed reads the row state the same way a passing suite does. No order in the
 task runs a test, so no suite was ever going to name the criterion, and the build already confirmed

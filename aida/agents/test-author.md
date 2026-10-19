@@ -93,9 +93,9 @@ states a behaviour still takes a test.
 Choose the level from the recipe, not from habit. The recipe names the levels this framework has and
 what each one reaches.
 
-Put the criterion id at the end of the test's own name, so a later run can select the tests for one
-criterion. A test of the order's `doneWhen` ends with the order id instead, `Wo1`, and names no
-criterion. The recipe says how the id is spelled here.
+Name each test the way the recipe says. Your report names the criterion each test proves, and the
+freeze records it, so no script reads the id from the name. A test of the order's `doneWhen`
+claims the order id instead, and names no criterion.
 
 Run every test and record what the run printed, to one file per test under the task folder's
 `implementation/` folder. Run it with the command the test-execution recipe

@@ -138,7 +138,7 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "The test's own name, as the `--test` flag named it. Checked to carry, at its own end, the criterion id (or ids, chained from the right) it claims, or the unit's own id on the doneWhen row, so a person or a later step can tell what a test is meant to prove without opening the file."
+          "description": "The test's own name, as the `--test` flag named it. The row this entry sits in says what the test proves, so the name follows the test-authoring recipe and need not carry an AIDA id (live-run row 374)."
         },
         "sha256": {
           "type": "string",

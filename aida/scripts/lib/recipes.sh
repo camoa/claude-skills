@@ -876,7 +876,7 @@ tf_first_segment() {
 
 # The text of $1 after its first "/", or empty when it holds none. Paired with tf_first_segment to
 # peel a "/"-joined string apart one segment at a time without ever word-splitting an unquoted
-# expansion, the same reasoning tf_name_carries already states for its own comma list.
+# expansion: zsh does not word-split `for x in $unquoted` or `set -- $unquoted` by default.
 tf_rest_segments() {
   case "$1" in
     */*) printf '%s' "${1#*/}" ;;

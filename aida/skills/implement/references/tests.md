@@ -249,8 +249,8 @@ freeze below. The red-run file per test goes under `--red`, each support file un
 
 **A criterion this order serves but does not own is proved by its owner.** Exactly one order owns a
 criterion, and most orders own none. A supporting order cannot observe a criterion whose outcome a
-later order builds, so its tests are written against its own done-when. Such a test ends its name
-with the order id, `Wo1`, and no criterion id. The author writes a test for every machine-verified
+later order builds, so its tests are written against its own done-when. Such a test claims the
+order id, and no criterion id. The author writes a test for every machine-verified
 criterion the order owns, and for its done-when where nothing it owns covers that.
 
 **A test green on its first run has four outcomes.** The test was wrong: it is corrected once.
@@ -464,7 +464,7 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
 ```
 
 A `--test` names its criteria or the order's own id, never both. The second form marks a test of
-the order's done-when, and its name ends with the order id. A `--test` path must be a file the
+the order's done-when. A `--test` path must be a file the
 order owns. The freeze refuses any other (exit 27) and names the test file design chose. Do not
 move the tests yourself. Run `dispatch-open` with `--resume` and resume the test author, which
 writes the tests into that file and takes a new red run for each. Then freeze again.
@@ -488,14 +488,13 @@ would rewind the step and leave a spent attempt counter and a stale build record
 longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward
 from here, not back.
 
-The script checks the file exists, sits inside the code repository, matches the framework's own
-declared pattern, and carries at the end of its name the criterion it claims. A done-when test
-carries the order id there instead. It checks every machine-verified criterion this order owns has
+The script checks the file exists, sits inside the code repository, and matches the framework's
+own declared pattern. It checks every machine-verified criterion this order owns has
 a test (a `gate` or `record` order excepted), and every criterion a person verifies has a checklist line. A criterion this order only
 serves needs no test from it, because its proof lives with its owner (exit 29 reads the owned
 list). A person-verified criterion is different: each order that serves it needs its checklist
 line, owned or not (exit 30). A test that names neither a criterion this order serves or owns nor
-this order's id refuses (exit 31). A name that does not end in what it claims refuses (exit 28).
+this order's id refuses (exit 31).
 A record that would hold no row refuses (exit 74).
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
 place. A test with neither refuses (exit 33). A `--locks-in` reason written `commit:<id>` must

@@ -40,7 +40,7 @@ which is worse than no recipe, because the step will report that it read one.
 ## Goal
 
 What this recipe answers for a <framework> project, in one paragraph: which level a behaviour
-belongs at, where its file goes and what it is called, how the criterion is recoverable from it, and
+belongs at, where its file goes and what it is called, whether it names the criterion it proves, and
 what a test here may not do.
 
 **This recipe stops at red.** Say so here, in your own words, and name the two files the rest lives
@@ -112,11 +112,10 @@ working code, it belongs in the implement recipe.
 2. Place and name the file. Directory, file name, and the name of the test function or method,
    stated as an instruction. Cite the implement recipe's declaration as the authority for the
    machine-readable pattern rather than repeating it here.
-3. Put the criterion identifier at the end of the test's own name, delimited so it cannot be part of
-   a longer token, because a bare `c3` otherwise matches a name ending `C30`. Write the local
-   spelling, and say plainly if a house coding standard forbids the obvious separator. If this
-   framework has something better than the name, an attribute or a marker the runner selects on, use
-   it and say how a script reads it back out.
+3. Say whether the test carries the criterion identifier at all. The freeze records which test
+   proves which criterion, so no script reads the identifier from a name or a tag. A project whose
+   tests go upstream keeps the upstream naming. If the recipe asks for the identifier in the name,
+   delimit it so it cannot be part of a longer token: a bare `c3` otherwise matches `C30`.
 4. Write the test, in the shape this framework expects. Assert on what the criterion names and
    nothing else.
 5. Watch it fail, through the test-execution recipe, reading the failure signal it declares rather
@@ -142,8 +141,6 @@ not.
 Checkable statements about the result, six to nine of them, each confirmable without redoing the
 work. These belong in every framework's list:
 
-- Each test carries its criterion identifier at the end of its name, recoverable by string
-  comparison and not as part of a longer token.
 - Each test sits where its level requires and is named as this recipe says.
 - Each new test was seen to fail, and the recorded failure is an assertion that ran and did not hold
   rather than a harness error or a run that selected nothing.
