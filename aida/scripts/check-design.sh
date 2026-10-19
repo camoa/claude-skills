@@ -80,7 +80,6 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/lib/schema-check.sh: the field-list comparison, sourced, never run
 #   <plugin root>/scripts/lib/proof.sh: what one order's proof kind means, sourced, never run
 #   <plugin root>/scripts/lib/task-helpers.sh: automated_tests and task_is_light, sourced, never run
-
 #   <project folder>/tasks/*/implementation*/tests-*.json: the test globs each freeze recorded,
 #     read only when an order's proof is confirm
 #   <plugin root>/scripts/lib/recipes.sh: tf_path_matches_catalog_glob, sourced in a subshell
@@ -132,8 +131,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      order whose proof is observe and
 #      that declares a test, names no surface or has no done-when row, an order whose proof is
 #      confirm and that declares a test, has no done-when row, owns a test file, or sits on a
-#      task whose contract does not say it has no automated tests, an order that owns nothing and
-#      reaches no owner, an order of a light task that does not come after wo1, a dependency cycle, two orders sharing
+#      task whose contract does not say it has no automated tests, an order that owns nothing
+#      and reaches no owner, an order of a light task that does not come after wo1, a
+#      dependency cycle, two orders sharing
 #      a declared owned file, or an id named anywhere that resolves to nothing. Each is named in
 #      the JSON on stdout.
 #
@@ -680,11 +680,16 @@ else
   # yet records none, and notChecked says so. recipes.sh empties TASK_PATH when it loads, so it
   # loads only inside the subshell that matches.
   if printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .slot == "confirm-at-review")' >/dev/null; then
+    # One jq call reads every record. jq stops at a record it cannot parse, so only then does
+    # each record get a call of its own.
     CONFIRM_TEST_GLOBS="$(
       [ -z "${ZSH_VERSION:-}" ] || setopt NULL_GLOB
-      for TEST_RECORD in "$PROJECT_PATH"/tasks/*/implementation*/tests-*.json; do
-        [ -f "$TEST_RECORD" ] && jq -r '(.testGlobs // [])[]? | strings' "$TEST_RECORD" 2>/dev/null
-      done | sort -u)"
+      set -- "$PROJECT_PATH"/tasks/*/implementation*/tests-*.json
+      [ -f "${1:-}" ] || exit 0
+      jq -r '(.testGlobs // [])[]? | strings' "$@" 2>/dev/null \
+        || for TEST_RECORD in "$@"; do jq -r '(.testGlobs // [])[]? | strings' "$TEST_RECORD" 2>/dev/null; done
+      )"
+    CONFIRM_TEST_GLOBS="$(printf '%s\n' "$CONFIRM_TEST_GLOBS" | sort -u | sed '/^$/d')"
   fi
   CONFIRM_ORDERS_OWNING_TEST_FILES_JSON="$(
     # shellcheck source=/dev/null
@@ -694,11 +699,10 @@ else
     | while IFS="$TAB" read -r REC_ID REC_PATH; do
         while IFS= read -r TEST_GLOB; do
           [ -n "$TEST_GLOB" ] || continue
-          # The file name must match the glob's last segment first. The whole-path matcher forks
-          # once per segment, and this test runs in the shell, so a code file costs no fork.
+          # The file name must match the glob's last segment first. That is one call of the
+          # segment matcher, where the whole-path matcher calls it once per segment.
           if [ "${TEST_GLOB##*/}" != "**" ]; then
-            # shellcheck disable=SC2053 # the glob must stay unquoted here
-            [[ "${REC_PATH##*/}" == ${TEST_GLOB##*/} ]] || continue
+            tf_path_matches_glob "${REC_PATH##*/}" "${TEST_GLOB##*/}" || continue
           fi
           if tf_path_matches_catalog_glob "$REC_PATH" "$TEST_GLOB"; then
             printf '%s\t%s\t%s\n' "$REC_ID" "$REC_PATH" "$TEST_GLOB"
