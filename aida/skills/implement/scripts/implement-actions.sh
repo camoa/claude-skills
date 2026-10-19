@@ -6926,17 +6926,15 @@ br_require_real_base() {
 # (live-run row 371). Every test the freeze record $4 holds locks in, so it passes on the code it
 # froze and the builder has nothing to commit. A tests order whose owned file is the frozen test
 # is that case. So is a code order whose tests all lock in on code that already passes: its range
-# then holds its test files alone. The record must name $2, and its subject must be the one tests-freeze writes for
-# the order, because a freeze of tests already in HEAD makes no commit and records whatever HEAD
-# was. Prints nothing otherwise. $1 the code repository.
+# then holds its test files alone. The record must name $2, and list it among the commits its
+# freezes made, because a freeze of tests already in HEAD makes no commit and records whatever
+# HEAD was (live-run row 374). Prints nothing otherwise. $1 the code repository.
 im_freeze_holds_work() {
   [ "$(jq -r '.commit // ""' "$4" 2>/dev/null)" = "$2" ] || return 0
   jq -e '[ (.rows // [])[] | (.tests // [])[] ] | length > 0 and all(has("locksIn"))' "$4" >/dev/null 2>&1 \
     || return 0
-  case "$(git -C "$1" log -1 --format=%s "$2" 2>/dev/null)" in
-    "Freeze the tests of $3 through the implement skill:"*)
-      git -C "$1" rev-parse --verify --quiet "$2^" 2>/dev/null ;;
-  esac
+  tf_freeze_commits "$4" | jq -e --arg c "$2" 'index($c) != null' >/dev/null \
+    && git -C "$1" rev-parse --verify --quiet "$2^" 2>/dev/null
   return 0
 }
 
