@@ -2098,7 +2098,7 @@ do_start() {
   local changed_criteria_json='[]' dependent_halts_json='[]' drift_halts_json='[]'
   local drift_checked=false
   local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' halted_removed_ids_json='[]'
-  local widened_ids_json='[]' widened_json='[]'
+  local widened_ids_json='[]' widened_json='[]' spared_json='{}'
 
   if [ "$snapshot_present" = "false" ]; then
     # ---- new run: design must be formally closed on exactly these live files --------------------
@@ -2195,9 +2195,40 @@ do_start() {
         changed_criteria_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
             (($b.criteria // []) | map({(.id): del(.verdict, .author)}) | add // {}) as $liveMap
             | [ ($a.criteria // [])[] | del(.verdict, .author) | select($liveMap[.id] != .) | .id ]')"
-        drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" "$HALT_MERGE_JQ"'
+        # A criterion whose verify clause alone changed spares each order whose frozen test record
+        # exists and names it in no row, nor its observed record (gap row 375). No frozen test was
+        # written from that clause and no record quotes it, so only review reads it, from the
+        # snapshot this start refreshes. A change made unattended spares only with a recorded
+        # reason: an open or approved decidedWithoutAPerson entry on that criterion.
+        local clause_only_json o_id clause_records
+        clause_only_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" --argjson changed "$changed_criteria_json" '
+            (($b.criteria // []) | map({(.id): del(.verdict, .author, .verification)}) | add // {}) as $liveMap
+            | [ ($a.criteria // [])[] | del(.verdict, .author, .verification) | .id as $i
+                | select($liveMap[$i] == . and ($changed | index($i)) != null) | $i ]')"
+        if [ "$(task_run_mode "$TASK_PATH" scope)" = "autonomous" ]; then
+          clause_only_json="$(printf '%s' "$live_alignment_json" | jq -c --argjson ids "$clause_only_json" "$DECIDED_JQ"'
+              [ (.decidedWithoutAPerson // [])[] | objects
+                | select(decidedWhole and (decidedState == "open" or decidedState == "approved")) | .field ] as $f
+              | [ $ids[] | select(($f | index(.)) != null) ]')"
+        fi
+        if [ "$(printf '%s' "$clause_only_json" | jq 'length')" -gt 0 ]; then
+          while IFS= read -r o_id; do
+            [ -f "$IMPL_DIR/tests-$o_id.json" ] || continue
+            clause_records=("$IMPL_DIR/tests-$o_id.json")
+            [ ! -f "$IMPL_DIR/observed-$o_id.json" ] || clause_records+=("$IMPL_DIR/observed-$o_id.json")
+            spared_json="$(jq -cs --arg id "$o_id" --argjson spared "$spared_json" --argjson ids "$clause_only_json" \
+                '[ .[] | (.rows // [])[] | .criterion // empty ] as $named
+                 | ($ids - $named) as $s | if ($s | length) > 0 then $spared + {($id): $s} else $spared end' \
+                "${clause_records[@]}" 2>/dev/null)" \
+              || die 3 "start: $IMPL_DIR/tests-$o_id.json or its observed record could not be read as JSON"
+          done <<CLAUSE_ORDERS
+$(printf '%s' "$snapshot_workorders_json" | jq -r '.[].id')
+CLAUSE_ORDERS
+        fi
+        drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" "$HALT_MERGE_JQ"'
             [ $snap[] | . as $s
-              | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null) ]) as $hits
+              | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null)
+                   | select((($spared[$s.id] // []) | index($c)) == null) ]) as $hits
               | select(($hits | length) > 0)
               | {id: $s.id, reason: ("design drift: criterion " + ($hits | join(", ")) + ", which " + $s.id + " serves, changed since the snapshot was taken")}
             ] as $byCriterion
@@ -2259,7 +2290,7 @@ $(jq -rn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workor
     | unique | .[]')
 REMOVED_PATHS
       widened_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson phantom "$phantom_json" \
-          --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" '
+          --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
           | ($snap | map({(.id): .}) | add // {}) as $snapMap
           | [ $drifted[] | .id as $d
@@ -2270,7 +2301,8 @@ REMOVED_PATHS
               | select(($l.reasoning // "") | startswith($s.reasoning // ""))
               | select(((($s.ownedFiles // []) - ($l.ownedFiles // []) - $phantom) | length) == 0)
               | select(((($s.sharedFiles // []) - ($l.sharedFiles // []) - $phantom) | length) == 0)
-              | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null) ] | length) == 0)
+              | select(([ (($s.criteriaServed // []) + ($s.criteriaOwned // []))[] | . as $c | select(($changed | index($c)) != null)
+                  | select((($spared[$d] // []) | index($c)) == null) ] | length) == 0)
               | [ (if ((($l.ownedFiles // []) - ($s.ownedFiles // [])) | length) > 0 then "gained owned files" else empty end),
                   (if ((($l.sharedFiles // []) - ($s.sharedFiles // [])) | length) > 0 then "gained shared files" else empty end),
                   ((($s.ownedFiles // []) - ($l.ownedFiles // [])) + (($s.sharedFiles // []) - ($l.sharedFiles // [])) | unique
@@ -2789,6 +2821,7 @@ LO_MOVE
     --argjson haltedDependents "$(printf '%s' "$dependent_halts_json" | jq -c '[ .[] | .id ]')" \
     --argjson resnapshotted "$resnapshot_ids_json" \
     --argjson driftCleared "$drift_cleared_ids_json" \
+    --argjson clauseSpared "$(printf '%s' "$spared_json" | jq -c 'to_entries | map(.key + " (" + (.value | join(", ")) + ")")')" \
     --argjson removed "$removed_ids_json" \
     --argjson added "$added_ids_json" \
     --arg finished "$st_unfinished" \
@@ -2802,7 +2835,7 @@ LO_MOVE
     {task: $task, codePath: $codePath, run: $run, runMode: $runMode, branch: $branch, trunk: $trunk,
      snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom, proofAbsent: $proofAbsent,
      drift: $drift, drifted: $drifted, haltedDependents: $haltedDependents, resnapshotted: ($resnapshotted - $added),
-     driftCleared: $driftCleared, removed: $removed, added: $added, finished: $finished,
+     driftCleared: $driftCleared, clauseSpared: $clauseSpared, removed: $removed, added: $added, finished: $finished,
      partialBuild: $partialBuild, leftovers: $leftovers, setAside: $setAside,
      halted: $halted, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
     | if ($leftovers | length) == 0 then del(.leftovers) else . end
@@ -2811,6 +2844,7 @@ LO_MOVE
     | if ($added | length) == 0 then del(.added) else . end
     | if $finished == "" then del(.finished) else . end
     | if ($driftCleared | length) == 0 then del(.driftCleared) else . end
+    | if ($clauseSpared | length) == 0 then del(.clauseSpared) else . end
     | if ($partialBuild | length) == 0 then del(.partialBuild) else . end')"
   exit 0
 }

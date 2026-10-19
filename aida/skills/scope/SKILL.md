@@ -439,6 +439,9 @@ To edit an existing criterion or non-goal rather than add or remove one:
   update "<task_folder>" --id <id> [--text "<text>"] [--verification "<verify clause>"] \
   [--verified-by <machine|person>]
 ```
+After implementation started, a corrected verify clause reaches the build through design's
+`close` and then implement's `start`. Unattended, run `record-decision --field <id>` with the
+reason first, or the change halts every started order that serves the criterion.
 A non-goal's id only accepts `--text`; the others are a criterion's own fields. `--author owner`
 is for a criterion the person corrected in this conversation; `approve` promotes the rest. Both
 only ever move a criterion from `designer` to `owner`, and the other way round is refused.

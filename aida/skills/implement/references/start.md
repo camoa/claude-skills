@@ -96,6 +96,12 @@ naming the criterion, the same as a changed order file. An order serving none of
 criteria is untouched. The snapshot then takes the live contract, so the tests are written from
 the criterion the person approved. That needs design closed on the live files too.
 
+A criterion whose verify clause alone changed halts fewer orders. A started order is spared when
+its frozen test record exists and no row there, or in its observed record, names that criterion.
+No test was written from the clause, and review reads it from the refreshed snapshot. The
+`clauseSpared:` line names each spared order and its criteria. A clause changed unattended spares
+nothing without a recorded reason: an open or approved scope decision on that criterion.
+
 Only a started order halts for drift: one with a step reached, a frozen test record or a build
 record. A drifted order that has not started is taken fresh from the live design instead, and
 nothing is halted for it. Nothing was built against its old shape, so its dependents are untouched.
