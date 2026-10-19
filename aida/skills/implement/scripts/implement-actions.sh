@@ -3912,7 +3912,7 @@ EOF
                 smoke_reason="the token {$smoke_payload} in the smoke command has no supplied value; pass --value $smoke_payload=<value>"
                 token_first="$(cr_lookup "$token_failures" "$smoke_payload")"
                 [ -z "$token_first" ] || {
-                  smoke_reason="the token {$smoke_payload} in the smoke command has no value, because the recipe's ## Tokens block for it failed or printed nothing ($token_first); pass --value $smoke_payload=<value>"
+                  smoke_reason="the token {$smoke_payload} in the smoke command has no value, because the recipe's ## Tokens block for it failed or printed nothing; pass --value $smoke_payload=<value> ($token_first)"
                   smoke_token="$smoke_payload"
                 }
               elif [ "$smoke_kind" = "EMPTY" ]; then
@@ -4174,9 +4174,11 @@ PC_TOOL_ROWS
   # of what answered unmet or unknown with the owner each recipe named, the state of its test
   # commands and its smoke verdict. What a condition or a smoke run printed stays in the record.
   # A verdict not met names the first row that stopped it and the command that row ran (live-run
-  # row 206). The first line that command printed takes the `failedOutput:` line. The install
-  # advice takes the `nextAdvice:` line, and only for an absent condition tool. Each is a line of
-  # its own, so the 240-character cut of a long argv never takes the cause or the instruction.
+  # row 206). The first line that command printed takes the `failedOutput:` line. The
+  # `nextAdvice:` line takes the install advice for an absent condition tool, or the bring-up for
+  # a token block on a worktree with no site. Each is a line of its own, so the 240-character cut
+  # of a long argv never takes the cause. A token's reason ends in what its block printed, so the
+  # cut takes that and never the --value instruction.
   # A suite the baseline recorded unmet or unknown takes the `baselineRed:` line (gap row 261):
   # the build goes on, but finish meets that red again, and only a person can decide it.
   local pc_next pc_advice="none" pc_failed="none" pc_cause pc_token
@@ -4211,7 +4213,7 @@ PC_TOOL_ROWS
       pc_token="$(printf '%s' "$record_json" | jq -r '[ .frameworks[].smoke.token // empty ][0] // empty')"
       [ -n "$pc_token" ] && jq -e '(.worktree.path // "") != "" and (.environment.address // "") == ""' \
           "$task_folder/task.json" >/dev/null 2>&1 \
-        && pc_advice="The {$pc_token} block reads the worktree, which records no site. Run task environment $(jq -r '.id' "$task_folder/task.json") up, then preconditions again. If no catalog recipe fits, run project add-source <project> processRecipes <folder> first."
+        && pc_advice="The worktree records no site for the ## Tokens block to read. If no catalog recipe fits, run project add-source <project> processRecipes <folder>. Then run preconditions again after task environment $(jq -r '.id' "$task_folder/task.json") up."
       # The catalog comes first, as the tool skill's exit 2 wins over its exit 4.
       pc_no_recipe="$(printf '%s' "$record_json" | jq -r '[ .frameworks[].entries[]
         | select(.verdict == "unknown" and ((.firstLine // "") | startswith("no recipe"))) | .id | ltrimstr("requires_tooling: ") ] | join(", ")')"
