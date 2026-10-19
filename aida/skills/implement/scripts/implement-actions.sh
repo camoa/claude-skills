@@ -2196,31 +2196,33 @@ do_start() {
             (($b.criteria // []) | map({(.id): del(.verdict, .author)}) | add // {}) as $liveMap
             | [ ($a.criteria // [])[] | del(.verdict, .author) | select($liveMap[.id] != .) | .id ]')"
         # A criterion whose verify clause alone changed spares each order whose frozen test record
-        # exists and names it in no row, nor its observed record (gap row 375). No frozen test was
-        # written from that clause and no record quotes it, so only review reads it, from the
-        # snapshot this start refreshes. A change made unattended spares only with a recorded
-        # reason: an open or approved decidedWithoutAPerson entry on that criterion.
+        # exists and names it in no row, nor its observed record, nor a ledger judgement the order
+        # made (gap row 375). Nothing frozen or judged then rests on that clause, so only review
+        # reads it, from the snapshot this start refreshes. A change made unattended spares only
+        # with a recorded reason: one more decidedWithoutAPerson entry on that criterion than the
+        # snapshot's contract holds, because scoping unattended already wrote one per criterion.
         local clause_only_json o_id clause_records
         clause_only_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" --argjson changed "$changed_criteria_json" '
             (($b.criteria // []) | map({(.id): del(.verdict, .author, .verification)}) | add // {}) as $liveMap
             | [ ($a.criteria // [])[] | del(.verdict, .author, .verification) | .id as $i
                 | select($liveMap[$i] == . and ($changed | index($i)) != null) | $i ]')"
         if [ "$(task_run_mode "$TASK_PATH" scope)" = "autonomous" ]; then
-          clause_only_json="$(printf '%s' "$live_alignment_json" | jq -c --argjson ids "$clause_only_json" "$DECIDED_JQ"'
-              [ (.decidedWithoutAPerson // [])[] | objects
-                | select(decidedWhole and (decidedState == "open" or decidedState == "approved")) | .field ] as $f
-              | [ $ids[] | select(($f | index(.)) != null) ]')"
+          clause_only_json="$(jq -cn --argjson ids "$clause_only_json" --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
+              def entries($doc; $c): [ ($doc.decidedWithoutAPerson // [])[] | objects | select(.field == $c) ] | length;
+              [ $ids[] | . as $c | select(entries($b; $c) > entries($a; $c)) ]')"
         fi
         if [ "$(printf '%s' "$clause_only_json" | jq 'length')" -gt 0 ]; then
           while IFS= read -r o_id; do
             [ -f "$IMPL_DIR/tests-$o_id.json" ] || continue
             clause_records=("$IMPL_DIR/tests-$o_id.json")
             [ ! -f "$IMPL_DIR/observed-$o_id.json" ] || clause_records+=("$IMPL_DIR/observed-$o_id.json")
+            [ ! -f "$LEDGER_FILE" ] || clause_records+=("$LEDGER_FILE")
             spared_json="$(jq -cs --arg id "$o_id" --argjson spared "$spared_json" --argjson ids "$clause_only_json" \
-                '[ .[] | (.rows // [])[] | .criterion // empty ] as $named
+                '[ .[] | ((.rows // [])[] | .criterion // empty),
+                         ((.criteria // [])[] | select(any((.judgements // [])[]; .unit == $id)) | .id) ] as $named
                  | ($ids - $named) as $s | if ($s | length) > 0 then $spared + {($id): $s} else $spared end' \
                 "${clause_records[@]}" 2>/dev/null)" \
-              || die 3 "start: $IMPL_DIR/tests-$o_id.json or its observed record could not be read as JSON"
+              || die 3 "start: $IMPL_DIR/tests-$o_id.json, its observed record or $LEDGER_FILE could not be read as JSON"
           done <<CLAUSE_ORDERS
 $(printf '%s' "$snapshot_workorders_json" | jq -r '.[].id')
 CLAUSE_ORDERS
@@ -2627,8 +2629,9 @@ DEP_SEGMENTS
     fi
     # The list follows the snapshot's criteria, which a contract change just refreshed: an entry
     # the ledger holds is kept with its judgements, a new criterion opens as not judged, and one
-    # the contract dropped leaves. A changed criterion's serving orders are unstarted or halted
-    # here, so no judgement is reset; `restart` resets the halted ones' when it takes them fresh.
+    # the contract dropped leaves. A changed criterion's serving orders are unstarted, halted, or
+    # spared because none judged it, so no judgement is reset; `restart` resets the halted ones'
+    # when it takes them fresh.
     final_criteria_json="$(printf '%s' "$ledger_doc" | jq -c --argjson live "$snapshot_criteria_json" '
         ((.criteria // []) | map({(.id): .}) | add // {}) as $have
         | [ $live[] | .id as $id | ($have[$id] // {id: $id, rowState: "not-judged"}) ]')"
@@ -2719,6 +2722,17 @@ LO_MOVE
     if [ -n "$st_unfinished" ]; then
       rm -f -- "$IMPL_DIR/finished.json" || die 3 "start: could not remove $IMPL_DIR/finished.json"
       st_unfinished="implementation/finished.json removed, so the build is not finished and finish writes it again: $st_unfinished"
+    fi
+  fi
+
+  # A spared clause reaches review only through a new pass: a closed one judged the old clause.
+  local st_clause_spared=""
+  if [ "$spared_json" != "{}" ]; then
+    st_clause_spared="$(printf '%s' "$spared_json" | jq -r 'to_entries | map(.key + " (" + (.value | join(", ")) + ")") | join(", ")')"
+    if jq -e 'has("verdict")' "$TASK_PATH/review/review.json" >/dev/null 2>&1; then
+      "$PLUGIN_ROOT/skills/review/scripts/review-actions.sh" archive "$TASK_PATH" >/dev/null 2>&1 \
+        || die 3 "start: the closed review judged the old verify clause, and review-actions.sh archive could not move it aside. Run it by hand, then run start."
+      st_clause_spared="$st_clause_spared; the closed review judged the old clause, so it moved aside and review runs again"
     fi
   fi
 
@@ -2821,7 +2835,7 @@ LO_MOVE
     --argjson haltedDependents "$(printf '%s' "$dependent_halts_json" | jq -c '[ .[] | .id ]')" \
     --argjson resnapshotted "$resnapshot_ids_json" \
     --argjson driftCleared "$drift_cleared_ids_json" \
-    --argjson clauseSpared "$(printf '%s' "$spared_json" | jq -c 'to_entries | map(.key + " (" + (.value | join(", ")) + ")")')" \
+    --arg clauseSpared "$st_clause_spared" \
     --argjson removed "$removed_ids_json" \
     --argjson added "$added_ids_json" \
     --arg finished "$st_unfinished" \
@@ -2844,7 +2858,7 @@ LO_MOVE
     | if ($added | length) == 0 then del(.added) else . end
     | if $finished == "" then del(.finished) else . end
     | if ($driftCleared | length) == 0 then del(.driftCleared) else . end
-    | if ($clauseSpared | length) == 0 then del(.clauseSpared) else . end
+    | if $clauseSpared == "" then del(.clauseSpared) else . end
     | if ($partialBuild | length) == 0 then del(.partialBuild) else . end')"
   exit 0
 }

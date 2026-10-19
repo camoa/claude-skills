@@ -97,10 +97,13 @@ criteria is untouched. The snapshot then takes the live contract, so the tests a
 the criterion the person approved. That needs design closed on the live files too.
 
 A criterion whose verify clause alone changed halts fewer orders. A started order is spared when
-its frozen test record exists and no row there, or in its observed record, names that criterion.
-No test was written from the clause, and review reads it from the refreshed snapshot. The
-`clauseSpared:` line names each spared order and its criteria. A clause changed unattended spares
-nothing without a recorded reason: an open or approved scope decision on that criterion.
+its frozen test record exists and names that criterion in no row. Its observed record must not
+name it either, and the ledger must hold no judgement of it by that order. The briefs quoted the
+old clause, but nothing frozen or judged rests on it. Review reads the clause from the refreshed
+snapshot. The `clauseSpared:` line names each spared order and its criteria. When a review
+already closed, that pass moves aside, the line says so, and review runs again. A clause changed
+unattended spares nothing without a recorded reason: a scope decision on that criterion, added
+after the snapshot.
 
 Only a started order halts for drift: one with a step reached, a frozen test record or a build
 record. A drifted order that has not started is taken fresh from the live design instead, and

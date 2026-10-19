@@ -32,6 +32,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   review-actions.sh close    <task_folder> [--row <criterion or check>=met|unmet]...
 #                                            [--row <finding id>=wrong|deferred]...
 #   review-actions.sh audit    <task_folder>          the checks, and how each verdict came about
+#   review-actions.sh archive  <task_folder>          moves a closed pass aside, so review runs again
 #   review-actions.sh step     <name>
 #
 # `--recipe` names the `test-execution` recipe, for its `## Test commands` block, which carries the
@@ -208,6 +209,7 @@ usage: review-actions.sh read     <task_folder>
        review-actions.sh close    <task_folder> [--row <criterion or check>=met|unmet]...
                                                [--row <finding id>=wrong|deferred]...
        review-actions.sh audit    <task_folder>
+       review-actions.sh archive  <task_folder>
        review-actions.sh step     <name>
 EOF
 }
@@ -3224,6 +3226,18 @@ RW_ROWS
 # detail's fixed wording decides: a tool row undeclared with no command, a surface check undeclared
 # with no command, and a surface row not run. The wording is this script's own, and a field on
 # the row saying why nothing ran would make each a field read. Nothing here changes a verdict.
+# archive: the closed pass moves aside the way a re-run moves it, and nothing else changes.
+# implement's `start` calls it when a corrected verify clause reaches the snapshot after the review
+# closed, because that verdict judged the old clause (gap row 375). A pass with no verdict stays.
+do_archive() {
+  [ "$#" -eq 1 ] || die 3 "archive: a task folder is required, and nothing else"
+  rw_paths "archive" "$1"
+  rw_load_record "archive"
+  rw_archive_closed_record "archive"
+  echo "action: archive"
+  echo "record: $RECORD_FILE"
+}
+
 do_audit() {
   [ "$#" -ge 1 ] || die 3 "audit: a task folder is required"
   [ "$#" -le 1 ] || die 3 "audit: unrecognized extra argument: $2"
@@ -3317,6 +3331,7 @@ case "$ACTION" in
   surfaces) do_surfaces "$@" ;;
   close)    do_close    "$@" ;;
   audit)    do_audit    "$@" ;;
+  archive)  do_archive  "$@" ;;
   step)     do_step     "$@" ;;
   *) usage; die 3 "unknown action: $ACTION" ;;
 esac
