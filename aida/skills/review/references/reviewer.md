@@ -30,11 +30,11 @@ whether to dispatch the reviewer.
 ## Search for current practice when no guide is on disk
 
 `practice-search: dispatch` means no guide body is on disk and the review has not searched yet.
-A missing guide is a reason to look, never a reason to skip the check. So search before the
-reviewer runs, in every run mode, light included.
+The `reviewer:` line then reads `wait`. A missing guide is a reason to look, never a reason to
+skip the check. So search before the reviewer runs, in every run mode, light included.
 
-Dispatch `outward-searcher` once, with the message SKILL.md names. Its lines are the run mode, the
-words, and the bound. The words are the frameworks `read` printed, then "current best practice",
+Dispatch `outward-searcher` once. Its message lines are the run mode, the words, and the bound,
+as its own definition asks, and no paths. The words are the frameworks `read` printed, then "current best practice",
 then the task's goal in a few words. The bound is official documentation and maintained sources
 for those frameworks, current for the release the code uses.
 
@@ -49,7 +49,10 @@ Keep `fetch-failed` in the text of a snippet. A search that found nothing is rec
 `--source` the words "searched and empty", so it names no URL. Then run `brief` again.
 
 The script decides what the search proves. `brief` counts each finding with a URL that is no
-`fetch-failed` snippet. A count of one or more makes the search the body both lenses judge.
+`fetch-failed` snippet and no searched and empty answer. A count of one or more makes the search
+the body both lenses judge. Each of the two checks then reads met only when the reviewer's
+`practiceJudged` names, for that lens, a counted finding. `findings` refuses at exit 62 when the
+search holds more or fewer findings than the brief the reviewer read.
 
 ## Dispatch the architecture reviewer
 
@@ -137,8 +140,8 @@ else. A task whose research records cite no source leaves both undeclared, becau
 had a guide or an accepted practice to judge against. A task with no research record at all leaves
 both unknown, because nobody looked. Met means a judgement happened. So where the brief puts no
 guide body on disk, both read unknown when their lens raised nothing. A code file research cites
-is not a guide body. A practice the review's own search found with a source lifts that floor, and
-the lens then decides. Check 16 also escapes it when the playbook record has a loaded source.
+is not a guide body. A practice the review's own search found with a source lifts that floor,
+when the reviewer's `practiceJudged` names it for the lens. Check 16 also escapes it when the playbook record has a loaded source.
 With neither, each check waits for the person at close.
 
 ## Classify every finding

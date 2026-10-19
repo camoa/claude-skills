@@ -79,8 +79,8 @@ then had only the research text. Research names guides and never opens them. The
 follows the same rule unless the playbook record holds a loaded source. With no guide body on
 disk, the review first searches the web for current practice for your stack, in every run mode.
 It records each finding with its source, beside the research records. A practice found with a
-source becomes what both lenses judge against. When the search finds none, you answer either
-check at close, met or unmet.
+source becomes what both lenses judge against, and the reviewer names each one it used. When
+the search finds none, or the reviewer names none, you answer either check at close, met or unmet.
 
 A lens check fails on any medium or high finding. When every finding of one of those six lens
 checks is low, you decide the check at close. The same holds for "everything serves a criterion" and
