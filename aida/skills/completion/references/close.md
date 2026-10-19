@@ -41,7 +41,7 @@ review that failed, one that ran and did not close, or none at all. Autonomous: 
 
 When `read` prints `personRoute`, a criterion waits for a person's met or unmet in review. In
 both modes, give the person that line first. Their answer in review can pass the review, and then
-no reason is needed.
+the close needs no reason.
 
 ## Put each observed criterion to the person
 

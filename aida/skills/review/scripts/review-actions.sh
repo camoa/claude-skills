@@ -3132,12 +3132,18 @@ RW_ROWS
 
   # A decision an unattended build left, still unanswered, holds the verdict back (gap row 279).
   # The record keeps every row without one, so a later close answers it with --row, no fresh pass.
-  local waiting
+  # A criterion only a person answers, such as one checked after a gated push, reads unanswered
+  # until the person answers it. The route is a later close at this commit (gap row 378).
+  local waiting person_waiting person_line=""
+  person_waiting="$(printf '%s' "$updated" | jq -r '[ (.criteria // [])[] | select(.verdict == "unanswered" and .answeredBy == "nobody") | .id ] | join(", ")')"
+  [ -z "$person_waiting" ] \
+    || person_line="CLOSE: these criteria wait for a person to answer met or unmet: $person_waiting. When the person answers, run close again at this commit with --row <criterion>=met or --row <criterion>=unmet. A light or autonomous run takes that answer from $REVIEW_DIR/person-answer.json, written by the main session with step close."
   waiting="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select((.id | startswith("decision-")) and .verdict == "unknown") | .id ] | join(", ")')"
   if [ -n "$waiting" ]; then
     rw_write_record "close" "$(printf '%s' "$updated" | jq -c 'del(.verdict)')"
     rw_print_summary "$updated" "close"
-    echo "CLOSE: no verdict yet. These decisions wait for the person: $waiting. Run close again with one --row per decision, as close.md says, with a person present." >&2
+    echo "CLOSE: no verdict yet. These decisions wait for the person: $waiting. Run close again with one --row per decision, as close.md says. A light or autonomous run takes the person's rows from $REVIEW_DIR/person-answer.json, written by the main session with step close." >&2
+    [ -z "$person_line" ] || echo "$person_line" >&2
     exit 0
   fi
 
@@ -3182,17 +3188,13 @@ RW_ROWS
     "the review $verdict_word${failing:+: $failing}"
   rw_print_summary "$updated" "close"
   printf 'contract: %s\n' "$ALIGNMENT_FILE"
-  local undeclared_list unknown_list awaiting_list note_count person_waiting
+  local undeclared_list unknown_list awaiting_list note_count
   undeclared_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "undeclared") | .id ] | join(", ")')"
   unknown_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy != "nobody") | .id ] | join(", ")')"
   awaiting_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy == "nobody") | .id ] | join(", ")')"
   note_count="$(printf '%s' "$updated" | jq '(.catalogNotes // []) | length')"
   echo "CLOSE: the review $verdict_word. ${failing:+What caused it: $failing.} Checks nothing declared: ${undeclared_list:-none}. Checks nobody could read: ${unknown_list:-none}. Checks awaiting the person: ${awaiting_list:-none}. Criteria reading unanswered: $unanswered. Catalog notes: $note_count." >&2
-  # A criterion only a person answers, such as one checked after a gated push, reads unanswered
-  # until the person answers it. The route is a later close at this commit (gap row 378).
-  person_waiting="$(printf '%s' "$updated" | jq -r '[ (.criteria // [])[] | select(.verdict == "unanswered" and .answeredBy == "nobody") | .id ] | join(", ")')"
-  [ -z "$person_waiting" ] \
-    || echo "CLOSE: these criteria wait for a person to answer met or unmet: $person_waiting. When the person answers, run close again at this commit with --row <criterion>=met or --row <criterion>=unmet. A light or autonomous run takes that answer from $REVIEW_DIR/person-answer.json, written by the main session with step close." >&2
+  [ -z "$person_line" ] || echo "$person_line" >&2
   case "$live_state" in
     ok) echo "CLOSE: review wrote one verdict per criterion into $ALIGNMENT_FILE, across $written criteria. That write moves the contract hash, but start compares the contract without verdicts, so it halts no order.${missing_ids:+ These criteria are in the frozen contract and not in the live one, so nothing was written for them: $missing_ids.}" >&2 ;;
     *)  echo "CLOSE: $ALIGNMENT_FILE is $live_state, so no criterion verdict was written into the contract. The record holds them." >&2 ;;

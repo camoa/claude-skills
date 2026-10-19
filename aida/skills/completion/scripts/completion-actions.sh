@@ -762,7 +762,7 @@ do_close() {
     undecided="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy == "nobody") | (.id + ": " + .detail) ] | join(" ")' 2>/dev/null)"
     local decide_route=""
     [ -z "$undecided" ] \
-      || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. A --reason here closes the task with every one of those decisions unmade."
+      || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. Or the run mode stays, and the main session writes those rows to $TASK_PATH/review/person-answer.json with step close. A --reason here closes the task with every one of those decisions unmade."
     decide_route="$decide_route${CP_PERSON_ROUTE:+ $CP_PERSON_ROUTE A --reason here closes the task with those criteria unanswered.}"
     case "$CP_RUN_MODE" in
       autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}$decide_route" ;;
