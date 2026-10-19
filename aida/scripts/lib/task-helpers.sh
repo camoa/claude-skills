@@ -14,6 +14,7 @@
 #   resolve_task_folder <path> <action>   prints the canonical task folder, or dies
 #   looks_like_flag <value>               true when the value is another option, not data
 #   is_blank <value>                      true when the value is empty or only whitespace
+#   text_args <arg>...                    sets TEXT_ARGS to the arguments, each @/<path> read
 #   parse_finding_ref <action> <ref> <research folder>
 #                                         sets FINDING_REF_SEARCH and FINDING_REF_N from
 #                                         <search>#<n>, counted from 1; 1 when no such search
@@ -253,6 +254,23 @@ is_blank() {
     *[![:space:]]*) return 1 ;;
   esac
   return 0
+}
+
+# Sets TEXT_ARGS to the arguments $@, with each argument @/<absolute path> replaced by that file's
+# text. A long text then never sits in the command line. Claude Code refuses a command whose quoted
+# text names git when the session is isolated in a worktree (live-run row 377). Dies 3 when the
+# file is not readable, so a mistyped path is never stored as the text.
+text_args() {
+  local a
+  TEXT_ARGS=()
+  for a in "$@"; do
+    case "$a" in
+      @/*)
+        [ -f "${a#@}" ] && [ -r "${a#@}" ] || die3 "the text file ${a#@} is not a readable file"
+        TEXT_ARGS+=("$(cat -- "${a#@}")") ;;
+      *) TEXT_ARGS+=("$a") ;;
+    esac
+  done
 }
 
 # A research finding is named `<search>#<n>`: its search's file under research/, and its place

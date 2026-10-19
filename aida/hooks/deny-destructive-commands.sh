@@ -51,11 +51,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # - A Write, Edit or MultiEdit to a `.claude` settings file whose new text holds `disableAllHooks`.
 #
 # False positives. A heredoc body that goes to `cat` or `tee`, or to `git commit -F -`, is not
-# read. The exception is a command line that also starts a shell or runs a file. The unreadable-verb
-# rule does not read a shell comment (live-run row 321). Two rules find a
+# read, also after `;` or `&&` on its line. The exception is a command line that also starts a
+# shell or runs a file. The unreadable-verb rule does not read a shell comment (live-run row 321).
+# Two rules find a
 # command word: a command word from a variable, and a recursive delete. They read a quoted string
 # that opens and closes on one line as part of one word. So the message in `detail="$d $fw: ..."`
-# is not a command (live-run row 254). A string that spans lines is read as commands. On a line
+# is not a command (live-run row 254). The push rules and the unreadable-verb rule read such a
+# string as one word too, except the value of an assignment, which a later `$cmd` runs. So
+# `--reasoning "... git push ..."` is not a command (live-run row 377). A string that spans lines
+# is read as commands. On a line
 # that holds `eval`, a `-c` flag or `<<<`, every string after it is read as commands, because a
 # shell runs it. The other rules read quoted text as commands. A refused phrase
 # anywhere else is refused, for example inside `git commit -m "..."` or `echo "..."`. Closing that
@@ -64,6 +68,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Out of reach:
 # - A script generated at run time and run in the same call, other than through a heredoc body.
 # - An encoded string, such as base64 piped to a shell.
+# - A quoted push that a command runs as a shell line with no `-c` flag, such as `watch` or `ssh`.
 # - Another language's subprocess call, such as Python or Node running git.
 # - An alias set before this command, and then used.
 # - A command word from a variable followed by a verb this hook does not list.
@@ -224,7 +229,7 @@ FORCE='--fo(r(c(e[^ ;&|]*)?)?)?'
 DELETE='--de(l(e(t(e)?)?)?)?'
 MIRROR='--mi(r(r(o(r)?)?)?)?'
 # A heredoc opening line whose body goes to a file or to a commit message, never to a shell.
-HD_TO_FILE='^[[:space:]]*(cat|tee)[[:space:]][^|]*$|^[[:space:]]*git[[:space:]][^|]*commit[[:space:]][^|]*(-F[[:space:]]*-|--file[=[:space:]]-)([[:space:]]|$)|\$\(cat[[:space:]]*<<'
+HD_TO_FILE='(^|[;&])[[:space:]]*(cat|tee)[[:space:]][^|]*$|(^|[;&])[[:space:]]*git[[:space:]][^|]*commit[[:space:]][^|]*(-F[[:space:]]*-|--file[=[:space:]]-)([[:space:]]|$)|\$\(cat[[:space:]]*<<'
 BSNL=$'\\\n'
 MAX_BYTES=262144
 MAX_DEPTH=3
@@ -244,11 +249,15 @@ segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
 # string is joined, because a shell runs its text. The shell runs the text of each `$(...)` and
 # each backtick pair outside single quotes, also inside a double-quoted string. So that text
 # follows its line again, as lines of its own.
-# With $2 set to strip, it prints the text with each comment dropped and nothing else changed. A
-# `#` starts a comment at the start of a word, outside a string, a backtick pair and `${...}`. A
-# `$'...'` string takes backslash escapes. A comment ends at its line, also after a backslash.
+# With $2 set to args, a string that is the value of an assignment is not joined, because a later
+# `$cmd` runs the text of `cmd="git push"`. With $2 set to code, it is args with each comment
+# dropped too. A `#` starts a comment at the start of a word, outside a string, a backtick pair and
+# `${...}`. A `$'...'` string takes backslash escapes. A comment ends at its line, also after a
+# backslash.
 quoted_words() {
-  printf '%s\n' "$1" | LC_ALL=C awk -v strip="${2:+1}" '
+  local strip=""
+  [ "${2:-}" != code ] || strip=1
+  printf '%s\n' "$1" | LC_ALL=C awk -v strip="$strip" -v asg="${2:+1}" '
     function close_at(s, k, c, e,   d, depth) {
       depth = 0
       while (k <= length(s)) {
@@ -284,11 +293,11 @@ quoted_words() {
     }
     {
       line = $0; n = length(line); pc = cont; cont = 0; dol = 0
-      if (hd != "") { t = line; sub(/^\t+/, "", t); if (t == hd) hd = ""; print (strip ? line : line subs(line)); next }
+      if (hd != "") { t = line; sub(/^\t+/, "", t); if (t == hd) hd = ""; print line subs(line); next }
       out = ""; i = 1; pend = ""; code = n
       if (q != "") {
         j = close_at(line, 1, q, qe)
-        if (j == 0) { print (strip ? line : line subs(line)); next }
+        if (j == 0) { print line subs(line); next }
         out = substr(line, 1, j); i = j + 1; q = ""
       }
       while (i <= n) {
@@ -310,7 +319,8 @@ quoted_words() {
           j = close_at(line, i + 1, c, e)
           if (j == 0) { out = out substr(line, i); q = c; qe = e; break }
           s = substr(line, i, j - i + 1)
-          if (!strip && substr(line, 1, i - 1) !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</) gsub(/[ \t;&|]/, "\037", s)
+          pre = substr(line, 1, i - 1)
+          if (pre !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</ && !(asg && pre ~ /(^|[ \t;&|(])[A-Za-z_][A-Za-z0-9_]*\+?=[^ \t;&|]*$/)) gsub(/[ \t;&|]/, "\037", s)
           out = out s; i = j + 1; continue
         }
         if (c == "`") bt = !bt
@@ -318,7 +328,7 @@ quoted_words() {
         else if (c == "}" && br) br--
         out = out c; i++
       }
-      print (strip ? out : out subs(substr(line, 1, code)))
+      print out subs(substr(line, 1, code))
       hd = pend
     }'
 }
@@ -552,16 +562,17 @@ SEGMENTS
 }
 
 # The command rules, on normalised text $1, and on $2, the same text normalised after quoted_words.
-# The unreadable-verb rule reads $3, the same text with its comments dropped, so a backticked verb
-# in a comment passes (live-run row 321). The comment reader can take code for a comment, so every
-# other rule reads the comments too.
+# The push rules read $4, the text after quoted_words args. The unreadable-verb rule reads $3, the
+# text after quoted_words code, so a backticked verb in a comment passes (live-run row 321). So a
+# quoted argument that names git, such as a reason text, is not read as a command (live-run row
+# 377). The comment reader can take code for a comment, so every other rule reads the comments too.
 # Sets REASON and returns 0 on the first rule that hits.
 rules() {
-  local t="$1" q="$2" c="$3" line
-  hit "$t" "${GIT}push$ARGS +(-[a-zA-Z]*[fd][a-zA-Z]*|$FORCE|$MIRROR|$DELETE|\+[^ ;&|]+|:[^ ;&|]+)$END" \
+  local t="$1" q="$2" c="$3" a="$4" line
+  hit "$a" "${GIT}push$ARGS +(-[a-zA-Z]*[fd][a-zA-Z]*|$FORCE|$MIRROR|$DELETE|\+[^ ;&|]+|:[^ ;&|]+)$END" \
     && { REASON="is a force push, a mirror push, or a delete of a remote branch"; return 0; }
   if ! push_gate_open; then
-    hit "$t" "${GIT}push$END" && { REASON="is a git push, and version 6 never publishes: a person pushes. To let this session push, the person opens the gate: sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push"; return 0; }
+    hit "$a" "${GIT}push$END" && { REASON="is a git push, and version 6 never publishes: a person pushes. To let this session push, the person opens the gate: sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push"; return 0; }
   fi
   hit "$c" "${GIT}([\$\`]|[^- ;&|][^ ;&|]*[\$\`{])" && { REASON="puts a variable, a brace or a command substitution in the git verb, so this hook cannot read the verb"; return 0; }
   if [ "$HAVE_TEXT" = true ] && variable_command "$q"; then
@@ -617,7 +628,7 @@ GHAPI
 check_text() {
   local text="$1" depth="$2" stripped n n0="" line val f p runs runs0="" need_x code
   # The comments go before the lines join, because a comment ends at its line.
-  code="$(quoted_words "$text" strip)"
+  code="$(quoted_words "$text" code)"
   code="${code//"$BSNL"/}"
   text="${text//"$BSNL"/}"
   if [ "$HAVE_TEXT" = true ]; then
@@ -628,7 +639,8 @@ check_text() {
     [ "$SHELLISH" = true ] || { text="$stripped"; code="$(strip_heredocs "$code" "$HD_TO_FILE")"; }
   fi
   n="$(normalise "$text")"
-  rules "$n" "$(normalise "$(quoted_words "$text")")" "$(normalise "$code")" && return 0
+  rules "$n" "$(normalise "$(quoted_words "$text")")" "$(normalise "$code")" \
+    "$(normalise "$(quoted_words "$text" args)")" && return 0
   [ "$depth" -lt "$MAX_DEPTH" ] || return 1
   while IFS= read -r line; do
     [ -n "$line" ] || continue

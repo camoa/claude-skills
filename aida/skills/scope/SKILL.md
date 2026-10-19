@@ -19,6 +19,11 @@ The record is `alignment.json`, in the task's own folder, beside `task.json` and
 below runs `surfaces-actions.sh decline`. Both are named in this skill's own grant, so they
 run without asking. Any other Bash command still asks for approval.
 
+`scope-actions.sh` takes a text value from a file. Write the text with the Write tool,
+and pass `@/<absolute path>` as the value. Use this for a text that names a command, such as
+git. Claude Code refuses a command whose quoted text names git when the session works in a
+worktree.
+
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation. Found, and it says

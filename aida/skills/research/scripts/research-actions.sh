@@ -759,6 +759,9 @@ do_split_read() {
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
+# A text argument may be @/<path>, read from that file (task-helpers.sh, text_args).
+text_args "$@"
+set -- ${TEXT_ARGS[@]+"${TEXT_ARGS[@]}"}
 ACTION="${1:-}"
 if [ "$ACTION" = "-h" ] || [ "$ACTION" = "--help" ]; then
   usage
