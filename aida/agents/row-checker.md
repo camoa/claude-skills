@@ -21,7 +21,7 @@ covers.
 
 Each row names a
 criterion, its verify clause, and the tests that claim to prove it. Read the recipe first: it says
-which test levels exist, what a test may not do, and how a criterion attaches to a test. Answer one
+which test levels exist, what a test may not do, and whether a test names its criterion. Answer one
 question per row: if these tests pass, is the verify clause true? Judge each test against the
 recipe and against the clause. Read only the recipe, the test files, the verify clause and the
 interface file below. Do not read the implementation. A hook refuses that read. The reason: a check

@@ -21,8 +21,8 @@ Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup once 
 lookup's answer in its own word: SKILL.md holds both rules.
 
 **`point: test-authoring`, only when `lookups=` names it.** This answers where a test file goes,
-which levels exist and when each is right, what a test may not do in this framework, and how a
-criterion id attaches to a test. The test author and the row-checker read it, so an order
+which levels exist and when each is right, what a test may not do in this framework, and
+whether a test names its criterion. The test author and the row-checker read it, so an order
 whose roles hold neither skips it.
 
 **Light:** do not ask for `point: implement`. Preconditions resolved it, so read each path from

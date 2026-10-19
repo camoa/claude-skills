@@ -2981,10 +2981,13 @@ do_close() {
       # so this compares strings and never re-derives the join. One question
       # per criterion: does the suite output name any test this criterion froze.
       # The suite output is read from the record on disk, never passed as an argument.
+      # A name matches only between non-word characters, because a name with no id at its end is
+      # often the start of another, as testCreate is of testCreateWithFoo (live-run row 374).
       hit="$(jq -nr --argjson rows "$RW_TEST_ROWS" --arg id "$cid" --slurpfile record "$RECORD_FILE" '
         ([ ($record[0].checks // [])[] | select(.id == "suite") ][0].output // "") as $out
         | [ $rows[] | select(.criterion == $id) | (.tests // [])[] | .name
-          | select($out | contains(.)) ] | length > 0')"
+          | (gsub("(?<c>[\\\\^$.|?*+()\\[\\]{}-])"; "\\\(.c)")) as $n
+          | select($out | test("(^|[^A-Za-z0-9_])" + $n + "($|[^A-Za-z0-9_])")) ] | length > 0')"
       case "$suite_verdict" in
         # not-needed reads the row state the same way met does. No order in the snapshot runs a
         # test, so no suite was ever going to name this criterion, and the row state two lines up

@@ -141,8 +141,8 @@ asked once to finish. An implementer is asked twice when its order's diff budget
 What it does see is the order's criteria with their verification sentences, the boundaries the
 order names, and the declared interface of each order it depends on. It sees the interface of
 anything design recorded as reused, since a reused module belongs to no work order. It also sees
-the framework's recipe for writing tests: where a test file goes, which levels exist, and how a
-criterion id attaches to a test. Its brief names the test-execution recipe too, which holds
+the framework's recipe for writing tests: where a test file goes, which levels exist, and
+whether a test names its criterion. Its brief names the test-execution recipe too, which holds
 the run command and the failure markers. The author reads a red against that recipe and never a
 guessed runner. A framework with no such recipe has no path through this step,
 and AIDA says so rather than writing tests from habit.

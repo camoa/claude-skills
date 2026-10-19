@@ -4961,6 +4961,16 @@ TB_OWNED
 # and the exit code this whole file promises for that die would never reach the caller.
 # ------------------------------------------------------------------------------------------------
 
+# The commits this order's freezes made, as a JSON array, read from freeze record $1, or [] when
+# it cannot be read. A record from before `freezeCommits` (live-run row 374) reads as its `commit`
+# and its retakenFrom commit when its proof is tests: such a freeze commits the files it froze, and
+# any other proof freezes no file.
+tf_freeze_commits() {
+  jq -c 'if has("freezeCommits") then .freezeCommits
+         elif (.proof // "tests") == "tests" then [ (.commit, .retakenFrom.commit) | strings ]
+         else [] end' "$1" 2>/dev/null || printf '[]'
+}
+
 # Parses --test values, one per line of $1 (`<path>::<test name>=<criterion id>[,<criterion
 # id>...]`), appending one `{path, name, criteria}` JSON object per line to file $2. `criteria` is
 # always a JSON array, however many ids the line named.
@@ -6389,7 +6399,7 @@ TF_OWN_COMMITS
   rm -f "$rows_tmp"
   # --- 74 again: a record with no row proves nothing, the same fact as an order with no criterion --
   [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
-    || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, with the name ending in $unit_id, and one --row $unit_id=... judged against the doneWhen text."
+    || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, and one --row $unit_id=... judged against the doneWhen text."
 
   # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
   # The freeze commits (below), so freezing wo1, then wo2, then wo1 again finds HEAD moved by wo2's
@@ -6421,7 +6431,10 @@ TF_OWN_COMMITS
   # no change and make no commit: a pathspec commit of unchanged paths is a git error, not a no-op.
   # The support files ride in the same commit as the tests, so they are the author's in the
   # history and never land in the implementer's range (live-run row 90).
-  local frozen_rel_paths tree_left
+  # The subject carries no AIDA name, because the branch can go upstream as it is. The record says
+  # which commit the freeze made, under `freezeCommits`, so no reader rests on the subject (live-run
+  # row 374).
+  local frozen_rel_paths tree_left tf_made="" tf_before
   frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
     '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
   if [ -n "$frozen_rel_paths" ]; then
@@ -6432,12 +6445,14 @@ TF_OWN_COMMITS
 $frozen_rel_paths
 TF_EOF
     if [ -n "$(git -C "$codepath" status --porcelain -- "$@")" ]; then
+      tf_before="$current_commit"
       recipe_commit_if_changed "$codepath" tests-freeze "the test files are already in HEAD" \
-        "Freeze the tests of $unit_id through the implement skill: $(printf '%s' "$frozen_rel_paths" | tr '\n' ' ')" \
+        "Add tests: $(printf '%s' "$frozen_rel_paths" | tr '\n' ' ')" \
         "$frozen_rel_paths"
       current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
       [ -n "$current_commit" ] \
         || die 3 "tests-freeze: could not read the commit just made (git rev-parse HEAD failed in $codepath)."
+      [ "$current_commit" = "$tf_before" ] || tf_made="$current_commit"
     fi
   fi
   tree_left="$(git -C "$codepath" status --porcelain)"
@@ -6516,10 +6531,14 @@ TF_EOF
       split("\n") | map(select(length > 0) | split("\t") | {key: .[0], value: .[1]}) | from_entries')"
   fi
   today="$(date -u +%Y-%m-%d)"
+  # A replaced record hands on the commits its freezes made, so a retake keeps them all.
+  local tf_carried='[]'
+  [ -f "$record_file" ] && tf_carried="$(tf_freeze_commits "$record_file")"
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
     --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --arg proof "$tf_proof" --argjson support "$support_json" \
-    --argjson testRecipePath "$test_recipe_paths_json" \
-    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof, support: $support}
+    --argjson testRecipePath "$test_recipe_paths_json" --argjson carried "$tf_carried" --arg made "$tf_made" \
+    '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof, support: $support,
+      freezeCommits: ($carried + (if $made == "" then [] else [$made] end) | unique)}
      + (if $testRecipePath == null then {} else {testRecipePath: $testRecipePath} end)')"
 
   # A record that reaches here with different rows is retaken: the order is still at tests-frozen
@@ -6529,8 +6548,8 @@ TF_EOF
   # sets retakenFrom aside with takenAt, so a rerun with the same rows after a retake stays unchanged.
   if [ -f "$record_file" ]; then
     local existing_no_date new_no_date existing_taken_at
-    existing_no_date="$(jq -cS 'del(.takenAt, .retakenFrom)' "$record_file" 2>/dev/null)"
-    new_no_date="$(printf '%s' "$record_json" | jq -cS 'del(.takenAt)')"
+    existing_no_date="$(jq -cS 'del(.takenAt, .retakenFrom, .freezeCommits)' "$record_file" 2>/dev/null)"
+    new_no_date="$(printf '%s' "$record_json" | jq -cS 'del(.takenAt, .freezeCommits)')"
     if [ "$existing_no_date" = "$new_no_date" ]; then
       echo "TESTS-FREEZE: unchanged (already frozen at commit $current_commit with the same tests)"
       printf '%s\n' "$record_file"
@@ -12828,11 +12847,10 @@ rs_split_pairs() {
 # {order, kind, commit, range}. $1 the task folder, $2 the code repository, $3 the order, $4 the
 # ledger document.
 # The freeze record's `commit` is HEAD at the freeze, whether or not the freeze committed: a gate
-# order commits nothing, and a test already in HEAD makes no commit either. So the commit is the
-# order's only when its subject is the one the freeze writes for this order.
-# One record holds one commit, and the freeze after a retake overwrites it. So each `retakes`
-# entry's `freezeCommit`, the freeze that retake superseded, is read as a freeze commit too, and
-# the same subject test decides it. `restart` keeps every freeze these name and opens its span at
+# order commits nothing, and a test already in HEAD makes no commit either. So the freezes are the
+# record's `freezeCommits`, the commits the freezes made, read through tf_freeze_commits. A record
+# that a retake replaced hands its list on, so the freeze each retake superseded stays listed.
+# `restart` keeps every freeze these name and opens its span at
 # the first of them, so the build before a retake is reverted too (live-run row 147). A build record holds
 # the last attempt's range; a fix record each round's. A record whose commits git no longer has
 # names nothing (live-run row 94). An earlier attempt is in no record, so a build record's
@@ -12842,13 +12860,10 @@ rs_split_pairs() {
 # moves it to `retaken-<order>-<n>/` and an earlier restart moves it to
 # `implementation-<date>-<commit>/`, and the commits it names stay on the branch either way. So
 # both are read, and an order's own commits are never counted as later ones (live-run row 144).
-# A record can be moved, cleared or written in a shape an older version wrote. The branch cannot.
-# So the freezes are read from the branch, by the subject `tests-freeze` writes above, over the
-# range the ledger's `startedFrom` opens. That range bounds the search to this task, because two
-# tasks on one repository both hold an order called wo1. The records still offer their freeze
-# commits, for the one case the range cannot cover: `start --rebased-onto` rewrites `startedFrom`,
-# and a freeze made before the rewrite then sits outside it.
-# The build and fix steps write no subject of their own. `agents/implementer.md` asks for "a
+# The freezes were read from the branch by their subject until live-run row 374. That subject named
+# the order and the skill, and the branch goes upstream, so the record now says which commits are
+# freezes. A restart moves the record to `implementation-<date>-<commit>/` with its list, and the
+# list is read there too. The build and fix steps write no subject of their own. `agents/implementer.md` asks for "a
 # one-line message naming this unit" and `agents/fixer.md` for one "naming this round", so the
 # words are the model's and no check may rest on them. Those two kinds stay record-read, and the
 # folders a record may sit in are found by their own names. That is the plugin's own naming and
@@ -12864,9 +12879,8 @@ rs_order_commits() {
   unit_json="$(jq -c --arg id "$one_id" '[ (.workOrders // [])[] | select(.id == $id) ][0] // {id: $id}' \
     "$impl/snapshot.json" 2>/dev/null)"
   [ -n "$unit_json" ] || unit_json="$(jq -nc --arg id "$one_id" '{id: $id}')"
-  # `git log --grep` reads the whole message, so it only narrows the candidates; the subject test
-  # below decides. HEAD alone when the ledger holds no usable startedFrom, which no ledger this
-  # stage writes does: the field is required, and the wider search still answers this order.
+  # HEAD alone when the ledger holds no usable startedFrom, which no ledger this stage writes does:
+  # the field is required, and the wider span still answers this order.
   started="$(printf '%s' "$ledger" | jq -r '.startedFrom // empty' 2>/dev/null)"
   span=HEAD
   if [ -n "$started" ] && git -C "$codepath" merge-base --is-ancestor "$started" HEAD >/dev/null 2>&1; then
@@ -12877,20 +12891,12 @@ rs_order_commits() {
     [ -n "$c" ] || continue
     c="$(rs_on_branch "$codepath" "$c" "$table")"
     case "$c" in ""|"?"*) continue ;; esac
-    case "$(git -C "$codepath" log -1 --format=%s "$c" 2>/dev/null)" in
-      "Freeze the tests of $one_id through the implement skill:"*) ;;
-      *) continue ;;
-    esac
     out="$(printf '%s' "$out" | jq -c --arg id "$one_id" --arg c "$c" '
       if any(.[]; .commit == $c) then . else . + [{order: $id, kind: "freeze", commit: $c, range: $c}] end')"
   done <<RS_FREEZES
-$(git -C "$codepath" log --reverse --format=%H --fixed-strings \
-  --grep="Freeze the tests of $one_id through the implement skill:" "$span" 2>/dev/null
-jq -r '.commit // empty' "$impl/tests-$one_id.json" 2>/dev/null
-find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/tests-$one_id.json" \
-  -exec jq -r '.commit // empty' {} ';' 2>/dev/null
-printf '%s' "$ledger" | jq -r --arg id "$one_id" \
-  '([ (.orders // [])[] | select(.id == $id) ][0].retakes // [])[] | .freezeCommit // empty' 2>/dev/null)
+$({ printf '%s\n' "$impl/tests-$one_id.json"
+    find "$task" -mindepth 2 -maxdepth 2 -path "*/implementation-*/tests-$one_id.json" 2>/dev/null; } \
+  | while IFS= read -r file; do [ -f "$file" ] && tf_freeze_commits "$file" | jq -r '.[]'; done)
 RS_FREEZES
   # Every folder a build or fix record of this order can sit in: the top of the implementation
   # folder, the retake folders under it, the folders an earlier restart wrote, and the retake
