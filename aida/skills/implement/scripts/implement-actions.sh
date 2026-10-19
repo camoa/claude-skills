@@ -35,7 +35,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                    [--value <name>=<value>]...
 #   implement-actions.sh recipe-refresh <task_folder> [--recipe <framework>=<path>]...
 #                                                     [--check-recipe <framework>=<path>]...
-#   implement-actions.sh tests-brief  <task_folder> <unit_id>
+#   implement-actions.sh tests-brief  <task_folder> <unit_id> [--test-glob <glob>]...
 #   implement-actions.sh tests-freeze <task_folder> <unit_id> \
 #                            [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
 #                            [--red <test name>=<path to a file holding what the run printed>]...
@@ -1091,7 +1091,7 @@ usage: implement-actions.sh read  <task_folder>
                             [--value <name>=<value>]...
        implement-actions.sh recipe-refresh <task_folder> [--recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
-       implement-actions.sh tests-brief  <task_folder> <unit_id>
+       implement-actions.sh tests-brief  <task_folder> <unit_id> [--test-glob <glob>]...
        implement-actions.sh tests-freeze <task_folder> <unit_id>
                             [--test <path>::<test name>=<criterion id>[,<criterion id>...] | <unit_id>]...
                             [--red <test name>=<path to a file holding what the run printed>]...
@@ -4657,9 +4657,19 @@ tf_record_confirmed() {
 
 do_tests_brief() {
   [ "$#" -ge 2 ] || die 3 "tests-brief: a task folder and a unit id are required"
-  [ "$#" -le 2 ] || die 3 "tests-brief: unrecognized extra argument: $3"
-  local resolve_rc unit_id="$2"
-  TASK_PATH="$(resolve_task_folder "$1" "tests-brief")"
+  local resolve_rc task_arg="$1" unit_id="$2" tb_globs=""
+  shift 2
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --test-glob)
+        [ "$#" -ge 2 ] && [ -n "$2" ] || die 3 "tests-brief: --test-glob needs a pattern from the implement recipe"
+        tb_globs="$tb_globs$2
+"
+        shift 2 ;;
+      *) die 3 "tests-brief: unrecognized extra argument: $1" ;;
+    esac
+  done
+  TASK_PATH="$(resolve_task_folder "$task_arg" "tests-brief")"
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
@@ -4770,6 +4780,29 @@ do_tests_brief() {
       else {clauses: .,
             whatToDo: "Each clause here carries a negation word. Return one that asserts an absence, verbatim, and write no test for it. The freeze routes it to review with --absence. A clause that states a behaviour still takes a test."} end')"
 
+  # Another key, only when every owned file matches a --test-glob: the freeze locks them all and
+  # the implementer writes only owned files, so the author's edit is the deliverable (live-run row
+  # 369). Exit 118 in tests-freeze is the floor when the globs were not passed here.
+  local deliverable_out='null' tb_f tb_g tb_hit tb_all=false
+  if [ -n "$tb_globs" ]; then
+    tb_all=true
+    while IFS= read -r tb_f; do
+      [ -n "$tb_f" ] || continue
+      tb_hit=false
+      while IFS= read -r tb_g; do
+        [ -n "$tb_g" ] || continue
+        tf_path_matches_catalog_glob "$tb_f" "$tb_g" && { tb_hit=true; break; }
+      done <<TB_GLOBS
+$tb_globs
+TB_GLOBS
+      [ "$tb_hit" = true ] || { tb_all=false; break; }
+    done <<TB_OWNED
+$(printf '%s' "$UNIT_JSON" | jq -r '(.ownedFiles // [])[]')
+TB_OWNED
+    [ "$(printf '%s' "$UNIT_JSON" | jq '(.ownedFiles // []) | length')" -gt 0 ] || tb_all=false
+  fi
+  [ "$tb_all" = false ] || deliverable_out='{"whatToDo": "Every file this order owns is a test file. The freeze locks it, and the implementer writes only owned files, so no build can turn a red test green. Make the change the done-when asks for in the test file yourself. Run each test until it passes, and return each with a locks-in reason naming the existing code it passes against."}'
+
   # A ninth thing, only after a restart or a retake left this order's build and fix commits on the
   # branch: a test that passes on arrival is suspect, and the author is told rather than left to
   # find it (live-run row 94).
@@ -4875,7 +4908,7 @@ do_tests_brief() {
         --argjson dependencyInformation "$dependency_information_json" \
         --argjson reuses "$reuses_out" --argjson treeHolds "$tree_holds_json" \
         --argjson retake "$retake_json" --argjson absenceCandidates "$absence_out" \
-        --argjson rowsRejected "$rows_rejected_json" \
+        --argjson rowsRejected "$rows_rejected_json" --argjson deliverableIsTests "$deliverable_out" \
         --arg testRecipePath "$test_recipe_path" --arg roundStartedAt "$round_started_at" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" --arg worktree "$RV_CODEPATH" \
         --arg reportPath "$IMPL_DIR/answers-$unit_id-tests.md" \
@@ -4887,6 +4920,7 @@ do_tests_brief() {
      | if $retake == null then . else .retake = $retake end
      | if $rowsRejected == null then . else .rowsRejected = $rowsRejected end
      | if $absenceCandidates == null then . else .absenceCandidates = $absenceCandidates end
+     | if $deliverableIsTests == null then . else .deliverableIsTests = $deliverableIsTests end
      | .worktree = $worktree')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
   write_atomic "$brief_file" "$brief_json"
@@ -4910,9 +4944,11 @@ do_tests_brief() {
               else null end),
      rowsRejected: (if has("rowsRejected") then ([ .rowsRejected.rows[] | .criterion ] | join(", ")) else null end),
      absenceCandidates: (if has("absenceCandidates") then (.absenceCandidates.clauses | length) else null end),
+     deliverableIsTests: (if has("deliverableIsTests") then true else null end),
      next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}
     | if .treeHolds == null then del(.treeHolds) else . end
     | if .absenceCandidates == null then del(.absenceCandidates) else . end
+    | if .deliverableIsTests == null then del(.deliverableIsTests) else . end
     | if .retake == null then del(.retake) else . end
     | if .rowsRejected == null then del(.rowsRejected) else . end')"
   exit 0
@@ -6322,8 +6358,8 @@ TF_OWN_COMMITS
     || die 33 "tests-freeze: these tests have neither a --red nor a --locks-in: $missing_red"
 
   # --- 118: an order whose every owned file this freeze locks has no build to turn a red green -----
-  # An owned glob or directory never equals a frozen path. It leaves the implementer a file to
-  # write, so it refuses nothing.
+  # An owned directory never equals a frozen path. It leaves the implementer a file to write, so
+  # it refuses nothing.
   local red_only
   red_only="$(jq -nr --argjson unit "$UNIT_JSON" --argjson tests "$tests_json" --argjson support "$support_json" --argjson locks "$locks_json" '
       (($tests | map(.relPath)) + ($support | map(.path))) as $frozen
@@ -6868,6 +6904,23 @@ do_build_brief() {
      + (if $previousAttempt == null then {} else {previousAttempt: $previousAttempt} end)
      + (if $fakeMarker == "" then {} else {fakeMarker: $fakeMarker} end)')"
   [ -n "$brief_json" ] || die 3 "build-brief: could not assemble the brief for $unit_id."
+  # An order whose every owned file is frozen, and whose every test locks in, has nothing left to
+  # write: its freeze commit holds the work (live-run row 369). No implementer is dispatched, so
+  # the records it would write come from the records here: the report's two lines and the declared
+  # interface. build-record then reads the freeze commit as the attempt's range.
+  local bb_nothing
+  bb_nothing="$(printf '%s' "$IM_TESTS_DOC" | jq -r --argjson owned "$(printf '%s' "$BB_UNIT_JSON" | jq -c '.ownedFiles // []')" '
+    [ (.rows // [])[] | (.tests // [])[] ] as $t
+    | (($t | map(.path)) + ((.support // []) | map(.path))) as $frozen
+    | ($t | length) > 0 and ($owned | length) > 0 and (($owned - $frozen) | length) == 0
+      and all($t[]; has("locksIn"))')"
+  if [ "$bb_nothing" = "true" ] && [ "$attempts_used" -eq 0 ]; then
+    brief_json="$(printf '%s' "$brief_json" | jq -c '.nothingToWrite = true')"
+    printf 'No implementer was dispatched. Every file %s owns is frozen, and every frozen test locks in, so the freeze commit holds the work.\nStop: none\nDeviation: none\n' "$unit_id" \
+      >"$IMPL_DIR/answers-$unit_id-attempt1.md" || die 3 "build-brief: could not write the report for $unit_id."
+    printf '%s\n' "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.interface // ""')" >"$IMPL_DIR/interface-$unit_id.md" \
+      || die 3 "build-brief: could not write the interface record for $unit_id."
+  fi
   write_atomic "$brief_file" "$brief_json"
   # headNow is printed because the caller passes it back as --started-at, and the report path
   # because the dispatch names it. Everything else the implementer reads from the file. The
@@ -6888,7 +6941,10 @@ do_build_brief() {
      dependencyInformation: (.dependencyInformation | length)}
     + (if has("beforeLookPath") then {beforeLook: "\(.beforeLookPath) (\($beforeState))"} else {} end)
     + (if has("deniedReads") then {deniedReads} else {} end)
-    + {next: (if has("deniedReads")
+    + (if has("nothingToWrite") then {nothingToWrite: true} else {} end)
+    + {next: (if has("nothingToWrite")
+              then "dispatch no implementer: the report and the interface record are written. Run build-record with --started-at headNow, the freeze commit"
+              elif has("deniedReads")
               then "a person rules first: the order text names a path in deniedReads, which its dispatch denies. To keep the text, dispatch implementer, then build-record. To change it, design update on \(.unit.id), close design, start, then restart"
               elif $beforeState == "owed"
               then "take the before-look at headNow into the beforeLook folder, then dispatch implementer with the brief path and the implement recipe path, then build-record"

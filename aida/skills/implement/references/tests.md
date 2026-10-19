@@ -102,7 +102,8 @@ when it owns none, and the person answers those criteria at review.
 
 Run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-brief "<task_folder>" <order id>
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-brief "<task_folder>" <order id> \
+  --test-glob <pattern from the implement recipe>
 ```
 
 It reads the frozen copy and never the live files. It writes exactly eight things to
@@ -148,6 +149,11 @@ key, the checker's note, and the person's words verbatim when a person rejected 
 test with a red run in a file that holds a rejected row's test. The repair edits that file, so
 each of those tests needs a new red run. The `whatToDo` asks for those runs only when the list is
 not empty. The summary prints a `rowsRejected:` line.
+
+`deliverableIsTests`, only when every file the order owns matches a `--test-glob`. Its `whatToDo`
+tells the author to make the change in the test file and freeze each test with a locks-in reason,
+below. Pass the same globs the freeze takes. Without them the key is never written, and exit 118
+at the freeze is the only check left. The summary prints a `deliverableIsTests:` line.
 
 One more key is for the freeze, not the author. `roundStartedAt` is the time this order's test
 round began. A brief written again for a retake or a rejected row keeps the earlier time, because
@@ -257,10 +263,12 @@ deleted quietly and never weakened into failing.
 The freeze locks the test file, and the implementer may write only owned files. So no build can
 turn a red test green. The author makes the done-when's change in its own test file and runs each
 test until it passes. Each test then freezes with `--locks-in`, naming the existing code it passes
-against. Design marks nothing: the owned files already say it. The freeze refuses a test with a red
-run and no `--locks-in` on such an order (exit 118), before anything is frozen. Resume the author
-with `dispatch-open --resume`, as for exit 27. An owned directory or glob leaves the implementer a
-file to write, so it refuses nothing.
+against. Design marks nothing: the owned files already say it, and `tests-brief` writes
+`deliverableIsTests` from them. The freeze refuses a test with a red run and no `--locks-in` when
+every owned file is a test file or a `--support` file (exit 118), before anything is frozen. Resume
+the author with `dispatch-open --resume`, as for exit 27. An owned directory leaves the implementer
+a file to write, so it refuses nothing. The build step then dispatches no implementer, as
+`references/build.md` says.
 
 **A test of the order's own work names a commit, not code.** After a retake the tree still holds
 this order's earlier build, so a test of its done-when arrives green. The code that satisfies it is

@@ -133,13 +133,13 @@ build or fix commits the brief lists there, written `commit:<id>`, as the `locks
 prefix is what marks it a commit, and a reason without it is read as prose. Read no source to
 decide it. If you can name neither existing code nor such a commit, report it as green on arrival.
 
-**When every file the order owns is a test file, your tests are the deliverable.** Check each
-owned file against the recipe's test file pattern. The freeze locks the test file, and the
+**When the brief holds `deliverableIsTests`, your tests are the deliverable.** The script wrote
+that key because every file the order owns is a test file. The freeze locks the test file, and the
 implementer may write only the files it owns. So nobody after you can change that file. Make the
 change the done-when asks for in it yourself, for example a repair of its existing fixtures. Run
 each test until it passes. A red run is not the goal here, because no build can turn it green.
 Return each test with a `locks-in` reason that names the existing code it passes against. The
-freeze refuses a red test on such an order.
+freeze refuses a red test when every owned file is a test file or a support file you pass to it.
 
 Write what you return to the report file the brief names under `reportPath`, and name that path
 in your reply. Return one row per test: the path, the test's name, and the criterion its name

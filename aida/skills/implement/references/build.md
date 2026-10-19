@@ -73,6 +73,13 @@ It prints the brief's path, the report path, the interface path, `headNow`, the 
 and counts, never the brief. The allowed count is two unless a person has granted this order one more; see
 `references/finish.md`. It is the order's own recorded allowance, never the constant alone.
 
+**An order with nothing left to write gets no implementer.** Every file it owns is a frozen test or
+support file, and every frozen test locks in, so its freeze commit holds the work. A fixture repair
+is one, in `references/tests.md`. On its first attempt `build-brief` marks the brief
+`nothingToWrite`, writes the report's stop and deviation lines and the declared interface as the
+interface record, and its `next` says so. Dispatch nothing. Run `build-record` below with
+`--started-at` as `headNow`, the freeze commit, which `build-record` reads as the attempt's range.
+
 **No role writes a file whose name holds "report".** Claude Code refuses that write from a
 subagent. So the implementer's and the fixer's files are named `answers-*`.
 
