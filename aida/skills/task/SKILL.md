@@ -17,6 +17,12 @@ does not run any of the six stages, and it does not pick which task is active: t
 Every action below needs the active project's own folder (the one holding `project.json`, never
 the code folder). Resolve that first, with the project skill, before using anything here.
 
+`task-actions.sh` takes a text value from a file. Write the text with the Write tool in the
+session's scratchpad folder. With no scratchpad, write it in the task folder, and delete it after
+the call. Then pass `@/<absolute path>` as the value. Use this for a text that names a command, such
+as git. Claude Code refuses a command whose quoted text names git when the session works in a
+worktree.
+
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation, when one is already active.

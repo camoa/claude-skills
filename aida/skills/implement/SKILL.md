@@ -25,6 +25,12 @@ skill. Stop; there is nowhere to act.
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
 
+`implement-actions.sh` takes a text value from a file. Write the text with the Write tool in the
+session's scratchpad folder. With no scratchpad, write it in the task folder, and delete it after
+the call. Then pass `@/<absolute path>` as the value. In a value such as `<id>=<reason>`, the path
+follows the `=` or the `::`. Use this for a text that names a command, such as git. Claude Code
+refuses a command whose quoted text names git when the session works in a worktree.
+
 ## Read what is already there
 
 Run:

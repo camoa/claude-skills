@@ -256,18 +256,20 @@ is_blank() {
   return 0
 }
 
-# Sets TEXT_ARGS to the arguments $@, with each argument @/<absolute path> replaced by that file's
-# text. A long text then never sits in the command line. Claude Code refuses a command whose quoted
-# text names git when the session is isolated in a worktree (live-run row 377). Dies 3 when the
-# file is not readable, so a mistyped path is never stored as the text.
+# Sets TEXT_ARGS to the arguments $@, with each @/<absolute path> replaced by that file's text. The
+# path is the whole argument, or follows the `=` or `::` of a value such as <id>=<reason>. A long
+# text then never sits in the command line. Claude Code refuses a command whose quoted text names
+# git when the session is isolated in a worktree (live-run row 377). Dies 3 when the file is not
+# readable, so a mistyped path is never stored as the text.
 text_args() {
-  local a
+  local a path
   TEXT_ARGS=()
   for a in "$@"; do
     case "$a" in
-      @/*)
-        [ -f "${a#@}" ] && [ -r "${a#@}" ] || die3 "the text file ${a#@} is not a readable file"
-        TEXT_ARGS+=("$(cat -- "${a#@}")") ;;
+      @/*|*=@/*|*::@/*)
+        path="/${a#*@/}"
+        [ -f "$path" ] && [ -r "$path" ] || die3 "the text file $path is not a readable file"
+        TEXT_ARGS+=("${a%%@/*}$(cat -- "$path")") ;;
       *) TEXT_ARGS+=("$a") ;;
     esac
   done

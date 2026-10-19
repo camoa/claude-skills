@@ -2027,6 +2027,9 @@ TA_IDS
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
+# A text argument may be @/<path>, read from that file (task-helpers.sh, text_args).
+text_args "$@"
+set -- ${TEXT_ARGS[@]+"${TEXT_ARGS[@]}"}
 action="${1:-}"
 [ -n "$action" ] && shift || true
 

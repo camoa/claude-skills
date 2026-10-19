@@ -25,9 +25,10 @@ named in the grant too. So is the project skill's `recipe-source` lookup. Any ot
 still asks for approval. Dispatching an agent needs no approval either; it is also named in this
 skill's own grant.
 
-`design-actions.sh` and `research-actions.sh` take a text value from a file. Write the text with
-the Write tool, and pass `@/<absolute path>` as the value. Use this for a text that names a
-command, such as git. Claude Code refuses a command whose quoted text names git when the session
+`design-actions.sh` and `research-actions.sh` take a text value from a file. Write the text with the
+Write tool in the session's scratchpad folder. With no scratchpad, write it in the task folder, and
+delete it after the call. Then pass `@/<absolute path>` as the value. Use this for a text that names
+a command, such as git. Claude Code refuses a command whose quoted text names git when the session
 works in a worktree.
 
 **The dispatch message is the role, the run mode and the paths.** Name the role on the Agent

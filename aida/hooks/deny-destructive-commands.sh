@@ -229,7 +229,7 @@ FORCE='--fo(r(c(e[^ ;&|]*)?)?)?'
 DELETE='--de(l(e(t(e)?)?)?)?'
 MIRROR='--mi(r(r(o(r)?)?)?)?'
 # A heredoc opening line whose body goes to a file or to a commit message, never to a shell.
-HD_TO_FILE='(^|[;&])[[:space:]]*(cat|tee)[[:space:]][^|]*$|(^|[;&])[[:space:]]*git[[:space:]][^|]*commit[[:space:]][^|]*(-F[[:space:]]*-|--file[=[:space:]]-)([[:space:]]|$)|\$\(cat[[:space:]]*<<'
+HD_TO_FILE='(^|[;&])[[:space:]]*(cat|tee)[[:space:]][^|;&]*<<[^|;&]*$|(^|[;&])[[:space:]]*git[[:space:]][^|;&]*commit[[:space:]][^|;&]*(-F[[:space:]]*-|--file[=[:space:]]-)[[:space:]][^|;&]*<<[^|;&]*$|\$\(cat[[:space:]]*<<'
 BSNL=$'\\\n'
 MAX_BYTES=262144
 MAX_DEPTH=3
@@ -251,13 +251,14 @@ segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
 # follows its line again, as lines of its own.
 # With $2 set to args, a string that is the value of an assignment is not joined, because a later
 # `$cmd` runs the text of `cmd="git push"`. With $2 set to code, it is args with each comment
-# dropped too. A `#` starts a comment at the start of a word, outside a string, a backtick pair and
-# `${...}`. A `$'...'` string takes backslash escapes. A comment ends at its line, also after a
-# backslash.
+# dropped too. With $2 set to strip, each comment is dropped and no string is joined, for a command
+# line that starts a shell, which can read a quoted string as commands. A `#` starts a comment at
+# the start of a word, outside a string, a backtick pair and `${...}`. A `$'...'` string takes
+# backslash escapes. A comment ends at its line, also after a backslash.
 quoted_words() {
-  local strip=""
-  [ "${2:-}" != code ] || strip=1
-  printf '%s\n' "$1" | LC_ALL=C awk -v strip="$strip" -v asg="${2:+1}" '
+  local strip="" join=1
+  case "${2:-}" in code) strip=1 ;; strip) strip=1; join="" ;; esac
+  printf '%s\n' "$1" | LC_ALL=C awk -v strip="$strip" -v join="$join" -v asg="${2:+1}" '
     function close_at(s, k, c, e,   d, depth) {
       depth = 0
       while (k <= length(s)) {
@@ -320,7 +321,7 @@ quoted_words() {
           if (j == 0) { out = out substr(line, i); q = c; qe = e; break }
           s = substr(line, i, j - i + 1)
           pre = substr(line, 1, i - 1)
-          if (pre !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</ && !(asg && pre ~ /(^|[ \t;&|(])[A-Za-z_][A-Za-z0-9_]*\+?=[^ \t;&|]*$/)) gsub(/[ \t;&|]/, "\037", s)
+          if (join && pre !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</ && !(asg && pre ~ /(^|[ \t;&|(])[A-Za-z_][A-Za-z0-9_]*\+?=[^ \t;&|]*$/)) gsub(/[ \t;&|]/, "\037", s)
           out = out s; i = j + 1; continue
         }
         if (c == "`") bt = !bt
@@ -349,11 +350,11 @@ skip_wrappers() {
 # Reads normalised text $1 one command segment at a time. Sets RUNS to the files the segments
 # run, one per line. A file run as a command word must be executable, so it carries an `x:`
 # prefix. Sets SHELLISH to true when a segment starts a shell, `eval`, or a command word with a
-# slash. Each loop in this file first drops, with one grep, the segments that cannot hit its rule.
+# slash. Sets SHELL_WORD to true when a segment starts a shell or `eval` only. Each loop in this file first drops, with one grep, the segments that cannot hit its rule.
 # A bash loop over every segment of a 256 KiB file took most of a minute (live-run row 255).
 scan_runs() {
   local seg j n c
-  RUNS=""; SHELLISH=false
+  RUNS=""; SHELLISH=false; SHELL_WORD=false
   while IFS= read -r seg; do
     set -f; read_words "$seg"; set +f
     # shellcheck disable=SC2154 # w is filled by read_words, scripts/lib/command-text.sh
@@ -363,7 +364,7 @@ scan_runs() {
     c="${w[$I]}"
     case "$c" in
       bash|sh|zsh|dash|ksh|source|.|eval)
-        SHELLISH=true
+        SHELLISH=true; SHELL_WORD=true
         [ "$c" != eval ] || continue
         # Options come before the file. -o takes a value; a -c cluster means inline text, which
         # the rules already read.
@@ -565,7 +566,9 @@ SEGMENTS
 # The push rules read $4, the text after quoted_words args. The unreadable-verb rule reads $3, the
 # text after quoted_words code, so a backticked verb in a comment passes (live-run row 321). So a
 # quoted argument that names git, such as a reason text, is not read as a command (live-run row
-# 377). The comment reader can take code for a comment, so every other rule reads the comments too.
+# 377). On a line that starts a shell, $4 is $1 and $3 joins no string, because `echo "git push" |
+# bash` runs the string. The comment reader can take code for a comment, so every other rule reads
+# the comments too.
 # Sets REASON and returns 0 on the first rule that hits.
 rules() {
   local t="$1" q="$2" c="$3" a="$4" line
@@ -626,21 +629,27 @@ GHAPI
 
 # Checks command text $1, read $2 files deep. Sets REASON and returns 0 when it is refused.
 check_text() {
-  local text="$1" depth="$2" stripped n n0="" line val f p runs runs0="" need_x code
-  # The comments go before the lines join, because a comment ends at its line.
-  code="$(quoted_words "$text" code)"
-  code="${code//"$BSNL"/}"
+  local text="$1" raw="$1" depth="$2" stripped n n0="" line val f p runs runs0="" need_x code mode=code a
   text="${text//"$BSNL"/}"
+  # Without the library no segment is read, so no line is known to start no shell.
+  SHELL_WORD=true
   if [ "$HAVE_TEXT" = true ]; then
     stripped="$(strip_heredocs "$text" "$HD_TO_FILE")"
     n0="$(normalise "$stripped")"
     scan_runs "$n0"
     runs0="$RUNS"
-    [ "$SHELLISH" = true ] || { text="$stripped"; code="$(strip_heredocs "$code" "$HD_TO_FILE")"; }
   fi
+  [ "$SHELL_WORD" = false ] || mode="strip"
+  # The comments go before the lines join, because a comment ends at its line.
+  code="$(quoted_words "$raw" "$mode")"
+  code="${code//"$BSNL"/}"
+  [ "$HAVE_TEXT" = false ] || [ "$SHELLISH" = true ] || { text="$stripped"; code="$(strip_heredocs "$code" "$HD_TO_FILE")"; }
   n="$(normalise "$text")"
-  rules "$n" "$(normalise "$(quoted_words "$text")")" "$(normalise "$code")" \
-    "$(normalise "$(quoted_words "$text" args)")" && return 0
+  # The joined text is read only when git and push both appear, which saves its pass on most calls.
+  # A joined option value, as in `git -C "a b" push`, can make a push that the plain text misses.
+  a="$n"
+  [ "$SHELL_WORD" = true ] || ! hit "$n" "(^|[^A-Za-z0-9_.-])git .*push" || a="$(normalise "$(quoted_words "$text" args)")"
+  rules "$n" "$(normalise "$(quoted_words "$text")")" "$(normalise "$code")" "$a" && return 0
   [ "$depth" -lt "$MAX_DEPTH" ] || return 1
   while IFS= read -r line; do
     [ -n "$line" ] || continue
