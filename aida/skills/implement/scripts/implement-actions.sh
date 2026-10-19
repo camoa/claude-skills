@@ -10767,6 +10767,10 @@ FB_ALLOW
   else
     fb_last="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
   fi
+  # Gap row 381. An order a closed-order-defect reopened made no commit after the record it closed
+  # at, so its first round after the reopen begins at HEAD.
+  [ "$fb_last" != "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '[ (.repairs // [])[] | select(.by) ] | last | .closedRange // "" | split("..") | .[1] // ""')" ] \
+    || fb_last=""
   [ -z "$fb_last" ] || [ "$fb_last" = "$fb_head" ] \
     || ! git -C "$RV_RANGE_REPO" merge-base --is-ancestor "$fb_last" "$fb_head" 2>/dev/null || fb_head="$fb_last"
   # Gap row 340. A commit after that record that changes only another order's files is that
