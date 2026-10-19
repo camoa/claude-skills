@@ -70,7 +70,12 @@ has no rule for this row. Answer one question: could a reader confirm the line f
 alone? Reject a line that does not say what an output must read. Reject a line that names a thing
 the document, once written, would not hold. A rejection's note names the words the line must add.
 
-For each row, answer confirmed or rejected, with a note. Reject when a test does not test what the
+For each row, answer confirmed or rejected, with a note. A rejected row also carries `repair`.
+Write `"repair": "tests"` when a rewrite of the tests alone, as your note names it, could earn a
+confirmation. Write `"repair": "row"` when no test could: the clause is too vague, it cannot be
+observed, or it asks the wrong thing. An absence row a test could prove is `tests`. A record
+row and a gap you cannot settle are `row`. On an autonomous run, `tests` sends the row back to
+the test author once, and `row` halts the order for a person. Reject when a test does not test what the
 clause asks. Reject when a test is missing for part of the clause. Reject when the test's name does
 not match what its body checks. Reject when a test breaks a rule the recipe states. Reject when a
 trivial implementation would pass the tests: an empty list, a constant, or a call that does
@@ -92,7 +97,7 @@ anywhere. Write it in this shape:
 
 ```json
 { "rows": [
-  { "criterion": "c1", "verdict": "confirmed|rejected", "note": "..." },
+  { "criterion": "c1", "verdict": "confirmed|rejected", "repair": "tests|row", "note": "..." },
   { "criterion": "wo1", "verdict": "confirmed|rejected", "note": "..." }
 ] }
 ```

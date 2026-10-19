@@ -508,11 +508,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  65  `tests-freeze` was given a `--row` that answers rejected. Not a defect in the script: the
 #      freeze stops, writes no test record, and the row goes back to the test author, the same way
 #      exit 34 stops the step on a test that was green on arrival. Unattended, a row the checker
-#      itself rejected halts the order first, because a refusal nobody is there to read leaves the
-#      order in flight with no reason on it. A row a person rejected never halts anything: the
-#      person is already there. It lands on the order's ledger entry as `rowsRejected`, which the
-#      next `tests-brief` carries to the test author. A rejection that lands on no ledger entry
-#      ends with a `redAgain: [<test name>, ...]` line instead, as JSON (gap row 258). Either way a
+#      itself rejected goes back to the test author once, when the order has one and the verdict
+#      file marks the row `"repair": "tests"`; its key joins `rowsSentBack` (gap row 373). Any
+#      other row the checker rejected unattended halts the order first, because a refusal nobody
+#      is there to read leaves the order in flight with no reason on it. A row a person rejected
+#      never halts anything: the person is already there. A row sent back lands on the order's
+#      ledger entry as `rowsRejected`, which the next `tests-brief` carries to the test author. A
+#      rejection that lands on no ledger entry ends with a `redAgain: [<test name>, ...]` line
+#      instead, as JSON (gap row 258). Either way a
 #      `checkAgain: [<row key>, ...]` line names the rows the next checker dispatch covers: each
 #      rejected row, each confirmed row with a test in a rejected row's file, and the doneWhen row
 #      when an owned row is rejected. Each other confirmed row lands on the ledger entry as
@@ -4830,15 +4833,16 @@ do_tests_brief() {
     [ -n "$retake_json" ] || die 3 "tests-brief: could not assemble the retake key for $unit_id."
   fi
 
-  # Another key, only while a row a person rejected at the checkpoint stands: `tests-freeze`
-  # recorded it on the ledger with the person's words and the checker's note (gap row 218).
+  # Another key, only while a row rejected at the checkpoint stands: `tests-freeze` recorded it on
+  # the ledger with the checker's note, and the person's words when a person rejected it (gap rows
+  # 218 and 373).
   local rows_rejected_json
   rows_rejected_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" '
     ([ (.orders // [])[] | select(.id == $id) ][0].rowsRejected // [])
     | if length == 0 then null
       else ([ .[] | (.redAgain // [])[] ] | unique) as $again
         | {rows: ., redAgain: $again,
-           whatToDo: ("A person rejected these rows at the checkpoint. Repair the tests of these rows only, from the person'"'"'s words and the checker'"'"'s note, and leave every other test alone."
+           whatToDo: ("These rows were rejected at the checkpoint. Repair the tests of these rows only, from the checker'"'"'s note and the person'"'"'s words where a row has them, and leave every other test alone."
                       + (if ($again | length) == 0 then ""
                          else " Then run again each test that redAgain names, and write each new red run. Each shares a test file with a repaired test, so its earlier red is older than that file." end))} end')"
 
@@ -5867,7 +5871,7 @@ TF_RECORDED
       fi
     fi
     if [ "$tf_has_author" = true ]; then
-      tf_person_next=" A row a person rejected is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker."
+      tf_person_next=" Each rejected row is on $unit_id's ledger entry: run tests-brief, then dispatch the test author fresh. Then put the rows checkAgain names to the checker."
       tf_model_next=" Send the row back to the test author. Then put the rows checkAgain names to the checker, and run tests-freeze again once the test observes what the criterion asks."
     else
       tf_person_next=" Put the rows checkAgain names to the checker."
@@ -5876,15 +5880,53 @@ TF_RECORDED
     rejected_by_model="$(printf '%s' "$rows_meta_json" | jq -r '
         [ .[] | select(.verdict == "rejected") | select(.judgedBy == "model")
           | .criterion + ": " + .note ] | join("; ")')"
-    if [ -n "$rejected_by_model" ]; then
-      local tf_why tf_halted_doc
-      if [ "$tf_run_mode" = "autonomous" ] && [ -n "$tf_ledger_doc" ]; then
-        tf_why="row rejected by the checker: $rejected_by_model"
+    local tf_person_rejected tf_check_file tf_check_doc='{}' tf_sent_back='[]'
+    tf_check_file="$IMPL_DIR/row-check-$unit_id.json"
+    tf_person_rejected="$(printf '%s' "$rows_meta_json" | jq -c '
+        [ .[] | select(.verdict == "rejected" and .judgedBy == "person") ]')"
+    # A missing verdict file leaves each note null. A present one that does not read refuses a
+    # person's row, because the rejection would otherwise be lost with it. Unattended, nobody would
+    # read that refusal, so a model's row halts instead, as one whose file names no repair.
+    if [ -n "$tf_ledger_doc" ] && [ -f "$tf_check_file" ] \
+       && { [ "$tf_person_rejected" != "[]" ] || { [ -n "$rejected_by_model" ] && [ "$tf_run_mode" = "autonomous" ]; }; }; then
+      tf_check_doc="$(jq -c '.' "$tf_check_file" 2>/dev/null)"
+      if [ -z "$tf_check_doc" ]; then
+        [ "$tf_person_rejected" = "[]" ] \
+          || die 3 "tests-freeze: $tf_check_file exists but could not be read as JSON. The rejected rows are recorded with the checker's note from it. Repair or remove it by hand before running this again."
+        tf_check_doc='{}'
+      fi
+    fi
+    # Unattended, a checker's rejection goes back to the test author once per row, when the
+    # checker's own verdict file says the tests can be repaired (gap row 373). The author rewrites
+    # the tests and a fresh checker judges them, so no model answers the rejection itself. Every
+    # other rejection halts the order: the checker says the row is wrong, the row was sent back
+    # once already, or the order has no test author. Each of those needs a person or design.
+    if [ -n "$rejected_by_model" ] && [ "$tf_run_mode" = "autonomous" ] && [ -n "$tf_ledger_doc" ]; then
+      local tf_why tf_halted_doc tf_model_rows
+      tf_model_rows="$(jq -nc --argjson rows "$rows_meta_json" --argjson check "$tf_check_doc" \
+          --argjson author "$tf_has_author" --arg id "$unit_id" --argjson ledger "$tf_ledger_doc" '
+          ([ ($ledger.orders // [])[] | select(.id == $id) ][0].rowsSentBack // []) as $sent
+          | [ $rows[] | select(.verdict == "rejected" and .judgedBy == "model") | .criterion as $c
+              | ([ (if ($check.rows | type) == "array" then $check.rows else [] end)[]
+                   | select(type == "object" and .criterion == $c) ][0]) as $v
+              | . + {cause: (if $author | not then "this order has no test author"
+                  elif ($sent | index($c)) != null then "it went back to the test author once already"
+                  elif ($v.verdict // "") != "rejected" then "the verdict file holds no rejection of it"
+                  elif ($v.repair // "") == "row" then "the checker says the row itself needs repair"
+                  elif ($v.repair // "") != "tests" then "the verdict file names no repair for it"
+                  else null end)} ]')"
+      [ -n "$tf_model_rows" ] || die 3 "tests-freeze: could not sort the rejected rows of $unit_id."
+      if printf '%s' "$tf_model_rows" | jq -e 'any(.[]; .cause != null)' >/dev/null; then
+        tf_why="row rejected by the checker: $(printf '%s' "$tf_model_rows" | jq -r '
+            [ .[] | .criterion + (if .cause == null then "" else " (" + .cause + ")" end) + ": " + .note ] | join("; ")')"
         tf_halted_doc="$(halt_order_in "$tf_ledger_doc" "$unit_id" "$tf_why")"
         [ -n "$tf_halted_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
         write_atomic "$tf_ledger_file" "$tf_halted_doc"
         tf_ledger_doc="$tf_halted_doc"
         echo "TESTS-FREEZE: $unit_id is halted. $tf_why" >&2
+        tf_model_next=" $unit_id is halted. Report the halt, and take the next ready order."
+      else
+        tf_sent_back="$(printf '%s' "$tf_model_rows" | jq -c 'map(del(.cause))')"
       fi
     fi
     # The confirmed rows the checker need not judge again are recorded. The next freeze carries them.
@@ -5896,29 +5938,26 @@ TF_RECORDED
     fi
     # A row a person rejected goes back to the test author, and the person's words existed only in
     # the conversation (gap row 218). So they land on the order's ledger entry, with the checker's
-    # note from its verdict file, and `tests-brief` carries them to a fresh test author.
-    local tf_person_rejected tf_rejected_doc tf_check_file tf_check_doc='{}'
-    tf_person_rejected="$(printf '%s' "$rows_meta_json" | jq -c '
-        [ .[] | select(.verdict == "rejected" and .judgedBy == "person") ]')"
+    # note from its verdict file, and `tests-brief` carries them to a fresh test author. A row sent
+    # back unattended lands the same way, with no person's words, and its key joins rowsSentBack.
+    local tf_rejected_doc
+    tf_person_rejected="$(printf '%s' "$tf_person_rejected" | jq -c --argjson m "$tf_sent_back" '. + $m')"
     if [ "$tf_person_rejected" != "[]" ] && [ -n "$tf_ledger_doc" ]; then
-      # A missing verdict file leaves each note null. A present one that does not read refuses,
-      # because the rejection would otherwise be lost with it.
-      tf_check_file="$IMPL_DIR/row-check-$unit_id.json"
-      if [ -f "$tf_check_file" ]; then
-        tf_check_doc="$(jq -c '.' "$tf_check_file" 2>/dev/null)"
-        [ -n "$tf_check_doc" ] \
-          || die 3 "tests-freeze: $tf_check_file exists but could not be read as JSON. The rejected rows are recorded with the checker's note from it. Repair or remove it by hand before running this again."
-      fi
       tf_person_rejected="$(printf '%s' "$tf_person_rejected" | jq -c --argjson check "$tf_check_doc" \
           --argjson entries "$tf_red_entries" "$RED_AGAIN_JQ"'
           [ .[] | .criterion as $c
-            | {criterion: $c, personWords: .note,
-               checkerNote: ([ ($check.rows // [])[] | select(.criterion == $c) | .note ][0] // null),
-               redAgain: red_again($entries; $c)} ]' 2>/dev/null)"
+            | {criterion: $c}
+              + (if .judgedBy == "person" then {personWords: .note} else {} end)
+              + {checkerNote: ([ ($check.rows // [])[] | select(.criterion == $c) | .note ][0] // null),
+                 redAgain: red_again($entries; $c)} ]' 2>/dev/null)"
       [ -n "$tf_person_rejected" ] \
         || die 3 "tests-freeze: $tf_check_file is not in the checker's shape, {\"rows\": [{\"criterion\", \"verdict\", \"note\"}]}. Repair or remove it by hand before running this again."
       tf_rejected_doc="$(printf '%s' "$tf_ledger_doc" | jq -c --arg id "$unit_id" --argjson r "$tf_person_rejected" \
-        '.orders = (.orders | map(if .id == $id then .rowsRejected = $r else . end))')"
+        --argjson m "$tf_sent_back" '
+        .orders = (.orders | map(if .id != $id then .
+          else .rowsRejected = $r
+            | if $m == [] then . else .rowsSentBack = (((.rowsSentBack // []) + ($m | map(.criterion))) | unique) end
+          end))')"
       [ -n "$tf_rejected_doc" ] || die 3 "tests-freeze: the ledger update for $unit_id failed."
       write_atomic "$tf_ledger_file" "$tf_rejected_doc"
       die 65 "tests-freeze: a --row answers rejected, so nothing is frozen: $rejected_rows.$tf_person_next$tf_absence_route$TF_CARRY_NEXT
@@ -6444,7 +6483,7 @@ TF_EOF
                + (if $carried == [] then {} else {rowsCarried: $carried} end)) end)
             | (if ($absences | length) == 0 then del(.absenceClauses)
                else .absenceClauses = $absences end)
-            | del(.rowsRejected, .rowsConfirmed))
+            | del(.rowsRejected, .rowsConfirmed, .rowsSentBack))
       end))')"
   [ -n "$ledger_with_judgements" ] \
     || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."

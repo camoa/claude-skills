@@ -43,8 +43,9 @@ A test the correction makes necessary is allowed, and the checker reads the affe
 Then run again each test that `retake.redAgain` names, and write its new run. Each one shares a
 file with a corrected test. The freeze refuses a red run older than its test file.
 
-When the brief holds `rowsRejected`, a person rejected those rows at the checkpoint. Each row holds
-the person's words and the checker's note. Repair the tests of those rows only. Then run again
+When the brief holds `rowsRejected`, those rows were rejected at the checkpoint. Each row holds
+the checker's note, and the person's words when a person rejected it. Repair the tests of those
+rows only. Do not argue with a note: a fresh checker reads your repair. Then run again
 each test that `rowsRejected.redAgain` names, and write its new red run. Each one shares a file
 with a repaired test. The freeze refuses a red run older than its test file. A row keyed
 `<order id>:absence:<n>` names done-when row n, which you returned as an absence. The checker found

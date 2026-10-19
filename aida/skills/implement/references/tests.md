@@ -143,8 +143,8 @@ in a file that holds a test of the finding's criterion, the same way `rowsReject
 record a person removed is named under `absent`, and the brief carries what is left. The summary
 prints a `retake:` line.
 
-`rowsRejected`, only while a row a person rejected at the checkpoint below stands. It holds each
-row's key, the person's words verbatim, and the checker's note. Its `redAgain` list names each
+`rowsRejected`, only while a row rejected at the checkpoint below stands. It holds each row's
+key, the checker's note, and the person's words verbatim when a person rejected it. Its `redAgain` list names each
 test with a red run in a file that holds a rejected row's test. The repair edits that file, so
 each of those tests needs a new red run. The `whatToDo` asks for those runs only when the list is
 not empty. The summary prints a `rowsRejected:` line.
@@ -407,11 +407,18 @@ reads confirmed; that freeze clears both records. A note may not hold the text
 carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.
 
 **Unattended, there is nobody to ask.** A rejected row becomes
-`--row <criterion id>=rejected::model::<its note>`, and it is not sent back to the test author the
-way a person's rejection is. Nobody is present to judge the correction, so `tests-freeze` writes
-the halt onto the order, with the checker's own note as the reason. Then it refuses. Report the
-halt, and take the next ready order instead. A person clears it with `clear-halt` once the test
-is repaired, in `references/finish.md`.
+`--row <criterion id>=rejected::model::<its note>`. `tests-freeze` reads the checker's verdict file
+to decide what follows (gap row 373). A row the checker marks `"repair": "tests"` goes back to the
+test author once, the way a person's rejection does. The refusal (exit 65) records it under
+`rowsRejected` with the checker's note, and adds its key to `rowsSentBack`. Run `tests-brief`,
+dispatch the test author fresh, then put the `checkAgain` rows to a fresh checker. The author
+rewrites the tests and never answers the rejection. Only the checker's next verdict confirms the row.
+Every other rejection halts the order, with the checker's note as the reason. That is a row
+marked `"repair": "row"`, a row in `rowsSentBack` already, or an order with no test author.
+A rejection that says the requirement is wrong needs design or a person, and no model may settle
+it. A second rejection of one row means the author could not meet the note. Report the halt, and
+take the next ready order instead. A person clears it with `clear-halt` once the test or the
+design is repaired, in `references/finish.md`.
 
 **A person's row needs a person.** A row judged `person` on an autonomous run refuses, because
 nobody was there to say it. A row judged `model` is accepted on both runs, because the checker runs

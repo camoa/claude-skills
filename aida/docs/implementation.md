@@ -227,9 +227,12 @@ requirement, the tests, the checker's note and the answer it recommends. A row y
 reject goes back to the test author, and the repaired test goes through the checker again.
 Nothing freezes while a rejected row stands.
 
-Unattended, there is nobody to ask. A rejected row halts the order, with the checker's note as
-the reason, and the run takes the next ready order. The ledger records who judged each row, so
-the rows no person read can be listed later. A model ruling on a test with nobody watching is
+Unattended, there is nobody to ask. When the checker says the tests can be repaired, the row goes
+back to the test author once, with the checker's note. A fresh checker reads the repair. A
+second rejection of that row halts the order, and so does a rejection that says the requirement
+itself is wrong. The halt carries the checker's note, and the run takes the next ready order. A
+model rewrites the tests, but no model overrules the checker. The ledger records who judged each
+row, so the rows no person read can be listed later. A model ruling on a test with nobody watching is
 weaker evidence than a person's. The record says so rather than marking the row passed.
 
 Once every row reads confirmed, the tests are frozen: a hash per file, recorded, and a commit of
@@ -568,7 +571,7 @@ changed is named as not found, with the reason, and cannot be cited. The test au
 carries those commits and says the tree holds the unit's earlier code. A test green on arrival is
 never taken as proof.
 
-**Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
+**Every other halt is yours to clear.** Unattended, that is a row the checker's rejection halted or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
 finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings open halt
 the same way. A grant refuses them, the restart does not see them, and a test ruled wrong takes
