@@ -10757,7 +10757,8 @@ FB_ALLOW
     echo "FIX-BRIEF: round $((rounds_used + 1)) of $unit_id is its one repair round, for $repair_ids." >&2
   fi
 
-  local fb_head fb_last fb_now c brief_file brief_json
+  local fb_head fb_last fb_now c brief_file brief_json fb_reopen fb_by fb_taken fb_first
+  brief_file="$IMPL_DIR/brief-$unit_id-fix-$((rounds_used + 1)).json"
   fb_head="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   fb_now="$fb_head"
   # Gap row 339. Commits after the order's last record are this round's work, so the round begins
@@ -10768,9 +10769,20 @@ FB_ALLOW
     fb_last="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
   fi
   # Gap row 381. An order a closed-order-defect reopened made no commit after the record it closed
-  # at, so its first round after the reopen begins at HEAD.
-  [ "$fb_last" != "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '[ (.repairs // [])[] | select(.by) ] | last | .closedRange // "" | split("..") | .[1] // ""')" ] \
-    || fb_last=""
+  # at. So its first round after the reopen begins at HEAD when each later commit is read
+  # elsewhere: inside another order's build or fix record, or wholly on files of the stopped
+  # order, whose next attempt holds it. Any other commit stays in the round, as before.
+  fb_reopen="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '[ (.repairs // [])[] | select(.by) ] | last // {}')"
+  if [ -n "$fb_last" ] && [ "$fb_last" = "$(printf '%s' "$fb_reopen" | jq -r '.closedRange // "" | split("..") | .[1] // ""')" ]; then
+    fb_by="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$(printf '%s' "$fb_reopen" | jq -r '.by')" '[ .workOrders[] | select(.id == $id) ][0] // {}')"
+    fb_taken="$(im_taken_commits "$RV_RANGE_REPO" "$unit_id")"
+    for c in $(git -C "$RV_RANGE_REPO" rev-list "$fb_last..$fb_head" 2>/dev/null); do
+      printf '%s\n' "$fb_taken" | grep -Fqx -- "$c" && continue
+      [ "$(im_commit_claim "$(git -C "$RV_RANGE_REPO" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)" \
+        "$fb_by" "$c" "")" = "own" ] || { fb_reopen=""; break; }
+    done
+    [ -z "$fb_reopen" ] || fb_last=""
+  fi
   [ -z "$fb_last" ] || [ "$fb_last" = "$fb_head" ] \
     || ! git -C "$RV_RANGE_REPO" merge-base --is-ancestor "$fb_last" "$fb_head" 2>/dev/null || fb_head="$fb_last"
   # Gap row 340. A commit after that record that changes only another order's files is that
@@ -10782,9 +10794,13 @@ FB_ALLOW
       fb_head="$c"
     done
   fi
+  # Gap row 381. A second brief for one round, to correct --allow, keeps the first brief's start,
+  # so the fixer's commits since then stay in the round.
+  fb_first="$(jq -r '.headNow // ""' "$brief_file" 2>/dev/null)"
+  [ -z "$fb_first" ] || ! git -C "$RV_RANGE_REPO" merge-base --is-ancestor "$fb_first" "$fb_now" 2>/dev/null \
+    || fb_head="$fb_first"
   # One brief per round, because each round's open findings differ from the last round's and the
   # record of what a fixer was given is worth keeping beside its report.
-  brief_file="$IMPL_DIR/brief-$unit_id-fix-$((rounds_used + 1)).json"
   brief_json="$(jq -n --arg unit "$unit_id" --argjson findings "$open_json" --argjson fixScope "$scope_json" \
     --argjson allowedFiles "$allowed_json" \
     --argjson frozenTests "$tests_json" --arg headNow "$fb_head" \

@@ -198,7 +198,9 @@ ruling with no round, under Rulings below. It writes `implementation/brief-<orde
 - `headNow`, the code repository's own commit at the moment of this call, or the order's last
   record when commits came after it, so the round holds them. A later commit that changes only
   another order's files is that order's, so the round begins after each one that comes first. The
-  first round after a closed-order-defect reopens the order begins at the current commit;
+  first round after a closed-order-defect reopens the order begins at the current commit, when
+  each later commit is in another order's record or only on the stopped order's files. A second
+  call for one round keeps the first brief's `headNow`;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path, the report path and `headNow`. It prints one line per finding with its
