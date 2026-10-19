@@ -69,7 +69,7 @@
 #   sw_source_lines <project file> <kind>     the sources providing that kind, in precedence order
 #   sw_probe <project file> <kind> <folder> <framework> <leaf> <asks the catalog>  one folder source's file
 #   sw_list <project file> <kind> <folder> <framework>  every name the folder sources hold
-#   cr_require_person <flag> <what it says>   exit 70 when RUN_MODE is autonomous
+#   cr_require_person <flag> <what it says> [<task> <words>]  exit 70 when RUN_MODE is autonomous
 #   cr_resolve_recipe <recipe flags>...       one recipe for KIND across FRAMEWORKS, into RECIPE
 #   fenced_blocks_under <recipe> <heading> <tag> [<n>]  the lines of every block with that tag, or of block n
 #   sh_blocks_under <recipe> <heading> [<n>]  the same, for blocks tagged sh: one command per line
@@ -1561,10 +1561,19 @@ SW_LINES
 # Defaults only: a caller that set one before loading this file keeps its value.
 : "${RECIPE:=}"; : "${RECIPE_FW:=}"; : "${VIEWPORTS_ARG:=}"
 
-# Exit 70. $1 the flag, $2 what it says a person did.
+# Exit 70. $1 the flag, $2 what it says a person did. A caller with a task passes $3 the task
+# folder and $4 the person's words the call carries. Then the person's answer at
+# <task>/person-answer.json, step "$ACTION $1", passes it too, without a change of mode (gap row
+# 380, task_person_answered). The caller removes it with task_answer_consume once it wrote, and
+# before its commit, which stages the task folder.
 cr_require_person() {
+  local route=""
   [ "$RUN_MODE" = "autonomous" ] || return 0
-  die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written."
+  if [ -n "${3:-}" ]; then
+    task_person_answered "$3/person-answer.json" "$3" "$ACTION $1" "" "$4" && return 0
+    route=" Or the main session writes the person's answer to $3/person-answer.json as $(jq -nc --arg task "$(jq -r '.id // empty' "$3/task.json" 2>/dev/null)" --arg step "$ACTION $1" --arg answer "$4" '{task: $task, step: $step, order: "", answer: $answer}'), as the implement skill's references/finish.md says."
+  fi
+  die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written.$route"
 }
 
 # One recipe per kind, or a lookup that failed, per framework. Sets RECIPE and RECIPE_FW, or ends

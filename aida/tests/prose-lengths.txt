@@ -18,7 +18,7 @@ skills/completion/references/close.md 136
 skills/design/SKILL.md 971
 skills/implement/SKILL.md 285
 skills/implement/references/build.md 586
-skills/implement/references/finish.md 260
+skills/implement/references/finish.md 262
 skills/implement/references/preconditions.md 296
 skills/implement/references/review.md 511
 skills/implement/references/start.md 151
@@ -35,6 +35,6 @@ skills/review/references/surfaces.md 96
 skills/scope/SKILL.md 480
 skills/surfaces/SKILL.md 154
 skills/surfaces/references/discover.md 58
-skills/task/SKILL.md 512
+skills/task/SKILL.md 513
 skills/tool/SKILL.md 211
 skills/tool/references/reading-a-recipe.md 53

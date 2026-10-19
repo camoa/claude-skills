@@ -1552,8 +1552,9 @@ do_environment() {
   if [ "$sub" = "not-applicable" ]; then
     [ "${1:-}" != "--" ] || shift
     is_blank "$*" && die3 "environment: not-applicable needs the person's reason after --"
-    cr_require_person "not-applicable" "a person decided this task needs no site"
+    cr_require_person "not-applicable" "a person decided this task needs no site" "$task_dir" "$*"
     write_atomic "$task_json" "$(jq --arg r "$*" '.environment = {"not-applicable": $r}' "$task_json")"
+    task_answer_consume
     commit_task_change "$project_path" "Record that ${id} needs no site" "$*" "" "" "$id" "environment" \
       || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
     printf 'environment: not-applicable\n'; task_summary "$task_json"
@@ -1590,9 +1591,10 @@ do_environment() {
       case "$rc" in
         0) die3 "environment: the ## Status line of $RECIPE says the adopted site of $id is still up in $wt. Nothing was written. If that database may go, tear the site down there with $(jq -r '.environment.tearDown // "the recipe'"'"'s ## Tear down lines"' "$task_json"), then run this again" ;;
         1) ;;
-        *) cr_require_person "down" "the adopted site is gone, and no ## Status line can tell. A person runs task environment $id down" ;;
+        *) cr_require_person "down" "the adopted site is gone, and no ## Status line can tell. A person runs task environment $id down" "$task_dir" yes ;;
       esac
       write_atomic "$task_json" "$(jq 'del(.environment)' "$task_json")"
+      task_answer_consume
       commit_task_change "$project_path" "Forget the adopted site of ${id}" "it is gone" "" "" "$id" "environment" \
         || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
       printf 'environment: none, the adopted site of %s is gone and forgotten, so prune may remove its tree\n' "$id"
@@ -1765,7 +1767,7 @@ TA_TOKEN_LIST
     trap - EXIT INT TERM
     return 0
   fi
-  cr_require_person up "a person approved the site coming up"
+  cr_require_person up "a person approved the site coming up" "$task_dir" yes
   wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-up.txt"
   # Same reason as the down branch above: an empty path here means task_worktree already refused
   # inside its own subshell. Without this test `cd ""` changes nothing and the bring-up lines run
@@ -1883,6 +1885,7 @@ $capture"
     # paths are the recipe's to know, and a commit of everything would sweep other work in.
     [ -z "$(git -C "$wt" status --porcelain)" ] || printf 'environment: after the %s install, uncommitted changes remain in %s: %s\n' "$kind" "$wt" "$(git -C "$wt" status --porcelain | tr '\n' ' ')" >&2
   done
+  task_answer_consume
   commit_task_change "$project_path" "$([ -n "$adopt" ] && echo "Record the site already up for" || echo "Bring up the site of") ${id}" "a person approved it" "" "" "$id" "environment" \
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
   environment_cleanup quiet; trap - EXIT INT TERM
