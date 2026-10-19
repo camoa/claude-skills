@@ -1877,8 +1877,26 @@ recipe_stale_line() {
       "$fw" "$phase" "${mine:-nothing}" "${theirs:-nothing}"
     return 0
   fi
+  local name="$mine" body adapted=""
   mine="$(recipe_name_of "$have" version)"; theirs="$(recipe_name_of "$catalog" version)"
   version_at_least "$mine" "$theirs" && return 0
+  # Gap row 385. A copy adapted on purpose keeps the catalog's name and the version it started
+  # from. The store keeps every body it served beside $3, so the catalog's body at the copy's own
+  # version tells an adapted copy from a plain one. With no such body, the copy reads as plain.
+  while IFS= read -r body; do
+    [ -n "$mine" ] && [ -n "$body" ] && [ ! "$body" -ef "$have" ] \
+      && [ "$(recipe_name_of "$body")" = "$name" ] \
+      && [ "$(recipe_name_of "$body" version)" = "$mine" ] || continue
+    cmp -s "$body" "$have" && { adapted=""; break; }
+    adapted=yes
+  done <<RS_BODIES
+$(grep -l "^name:[[:space:]]*$name" "$(dirname -- "$catalog")"/* 2>/dev/null)
+RS_BODIES
+  if [ -n "$adapted" ]; then
+    printf "%s: the project's copy of the %s recipe is adapted from the catalog's version %s, and the catalog's is now %s. Nothing was changed. Carry into the copy what still applies from the catalog's changes, set its version to %s, %s" \
+      "$fw" "$phase" "$mine" "$theirs" "$theirs" "$after"
+    return 0
+  fi
   printf "%s: the project's copy of the %s recipe is version %s, and the catalog's is %s. Nothing was changed. Update the project's copy in place, %s" \
     "$fw" "$phase" "${mine:-unstated}" "$theirs" "$after"
 }
