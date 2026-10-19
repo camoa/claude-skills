@@ -855,6 +855,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 117  `build-record` found the order's ownedFiles or sharedFiles in design/<id>.json different
 #      from the snapshot's copy. The route is design close, then start. No attempt is spent.
 #
+# 118  `tests-freeze` found every file the order owns among the tests and support files it would
+#      lock, and a test with a red run and no --locks-in. The implementer writes only owned files,
+#      and the hook refuses a frozen one, so no build can turn that red green. The test file is the
+#      order's deliverable: its author edits it until each test passes, and freezes each with a
+#      --locks-in reason (live-run row 369). The message names the tests. Nothing is frozen.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -6314,6 +6320,20 @@ TF_OWN_COMMITS
     ')"
   [ -z "$missing_red" ] \
     || die 33 "tests-freeze: these tests have neither a --red nor a --locks-in: $missing_red"
+
+  # --- 118: an order whose every owned file this freeze locks has no build to turn a red green -----
+  # An owned glob or directory never equals a frozen path. It leaves the implementer a file to
+  # write, so it refuses nothing.
+  local red_only
+  red_only="$(jq -nr --argjson unit "$UNIT_JSON" --argjson tests "$tests_json" --argjson support "$support_json" --argjson locks "$locks_json" '
+      (($tests | map(.relPath)) + ($support | map(.path))) as $frozen
+      | ($unit.ownedFiles // []) as $owned
+      | if ($owned | length) > 0 and (($owned - $frozen) | length) == 0
+        then ($locks | map(.name)) as $l | [ $tests[] | .name | select(($l | index(.)) == null) ] | unique | join(", ")
+        else "" end
+    ')"
+  [ -z "$red_only" ] \
+    || die 118 "tests-freeze: $unit_id owns no file outside the tests and support files this freeze locks, so no build can turn a red test green. These tests have a red run and no --locks-in: $red_only. The test file is the order's deliverable. Run dispatch-open with --resume and resume the test author: it edits its own test file until each test passes, and returns a locks-in reason naming the existing code each one passes against. Then freeze again with a --locks-in for each test. Nothing was frozen."
 
   # --- 34: a green-on-arrival stops the step outright -----------------------------------------------
   if [ "$(printf '%s' "$goa_json" | jq 'length')" -gt 0 ]; then

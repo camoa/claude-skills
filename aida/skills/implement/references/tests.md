@@ -253,6 +253,15 @@ in, and the reason is recorded with `--locks-in`. Still green with no existing c
 reported by name and the step stops. Failed: it is frozen with its red run. A green test is never
 deleted quietly and never weakened into failing.
 
+**An order that owns only test files has its tests as its deliverable.** A fixture repair is one.
+The freeze locks the test file, and the implementer may write only owned files. So no build can
+turn a red test green. The author makes the done-when's change in its own test file and runs each
+test until it passes. Each test then freezes with `--locks-in`, naming the existing code it passes
+against. Design marks nothing: the owned files already say it. The freeze refuses a test with a red
+run and no `--locks-in` on such an order (exit 118), before anything is frozen. Resume the author
+with `dispatch-open --resume`, as for exit 27. An owned directory or glob leaves the implementer a
+file to write, so it refuses nothing.
+
 **A test of the order's own work names a commit, not code.** After a retake the tree still holds
 this order's earlier build, so a test of its done-when arrives green. The code that satisfies it is
 the order's own, which the author may not read, and no interface record of this order exists yet. So
