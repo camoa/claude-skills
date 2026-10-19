@@ -1107,11 +1107,6 @@ task_worktree() {
     branch="feature/$id"
     printf 'worktree: %s\n' "$wt" >&2
   fi
-  base_dir="$code"
-  why="$(task_worktree_stack "$project" "$code")"
-  tab="$(printf '\t')"
-  case "$why" in *"$tab"*) base_dir="${why%%"$tab"*}"; why="${why#*"$tab"}" ;; esac
-  base="$(git -C "$base_dir" rev-parse HEAD 2>/dev/null)" || die3 "$who: $base_dir has no commit to cut a worktree from"
   dirty="$(git -C "$code" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   [ "$dirty" -eq 0 ] || printf '%s: %s uncommitted change(s) in %s are not in the worktree\n' "$who" "$dirty" "$code" >&2
   # Two old ids such as a_b and a-b slug to one folder. The tree there is the other task's.
@@ -1133,6 +1128,12 @@ task_worktree() {
     if [ -n "$after_branch" ]; then
       base="$after_base"; base_branch="$after_branch"; why="Task $id builds on task ${after% *}"
     else
+      base_dir="$code"
+      why="$(task_worktree_stack "$project" "$code")"
+      tab="$(printf '\t')"
+      case "$why" in *"$tab"*) base_dir="${why%%"$tab"*}"; why="${why#*"$tab"}" ;; esac
+      base="$(git -C "$base_dir" rev-parse HEAD 2>/dev/null)" \
+        || { rmdir "$group" 2>/dev/null; die3 "$who: $base_dir has no commit to cut a worktree from"; }
       base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
     fi
     said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" \
