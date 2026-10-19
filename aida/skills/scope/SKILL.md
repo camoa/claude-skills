@@ -221,9 +221,9 @@ For each one, in order, in the draft:
 Recommend `machine` whenever a command can read the fact: a test, a linter, or a status call to
 an API. Keep `person` for what only a person judges, such as how a page looks. Some facts exist
 only after a step the task never takes, such as a push behind a sudo gate. No build step runs
-after that step, so write `person`. Say the step in the outcome as the person's action. Name in
-the verify clause the command that reads the fact, never a page the person opens. Review runs
-that command once the person says the step is done.
+after that step, so write `person`. Say the step in the outcome as the person's action. For such
+a step, name in the verify clause the command that reads the fact, not a page the person opens.
+Review close runs it.
 
 Never pass a verdict. It starts `unanswered` and stays there until an end of task review runs;
 scope never sets it, on `add` or on `update`.

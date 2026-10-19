@@ -47,8 +47,8 @@ the person to rule it `wrong` or `deferred`. A lens check whose medium and high 
 then waits for the person, the way a lens check with low findings only does.
 
 The person answers met or unmet per criterion, from its rows. When a criterion's verify clause
-names a command, run it once the person says the step before it is done. Show its output with
-the question. Their answer becomes one flag below. Autonomous, there is
+names a command, wait until the person says the step before that check is done. Then run the
+command, and show its output with the question. Their answer becomes one flag below. Autonomous, there is
 nobody to ask: each such criterion reads unanswered, and the task gets no sign off. A run with
 nobody present cannot sign off a task carrying one person verified criterion. `close` names each
 one and its route. When the person answers, `close` runs again at the same commit with the rows.

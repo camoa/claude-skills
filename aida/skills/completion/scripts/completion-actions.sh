@@ -312,7 +312,7 @@ cp_load() {
   local waiting
   waiting="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.criteria // [])[] | select(.verdict == "unanswered" and .answeredBy == "nobody") | .id ] | join(", ")' 2>/dev/null)"
   [ -z "$waiting" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
-    || CP_PERSON_ROUTE="These criteria wait for a person to answer met or unmet: $waiting. The person answers each with review close --row <criterion>=met|unmet at the reviewed commit. A light or autonomous run takes that answer from $TASK_PATH/review/person-answer.json, written by the main session with step close."
+    || CP_PERSON_ROUTE="These criteria wait for a person to answer met or unmet: $waiting. The person answers each with review close --row <criterion>=met|unmet at the reviewed commit. A light or autonomous run takes that answer from $TASK_PATH/review/person-answer.json, written by the main session with step close. Before either, run the command a criterion's verify clause names, and show its output to the person."
   cp_load_children "$who"
   cp_load_follow_ups "$who"
   cp_load_observed "$who"
