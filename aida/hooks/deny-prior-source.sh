@@ -12,7 +12,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # carries the fuller reasoning for the record itself). Two roles reach it today. A test author is
 # denied every work order's owned files, because a test that has read the code describes the code
 # instead of the intent. An implementer is denied every order's but its own, because what another
-# unit exposes is its interface record and never its source.
+# unit exposes is its interface record and never its source. The task folder's own copies of code,
+# such as diffs and set-aside files, are listed one file at a time when the dispatch opens. A file
+# written there after that is in no list, and the read passes (gap row 379).
 #
 # It compares the payload's agent_type against the record's role rather than naming a role in its
 # own source. Naming one meant a second role with denied reads needed a second hook, and meant the
@@ -24,7 +26,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # anything by it, and a Grep that returns content returns the source as surely as opening the file.
 # Bash is covered for the plain forms only (2026-09-20, live-run row 101). A shell assembles any
 # path at run time where this hook sees only text. So a path from a variable, an interpreter or a
-# symlink passes, as it passes the write hook. A parser was built for it on 2026-09-10 and
+# symlink passes, as it passes the write hook. So does a glob operand such as `diff-*`, which is
+# compared as text and names no listed file. A parser was built for it on 2026-09-10 and
 # reverted the same day (stages/08-invariant-audit.md, section 9). The live implementer's first
 # move was then `cat` on two denied files, never Read, so the door is back for the reading verbs.
 # The Bash door is the mirror of the write hook's: heredoc bodies dropped, the command split at

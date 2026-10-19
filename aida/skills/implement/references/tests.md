@@ -203,7 +203,8 @@ contrib tests, which are the fair place to look up a framework base class. A fil
 writes is untracked, so it stays readable. A search of a folder that holds a denied file is
 refused, so the author searches its own test file by its path. Every file in the task's set-aside
 folder is denied too, because an implementer's file can sit there beside the tests. Only the
-earlier tests that the script names stay readable. The
+earlier tests that the script names stay readable. The task folder's diffs, build and fix records,
+and review and verify records are denied for the same reason. The
 script refuses the dispatch (exit 47) when this order owns no file a test glob matches and no
 directory. The freeze would refuse every test the author wrote, so design adds the order's test
 file with `add-owned-file` first. The test runner still loads

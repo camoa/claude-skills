@@ -13846,14 +13846,17 @@ TG_ROOTS
           '[ .[] | (.rows // [])[] | select(.criterion as $k | $c | index($k)) | (.tests // [])[].path ] | unique')"
       [ -n "$named_json" ] || named_json='[]'
       owned_json="$(jq -nc --argjson d "$owned_json" --argjson n "$named_json" '$d - $n')"
-      # The task folder holds copies of production code and other roles' judgements: diffs, build
-      # and fix records, review and verify records, every brief, every report, and the files a
-      # restart set aside. The hook resolves an absolute entry as it is. The checker's own inputs,
-      # interfaces-<unit>.json and the frozen test records, match none of these names.
-      owned_json="$(find "$IMPL_DIR" -maxdepth 1 \( -name 'diff-*' -o -name 'build-*' -o -name 'fix-*' \
-          -o -name 'review-*' -o -name 'verify-*' -o -name 'brief-*' -o -name '*answers-*' -o -name 'set-aside' \) 2>/dev/null \
+      # The checker is also denied every brief, every report, and the files a restart set aside.
+      # Its own inputs, interfaces-<unit>.json and the frozen test records, match none of these names.
+      owned_json="$(find "$IMPL_DIR" -maxdepth 1 \( -name 'brief-*' -o -name '*answers-*' -o -name 'set-aside' \) 2>/dev/null \
         | jq -R -s -c --argjson d "$owned_json" '$d + (split("\n") | map(select(length > 0))) | unique')"
     fi
+    # The task folder holds copies of production code and other roles' judgements: diffs, build and
+    # fix records, review and verify records (gap row 379). The hook resolves an absolute entry as it
+    # is. The test author's own brief and answers file match none of these names.
+    owned_json="$(find "$IMPL_DIR" -maxdepth 1 \( -name 'diff-*' -o -name 'build-*' -o -name 'fix-*' \
+        -o -name 'review-*' -o -name 'verify-*' \) 2>/dev/null \
+      | jq -R -s -c --argjson d "$owned_json" '$d + (split("\n") | map(select(length > 0))) | unique')"
     deny_raw="$deny_raw$(printf '%s' "$owned_json" | jq -r '.[]')
 "
   fi
