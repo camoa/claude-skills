@@ -52,10 +52,9 @@ that a test could prove it. Write that test, and do not return the clause as an 
 When the clause joins an absence to a behaviour, test the behaviour. Name the clause in your
 report, so design can split it.
 
-Your test file can already hold tests that an earlier author wrote before design reopened. The
-dispatch copied them back. Read the file first. Keep each test the brief still asks for, and change
-or remove the rest. Then run each test and write its red run, because a red run from before this
-round is refused.
+The dispatch message can name earlier tests. An earlier author wrote them before design reopened,
+and they are not in the tree. Read them. Write into your own test file only the tests the brief
+still asks for, changed where the brief changed. Then run each test and write its red run.
 
 **Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The

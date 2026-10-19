@@ -12,7 +12,7 @@ agents/outward-searcher.md 41
 agents/playbook-loader.md 85
 agents/reviewer.md 174
 agents/row-checker.md 110
-agents/test-author.md 156
+agents/test-author.md 155
 skills/completion/SKILL.md 106
 skills/completion/references/close.md 136
 skills/design/SKILL.md 957
