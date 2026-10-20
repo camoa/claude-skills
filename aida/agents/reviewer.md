@@ -150,10 +150,10 @@ this shape:
 ], "newBreakage": [ ... ], "outOfScope": [ "..." ] }
 ```
 
-A finding with origin `repair` carries a `question`. Another unit's builder named the file, and
-nobody has checked that claim. Answer it in that verdict as `"defectInFile": "yes"` or `"no"`,
-with the reason in `evidence`. Answer `no` when the failure arises elsewhere, such as in the
-builder's own unit. A `no` waits for the person, whatever the verdict says.
+A finding with origin `repair` carries a `question`. Another unit's builder or the task review
+named the file, and nobody has checked that claim. Answer it in that verdict as
+`"defectInFile": "yes"` or `"no"`, with the reason in `evidence`. Answer `no` when the failure
+arises elsewhere, such as in the builder's own unit. A `no` waits for the person, whatever the verdict says.
 
 A finding with `departureFrom` carries a `question` too. Its fix was to cure a departure from that
 recipe. Answer it as `"departureCured": "yes"` or `"no"`, with the reason in `evidence`. A `no`

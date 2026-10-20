@@ -99,7 +99,9 @@ The verdict is two words, `passed` and `failed`.
 4. **A criterion reading unmet or unanswered means no sign off**, whatever the checks said.
 
 Name the check or the criterion that caused a fail. Then hand the record to the person. No fixer
-starts and no second pass runs, per SKILL.md.
+starts and no second pass runs, per SKILL.md. A finding that fails a criterion goes back to the
+order that owns its file through the implement skill's `reopen`. Its `next:` line names it, per
+"Finish runs again after a failed review" in `skills/implement/references/finish.md`.
 
 ## Say what the write did to the contract
 

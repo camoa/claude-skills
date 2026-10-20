@@ -151,7 +151,7 @@
         "origin": {
           "type": "string",
           "pattern": "^(review|round[1-9][0-9]*|repair|check)$",
-          "description": "Where this finding came from: `review` for the review's own, `round<N>` for something a verification found newly broken in that round, `repair` for a defect a dependent order's builder found after this order closed (gap row 286), `check` for a check that stopped a fix round, which the script judges from the next round's checks and no verifier sees (gap row 305). Kept because a finding the fix itself introduced reads differently from one the review raised, and a reader must not have to guess which is which."
+          "description": "Where this finding came from: `review` for the review's own, `round<N>` for something a verification found newly broken in that round, `repair` for a defect a dependent order's builder or a failed task review found after this order closed (gap rows 286 and 390), `check` for a check that stopped a fix round, which the script judges from the next round's checks and no verifier sees (gap row 305). Kept because a finding the fix itself introduced reads differently from one the review raised, and a reader must not have to guess which is which."
         },
         "addressedInRound": {
           "type": "integer",
@@ -193,7 +193,7 @@
         "defectInFile": {
           "type": "string",
           "enum": ["yes", "no"],
-          "description": "On a finding with origin `repair` only: the verifier's answer to whether the cited failure arises in the finding's file. The stopped builder named the file, and no other role had checked it. A no makes the finding pending for the person (gap row 286)."
+          "description": "On a finding with origin `repair` only: the verifier's answer to whether the cited failure arises in the finding's file. The stopped builder or the task review named the file, and no other role had checked it. A no makes the finding pending for the person (gap row 286)."
         },
         "declaredDeparture": {
           "type": "boolean",

@@ -88,6 +88,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh close <task_folder> <unit_id>
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]... \
 #                            [--accept-warnings <the person's reason>]
+#   implement-actions.sh reopen <task_folder>
 #   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
 #   implement-actions.sh restart <task_folder> --reason <text> [--split <commit>]...
 #   implement-actions.sh unattributed <task_folder>
@@ -1145,6 +1146,7 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh close <task_folder> <unit_id>
        implement-actions.sh finish <task_folder> [--value <name>=<value>]...
                             [--accept-warnings <the person's reason>]
+       implement-actions.sh reopen <task_folder>
        implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
        implement-actions.sh restart <task_folder> --reason <text> [--split <commit>]...
        implement-actions.sh unattributed <task_folder>
@@ -1540,7 +1542,13 @@ im_next_step() {
     return 0
   fi
   if [ "$finished" = "true" ]; then
-    printf 'none: implementation is finished, the review stage is next, and a failed review takes a fix and a second finish'
+    # A failed task review of this finish sends its findings back into the orders (gap row 390).
+    if [ "$(jq -r --arg r "$(jq -r '.commitRange // ""' "$impl/finished.json" 2>/dev/null)" \
+      '.verdict == "failed" and .reviewedRange == $r' "$impl/../review/review.json" 2>/dev/null)" = "true" ]; then
+      printf 'finish: reopen, the task review of this finish failed, and its findings go back to the orders that own their files'
+    else
+      printf 'none: implementation is finished, the review stage is next, and a failed review takes a fix and a second finish'
+    fi
     return 0
   fi
   # How many actionable findings each reviewed order still has open, read once per order here so
@@ -8530,6 +8538,34 @@ BR_DEVIATION_PREFIX="the builder declared a deviation:"
 # message quotes the row from the snapshot, never from the builder's text.
 BR_ROW_KIND="row-wrong"
 
+# The orders other than $3 whose ownedFiles match a file, one "<id><tab><glob>" line each, in the
+# snapshot's order. $1 the file's absolute path, $2 the same path relative to the code path.
+im_file_owners() {
+  local one g
+  while IFS='	' read -r one g; do
+    [ -n "$g" ] || continue
+    case "$g" in
+      /*) tf_path_matches_catalog_glob "$1" "$g" || continue ;;
+      *) tf_path_matches_catalog_glob "$2" "$g" || continue ;;
+    esac
+    printf '%s\t%s\n' "$one" "$g"
+  done <<IFO_OWNED
+$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "${3:-}" '.workOrders[] | select(.id != $u) | .id as $i | (.ownedFiles // [])[] | $i + "\t" + .')
+IFO_OWNED
+}
+
+# The ledger document $1 with the closed order $2 reopened by the repair entry $3: the entry joins
+# its repairs with the range the order closed at, and the order goes back to the step its fix
+# rounds follow. close writes the range again, so the entry keeps the first one (gap row 286).
+im_reopen_in() {
+  printf '%s' "$1" | jq -c --arg id "$2" --argjson e "$3" '
+    .orders = (.orders | map(if .id == $id then
+      (.repairs = ((.repairs // []) + [$e + (if .commitRange then {closedRange: .commitRange} else {} end)])
+       | .lastStep = (if (.roundsUsed // 0) > 0 then "fixed" else "reviewed" end)
+       | del(.commitRange))
+      else . end))'
+}
+
 # Gap row 286. A builder that meets a defect in a file a closed order owns stops with
 # `Stop: closed-order-defect: <file>: <what fails>`. A closed order cannot be reopened, two orders
 # may not own one file, and the live fix was a hand commit no reviewer read. So the stop reopens
@@ -8568,16 +8604,9 @@ br_open_repair() {
     BR_REPAIR_NOTE=" No repair opened: $unit_id owns $file itself, so the fix is its own."
     return 1
   fi
-  while IFS='	' read -r one g; do
-    [ -n "$g" ] && [ -z "$owner" ] || continue
-    case "$g" in
-      /*) tf_path_matches_catalog_glob "$abs" "$g" || continue ;;
-      *) tf_path_matches_catalog_glob "$rel" "$g" || continue ;;
-    esac
-    owner="$one"; owner_glob="$g"
-  done <<BR_OWNED
-$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '.workOrders[] | select(.id != $u) | .id as $i | (.ownedFiles // [])[] | $i + "\t" + .')
-BR_OWNED
+  IFS='	' read -r owner owner_glob <<BR_OWNER
+$(im_file_owners "$abs" "$rel" "$unit_id" | head -n 1)
+BR_OWNER
   owner_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$owner" '[ (.orders // [])[] | select(.id == $id) ][0] // null')"
   if [ -z "$owner" ] || [ "$(printf '%s' "$owner_entry" | jq -r '.lastStep // ""')" != "closed" ]; then
     BR_REPAIR_NOTE=" No repair opened: no closed order owns $file."
@@ -8619,16 +8648,9 @@ BR_EARLIER
   built="$(printf '%s' "$built" | jq -c '.actionableBecause += "; the repair took the owner'"'"'s first criterion by position, and nobody judged the link"')"
   review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
   [ -n "$review_doc" ] || die 3 "build-record: the repair finding on $owner could not be written."
-  # Back to the step its fix rounds follow. The range close wrote stays on the repair entry, and
-  # close writes the order's range again.
-  new_ledger="$(printf '%s' "$ledger_doc" | jq -c --arg id "$owner" --arg u "$unit_id" --argjson a "$attempt" \
-    --arg f "$new_id" --arg report "$report" --arg at "$(date -u +%Y-%m-%d)" '
-    .orders = (.orders | map(if .id == $id then
-      (.repairs = ((.repairs // []) + [{by: $u, attempt: $a, finding: $f, report: $report, at: $at}
-                                       + (if .commitRange then {closedRange: .commitRange} else {} end)])
-       | .lastStep = (if (.roundsUsed // 0) > 0 then "fixed" else "reviewed" end)
-       | del(.commitRange))
-      else . end))')"
+  new_ledger="$(im_reopen_in "$ledger_doc" "$owner" "$(jq -cn --arg u "$unit_id" --argjson a "$attempt" \
+    --arg f "$new_id" --arg report "$report" --arg at "$(date -u +%Y-%m-%d)" \
+    '{by: $u, attempt: $a, finding: $f, report: $report, at: $at}')")"
   [ -n "$new_ledger" ] || die 3 "build-record: the repair on $owner could not be written to the ledger."
   if [ -n "$commits" ]; then
     commit_count="$(printf '%s' "$commits" | wc -w | tr -d ' ')"
@@ -10819,8 +10841,9 @@ FB_ALLOW
   # Gap row 381. An order a closed-order-defect reopened made no commit after the record it closed
   # at. So its first round after the reopen begins at HEAD when each later commit is read
   # elsewhere: inside another order's build or fix record, or wholly on files of the stopped
-  # order, whose next attempt holds it. Any other commit stays in the round, as before.
-  fb_reopen="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '[ (.repairs // [])[] | select(.by) ] | last // {}')"
+  # order, whose next attempt holds it. Any other commit stays in the round, as before. A task
+  # review's reopen has no stopped order, so only the records count (gap row 390).
+  fb_reopen="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '[ (.repairs // [])[] | select(.by or .review) ] | last // {}')"
   if [ -n "$fb_last" ] && [ "$fb_last" = "$(printf '%s' "$fb_reopen" | jq -r '.closedRange // "" | split("..") | .[1] // ""')" ]; then
     fb_by="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$(printf '%s' "$fb_reopen" | jq -r '.by')" '[ .workOrders[] | select(.id == $id) ][0] // {}')"
     fb_taken="$(im_taken_commits "$RV_RANGE_REPO" "$unit_id")"
@@ -12437,7 +12460,7 @@ FN_RECIPES
       commitRange: $range,
       suite: $suite,
       orders: [ ($ledger.orders // [])[] | {id: .id, commitRange: (.commitRange // ""), roundsUsed: (.roundsUsed // 0)}
-                + (if ([ (.repairs // [])[] | select(has("by")) ] | length) > 0 then {closedRanges: [ .repairs[] | .closedRange // empty ]} else {} end) ],
+                + (if ([ (.repairs // [])[] | select(has("by") or has("review")) ] | length) > 0 then {closedRanges: [ .repairs[] | .closedRange // empty ]} else {} end) ],
       criteria: [ ($ledger.criteria // [])[] | . as $c
                   | {id: $c.id,
                      verifiedBy: (([ $kinds[] | select(.id == $c.id) ][0].verifiedBy) // ""),
@@ -12471,6 +12494,111 @@ FN_RECIPES
      record: $record,
      next: "none: implementation is finished, and the review stage reads the record"}')"
   echo "FINISH: implementation is finished for this task; the review stage reads $record_file" >&2
+  exit 0
+}
+
+# reopen: a failed task review's findings go back into the orders that own their files (gap row
+# 390). Each finding the review records as failing a criterion reopens the closed order that owns
+# its file and serves that criterion, or the one order that owns the file. So the order's own
+# fixer, dispatch record, owned files and verifier bound the repair, as for a closed-order defect.
+# One repair entry per order, so one fix round is added however many findings it takes. A finding
+# no order takes is named and left. finished.json goes, because finish's condition no longer
+# holds and every field in it is derived. Exit 119 when the review over this finish did not fail,
+# or nothing in it can be routed.
+do_reopen() {
+  [ "$#" -eq 1 ] || die 3 "reopen: one task folder is required"
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$1" "reopen")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+  fn_load_task_state "reopen"
+  rv_load_codepath "reopen"
+  local review_file="$TASK_PATH/review/review.json" finished_range reviewed verdict
+  finished_range="$(jq -r '.commitRange // ""' "$IMPL_DIR/finished.json" 2>/dev/null)"
+  [ -n "$finished_range" ] \
+    || die 66 "reopen: $IMPL_DIR/finished.json is absent or holds no commitRange, so no task review judged a finished build."
+  verdict="$(jq -r '.verdict // "none"' "$review_file" 2>/dev/null)"
+  reviewed="$(jq -r '.reviewedRange // ""' "$review_file" 2>/dev/null)"
+  [ "$verdict" = "failed" ] && [ "$reviewed" = "$finished_range" ] \
+    || die 119 "reopen: the task review over $finished_range did not fail: $review_file reads verdict ${verdict:-none} over ${reviewed:-no range}. Only a failed review of this finish reopens an order."
+
+  local alignment findings count i one fid file crit abs rel owners owner owner_glob entry
+  local review_doc new_id raw built routed='{}' not_routed="" reopened='[]' ledger_doc order rf
+  alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
+  findings="$(jq -c '[ (.findings // [])[] | select(.disposition == "criterion" and (.ruling // "") != "wrong") ]' "$review_file")"
+  count="$(printf '%s' "$findings" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    one="$(printf '%s' "$findings" | jq -c --argjson i "$i" '.[$i]')"
+    i=$((i + 1))
+    fid="$(printf '%s' "$one" | jq -r '.id')"
+    file="$(printf '%s' "$one" | jq -r '.file // ""')"
+    crit="$(printf '%s' "$one" | jq -r '.linkedTo // ""')"
+    if [ -z "$file" ]; then not_routed="$not_routed $fid (it names no file);"; continue; fi
+    abs="$(normalize_abs "$(resolve_against "$file" "$RV_CODEPATH")")"
+    rel="${abs#"$RV_CODEPATH"/}"
+    owners="$(im_file_owners "$abs" "$rel" "")"
+    owner=""; owner_glob=""
+    while IFS='	' read -r order entry; do
+      [ -n "$order" ] && [ -z "$owner" ] || continue
+      printf '%s' "$SNAPSHOT_DOC" | jq -e --arg id "$order" --arg c "$crit" \
+        '.workOrders[] | select(.id == $id) | (.criteriaOwned // []) + (.criteriaServed // []) | index($c) != null' >/dev/null \
+        && { owner="$order"; owner_glob="$entry"; }
+    done <<RO_OWNERS
+$owners
+RO_OWNERS
+    if [ -z "$owner" ] && [ "$(printf '%s' "$owners" | cut -f1 | sort -u | grep -c .)" = "1" ]; then
+      IFS='	' read -r owner owner_glob <<RO_ONE
+$owners
+RO_ONE
+    fi
+    if [ -z "$owner" ]; then
+      if [ -z "$owners" ]; then not_routed="$not_routed $fid (no order owns $file);"
+      else not_routed="$not_routed $fid ($(printf '%s' "$owners" | cut -f1 | sort -u | paste -sd, -) own $file, and none serves $crit);"; fi
+      continue
+    fi
+    [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$owner" '.orders[] | select(.id == $id) | .lastStep // ""')" = "closed" ] \
+      || { not_routed="$not_routed $fid ($owner owns $file and is not closed);"; continue; }
+    case "$owner_glob" in /*) rel="$abs" ;; esac
+    review_doc="$(printf '%s' "$routed" | jq -c --arg o "$owner" '.[$o].doc // empty')"
+    [ -n "$review_doc" ] || review_doc="$(jq -c '.' "$IMPL_DIR/review-$owner.json" 2>/dev/null)"
+    [ -n "$review_doc" ] \
+      || die 3 "reopen: $IMPL_DIR/review-$owner.json is missing or not JSON, though the ledger records $owner as closed."
+    new_id="f$(printf '%s' "$review_doc" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
+    raw="$(printf '%s' "$one" | jq -c --arg id "$new_id" --arg file "$rel" --arg range "$reviewed" '
+      {id: $id, severity, file: $file, lines: (.lines // ""), linkedTo,
+       evidence: ("The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence),
+       fixScope: [$file]}')"
+    built="$(rv_finding_record "$raw" "$alignment" repair)"
+    review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
+    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg rf "$fid" --arg f "$new_id" --argjson doc "$review_doc" '
+      .[$o] = {doc: $doc, reviewFindings: ((.[$o].reviewFindings // []) + [$rf]), findings: ((.[$o].findings // []) + [$f])}')"
+    reopened="$(printf '%s' "$reopened" | jq -c --arg o "$owner" --arg f "$new_id" --arg rf "$fid" --arg c "$crit" --arg file "$rel" \
+      '. + [{order: $o, finding: $f, from: ("task review " + $rf), cites: ("cites " + $c), file: $file}]')"
+  done
+  [ "$routed" != "{}" ] \
+    || die 119 "reopen: no finding of the failed review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns. A person fixes on the task branch, then runs finish again."
+
+  ledger_doc="$FN_LEDGER_DOC"
+  for order in $(printf '%s' "$routed" | jq -r 'keys[]'); do
+    rf="$(printf '%s' "$routed" | jq -c --arg o "$order" --arg range "$reviewed" --arg at "$(date -u +%Y-%m-%d)" \
+      '{review: $range, reviewFindings: .[$o].reviewFindings, findings: .[$o].findings, at: $at}')"
+    ledger_doc="$(im_reopen_in "$ledger_doc" "$order" "$rf")"
+    [ -n "$ledger_doc" ] || die 3 "reopen: the repair on $order could not be written to the ledger."
+  done
+  for order in $(printf '%s' "$routed" | jq -r 'keys[]'); do
+    write_atomic "$IMPL_DIR/review-$order.json" "$(printf '%s' "$routed" | jq -c --arg o "$order" '.[$o].doc')"
+  done
+  write_atomic "$FN_LEDGER_FILE" "$ledger_doc"
+  rm -f -- "$IMPL_DIR/finished.json" || die 3 "reopen: could not remove $IMPL_DIR/finished.json"
+  im_print_summary "reopen" "$(jq -cn --argjson reopened "$reopened" --arg left "${not_routed%;}" --arg review "$review_file" \
+    --arg next "$(im_next_step "$ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+    {reopened: $reopened,
+     notRouted: (if $left == "" then "none" else ($left | ltrimstr(" ")) + ". Each waits for a person: a fix on the task branch before finish, or a ruling at the next review" end),
+     finished: "implementation/finished.json removed, so finish runs again once these orders close",
+     review: $review,
+     next: $next}')"
   exit 0
 }
 
@@ -14480,6 +14608,7 @@ case "$ACTION" in
   verify-record)  do_verify_record  "$@" ;;
   close)          do_close          "$@" ;;
   finish)         do_finish         "$@" ;;
+  reopen)         do_reopen         "$@" ;;
   grant-attempt)  do_grant_attempt  "$@" ;;
   restart)        do_restart        "$@" ;;
   unattributed)   do_unattributed   "$@" ;;
