@@ -1,10 +1,11 @@
 # Finish the task, grant an attempt, restart the build, or clear a halt
 
 This step covers five actions that act on the task rather than on one order. `finish` runs when
-every order is closed. `reopen` follows a failed task review. `grant-attempt` answers a spent attempt counter, when a person wants to
-grant one more, and a spent run budget, once the person has raised it. `restart` follows a
-mid-build design change: it halted one or more orders, and a person wants a fresh build against the
-new design. `clear-halt` answers every other halt, once the person has acted on what it names.
+every order is closed. `reopen` follows a failed task review. `grant-attempt` answers a spent
+attempt counter, when a person wants to grant one more, and a spent run budget, once the person has
+raised it. `restart` follows a mid-build design change: it halted one or more orders, and a person
+wants a fresh build against the new design. `clear-halt` answers every other halt, once the person
+has acted on what it names.
 
 ## Finish
 
@@ -80,8 +81,8 @@ names `reopen`. Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh reopen "<task_folder>"
 ```
 It takes each review finding that fails a criterion, unless the person ruled it wrong. The finding
-goes to the closed order that owns its file and serves that criterion. When no such order exists,
-it goes to the one order that owns the file. That order gets one finding with origin `repair` per
+goes to the closed order that owns its file and owns that criterion, else to one that serves it.
+When no such order exists, it goes to the one order that owns the file. That order gets one finding with origin `repair` per
 review finding, scoped to the file, and one more fix round. It goes back to its fix step. Its own
 fixer repairs it under a dispatch record, its owned files and the frozen-test hook. A fresh
 verifier then reads the round, and answers whether the failure arises in that file. The order

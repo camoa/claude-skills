@@ -16,8 +16,9 @@ step asks the person the checklist rows and writes the verdict.
 
 **Review starts no fixer and runs no second pass.** A failed review goes to the person, with the
 record. The implement skill's `reopen` then sends each finding that fails a criterion back to the
-order that owns its file, whose own fixer repairs it. A reviewer holding no reference outside the code checks the code against itself, so a second
-round finds new things forever. The reference here is the frozen contract and the frozen tests.
+order that owns its file, whose own fixer repairs it. A reviewer holding no reference outside the
+code checks the code against itself, so a second round finds new things forever. The reference here
+is the frozen contract and the frozen tests.
 
 **Review is not completion.** It never marks the task complete, writes no pull request body, and
 repairs no finding. The task stays in progress, and the completion stage is what moves it. A person

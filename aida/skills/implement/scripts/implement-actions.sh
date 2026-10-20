@@ -866,6 +866,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      order's deliverable: its author edits it until each test passes, and freezes each with a
 #      --locks-in reason (live-run row 369). The message names the tests. Nothing is frozen.
 #
+# 119  `reopen` found no failed task review of this finish, or no finding of it that fails a
+#      criterion in a file a closed order owns (gap row 390). Nothing is written.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -12499,7 +12502,7 @@ FN_RECIPES
 
 # reopen: a failed task review's findings go back into the orders that own their files (gap row
 # 390). Each finding the review records as failing a criterion reopens the closed order that owns
-# its file and serves that criterion, or the one order that owns the file. So the order's own
+# its file and owns that criterion, then one that serves it, then the one order that owns the file. So the order's own
 # fixer, dispatch record, owned files and verifier bound the repair, as for a closed-order defect.
 # One repair entry per order, so one fix round is added however many findings it takes. A finding
 # no order takes is named and left. finished.json goes, because finish's condition no longer
@@ -12539,15 +12542,18 @@ do_reopen() {
     abs="$(normalize_abs "$(resolve_against "$file" "$RV_CODEPATH")")"
     rel="${abs#"$RV_CODEPATH"/}"
     owners="$(im_file_owners "$abs" "$rel" "")"
+    # The order that owns the criterion comes before one that only serves it.
     owner=""; owner_glob=""
-    while IFS='	' read -r order entry; do
-      [ -n "$order" ] && [ -z "$owner" ] || continue
-      printf '%s' "$SNAPSHOT_DOC" | jq -e --arg id "$order" --arg c "$crit" \
-        '.workOrders[] | select(.id == $id) | (.criteriaOwned // []) + (.criteriaServed // []) | index($c) != null' >/dev/null \
-        && { owner="$order"; owner_glob="$entry"; }
-    done <<RO_OWNERS
+    for rf in criteriaOwned criteriaServed; do
+      while IFS='	' read -r order entry; do
+        [ -n "$order" ] && [ -z "$owner" ] || continue
+        printf '%s' "$SNAPSHOT_DOC" | jq -e --arg id "$order" --arg c "$crit" --arg k "$rf" \
+          '.workOrders[] | select(.id == $id) | (.[$k] // []) | index($c) != null' >/dev/null \
+          && { owner="$order"; owner_glob="$entry"; }
+      done <<RO_OWNERS
 $owners
 RO_OWNERS
+    done
     if [ -z "$owner" ] && [ "$(printf '%s' "$owners" | cut -f1 | sort -u | grep -c .)" = "1" ]; then
       IFS='	' read -r owner owner_glob <<RO_ONE
 $owners

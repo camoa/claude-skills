@@ -32,13 +32,17 @@ on one machine is worth less than work that is pushed, so the report says so.
 ## After a failed review
 
 A failed review hands you the record and stops. Two paths lead on. The usual one is to fix the
-code: commit the fix on the task branch, then run `/aida:implement <task-id>` again. Its start
-reports the contract as changed and halts nothing. Every order is already closed, so its next
-step is finish, which rewrites the range from the build's start commit to the new head and
-commits the task folder. Then `/aida:review <task-id>` runs from the first step, and the old
-record is archived first. One caveat: the fix commit belongs to no order. A file no order owns
-reads unmet at the check that every change serves a criterion, so keep the fix inside the files
-the orders own.
+code. Run `/aida:implement <task-id>` again, and its next step is `reopen`. That sends each
+finding that fails a criterion back to the order that owns its file. That order's own fixer
+repairs it, a fresh verifier checks the round, and the order closes again. Then finish rewrites
+the range from the build's start commit to the new head and commits the task folder. Then
+`/aida:review <task-id>` runs from the first step, and the old record is archived first.
+
+`reopen` names each finding no order takes, such as one in a file no order owns. A failed check
+that cites no finding, and a decision you ruled load-bearing, test-wrong or rebuild, are not
+taken either. For those, commit the fix on the task branch, then run finish again. That commit
+belongs to no order. A file no order owns reads unmet at the check that every change serves a
+criterion, so keep the fix inside the files the orders own.
 
 The other path is to close the task without a passed review. Completion takes a one-sentence
 reason from you and records it, interactively only. [Finishing a task](finishing.md) covers it.
