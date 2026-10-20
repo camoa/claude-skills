@@ -62,7 +62,11 @@ suite. A recipe may declare more rows, such as a duplication tool or a design-me
 adds one check, so the list can run past sixteen on such a framework. The tool rows leave the frozen
 tests out, as the build does, because no role after the freeze may change them. Static analysis
 then runs once more over the frozen tests alone. A finding there blocks nothing: it becomes a
-follow-up that completion offers.
+follow-up that completion offers. A row reads only the file types its recipe names. When no row
+reads a file the task changed, such as a shell script on a Drupal project, review records a
+catalog note that names those files. To check them, copy the review recipe into your own process
+recipes folder and add a row with its own id, its command and its `extensions`. A task that has
+already started its build adopts the copy with `recipe-refresh`.
 
 **The reviewer's lenses.** One reviewer reading the diff answers five checks. They are SOLID,
 DRY, architecture fit, the guides research cited, and the framework practices this project
@@ -72,7 +76,11 @@ change no test catches is a survivor. The reviewer also judges every hunk for pu
 those survivors, so two of the contract checks are half script and half reviewer. The guides
 check reads unknown, not met, when no guide body design opened is on disk, because the reviewer
 then had only the research text. Research names guides and never opens them. The practices check
-follows the same rule unless the playbook record holds a loaded source.
+follows the same rule unless the playbook record holds a loaded source. With no guide body on
+disk, the review first searches the web for current practice for your stack, in every run mode.
+It records each finding with its source, beside the research records. A practice found with a
+source becomes what both lenses judge against, and the reviewer names each one it used. When
+the search finds none, or the reviewer names none, you answer either check at close, met or unmet.
 
 A lens check fails on any medium or high finding. When every finding of one of those six lens
 checks is low, you decide the check at close. The same holds for "everything serves a criterion" and
@@ -237,7 +245,7 @@ settled either. Review judges it again, because a deferral was you saying not no
 The close asks you the checklist rows for the criteria a person verifies, each row word for
 word as implementation froze it, once. You answer met or unmet per row. A machine-verified
 criterion needs no answer from you: it reads met when its row was confirmed and no failing test
-carries its id. A criterion owned by an order a model observed through a browser reads met when
+is one it froze. A criterion owned by an order a model observed through a browser reads met when
 every row of that order's observed record is met. It reads unmet when one row is not. On a task
 with no automated tests, a criterion that an order you confirm owns is yours to answer too, and
 so is one it serves when it owns none. Its rows are that order's done-when sentences, and you

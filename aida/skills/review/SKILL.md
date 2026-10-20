@@ -3,7 +3,7 @@ name: review
 description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over eight lenses, asks the person the rows only a person can answer, and records one verdict a person acts on.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh record *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Agent, EnterWorktree
 ---
 
 # Review
@@ -104,7 +104,8 @@ mode, `interactive` or `autonomous`, then each path the step hands over. Nothing
 The role's rules and its return shape live in its agent definition, which reaches it on every
 dispatch. The data it needs lives in the brief the paths name. So the message restates neither,
 and two runs of one step hand the role the same words. The step file names this shape and lists
-its own paths.
+its own paths. The one exception is `outward-searcher`, whose message carries the words to search
+and the bound in place of paths.
 
 **A recipe lookup answers four ways, and review passes the one that happened.** One answer is a path
 on disk. The other three are no recipe for this framework, a listing that could not be reached, and
@@ -135,7 +136,8 @@ branch is recorded rather than assumed.
 | A new baseline for a surface | plan, show, confirm, then write | refused, and recorded as refused |
 | Setting up a surface | offered once | not offered, and recorded as not offered |
 
-`surfaces` refuses `--accept-baseline` on an autonomous run, and `close` refuses a `--row` there.
+`surfaces` refuses `--accept-baseline` on an autonomous run, and `close` refuses a `--row` there
+unless `review/person-answer.json` holds the person's answer.
 A command surface needs no walk, because its exit status is the whole answer.
 A run with nobody present cannot sign off a task carrying one person verified criterion. That is
 intended: a check that could not run has established nothing.
@@ -151,10 +153,11 @@ After `close` has written the record, run `audit` and print its lines before you
 verdict word, so a person sees what did not run first. `close` writes the last check, which is
 why `audit` runs after it.
 
-Name the catalog notes by count as well. A note is a guide the code contradicts, a recipe whose
-command no longer runs, or a pattern the framework wants and no guide names. A recipe research or
-design judged not to fit this task is a note too. `checks` writes it from the `recipeFit` field of
-each research file and of `design-closed.json`, and a mismatch never fails a review. Review writes
+Name the catalog notes by count as well. A note is a guide the code contradicts, or a recipe whose
+command no longer runs. A change no tool row read is a note. So is a pattern the framework wants
+and no guide names. A recipe research or design judged not to fit this task is a note too.
+`checks` writes it from the `recipeFit` field of each research file and of `design-closed.json`,
+and a mismatch never fails a review. Review writes
 nothing to the catalog. A person decides whether a note becomes a proposal.
 
 ## audit

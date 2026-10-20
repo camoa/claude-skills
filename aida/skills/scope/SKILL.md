@@ -19,6 +19,12 @@ The record is `alignment.json`, in the task's own folder, beside `task.json` and
 below runs `surfaces-actions.sh decline`. Both are named in this skill's own grant, so they
 run without asking. Any other Bash command still asks for approval.
 
+`scope-actions.sh` takes a text value from a file. Write the text with the Write tool in the
+session's scratchpad folder. With no scratchpad, write it in the task folder, and delete it after
+the call. Then pass `@/<absolute path>` as the value. Use this for a text that names a command, such
+as git. Claude Code refuses a command whose quoted text names git when the session works in a
+worktree.
+
 ## Determine the run mode
 
 Look for a stated run mode on the task active in this conversation. Found, and it says
@@ -212,6 +218,13 @@ For each one, in order, in the draft:
      --verified-by <machine|person> --author <owner|designer>
    ```
 
+Recommend `machine` whenever a command can read the fact: a test, a linter, or a status call to
+an API. Keep `person` for what only a person judges, such as how a page looks. Some facts exist
+only after a step the task never takes, such as a push behind a sudo gate. No build step runs
+after that step, so write `person`. Say the step in the outcome as the person's action. For such
+a step, name in the verify clause the command that reads the fact, not a page the person opens.
+Review close runs it.
+
 Never pass a verdict. It starts `unanswered` and stays there until an end of task review runs;
 scope never sets it, on `add` or on `update`.
 
@@ -266,7 +279,7 @@ later, and the person may change it there.
 decision itself, so do not run `record-decision` for it.
 
 **Light:** do not ask, and do not run `set-tests`. `init` wrote no on a light task and logged the
-skip. `set-tests` refuses yes there.
+skip. Research changes it to yes when the test recipe's own checks find a runner.
 
 ## Tests and checks
 
@@ -433,6 +446,9 @@ To edit an existing criterion or non-goal rather than add or remove one:
   update "<task_folder>" --id <id> [--text "<text>"] [--verification "<verify clause>"] \
   [--verified-by <machine|person>]
 ```
+After implementation started, a corrected verify clause reaches the build through design's
+`close` and then implement's `start`. Unattended, run `record-decision --field <id>` with the
+reason first, or the change halts every started order that serves the criterion.
 A non-goal's id only accepts `--text`; the others are a criterion's own fields. `--author owner`
 is for a criterion the person corrected in this conversation; `approve` promotes the rest. Both
 only ever move a criterion from `designer` to `owner`, and the other way round is refused.

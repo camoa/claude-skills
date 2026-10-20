@@ -166,10 +166,11 @@ cause. Design has to close again on the live files first. The restart takes the 
 live copies into the snapshot, and refuses with exit 13 until `design-closed.json` records a
 close over them.
 
-On success it moves only the halted orders' records to `implementation-<date>-<commit>/`. A
-record is the order's when its name carries the order id, the way every record the script
-writes does. A folder counts too, such as the test author's `<order id>-red-runs/` and a
-retake's `retaken-<order id>-<n>/`. So a red run of a test that no longer exists leaves with its
+On success it moves only the halted orders' records to `implementation-<date>-<commit>/`. An
+earlier restart on the same day at the same commit can hold that name. Then the folder takes
+the next free number, `implementation-<date>-<commit>-<n>/`, starting at 2. A record is the
+order's when its name carries the order id, the way every record the script writes does. A folder counts
+too, such as the test author's `<order id>-red-runs/` and a retake's `retaken-<order id>-<n>/`. So a red run of a test that no longer exists leaves with its
 order. It writes the reason and the halted orders there as `restarted.json`, and prints that
 path. It keeps every other order's records, and the snapshot and the ledger, in place. In
 the ledger the halted orders go back to not started, and their judgements are dropped. The
@@ -199,9 +200,13 @@ When a commit also changes a file the order does not own, the restart stops with
 names the commit, the order and the other files. A merge that changes the order's files stops it
 the same way, because a revert of a merge needs a person to choose its parent. Nothing is reverted, moved or written. Put it
 to the person, opening with: "This unit's code sits in a commit that also changes other files.
-A revert would undo that other work too, so only you can separate them." When they say it is
-done, run restart again. A revert that stops on a conflict is taken back, and the restart stops.
-The reverts before it stay committed, and the next restart skips them.
+A revert would undo that other work too, so only you can separate them." Offer `--split
+<commit>` for each named commit that is no merge. Run restart again with it when they agree.
+The restart then reverts only the halted order's files in that commit, in one commit, and the
+other files stay. The `reverted:` line for it ends with `its files only:` and those files, and
+`restarted.json` lists it under `split`. Or the person separates the commit by hand. When they
+say it is done, run restart again. A revert that stops on a conflict is taken back, and the restart stops.
+The reverts it committed before that are taken back too, so the branch is where it was.
 
 ## Clear any other halt, once the person has acted on it
 
@@ -229,3 +234,35 @@ refuses when the task's implement stage is autonomous (exit 68), because clearin
 person's judgement. The person sets the task interactive first. The reason may not hold
 `; earlier: `, for the same cause as the grant's. Then run `start` again and take the `next:`
 line.
+
+## A person's answer in an unattended run
+
+A light or autonomous run refuses a person's call. In implement the calls are `grant-attempt`,
+`clear-halt`, `restart`, `finish --accept-warnings`, the two `--accept-deviation` keeps (exit 68),
+`verify-record --ruling` (exit 55) and `fix-brief --allow` (exit 100). In review the call is
+`close --row` (exit 70). In completion it is `close` with `--reason`, `--leave`,
+`--captures-offered` or `--observed-accepted` (exit 70). In the task skill the calls are
+`environment` `up`, `not-applicable` and `down` (exit 70). Two routes reach them. The person sets
+the task interactive with `task set-run-mode`. Or the person's answer travels as a record, and the
+run mode stays as it is.
+
+The record is `person-answer.json`. It sits in the task's `implementation/` folder for an
+implement call, in `review/` for review's `close`, and in `completion/` for completion's `close`.
+For `environment` it sits in the task folder itself. Only the main session writes it, the session
+the person types in, and only with words the person gave there. A hook refuses the file to every
+dispatched agent. A main session started with `claude --agent` carries an agent name, so the hook
+refuses it too. An agent that meets the refusal reports the halt to the main session and stops. It
+never asks again. The record holds four keys:
+```
+{"task": "<task id>", "step": "<action>", "order": "<order id, or empty for finish, restart and close>",
+ "answer": "<the exact value of the call's flag>"}
+```
+For a repeated flag, `--ruling`, `--allow` or `--row`, the answer is every value in the call's
+order, one per line. For completion's `close`, the answer is one `<flag> <value>` line per person's
+flag, in the call's order. For `environment`, the step is `environment up`, `environment
+not-applicable` or `environment down`. The answer is the reason for `not-applicable`. It is `yes`
+for the other two. A final newline does not count. The action reads the record only on an
+unattended stage. A record that names this task, this action, this order and these exact words
+passes the refusal. The action removes it once its own writes are done, so a later refusal keeps
+it. A record for another call stays. The refusals of completion and the task skill say so, and
+print the record to write. No task commit takes the record.

@@ -78,7 +78,12 @@ its text, its source sentence, its `paths` and its `urls`, and the criteria it s
 marked `onDisk`. The text says whether the source is a guide or an agentic recipe. A body that is not
 on disk is named as unread, and you answer from the text. A URL is never on disk. The brief's
 `guideBodies` lists each guide body design opened, marked `onDisk`. Open each one on disk.
-Ask no catalog for anything; you have no way to reach one and no need.
+When none is on disk and `practiceSearch` is not null, its research file holds current practice
+for this stack, each finding with its source. Judge the diff against those findings for both
+lenses, and cite the finding's source and text. Then write `practiceJudged`, one entry per lens,
+naming each finding you judged against from `practiceSearch.sourcedRefs`. Without that entry the
+script cannot tell a judgement from silence, and the check reads unknown. Ask no catalog for
+anything; you have no way to reach one and no need.
 
 For `practices` the brief also carries `playbooksPath`: the playbook record that research loaded,
 or null. When it is not null, open it. Report one finding per play the diff contradicts, citing the
@@ -146,13 +151,16 @@ Write the findings file at the path your dispatch names, in this shape:
   "absenceVerdicts": [
   { "order": "wo8", "clause": "no new Composer dependency", "verdict": "met|unmet|unknown",
     "testable": "yes|no", "note": "..." }
+],
+  "practiceJudged": [
+  { "lens": "guides|practices", "findings": ["review-practices#1"], "note": "..." }
 ] }
 ```
 
 Use `{ "findings": [], "catalogNotes": [] }` when you find nothing. A lens that returned nothing is
 read as met, so an empty list is an answer and not a gap. Leave `absenceVerdicts` out only when the
 brief carried no clause. A clause you leave unanswered is recorded unknown, and that fails the
-review.
+review. Leave `practiceJudged` out when the brief's `practiceSearch` is null.
 
 **Every finding cites exactly one id in `linkedTo`**, a criterion or a non-goal, and only one the
 contract gave you. A finding that cites neither carries `"disposition": "follow-up"` instead, which

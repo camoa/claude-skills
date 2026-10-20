@@ -1,7 +1,7 @@
 ---
 name: project
-description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", "check this machine", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | drop-retired <name-or-path> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path> | check-machine]"
+description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", "set where task worktrees go", "check this machine", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | set-worktree-base <name-or-path> [<folder>] | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | drop-retired <name-or-path> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path> | check-machine]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -139,7 +139,7 @@ names with any framework names already given or mentioned, keeping the given one
 given and nothing detected, or the code path does not exist yet: interactive asks "What is the
 stack?"; autonomous **halts**, reporting that the frameworks are missing.
 
-**4. The projects-folder base.** Run
+**4. The two bases.** First the projects-folder base. Run
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh read-projects-base
 ```
@@ -148,14 +148,23 @@ Exit 1, interactive: ask once, "Where should project folders be stored? Default:
 `~/.claude/aida/projects`." Accept the default on an empty answer, or a typed absolute path.
 Exit 1, autonomous: use the default silently; this is not one of the three facts that halts.
 
-**5. Write it.** Once all four are known, run, with the run mode set as decided above:
+Then the worktree base, the folder that holds this project's task worktrees. Each tree goes in
+`<worktree base>/<slug of the code folder>.worktrees/<slug of the code folder>-<task id>`.
+Interactive: ask once, "Where should task worktrees go? Default: `<parent of the code path>`."
+An empty answer passes `--worktree-base ..`, the default, which follows the code path. A typed
+absolute path passes that path. Asked here because the code path is known now, and a new project
+has no tree yet to move. Autonomous: do not ask, and pass no `--worktree-base`. Nothing is
+recorded, so the next attended project or task create asks once. Say that the default is used.
+
+**5. Write it.** Once these are known, run, with the run mode set as decided above:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   create --name "<name>" --path "<codePath>" --projects-home "<base>" \
-  --framework "<fw1>" [--framework "<fw2>" ...]
+  --framework "<fw1>" [--framework "<fw2>" ...] [--worktree-base "<folder>"]
 ```
 It writes every file, makes the first commit, adds the registry row, records the projects-home
-base the first time only, and runs the check itself. Show the whole output.
+base the first time only, and runs the check itself. It records the worktree base when one is
+given. A refused worktree base exits 3 before anything is written: ask again. Show the whole output.
 
 Exit code 2 from the check here is normal, not a problem: the code path was just set from what
 was confirmed, and a brand-new project can go without code for a while. Say so and move on.
@@ -350,6 +359,29 @@ Sets the stack by hand, for a project whose code path the detector did not recog
 Looks the target up the same way `switch` does. Not found: say so and stop. Otherwise it writes
 the list into the project file, commits the change, and runs the check. Show the whole output.
 
+## `set-worktree-base <name-or-path> [<folder>]`
+
+Sets the folder that holds this project's task worktrees. Each tree goes in
+`<folder>/<slug of the code folder>.worktrees/<slug of the code folder>-<task id>`. The group name
+keeps the code folder, so site names stay unique on the machine. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
+  set-worktree-base "<target>" ["<folder>"]
+```
+Looks the target up the same way `switch` does. Not found: say so and stop. Without a folder it
+records the default, `..`, which reads as the parent of the code path and follows it. The check
+names this action in a note when the field is missing. The note does not change the exit code.
+The script refuses a folder at or under the code path, because DDEV hands a nested tree to the
+parent project. For the same reason it refuses a folder at or under any registered project, and
+a folder inside another git repository. A repository at the home directory or above it does not
+count. It also refuses a system root and a folder above the home directory. The home directory
+itself is allowed. A refusal exits 3 and writes nothing. Otherwise it records the
+folder, commits the change, and runs the check. A tree that a task already records stays where it
+is. Show the whole output.
+
+`read-worktree-base <name-or-path>` prints the recorded folder and exits 0. A project that records
+none prints the default and exits 1. The task skill reads it before a task is created.
+
 ## `add-source <name-or-path> <kind> <folder | catalog>`
 
 Declares one folder, or the hosted catalog, as where this project's content of one kind comes
@@ -420,7 +452,8 @@ write. Then run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   subscribe-playbook "<target>" <framework> <set-id>
 ```
-Exit 1 with a framework this project never declared: say so, name `set-frameworks`, and stop.
+Exit 1 whose report names a framework this project never declared: say so, name
+`set-frameworks`, and stop.
 It writes the id under that framework, commits the change, and runs the check.
 `unsubscribe-playbook` takes the same three arguments and removes the id, with no such check.
 Show the whole output.
@@ -558,6 +591,10 @@ One route does not pass that code on. A `switch` that picked a folder up exits 0
 registered the folder and that was its job. A folder it registers has fields no producer has
 filled yet, so the check is never 0 there. Read the report it printed for the findings. Name each
 missing field and its producer, as the table above says.
+
+An action that writes the project file does not pass exit 6 on either, when it committed its own
+change. The uncommitted work belongs to someone else, so the action exits 0 and prints a `NOTE:`
+line. Show the uncommitted work the report lists, and say the action succeeded.
 
 A retired field comes under "Retired fields", with exit 1. The report names `drop-retired` as its
 repair. Interactive: offer it once, in one line, and on yes run `drop-retired` above. Autonomous:

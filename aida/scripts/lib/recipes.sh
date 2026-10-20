@@ -63,13 +63,13 @@
 #   rv_refuse_duplicate_keys <file> <action>  exit 52 on a JSON file naming one key twice
 #   rv_read_findings_array <file> <key> <action> [minted]  sets RV_FINDINGS_ARRAY, or exits 52
 #   cr_lookup_failure_pair <action> <flag> <value>  parses <framework>=<reason> into CR_PAIR
-#   cr_catalog_pair <action> <value>          parses --catalog-recipe's path or reason into CR_PAIR
+#   cr_catalog_pair <action> <value> [<flag>]  parses --catalog-recipe's path or reason into CR_PAIR
 #   json_file_state <file>                    missing | unreadable | ok, for any JSON file
 #   md_basenames_in <folder>                  the .md base names in it, sorted and space separated
 #   sw_source_lines <project file> <kind>     the sources providing that kind, in precedence order
 #   sw_probe <project file> <kind> <folder> <framework> <leaf> <asks the catalog>  one folder source's file
 #   sw_list <project file> <kind> <folder> <framework>  every name the folder sources hold
-#   cr_require_person <flag> <what it says>   exit 70 when RUN_MODE is autonomous
+#   cr_require_person <flag> <what it says> [<task> <words>]  exit 70 when RUN_MODE is autonomous
 #   cr_resolve_recipe <recipe flags>...       one recipe for KIND across FRAMEWORKS, into RECIPE
 #   fenced_blocks_under <recipe> <heading> <tag> [<n>]  the lines of every block with that tag, or of block n
 #   sh_blocks_under <recipe> <heading> [<n>]  the same, for blocks tagged sh: one command per line
@@ -93,7 +93,7 @@
 #                                             tool in endOfTaskToolsAbsent with its rows, as text
 #   recipe_requires_tooling_of <recipe> [<key>]  the names its requires_tooling: list holds, or
 #                                             the list under <key>; 2 on a value it cannot read
-#   recipe_stale_line <fw> <copy> <catalog>   one sentence when the copy is behind the catalog's
+#   recipe_stale_line <fw> <copy> <catalog> [<phase>]  one sentence when the copy is behind the catalog's
 #                                             copy or could not be compared; nothing otherwise
 #   recipe_file_is_earlier <recipe> <path> <file>  true when the file holds an earlier version's block
 #   recipe_files_refuse_differing <who> <recipe> <list> <tree> <dir>  exit 3 on a differing file;
@@ -107,6 +107,12 @@
 #   recipe_files_take_out <tree> <saved> <written> <replaced> <dirs>  puts back, removes and
 #                                             removes the empty folders; prints what it did
 #   recipe_commit_if_changed <tree> <who> <nothing> <message> [<paths>]  commits the tree, or the paths; prints committed:
+#   pc_check_is_unsafe <check>               true when a condition's check carries a shell metacharacter
+#   pc_run_check <check> <dir> <out>         runs one check as arguments; prints its exit status
+#   pc_flush_entry <out> <dir>               runs the held condition and appends its JSON object
+#   pc_parse_recipe <recipe> <out> <dir>     runs every ## Preconditions check; prints the section state
+#   pc_section_verdict <state>               the verdict that section state gives before its entries
+#   pc_rank <verdict>, pc_worse <a> <b>      the worse of two condition verdicts
 #
 # What this library takes from its caller, and never defines itself:
 #
@@ -275,7 +281,7 @@ recipe_block_into() {
   printf 'ok'
 }
 
-# The entry being read, held between lines, the same reason PC_* is held between lines above.
+# The entry being read, held between lines, the same reason PC_* is held between lines below.
 TC_ID=""; TC_ARGV_RAW=""; TC_COST=""; TC_ABSENT=0; TC_NEAREST_RAW=""; TC_FAILURE_LINE=""; TC_WARNING_LINE=""
 
 # Appends one JSON object to $1 for the held row and clears it, so a second call with nothing held
@@ -406,7 +412,7 @@ tc_parse_recipe() {
 # instead, and the caller hands over the recipe path rather than the command.
 # ------------------------------------------------------------------------------------------------
 
-# The entry being read, held between lines, the same way PC_* and TC_* are held above.
+# The entry being read, held between lines, the same way TC_* is held above and PC_* below.
 CC_ID=""; CC_ARGV_RAW=""; CC_ABSENT=0; CC_ABSENT_TEXT=""; CC_SIGNAL=""; CC_EXTS_RAW=""; CC_SILENT_TEXT=""
 
 # Appends one JSON object to $1 for the held row and clears it. `argv` and `extensions` are read as
@@ -626,11 +632,12 @@ cr_lookup_failure_pair() {
 }
 
 # Parses one `--catalog-recipe <framework>=<path or reason>` value, the catalog's copy of a recipe a
-# project folder answered for, and sets CR_PAIR the way the two functions above do. $1 the action.
+# project folder answered for, and sets CR_PAIR the way the two functions above do. $1 the action,
+# $3 the flag when it is another one, such as `--catalog-check-recipe`.
 cr_catalog_pair() {
   case "${2#*=}" in
-    no-recipe|listing-unreachable|fetch-failed) cr_lookup_failure_pair "$1" "--catalog-recipe" "$2" ;;
-    *) cr_recipe_pair "$1" "--catalog-recipe" "$2" ;;
+    no-recipe|listing-unreachable|fetch-failed) cr_lookup_failure_pair "$1" "${3:---catalog-recipe}" "$2" ;;
+    *) cr_recipe_pair "$1" "${3:---catalog-recipe}" "$2" ;;
   esac
 }
 
@@ -875,7 +882,7 @@ tf_first_segment() {
 
 # The text of $1 after its first "/", or empty when it holds none. Paired with tf_first_segment to
 # peel a "/"-joined string apart one segment at a time without ever word-splitting an unquoted
-# expansion, the same reasoning tf_name_carries already states for its own comma list.
+# expansion: zsh does not word-split `for x in $unquoted` or `set -- $unquoted` by default.
 tf_rest_segments() {
   case "$1" in
     */*) printf '%s' "${1#*/}" ;;
@@ -1247,16 +1254,55 @@ br_subtract_baseline() {
   [ -z "$selector" ] || rm -f "$base_sel" "$now_sel"
 }
 
-# The baseline field that holds one tool row's own earlier verdict, or the empty string for a row
-# the baseline has no field for. baseline-schema.json carries three tool fields and no more, so a
-# duplication or design-metrics row the recipe declares has no baseline to subtract, and this says
-# so rather than reading its absence as a clean one.
-rw_baseline_field_for() {
+# For a tool row that failed now and whose baseline recorded it unknown or undeclared, $3, so the
+# baseline kept no output to subtract. Gap row 359: a file absent at the baseline commit held no
+# finding then. The rule rests on git alone: the baseline reads undeclared, the commit $5 is in
+# repository $4, and every path in $6 is absent at it. Then a line of the run at $7 that names
+# one of those paths is this task's own, and the row reads unmet. Only the lines naming a path
+# count, because a tool may report a file outside them, such as an old file a new one imports.
+# Any other case reads unknown, as before: the exit $8 is 127 (the tool could not run), the commit
+# is not in the repository, a path existed then or lies outside the repository, or no line names a
+# path. $1 a word for the message, $2 how the command failed. Sets BR_SUB_VERDICT, BR_SUB_DETAIL,
+# BR_SUB_NEW and BR_SUB_COUNT as br_subtract_baseline does.
+# shellcheck disable=SC2034 # read by the sourcing script
+br_new_files_only() {
+  local label="$1" how="$2" was="$3" repo="$4" commit="$5" paths="$6" now="$7" rc="$8" p names named ok=no
+  BR_SUB_VERDICT="unknown"; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
+  BR_SUB_DETAIL="the $label command $how, and the baseline recorded this tool $was at the commit the build started from, so there is nothing to subtract and this cannot tell an old finding from a new one."
+  [ "$was" = "undeclared" ] && [ "$rc" != "127" ] && [ -n "$commit" ] || return 0
+  git -C "$repo" cat-file -e "$commit^{commit}" 2>/dev/null || return 0
+  [ "$(printf '%s' "$paths" | jq 'length' 2>/dev/null)" != "0" ] || return 0
+  names="$(mktemp)" || die 3 "$CR_WHO: could not create a temporary file"
+  while IFS= read -r p; do
+    ok=no
+    [ -n "$p" ] || break
+    printf '%s\n' "$p" >>"$names"
+    case "$p" in "$repo"/*) p="${p#"$repo"/}" ;; /*|../*|*/../*) break ;; esac
+    git -C "$repo" cat-file -e "$commit:./$p" 2>/dev/null && break
+    printf '%s\n' "$p" >>"$names"
+    ok=yes
+  done <<BR_NEW_PATHS
+$(printf '%s' "$paths" | jq -r '.[]' 2>/dev/null)
+BR_NEW_PATHS
+  named="$(grep -a -F -f "$names" "$now" 2>/dev/null)"
+  rm -f "$names"
+  [ "$ok" = "yes" ] && [ -n "$named" ] || return 0
+  BR_SUB_VERDICT="unmet"
+  BR_SUB_COUNT="$(printf '%s\n' "$named" | grep -c '')"
+  BR_SUB_NEW="$(printf '%s\n' "$named" | head -20 | jq -Rsc 'split("\n") | map(select(length > 0))')"
+  BR_SUB_DETAIL="the $label command $how, and no file it read existed at the baseline commit $commit, so the baseline held no finding in them. $BR_SUB_COUNT of its lines name one of those files, and each is this task's own. newLines holds the first 20."
+}
+
+# The place in baseline.json that holds one tool row's own earlier result, as a JSON path for jq's
+# getpath and setpath. The three floor rows keep their own fields. Every other row the check recipe
+# declares sits under toolRows by its id (gap row 353), so a row a project adds subtracts the way
+# the three do. A baseline taken before toolRows existed holds nothing there, and a reader says so.
+rw_baseline_path_for() {
   case "$1" in
-    coding-standards) printf 'codingStandards' ;;
-    static-analysis)  printf 'staticAnalysis' ;;
-    security)         printf 'security' ;;
-    *) printf '' ;;
+    coding-standards) printf '["codingStandards"]' ;;
+    static-analysis)  printf '["staticAnalysis"]' ;;
+    security)         printf '["security"]' ;;
+    *) jq -cn --arg id "$1" '["toolRows", $id]' ;;
   esac
 }
 
@@ -1521,10 +1567,21 @@ SW_LINES
 # Defaults only: a caller that set one before loading this file keeps its value.
 : "${RECIPE:=}"; : "${RECIPE_FW:=}"; : "${VIEWPORTS_ARG:=}"
 
-# Exit 70. $1 the flag, $2 what it says a person did.
+# Exit 70. $1 the flag, $2 what it says a person did. A caller with a task passes $3 the task
+# folder and $4 the person's words the call carries. Then the task's own run mode for implement
+# also counts, so a call that leaves out --run-mode is not interactive by that alone; the site
+# serves the build, as fn_require_interactive reads it. And the person's answer at
+# <task>/person-answer.json, step "$ACTION $1", passes the refusal without a change of mode (gap
+# row 380, task_person_answered). The caller removes it with task_answer_consume once it wrote.
 cr_require_person() {
-  [ "$RUN_MODE" = "autonomous" ] || return 0
-  die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written."
+  local mode="$RUN_MODE" route=""
+  [ -z "${3:-}" ] || [ "$(task_run_mode "$3" implement)" != "autonomous" ] || mode="autonomous"
+  [ "$mode" = "autonomous" ] || return 0
+  if [ -n "${3:-}" ]; then
+    task_person_answered "$3/person-answer.json" "$3" "$ACTION $1" "" "$4" && return 0
+    route="$(task_answer_route "$3/person-answer.json" "$3" "$ACTION $1" "$4")"
+  fi
+  die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written.$route"
 }
 
 # One recipe per kind, or a lookup that failed, per framework. Sets RECIPE and RECIPE_FW, or ends
@@ -1793,32 +1850,55 @@ recipe_requires_tooling_of() {
 
 # One sentence when the project's copy $2 of a framework's test-execution recipe is behind the
 # catalog's copy $3, or could not be compared with it; nothing otherwise (gap row 284). $1 the
-# framework. $3 is a path, or the catalog lookup's own word: no-recipe has nothing to compare, and
+# framework, $4 the recipe's phase, test-execution when it is not given. $3 is a path, or the catalog lookup's own word: no-recipe has nothing to compare, and
 # listing-unreachable or fetch-failed means nobody read the catalog's copy. Two files with other
 # names are two recipes, so their versions are not compared. Preconditions and review both call
 # this. The task reads the recipe at its recorded path, so an update in place needs no other step.
 # version_at_least is task-helpers.sh's, which every caller sources.
 recipe_stale_line() {
-  local fw="$1" have="$2" catalog="$3" mine theirs
+  local fw="$1" have="$2" catalog="$3" phase="${4:-test-execution}" mine theirs after
+  # A changed test-execution recipe is read at its path. A changed review recipe moves the sha the
+  # baseline pinned, so the task adopts it through recipe-refresh, or every check stops at exit 73.
+  after="and the task reads the new version at the same path."
+  [ "$phase" = "test-execution" ] \
+    || after="and a task past preconditions adopts it with implement-actions.sh recipe-refresh --check-recipe $fw=<path>."
   case "$catalog" in
     ''|no-recipe) return 0 ;;
     listing-unreachable|fetch-failed)
       mine="$(recipe_name_of "$have" version)"
-      printf "%s: the project's copy of the test-execution recipe is version %s, and its catalog version was not checked, because the catalog's copy could not be read (%s)." \
-        "$fw" "${mine:-unstated}" "$catalog"
+      printf "%s: the project's copy of the %s recipe is version %s, and its catalog version was not checked, because the catalog's copy could not be read (%s)." \
+        "$fw" "$phase" "${mine:-unstated}" "$catalog"
       return 0 ;;
   esac
   [ ! "$have" -ef "$catalog" ] || return 0
   mine="$(recipe_name_of "$have")"; theirs="$(recipe_name_of "$catalog")"
   if [ -z "$mine" ] || [ "$mine" != "$theirs" ]; then
-    printf "%s: the project's copy of the test-execution recipe is named %s and the catalog's copy %s, so their versions were not compared." \
-      "$fw" "${mine:-nothing}" "${theirs:-nothing}"
+    printf "%s: the project's copy of the %s recipe is named %s and the catalog's copy %s, so their versions were not compared." \
+      "$fw" "$phase" "${mine:-nothing}" "${theirs:-nothing}"
     return 0
   fi
+  local name="$mine" body adapted=""
   mine="$(recipe_name_of "$have" version)"; theirs="$(recipe_name_of "$catalog" version)"
   version_at_least "$mine" "$theirs" && return 0
-  printf "%s: the project's copy of the test-execution recipe is version %s, and the catalog's is %s. Nothing was changed. Update the project's copy in place, and the task reads the new version at the same path." \
-    "$fw" "${mine:-unstated}" "$theirs"
+  # Gap row 385. A copy adapted on purpose keeps the catalog's name and the version it started
+  # from. The store keeps every body it served beside $3, so the catalog's body at the copy's own
+  # version tells an adapted copy from a plain one. With no such body, the copy reads as plain.
+  [ -z "$mine" ] || while IFS= read -r body; do
+    [ -n "$body" ] && [ ! "$body" -ef "$have" ] \
+      && [ "$(recipe_name_of "$body")" = "$name" ] \
+      && [ "$(recipe_name_of "$body" version)" = "$mine" ] || continue
+    cmp -s "$body" "$have" && { adapted=""; break; }
+    adapted=yes
+  done <<RS_BODIES
+$(grep -l "^name:[[:space:]]*$name" "$(dirname -- "$catalog")"/* 2>/dev/null)
+RS_BODIES
+  if [ -n "$adapted" ]; then
+    printf "%s: the project's copy of the %s recipe is adapted from the catalog's version %s, and the catalog's is now %s. Nothing was changed. Carry into the copy what still applies from the catalog's changes, set its version to %s, %s" \
+      "$fw" "$phase" "$mine" "$theirs" "$theirs" "$after"
+    return 0
+  fi
+  printf "%s: the project's copy of the %s recipe is version %s, and the catalog's is %s. Nothing was changed. Update the project's copy in place, %s" \
+    "$fw" "$phase" "${mine:-unstated}" "$theirs" "$after"
 }
 
 # True when the file $3 holds the block for the path $2 of an earlier version of the recipe $1.
@@ -2133,4 +2213,174 @@ rv_read_findings_array() {
   done
   # shellcheck disable=SC2034 # read by the sourcing script
   RV_FINDINGS_ARRAY="$arr"
+}
+
+# ------------------------------------------------------------------------------------------------
+# `## Preconditions`: the conditions a test-execution recipe declares, run from inside a tree.
+# Moved unchanged from implement-actions.sh, because research runs them too (gap row 366).
+# ------------------------------------------------------------------------------------------------
+
+# True when a check value would mean something other than what its author read. A recipe body is
+# data written elsewhere, and nothing here reaches a shell: the value is split on whitespace and
+# run as arguments. A value carrying a shell metacharacter is refused by name rather than run with
+# that character passed through as a literal, because either reading surprises whoever wrote it.
+pc_check_is_unsafe() {
+  case "$1" in
+    *[\;\|\&\$\`\<\>\(\)\{\}\*\?\[\]\~\!\\\"\']*) return 0 ;;
+  esac
+  return 1
+}
+
+# Runs one check as arguments from inside $2, and prints only its exit status. Globbing is off for
+# the split, so a `*` that survived the refusal above could not expand against the working
+# directory anyway. Standard input is empty. The caller reads the framework names from a pipe.
+# A command that reads its input would swallow the frameworks still to come (live-run row 137).
+pc_run_check() {
+  local value="$1" dir="$2" outfile="$3"
+  (
+    cd "$dir" || exit 127
+    # zsh does not split an unquoted expansion on whitespace the way bash and every other
+    # POSIX-family shell do (foundations.md, Honesty: this script runs under both). Scoped to
+    # this subshell only, so it never changes how the rest of the script's own expansions behave.
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      setopt SH_WORD_SPLIT 2>/dev/null
+    fi
+    set -f
+    # shellcheck disable=SC2086
+    set -- $value
+    set +f
+    # An `exec` with no operands returns 0 without replacing the shell, so a check whose command
+    # came out empty would read as a condition that passed. Exit 126 instead.
+    [ "$#" -gt 0 ] || exit 126
+    exec "$@"
+  ) >"$outfile" 2>/dev/null </dev/null
+  printf '%s' "$?"
+}
+
+# The entry being read, held between lines. Bash 3.2 has no nameref, so the parse loop and its
+# flush share these rather than passing a record around.
+PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""; PC_ANY=0
+
+# Runs the held entry's check and appends one JSON object to $1. Clears the entry afterwards, so a
+# second call with nothing held writes nothing.
+pc_flush_entry() {
+  local out="$1" codepath="$2"
+  local verdict reason rc exitjson first
+  [ -n "$PC_ID" ] || return 0
+  PC_ANY=1
+  verdict=""; reason=""; exitjson="null"; first=""
+  if [ -z "$PC_WHAT" ]; then
+    verdict="unknown"; reason="entry-unparseable"
+  elif [ -z "$PC_CHECK" ]; then
+    verdict="unknown"; reason="no-check-declared"
+  elif pc_check_is_unsafe "$PC_CHECK"; then
+    verdict="unknown"; reason="unsafe-check-shape"
+  else
+    rc="$(pc_run_check "$PC_CHECK" "$codepath" "$out.stdout")"
+    exitjson="$rc"
+    case "$rc" in
+      0)   verdict="met" ;;
+      127) verdict="unknown"; reason="check-command-not-found" ;;
+      *)   verdict="unmet" ;;
+    esac
+    # The exit status is read first and keeps every meaning it has. Only on a zero exit does an
+    # expected string decide, and it decides one way: the string is in what the command wrote, or
+    # the condition answered no. A substring test and nothing more, for the same reason the command
+    # never reaches a shell. An unmet carrying exit code 0 and an expected string is this test
+    # deciding, which is why it needs no reason of its own.
+    if [ "$verdict" = "met" ] && [ -n "$PC_EXPECT" ]; then
+      if ! pc_output_holds "$out.stdout" "$PC_EXPECT"; then
+        verdict="unmet"
+      fi
+    fi
+    [ "$verdict" = "met" ] || first="$(grep -m1 '[^[:space:]]' "$out.stdout" 2>/dev/null)"
+    rm -f "$out.stdout"
+  fi
+  jq -n --arg id "$PC_ID" --arg what "$PC_WHAT" --arg owner "$PC_OWNER" --arg check "$PC_CHECK" \
+        --arg expect "$PC_EXPECT" --arg first "$first" \
+        --arg verdict "$verdict" --arg reason "$reason" --argjson exitCode "$exitjson" '
+    {id: $id, what: (if $what == "" then $id else $what end), verdict: $verdict}
+    + (if $check    == ""   then {} else {check: ([$check | splits("[ \t]+")] | map(select(length > 0)))} end)
+    + (if $expect   == ""   then {} else {expect: $expect} end)
+    + (if $owner    == ""   then {} else {owner: $owner} end)
+    + (if $reason   == ""   then {} else {reason: $reason} end)
+    + (if $exitCode == null then {} else {exitCode: $exitCode} end)
+    + (if $first    == ""   then {} else {firstLine: $first} end)
+  ' >>"$out" || die 3 "preconditions: could not record the entry $PC_ID"
+  PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""
+}
+
+# Reads the `## Preconditions` section of the recipe at $1, runs each check from inside $3, and
+# appends one JSON object per entry to $2. Prints the section's own state: `undeclared` when the
+# heading is absent, `unparseable` when the heading is there with nothing readable under it, or
+# `ok`.
+pc_parse_recipe() {
+  local recipe_file="$1" out="$2" codepath="$3"
+  local section_file block_file line trimmed
+
+  section_file="$out.section"
+  sed -n '/^##[[:space:]]*Preconditions[[:space:]]*$/,/^##[[:space:]]/p' "$recipe_file" >"$section_file" 2>/dev/null
+  if [ ! -s "$section_file" ]; then
+    rm -f "$section_file"
+    printf 'undeclared'
+    return 0
+  fi
+
+  # The key's presence and the entries under it are two facts. A recipe that wrote the key and put
+  # nothing in it has declared there are none. A recipe with no key at all may have misspelled it,
+  # and nobody can tell that from a recipe that meant to declare nothing, so it is unknown. That
+  # difference is the only thing standing between a misspelled `check:` and a run that reads clean
+  # while checking less than its author wrote.
+  if ! grep -q '^preconditions:' "$section_file"; then
+    rm -f "$section_file"
+    printf 'unparseable'
+    return 0
+  fi
+
+  block_file="$out.block"
+  sed -n '/^preconditions:/,$p' "$section_file" | sed '1d' >"$block_file"
+  rm -f "$section_file"
+
+  PC_ID=""; PC_WHAT=""; PC_CHECK=""; PC_OWNER=""; PC_EXPECT=""; PC_ANY=0
+  while IFS= read -r line; do
+    case "$line" in
+      '##'*) break ;;
+    esac
+    trimmed="$(pc_trim "$line")"
+    [ -n "$trimmed" ] || continue
+    case "$trimmed" in
+      '- id:'*)   pc_flush_entry "$out" "$codepath"; PC_ID="$(pc_trim "${trimmed#- id:}")" ;;
+      'what:'*)   PC_WHAT="$(pc_trim "${trimmed#what:}")" ;;
+      'check:'*)  PC_CHECK="$(pc_trim "${trimmed#check:}")" ;;
+      'owner:'*)  PC_OWNER="$(pc_trim "${trimmed#owner:}")" ;;
+      'expect:'*) PC_EXPECT="$(pc_unquote "$(pc_trim "${trimmed#expect:}")")" ;;
+    esac
+  done <"$block_file"
+  pc_flush_entry "$out" "$codepath"
+  rm -f "$block_file"
+
+  if [ "$PC_ANY" = "1" ]; then printf 'ok'; else printf 'declared-empty'; fi
+}
+
+# The verdict a ## Preconditions section state gives before its entries fold in: a section that
+# declared nothing, or declared an empty list, is undeclared, and one this parser cannot read is
+# unknown. Preconditions and research both read it here, so the two never disagree (gap row 366).
+pc_section_verdict() {
+  case "$1" in
+    undeclared|declared-empty) printf 'undeclared' ;;
+    unparseable) printf 'unknown' ;;
+    *) printf 'met' ;;
+  esac
+}
+
+# The worse of two verdicts, best to worst: met, undeclared, unknown, unmet. A recipe that declared
+# nothing is a smaller hole than a check that could not answer, and a check that answered no is the
+# only one of the four that names something a person can fix.
+pc_rank() {
+  case "$1" in
+    met) printf '0' ;; undeclared) printf '1' ;; unknown) printf '2' ;; *) printf '3' ;;
+  esac
+}
+pc_worse() {
+  if [ "$(pc_rank "$1")" -ge "$(pc_rank "$2")" ]; then printf '%s' "$1"; else printf '%s' "$2"; fi
 }

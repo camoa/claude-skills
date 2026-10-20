@@ -17,9 +17,8 @@ INPUT="$(cat 2>/dev/null)"
 command -v jq >/dev/null 2>&1 || exit 0
 TYPE="$(jq -r '.tool_input.subagent_type // empty | ascii_downcase' <<<"$INPUT" 2>/dev/null)"
 NAME="$(jq -r '.tool_input.name // empty' <<<"$INPUT" 2>/dev/null)"
-[ -n "$NAME" ] && [ -f "$PLUGIN_ROOT/agents/${TYPE##*:}.md" ] || exit 0
-case "$TYPE" in
-  *:*) [ "${TYPE%%:*}" = "$(jq -r '.name // empty' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null)" ] || exit 0 ;;
-esac
+# shellcheck source=/dev/null
+source "$PLUGIN_ROOT/scripts/lib/paths.sh" 2>/dev/null || exit 0
+[ -n "$NAME" ] && plugin_role "$PLUGIN_ROOT" "$TYPE" || exit 0
 jq -nc --arg r "$TYPE was dispatched with the name $NAME. Dispatch it again with the same type and no name. A named dispatch can start a teammate. Its hooks then see $NAME as the agent type, so the role's guards miss it." \
   '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'

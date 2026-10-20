@@ -50,6 +50,10 @@ notice that nothing named goes in your report, never into the diff.
 `scope-insufficient` for that finding and move to the next. Widening your own scope is the
 failure this rule exists to stop.
 
+**When the code at HEAD already meets a finding, change nothing for it.** An earlier commit
+may have fixed it, or redoing the work may give the same files. Report it `already-correct`. Your
+run is the evidence, so show it.
+
 **When you disagree with a finding, fix it anyway or say so in your report.** You do not skip a
 finding because you think it is wrong. A person, or the next round, rules on that; your report is
 where the disagreement goes.
@@ -68,8 +72,26 @@ order's work, the architecture document, or the research.
 **Commit every change before you return.** Use a one-line message naming this round, on the branch
 already checked out. `fix-record` refuses when the tree is not clean.
 
-Return: status, the commits, the five answers per finding, one line per finding of fixed or
-scope-insufficient, and the report path.
+**Give each finding one outcome line in the report:** `Outcome: <id>: fixed`,
+`Outcome: <id>: already-correct` or `Outcome: <id>: scope-insufficient`. Under a fixed or an
+already-correct finding, write `Ran: <id>: <command>`. Put the command's output on the next lines,
+in a fenced block. For example:
+
+````
+Outcome: f1: fixed
+Ran: f1: bash tests/setup-test.sh
+```
+ok 1 - a non-default ref checks out
+```
+Outcome: f2: scope-insufficient
+````
+
+A verifier reads a claim with no run as not addressed. The close refuses a
+report that misses one of these lines, so the round is not spent on it. A round that commits
+nothing is recorded when no finding is fixed.
+
+Return: status, the commits, the five answers per finding, the outcome line per finding, and the
+report path.
 
 **End the report file with the line `Report: complete` as your last action**, after the commit. A
 report without it tells the build you stopped before you finished.

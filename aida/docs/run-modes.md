@@ -207,29 +207,32 @@ an autonomous run over every stage, so everything above holds, and it skips name
 Set it with `/aida:task set-run-mode <task-id> light`. It takes no `--stage`. Interactive and
 autonomous tasks are unchanged by it.
 
-A light task has no automated tests. Scope writes that answer itself, so each code order takes
-the proof a person confirms at review. So the run ends at review, and a person closes the task.
-With nobody present, review records each of those criteria as unanswered, and completion halts.
-The task then waits for you. Answer the rows when you run review again, or close the task with
-a reason. `set-run-mode` says this in its `sign-off:` line. The path script does not stand in for
-your answer. Its lines are written by the build it judges, and no record says which criteria
-it proves. What light skips:
+A light task starts with no automated tests. Scope writes that answer itself, so each code order
+takes the proof a person confirms at review. So the run ends at review, and a person closes the
+task. With nobody present, review records each of those criteria as unanswered, and completion
+halts. The task then waits for you. Answer the rows when you run review again, or close the task
+with a reason. `set-run-mode` says this in its `sign-off:` line.
+The path script does not stand in for your answer. Its lines are written by the build it judges,
+and no record says which criteria it proves. When the test recipe's own checks find a runner in
+the worktree, research changes the answer to yes. The code orders then take tests, and the build
+writes and freezes them as on any task. The scope row leaves the compromises log. What light skips:
 
 - **Research** searches this project and the catalog, and runs no outward search on the web.
 - **Design** runs no critique. The first work order, `wo1`, is the walking skeleton: a tiny
   version that links the input, the logic and the output along the demo path. Every other order
   comes after it, and the design check refuses one that does not.
-- **Implementation** writes no tests for each order and runs no checker over test rows. It gives
-  each order one fix round. A low finding still open after that round waits for the person at
-  review, who rules it there. An order with a medium or high finding still open after that round
-  halts. A fix round that fails its own checks opens a finding for that check. It reads low for
-  coding-standards alone, and medium for any other check. After that round the order
-  keeps its one-round cap even if you set the task interactive, so you rule at once. One
-  exception: the order gets one repair round, once. It takes new breakage that the fix round
-  made, unattended too. With you present, it also takes a finding the fixer reported out of its
-  scope, when you grant the files with `fix-brief --allow`. The
-  implementer may build a fake off the demo path, marked in the code with `AIDA-FAKE:`.
-- **Review** runs no visual regression.
+- **Implementation** on a task with no automated tests writes no tests for each order and runs no
+  checker over test rows. On every light task it gives each order one fix round. A low finding
+  still open after that round waits for the person at review, who rules it there. An order with a
+  medium or high finding still open after that round halts. A fix round that fails its own checks
+  opens a finding for that check. It reads low for coding-standards alone, and medium for any other
+  check. After that round the order keeps its one-round cap even if you set the task interactive,
+  so you rule at once. One exception: the order gets one repair round, once. It takes new breakage
+  that the fix round made, unattended too. With you present, it also takes a finding the fixer
+  reported out of its scope, when you grant the files with `fix-brief --allow`. The implementer may
+  build a fake off the demo path, marked in the code with `AIDA-FAKE:`.
+- **Review** runs no visual regression. It still runs its one web search for current practice
+  when no guide body is on disk.
 
 What light keeps: the code review of each order, and the project's own checks, including its
 security check. It also keeps one script that walks the demo path. That script is the project's

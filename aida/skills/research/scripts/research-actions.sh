@@ -27,9 +27,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                          [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
 #   research-actions.sh serve  <task_folder> --finding <search>#<n> --criteria-served <id[,id...]>
 #   research-actions.sh drop   <task_folder> --finding <search>#<n>
+#   research-actions.sh runner <task_folder> \
+#                          (--recipe <framework>=<path> | --lookup-failed <framework>=<reason>)...
 #   research-actions.sh check  <task_folder>
 #   research-actions.sh distill <task_folder>
 #   research-actions.sh split-read <task_folder>
+#
+# `runner` runs each test-execution recipe's `## Preconditions` checks in the task's worktree, and
+# reads its `## Test commands` suite row. It writes records/test-runner.json (TEST_RUNNER_RECORD).
+# A light task whose answer is no and whose check reads met takes yes through scope's set-tests.
 #
 # Depends on, shipped by the same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/research-render.sh   called by `record`, `serve` and `drop`, unmodified
@@ -114,6 +120,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      "A spike"). Research closes only once it is deleted, so nothing throwaway ships. The
 #      report is still written, with exitCode 6. A coverage gap outranks this: a spike open
 #      mid-research is fine.
+#   7  `check` found the coverage clean, but the contract says no automated tests and
+#      records/test-runner.json does not exist: the runner check never ran (gap row 366). The
+#      report is still written, with exitCode 7. A spike outranks this.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # `read` also reports <task_folder>/inputs/, the material captured before the task existed. Its
@@ -156,6 +165,8 @@ die1() { printf 'research-actions: %s\n' "$1" >&2; exit 1; }
 die2() { printf 'research-actions: %s\n' "$1" >&2; exit 2; }
 die3() { printf 'research-actions: %s\n' "$1" >&2; exit 3; }
 die4() { printf 'research-actions: %s\n' "$1" >&2; exit 4; }
+# The refusal recipes.sh calls. `runner` reaches only its exit 3 paths.
+die() { printf 'research-actions: %s\n' "$2" >&2; exit "$1"; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { printf 'research-actions: %s\n' "$1" >&2; exit 79; }
 
@@ -169,6 +180,8 @@ usage: research-actions.sh read   <task_folder>
                                    [--recipe-fit <true|false|unsure> --recipe-path <path> --recipe-reason <text>]
        research-actions.sh serve  <task_folder> --finding <search>#<n> --criteria-served <id[,id...]>
        research-actions.sh drop   <task_folder> --finding <search>#<n>
+       research-actions.sh runner <task_folder> \
+                                   (--recipe <framework>=<path> | --lookup-failed <framework>=<reason>)...
        research-actions.sh check  <task_folder>
        research-actions.sh distill <task_folder>
        research-actions.sh split-read <task_folder>
@@ -626,6 +639,122 @@ do_drop() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# runner: whether this project can run tests at all, from the test-execution recipe, before design
+# chooses each order's proof (gap row 366). The searcher's prose named a runner, and nothing read
+# it. The recipe's own conditions decide here instead, run the way implementation's preconditions
+# step runs them. Whether the runner covers the changed code is not asked: the build's tests are
+# new files, and the suite row runs the whole project's tests.
+#
+# The conditions run in the task's worktree first. A new worktree holds tracked files only, so a
+# local environment such as .venv, or a site not yet up, reads unmet there. The project's codePath
+# holds the environment before the worktree has one, so an answer short of met there is asked again
+# in the codePath. The record names the tree that answered. Implementation's preconditions still
+# run in the worktree, and they name what the worktree lacks.
+# ------------------------------------------------------------------------------------------------
+
+# Runs the ## Preconditions checks of the recipe $1 from inside the tree $2, through the file $3.
+# Sets RN_ENTRIES, the condition objects as a JSON array, and RN_VERDICT, the worst of them.
+RN_ENTRIES='[]'; RN_VERDICT=""
+runner_conditions() {
+  local state v
+  : >"$3"
+  state="$(pc_parse_recipe "$1" "$3" "$2")" || exit $?
+  RN_VERDICT="$(pc_section_verdict "$state")"; RN_ENTRIES='[]'
+  [ "$state" = "ok" ] || return 0
+  RN_ENTRIES="$(jq -sc '.' "$3")"
+  while IFS= read -r v; do RN_VERDICT="$(pc_worse "$RN_VERDICT" "$v")"; done \
+    < <(printf '%s' "$RN_ENTRIES" | jq -r '.[].verdict')
+}
+
+do_runner() {
+  local recipes="" failures="" fw rpath reason verdict worst="" entries suite out record tree
+  local frameworks_json='[]' key want rp
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --recipe|--lookup-failed)
+        [ $# -ge 2 ] || die3 "runner: $1 needs a value"
+        if [ "$1" = "--recipe" ]; then
+          cr_recipe_pair runner --recipe "$2"; recipes="$recipes$CR_PAIR"$'\n'
+          rp="${CR_PAIR##*$'\t'}"
+          for key in capability framework; do
+            want="${2%%=*}"; [ "$key" = framework ] || want="test-execution"
+            [ "$(recipe_name_of "$rp" "$key")" = "$want" ] \
+              || die3 "runner: the recipe given for ${2%%=*} does not say $key: $want in its frontmatter: $rp"
+          done
+        else
+          cr_lookup_failure_pair runner --lookup-failed "$2"; failures="$failures$CR_PAIR"$'\n'
+        fi
+        shift 2 ;;
+      *) die3 "runner: unrecognized argument: $1" ;;
+    esac
+  done
+  local project_folder worktree codepath
+  project_folder="$(resolve_project_folder "$TASK_PATH")" \
+    || die3 "runner: no project.json two levels up from $TASK_PATH"
+  worktree="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
+  [ -n "$worktree" ] && [ -d "$worktree" ] || die3 "runner: task.json records no worktree on disk"
+  codepath="$(project_code_path_value "$project_folder")"
+  out="$(mktemp)" || die3 "runner: could not create a temporary file"
+
+  echo "action: runner"
+  while IFS= read -r fw; do
+    [ -n "$fw" ] || continue
+    rpath="$(printf '%s' "$recipes" | awk -F '\t' -v f="$fw" '$1 == f { print $2; exit }')"
+    reason="$(printf '%s' "$failures" | awk -F '\t' -v f="$fw" '$1 == f { print $2; exit }')"
+    entries='[]'; suite='null'; tree=""
+    if [ -n "$rpath" ]; then
+      tree="worktree"
+      runner_conditions "$rpath" "$worktree" "$out"
+      if [ "$RN_VERDICT" != "met" ] && [ -n "$codepath" ] && [ -d "$codepath" ] && [ "$codepath" != "$worktree" ]; then
+        verdict="$RN_VERDICT"; entries="$RN_ENTRIES"
+        runner_conditions "$rpath" "$codepath" "$out"
+        if [ "$RN_VERDICT" = "met" ]; then tree="codePath"; else RN_VERDICT="$verdict"; RN_ENTRIES="$entries"; fi
+      fi
+      verdict="$RN_VERDICT"; entries="$RN_ENTRIES"
+      : >"$out"
+      tc_parse_recipe "$rpath" "$out"
+      suite="$(jq -sc 'map(select(.id == "suite" and has("argv")))[0].argv' "$out")"
+      [ "$suite" != "null" ] || verdict="$(pc_worse "$verdict" undeclared)"
+    elif [ -n "$reason" ]; then
+      verdict="unknown"; [ "$reason" = "no-recipe" ] && verdict="undeclared"
+    else
+      rm -f "$out"
+      die3 "runner: the project records the framework $fw, and neither --recipe nor --lookup-failed names it"
+    fi
+    worst="$(pc_worse "${worst:-met}" "$verdict")"
+    echo "framework: $fw $verdict${tree:+ in the $tree} ${rpath:-$reason}"
+    printf '%s' "$entries" | jq -r --arg fw "$fw" '.[] | select(.verdict != "met")
+      | "condition: \($fw) \(.id) \(.verdict)" + (if .firstLine then ": " + .firstLine else "" end)'
+    printf '%s' "$suite" | jq -r --arg fw "$fw" 'select(. != null) | "suite: \($fw) \(join(" "))"
+      + (if any(.[]; test("\\{[a-z_]+\\}")) then ", its placeholders resolve at implementation" else "" end)'
+    frameworks_json="$(printf '%s' "$frameworks_json" | jq -c --arg fw "$fw" --arg v "$verdict" \
+      --arg p "$rpath" --arg r "$reason" --arg t "$tree" --argjson e "$entries" --argjson s "$suite" '
+      . + [{framework: $fw, verdict: $v, conditions: $e, suite: $s}
+        + (if $p == "" then {lookup: $r} else {recipePath: $p, answeredIn: $t} end)]')"
+  done < <(jq -r '.frameworks // [] | .[]' "$project_folder/project.json" 2>/dev/null)
+  rm -f "$out"
+  [ -n "$worst" ] || die3 "runner: $project_folder/project.json records no frameworks"
+
+  record="$TASK_PATH/$TEST_RUNNER_RECORD"
+  mkdir -p "$TASK_PATH/records" || die3 "runner: could not create $TASK_PATH/records"
+  write_atomic "$record" "$(jq -n --arg d "$(date -u +%Y-%m-%d)" --arg w "$worktree" --arg c "$codepath" \
+    --arg v "$worst" --argjson f "$frameworks_json" \
+    '{schemaVersion: 1, takenAt: $d, worktree: $w, codePath: $c, verdict: $v, frameworks: $f}')"
+  echo "test-runner: $worst"
+  echo "record: $record"
+  # A light run meets no person before review, so the record answers for it. Other modes ask.
+  if [ "$worst" = "met" ] && task_is_light "$TASK_PATH" && [ "$(automated_tests "$TASK_PATH")" = "no" ]; then
+    bash "$PLUGIN_ROOT/skills/scope/scripts/scope-actions.sh" --run-mode autonomous \
+      set-tests "$TASK_PATH" --automated yes >/dev/null \
+      || die3 "runner: scope-actions.sh set-tests could not record yes"
+    echo "automated-tests: yes, set by this check"
+  else
+    echo "automated-tests: $(automated_tests "$TASK_PATH")"
+  fi
+  exit 0
+}
+
+# ------------------------------------------------------------------------------------------------
 # check: calls check-research.sh and remaps its exit code onto this script's own vocabulary, so
 # exit 1 keeps one meaning across every action here (see the exit-code table above).
 # ------------------------------------------------------------------------------------------------
@@ -660,9 +789,14 @@ do_check() {
     spike_dir="${spike_dir:+$spike_dir/.aida-spike}"
     [ -n "$spike_dir" ] && [ -d "$spike_dir" ] && verdict=6
   fi
-  # The report's exitCode is what design's `start` reads, so a spike refusal must land there too.
-  # check-research.sh wrote 0; left alone, design would accept a task research refused.
-  [ "$verdict" -eq 6 ] && write_atomic "$CHECK_FILE" "$(jq '.exitCode = 6' "$CHECK_FILE")"
+  # A task with no automated tests closes only once the runner check has run, in every run mode,
+  # so a skipped step is caught here rather than trusted (gap row 366).
+  [ "$verdict" -eq 0 ] && [ "$(automated_tests "$TASK_PATH")" = "no" ] \
+    && [ ! -f "$TASK_PATH/$TEST_RUNNER_RECORD" ] && verdict=7
+  # The report's exitCode is what design's `start` reads, so a spike or runner refusal must land
+  # there too. check-research.sh wrote 0; left alone, design would accept a task research refused.
+  [ "$verdict" -eq 6 ] || [ "$verdict" -eq 7 ] \
+    && write_atomic "$CHECK_FILE" "$(jq --argjson v "$verdict" '.exitCode = $v' "$CHECK_FILE")"
   # A clean check is the close, when a stated mechanism counts as grounded. One sha256 per
   # mechanismHints[].approach in task.json, each hashed as its own compact JSON string, goes into
   # the report so design's `start` can tell a claim edited later. Same computation there.
@@ -691,6 +825,8 @@ do_check() {
     echo "spike: $spike_dir"
     printf 'research-actions: check: coverage is clean, but the spike folder %s still exists. Delete it, then check again; nothing throwaway ships\n' "$spike_dir" >&2
   fi
+  [ "$verdict" -eq 7 ] \
+    && printf 'research-actions: check: the task has no automated tests and %s does not exist. Run the runner check, then check again\n' "$TASK_PATH/$TEST_RUNNER_RECORD" >&2
   if [ "$verdict" -eq 4 ] || [ "$verdict" -eq 5 ]; then
     echo "open: $(jq -r '
       [ ("criteria with no finding: " + ((.coverage.criteriaWithNoFinding // []) | map(.id) | join(" "))
@@ -759,6 +895,9 @@ do_split_read() {
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
+# A text argument may be @/<path>, read from that file (task-helpers.sh, text_args).
+text_args "$@"
+set -- ${TEXT_ARGS[@]+"${TEXT_ARGS[@]}"}
 ACTION="${1:-}"
 if [ "$ACTION" = "-h" ] || [ "$ACTION" = "--help" ]; then
   usage
@@ -785,6 +924,7 @@ case "$ACTION" in
   record)  do_record  "$@" ;;
   serve)   do_serve   "$@" ;;
   drop)    do_drop    "$@" ;;
+  runner)  do_runner  "$@" ;;
   check)   do_check   "$@" ;;
   distill) do_distill "$@" ;;
   split-read) do_split_read "$@" ;;

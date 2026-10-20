@@ -16,7 +16,8 @@ It writes the brief to `review/brief.json`. The brief holds the criteria and the
 frozen contract, and every work order. It holds the path to `review/diff.patch`. It holds the
 research records. Each finding carries the paths its source names, each marked on disk or not,
 and its URLs apart. It holds `guideBodies`, the guide bodies design opened, each marked on disk
-or not. It holds the results of checks 4 to 8, with every tool row and every mutation
+or not. It holds `practiceSearch`: the review's own practice search and its count of findings
+with a source, else null. It holds the results of checks 4 to 8, with every tool row and every mutation
 survivor. It holds the findings implementation ruled deferred. It holds `pendingDecisions`: the
 findings and departures a build left for the person. It holds
 `playbooksPath`: the path of `records/playbooks.json` when research loaded one, else null. It holds
@@ -25,6 +26,33 @@ findings and departures a build left for the person. It holds
 The call prints the brief's own path, the path the findings go to at `review/findings.json`, and
 the counts. Read neither file into this conversation, per SKILL.md. Its `reviewer:` line says
 whether to dispatch the reviewer.
+
+## Search for current practice when no guide is on disk
+
+`practice-search: dispatch` means no guide body is on disk and the review has not searched yet.
+The `reviewer:` line then reads `wait`. A missing guide is a reason to look, never a reason to
+skip the check. So search before the reviewer runs, in every run mode, light included.
+
+Dispatch `outward-searcher` once. Its message lines are the run mode, the words, and the bound,
+as its own definition asks, and no paths. The words are the frameworks `read` printed, then "current best practice",
+then the task's goal in a few words. The bound is official documentation and maintained sources
+for those frameworks, current for the release the code uses.
+
+Record each finding the searcher returns, the way research records one:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh record "<task_folder>" \
+  --search review-practices --searched-for "<the words>" \
+  --text "<what was found>" --source "<the URL>"
+```
+Give no `--criteria-served`. A practice serves the guides and practices checks, not a criterion.
+Keep `fetch-failed` in the text of a snippet. A search that found nothing is recorded once, with
+`--source` the words "searched and empty", so it names no URL. Then run `brief` again.
+
+The script decides what the search proves. `brief` counts each finding with a URL that is no
+`fetch-failed` snippet and no searched and empty answer. A count of one or more makes the search
+the body both lenses judge. Each of the two checks then reads met only when the reviewer's
+`practiceJudged` names, for that lens, a counted finding. `findings` refuses at exit 62 when the
+search holds more or fewer findings than the brief the reviewer read.
 
 ## Dispatch the architecture reviewer
 
@@ -112,7 +140,9 @@ else. A task whose research records cite no source leaves both undeclared, becau
 had a guide or an accepted practice to judge against. A task with no research record at all leaves
 both unknown, because nobody looked. Met means a judgement happened. So where the brief puts no
 guide body on disk, both read unknown when their lens raised nothing. A code file research cites
-is not a guide body. Check 16 escapes that floor when the playbook record has a loaded source.
+is not a guide body. A practice the review's own search found with a source lifts that floor,
+when the reviewer's `practiceJudged` names it for the lens. Check 16 also escapes it when the playbook record has a loaded source.
+With neither, each check waits for the person at close.
 
 ## Classify every finding
 

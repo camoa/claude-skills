@@ -27,6 +27,12 @@ the task skill, and stop. There is nowhere to act.
 
 The task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that folder.
 
+`completion-actions.sh` takes a text value from a file. Write the text with the Write tool in the
+session's scratchpad folder. With no scratchpad, write it in the task folder, and delete it after
+the call. Then pass `@/<absolute path>` as the value. Use this for a text that names a command, such
+as git. Claude Code refuses a command whose quoted text names git when the session works in a
+worktree.
+
 ## Read what is already there
 
 Run:
@@ -89,8 +95,10 @@ A person's answer is accepted only when a person is present.
 | The summary for `task complete` | the person gives one or two lines | one line naming the grounds |
 | A saved note offered as a play | the person says yes or no per note, and names the play | offers nothing; the record says `autonomous` |
 
-`close` refuses `--reason`, `--leave` and `--captures-offered` on an autonomous run at exit 70.
-A run with nobody present closes a task on a passed review and on nothing else.
+`close` refuses `--reason`, `--leave`, `--captures-offered` and `--observed-accepted` on an
+autonomous run at exit 70. A run with nobody present closes a task on a passed review and on
+nothing else. Or the main session writes the person's answer to `completion/person-answer.json`.
+The refusal prints that record whole. The implement skill's `references/finish.md` says how.
 
 ## The exit codes
 

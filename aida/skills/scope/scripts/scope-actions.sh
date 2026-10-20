@@ -109,8 +109,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      match either id format, or that is already present when `add` tries to mint it; a given
 #      --verified-by that is not machine or person; a given --author that add does not recognise,
 #      or that update is asked to set to anything but owner; `approve` under --run-mode
-#      autonomous; a given --automated that is not yes or no, or yes on a light task; a missing
-#      or unusable nextCriterionId or nextNonGoalId; a name in --field record-decision does not know;
+#      autonomous; a given --automated that is not yes or no, or yes on a light task whose
+#      runner check in records/test-runner.json does not read met; a missing or unusable nextCriterionId or nextNonGoalId; a name in --field record-decision does not know;
 #      `retire` under --run-mode autonomous, or on an entry already superseded or retired; the
 #      plugin root could not be resolved; or a write that failed.
 #   4  a script this action calls ran and failed. `render`, and every action that writes
@@ -334,6 +334,11 @@ do_read() {
   exit 0
 }
 
+# The compromises log row for a light task with no automated tests: init writes it, and
+# set-tests takes it out on yes.
+LIGHT_TESTS_SKIPPED="tests for each work order, and the checker that confirms each test row"
+LIGHT_TESTS_NORMAL="write and freeze tests for each code order before its code, and have a checker confirm each row"
+
 # ------------------------------------------------------------------------------------------------
 # init: writes a new alignment.json with no criteria and no non-goals, both id counters starting
 # at 1, and no decisions recorded yet. Refuses to overwrite one that already exists; scope has an
@@ -352,11 +357,11 @@ do_init() {
   local empty
   empty="$(jq -n '{schemaVersion: 1, goal: "", expectedResult: "", criteria: [], nonGoals: [],
                    nextCriterionId: 1, nextNonGoalId: 1, decidedWithoutAPerson: []}')"
-  # A light task has no automated tests, so each code order takes the confirm proof (gap row 197).
+  # A light task starts with no automated tests, so each code order takes the confirm proof (gap
+  # row 197). Research may change the answer to yes when it finds a test runner (gap row 365).
   if task_is_light "$TASK_PATH"; then
     empty="$(printf '%s' "$empty" | jq '.automatedTests = false')"
-    log_compromise "$TASK_PATH" scope "tests for each work order, and the checker that confirms each test row" \
-      "write and freeze tests for each code order before its code, and have a checker confirm each row"
+    log_compromise "$TASK_PATH" scope "$LIGHT_TESTS_SKIPPED" "$LIGHT_TESTS_NORMAL"
   fi
   write_atomic "$ALIGNMENT_FILE" "$empty"
 
@@ -429,8 +434,10 @@ do_set_tests() {
   esac
 
   require_alignment_exists "set-tests"
+  # A light task meets no person before review, so its yes rests on research's runner check.
   [ "$value" = "false" ] || ! task_is_light "$TASK_PATH" \
-    || die3 "set-tests: a light task has no automated tests. Set the task interactive or autonomous first"
+    || [ "$(jq -r '.verdict' "$TASK_PATH/$TEST_RUNNER_RECORD" 2>/dev/null)" = "met" ] \
+    || die3 "set-tests: a light task takes yes only when research's runner check reads met in $TASK_PATH/$TEST_RUNNER_RECORD. Run research-actions.sh runner"
 
   local updated
   updated="$(jq --argjson v "$value" '.automatedTests = $v' "$ALIGNMENT_FILE")" \
@@ -438,6 +445,14 @@ do_set_tests() {
   write_contract set-tests "$updated"
   [ "$RUN_MODE" = "interactive" ] \
     || append_decision "Automated tests: $automated, the recommended answer, taken" automatedTests
+  # On a light task the scope row of the compromises log holds only while the answer is no.
+  if task_is_light "$TASK_PATH"; then
+    if [ "$value" = "true" ]; then
+      unlog_compromise "$TASK_PATH" scope "$LIGHT_TESTS_SKIPPED" "$LIGHT_TESTS_NORMAL"
+    else
+      log_compromise "$TASK_PATH" scope "$LIGHT_TESTS_SKIPPED" "$LIGHT_TESTS_NORMAL"
+    fi
+  fi
 
   echo "TESTS SET"
   contract_summary
@@ -960,6 +975,9 @@ do_distill() {
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
+# A text argument may be @/<path>, read from that file (task-helpers.sh, text_args).
+text_args "$@"
+set -- ${TEXT_ARGS[@]+"${TEXT_ARGS[@]}"}
 ACTION="${1:-}"
 if [ "$ACTION" = "-h" ] || [ "$ACTION" = "--help" ]; then
   usage

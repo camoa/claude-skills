@@ -25,8 +25,8 @@ The contract has five parts. You approve all five together, as one document.
 
 A task with no automated tests is built with no test. Each code order has one builder and one
 reviewer, and nothing installs or runs a test runner. You confirm each order's done-when
-sentences at the review you already sign. Research checks the answer: when it finds a test runner
-that covers the changed code, it names it before design, and you keep or change the answer then.
+sentences at the review you already sign. Research checks the answer: when the test recipe's own
+checks find a runner in the worktree, it names it before design, and you keep or change the answer.
 
 An acceptance criterion is an outcome you can see when the task is done. It reads like a user
 story: "An admin can download the user list as CSV." It is written from outside the code. It

@@ -330,6 +330,11 @@
           "type": "string",
           "minLength": 1,
           "description": "The first line the command printed that holds more than white space, read from the whole capture before `output` is trimmed. Present only when the command ran, the verdict is not `met`, and it printed such a line. The `failedOutput:` line of an unmet run quotes it (live-run row 206)."
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The token in the smoke row whose `## Tokens` block failed or printed nothing, so the row never ran. On a worktree that records no site, the `nextAdvice:` line reads it and names `task environment up` (live-run row 368)."
         }
       }
     }

@@ -20,10 +20,14 @@ stop, even for a two-line change. Your report names the file and why the unit ne
 
 **You may not read another order's source.** The dispatch record's `denyRead` list names the
 files: every other order's owned files, closed orders included. A file your order shares stays
-readable. A closed order's source is still another unit's source. What another unit exposes is
-its interface record, and the brief holds the ones you depend on. A hook refuses Read, Grep and
-the plain shell reads such as `cat`, `head`, `sed` and `grep`. A path a shell assembles at run
-time is not caught, and it is still denied.
+readable. So does a file outside the code path that an order you depend on owns, such as a
+record in the task folder. A closed order's source is still another unit's source. What
+another unit exposes is its interface record, and the brief holds the ones you depend on. A hook
+refuses Read, Grep and the plain shell reads such as `cat`, `head`, `sed` and `grep`. A path a
+shell assembles at run time is not caught, and it is still denied. The brief's `deniedReads`
+lists each denied path that your unit's own text names. Do not open one, even where the text
+tells you to read it. Build from the text and the interface records. If the unit cannot be built
+without one, stop with `interface-misfit` and name the path.
 
 **Write the report file with the five answers as your first action, before any edit under the code
 path.** The brief names the path. Name the most surgical fix
@@ -108,8 +112,13 @@ Stop: test-wrong: <the test, and why it seems wrong>
 Stop: interface-misfit: <what the unit needs that the interface does not give>
 Stop: file-not-owned: <the file, and why the unit needs it>
 Stop: closed-order-defect: <the file>: <what fails, and the output that shows it>
+Stop: row-wrong: <the done-when row number>: <the evidence that the row is wrong>
 Stop: attempts-out: <what is still not done>
 ```
+
+Use `row-wrong` when a done-when row of your unit cannot hold, and no file holds a defect. An
+example is a count the row states that the real data does not give. Name the row by its number,
+counted from 1, then the evidence. A person decides whether the row changes.
 
 Use `closed-order-defect` when your code is right and what fails lies in a file another unit
 owns. Name that one file, as the error names it, then the failure. A script finds the unit that

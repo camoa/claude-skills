@@ -29,6 +29,12 @@ and so does the project skill's `recipe-source` lookup. Any other Bash command s
 approval. Dispatching an agent needs no approval either; it is also named in this skill's own
 grant.
 
+`research-actions.sh` takes a text value from a file. Write the text with the Write tool in the
+session's scratchpad folder. With no scratchpad, write it in the task folder, and delete it after
+the call. Then pass `@/<absolute path>` as the value. Use this for a text that names a command, such
+as git. Claude Code refuses a command whose quoted text names git when the session works in a
+worktree.
+
 **The dispatch message is the role, the run mode and the inputs.** Name the role on the Agent
 call. The message itself is one line per item: the run mode, `interactive` or `autonomous`, then
 each input the step hands over. An input is a path, the words a search is given, or one word a
@@ -220,10 +226,6 @@ Typical search subjects, named by what they read, not by a fixed roster:
   check refuses (exit 6) while it exists, so nothing throwaway ships. Carry the idea forward,
   never the code: design authors it fresh.
 
-When `automated-tests:` reads `no`, the search inside this project asks one more thing. Is there a
-test runner that covers the changed code? Name it in the searcher's words, with its
-configuration file as the source. Serve the finding to the criteria the changed code serves.
-
 How many searches run is set by what these criteria actually need. A task with three criteria
 that all rest on the same library may need one search, not three. The search inside this project
 is the exception: run it on every task that changes code.
@@ -405,14 +407,35 @@ to what can be checked.
 ## Check the automated tests answer
 
 Do this before the coverage check, so its commit carries any change. It applies only when
-`automated-tests:` reads `no` and a finding names a test runner that covers the changed code.
-Interactive: say the runner and its source in one line. Ask one question: keep "no automated
+`automated-tests:` reads `no`. The coverage check refuses (exit 7) until it has run. For each of
+the project's frameworks, dispatch `catalog-identifier` with `point: test-execution`, that
+framework, and the project folder. Pass each path it returns as `--recipe`. When the lookup
+answered no path, pass `--lookup-failed <framework>=<reason>` in its place. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh runner "<task_folder>" \
+  --recipe <framework>=<path>
+```
+The script runs the recipe's own conditions in the worktree. When they fall short of met there, it
+runs them again in the project's codePath. It reads the suite row and writes the record. It
+prints `test-runner:`, the tree that answered, each condition short of met, and a `suite:` line.
+Only `met` says this project can run tests. Any other word keeps the answer no.
+
+Interactive, on `met`: say the `suite:` line in one line. Ask one question: keep "no automated
 tests", or change it to yes. On a change, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   set-tests "<task_folder>" --automated yes
 ```
-Autonomous: keep the answer, and say the runner in one line. A person decides at the next window.
+Interactive, on any other word: say the word and each `condition:` line, and ask nothing. The
+person can set up the runner and run `runner` again.
+
+Autonomous, not light: keep the answer, and say the suite command in one line. A person decides
+at the next window.
+
+Light: `runner` changed the answer to yes itself and printed `automated-tests: yes`. A light run
+meets no person before review, so a kept no would send every criterion to a person by hand. The
+change records the decision and takes the skipped tests out of the compromises log. The code
+orders then take tests, and the build writes them.
 
 ## Run the coverage check
 

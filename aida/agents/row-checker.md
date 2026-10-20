@@ -21,7 +21,7 @@ covers.
 
 Each row names a
 criterion, its verify clause, and the tests that claim to prove it. Read the recipe first: it says
-which test levels exist, what a test may not do, and how a criterion attaches to a test. Answer one
+which test levels exist, what a test may not do, and whether a test names its criterion. Answer one
 question per row: if these tests pass, is the verify clause true? Judge each test against the
 recipe and against the clause. Read only the recipe, the test files, the verify clause and the
 interface file below. Do not read the implementation. A hook refuses that read. The reason: a check
@@ -70,7 +70,19 @@ has no rule for this row. Answer one question: could a reader confirm the line f
 alone? Reject a line that does not say what an output must read. Reject a line that names a thing
 the document, once written, would not hold. A rejection's note names the words the line must add.
 
-For each row, answer confirmed or rejected, with a note. Reject when a test does not test what the
+**A verify-line row names a criterion and one or more commands, not a test.** The dispatch names
+each command and what passing means. The freeze runs them over the order's files, and the build
+runs them again. Answer one question: if every command passes, is the verify clause true? Reject
+when the clause names a tool or a check that no command runs. Reject when a command reads less
+than the clause asks, such as other files. Key your verdict by the criterion id. A rejected
+verify-line row is `row`, because only design can change a command.
+
+For each row, answer confirmed or rejected, with a note. A rejected row also carries `repair`.
+Write `"repair": "tests"` when a rewrite of the tests alone, as your note names it, could earn a
+confirmation. Write `"repair": "row"` when no test could: the clause is too vague, it cannot be
+observed, or it asks the wrong thing. An absence row a test could prove is `tests`. A record
+row and a gap you cannot settle are `row`. On an autonomous run, `tests` sends the row back to
+the test author once, and `row` halts the order for a person. Reject when a test does not test what the
 clause asks. Reject when a test is missing for part of the clause. Reject when the test's name does
 not match what its body checks. Reject when a test breaks a rule the recipe states. Reject when a
 trivial implementation would pass the tests: an empty list, a constant, or a call that does
@@ -92,7 +104,7 @@ anywhere. Write it in this shape:
 
 ```json
 { "rows": [
-  { "criterion": "c1", "verdict": "confirmed|rejected", "note": "..." },
+  { "criterion": "c1", "verdict": "confirmed|rejected", "repair": "tests|row", "note": "..." },
   { "criterion": "wo1", "verdict": "confirmed|rejected", "note": "..." }
 ] }
 ```

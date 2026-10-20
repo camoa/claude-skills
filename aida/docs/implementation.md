@@ -141,17 +141,17 @@ asked once to finish. An implementer is asked twice when its order's diff budget
 What it does see is the order's criteria with their verification sentences, the boundaries the
 order names, and the declared interface of each order it depends on. It sees the interface of
 anything design recorded as reused, since a reused module belongs to no work order. It also sees
-the framework's recipe for writing tests: where a test file goes, which levels exist, and how a
-criterion id attaches to a test. Its brief names the test-execution recipe too, which holds
+the framework's recipe for writing tests: where a test file goes, which levels exist, and
+whether a test names its criterion. Its brief names the test-execution recipe too, which holds
 the run command and the failure markers. The author reads a red against that recipe and never a
 guessed runner. A framework with no such recipe has no path through this step,
 and AIDA says so rather than writing tests from habit.
 
-Each test carries the id of the criterion it proves at the end of its name. A script can then
-check a row with a string comparison, and a runner can select one criterion's tests by name.
+The freeze records the criterion each test proves, so a test's name follows the test-authoring
+recipe and your project's own convention, not AIDA's ids.
 Exactly one order owns each criterion, and most orders own none. An order that serves a criterion
 without owning it cannot observe an outcome a later order builds. Its tests prove its own
-done-when instead, and those names end with the order's id. An order that neither serves nor owns
+done-when instead, and they claim the order's id. An order that neither serves nor owns
 any criterion refuses here; the repair is the work order, so close design again. A criterion a
 person verifies gets no test. The author writes a checklist line for it, copying the verification
 sentence whole, and the review stage asks you those lines at its close.
@@ -227,9 +227,12 @@ requirement, the tests, the checker's note and the answer it recommends. A row y
 reject goes back to the test author, and the repaired test goes through the checker again.
 Nothing freezes while a rejected row stands.
 
-Unattended, there is nobody to ask. A rejected row halts the order, with the checker's note as
-the reason, and the run takes the next ready order. The ledger records who judged each row, so
-the rows no person read can be listed later. A model ruling on a test with nobody watching is
+Unattended, there is nobody to ask. When the checker says the tests can be repaired, the row goes
+back to the test author once, with the checker's note. A fresh checker reads the repair. A
+second rejection of that row halts the order, and so does a rejection that says the requirement
+itself is wrong. The halt carries the checker's note, and the run takes the next ready order. A
+model rewrites the tests, but no model overrules the checker. The ledger records who judged each
+row, so the rows no person read can be listed later. A model ruling on a test with nobody watching is
 weaker evidence than a person's. The record says so rather than marking the row passed.
 
 Once every row reads confirmed, the tests are frozen: a hash per file, recorded, and a commit of
@@ -568,7 +571,7 @@ changed is named as not found, with the reason, and cannot be cited. The test au
 carries those commits and says the tree holds the unit's earlier code. A test green on arrival is
 never taken as proof.
 
-**Every other halt is yours to clear.** Unattended, that is a row the checker rejected or a
+**Every other halt is yours to clear.** Unattended, that is a row the checker's rejection halted or a
 finding on a non-goal, with nobody to rule. In either mode it is a fixer's scope too small, a
 finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with findings open halt
 the same way. A grant refuses them, the restart does not see them, and a test ruled wrong takes

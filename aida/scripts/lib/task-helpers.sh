@@ -14,6 +14,7 @@
 #   resolve_task_folder <path> <action>   prints the canonical task folder, or dies
 #   looks_like_flag <value>               true when the value is another option, not data
 #   is_blank <value>                      true when the value is empty or only whitespace
+#   text_args <arg>...                    sets TEXT_ARGS to the arguments, each @/<path> read
 #   parse_finding_ref <action> <ref> <research folder>
 #                                         sets FINDING_REF_SEARCH and FINDING_REF_N from
 #                                         <search>#<n>, counted from 1; 1 when no such search
@@ -30,6 +31,8 @@
 #   task_is_light <folder>                true when the task's mode is light
 #   log_compromise <folder> <stage> <skipped> <normal>
 #                                         adds one row to COMPROMISES.md in the task folder
+#   unlog_compromise <folder> <stage> <skipped> <normal>
+#                                         takes that row out of COMPROMISES.md again
 #   task_env_recipe_change <folder> <path> <tree> <commit>
 #                                         true when `environment up` recorded the path and the
 #                                         commit still holds that content
@@ -59,7 +62,7 @@
 #   task_tree_from_git <folder> <code> <action>
 #                                         prints the registered worktree carrying the task's
 #                                         branch, and repairs worktree.path when git disagrees
-#   task_worktree_group <codePath> <action>
+#   task_worktree_group <project> <codePath> <action>
 #                                         prints the folder that holds the repository's task trees
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
@@ -253,6 +256,25 @@ is_blank() {
   return 0
 }
 
+# Sets TEXT_ARGS to the arguments $@, with each @/<absolute path> replaced by that file's text. The
+# path is the whole argument, or follows the `=` or `::` of a value such as <id>=<reason>. A long
+# text then never sits in the command line. Claude Code refuses a command whose quoted text names
+# git when the session is isolated in a worktree (live-run row 377). Dies 3 when the file is not
+# readable, so a mistyped path is never stored as the text.
+text_args() {
+  local a path
+  TEXT_ARGS=()
+  for a in "$@"; do
+    case "$a" in
+      @/*|*=@/*|*::@/*)
+        path="/${a#*@/}"
+        [ -f "$path" ] && [ -r "$path" ] || die3 "the text file $path is not a readable file"
+        TEXT_ARGS+=("${a%%@/*}$(cat -- "$path")") ;;
+      *) TEXT_ARGS+=("$a") ;;
+    esac
+  done
+}
+
 # A research finding is named `<search>#<n>`: its search's file under research/, and its place
 # in that file's findings, counted from 1 as research-render.sh numbers it. Research's serve and
 # drop and design's account take this one form, so a person meets one number (gap row 235).
@@ -422,6 +444,43 @@ task_run_mode() {
   if [ "$answer" = "autonomous" ]; then printf 'autonomous'; else printf 'interactive'; fi
 }
 
+# Gap row 357. A person's answer, held as a record, stands in for an interactive run on one call.
+# The record is {"task", "step", "order", "answer"}: the task's id, the action, the order ("" for a
+# task-wide action) and the exact words the call carries. Final newlines on either side are not
+# words. An empty answer never matches. Only the main session writes the record:
+# hooks/deny-frozen-test-writes.sh refuses it to every agent type. A match is held, not removed,
+# so a later refusal keeps the person's answer. task_answer_consume removes it once the action wrote.
+# $1 the record file, $2 the task folder, $3 the action, $4 the order or empty, $5 the words.
+TASK_ANSWER_MATCHED=""
+task_person_answered() {
+  local task_id
+  [ -n "$5" ] && [ -f "$1" ] || return 1
+  task_id="$(jq -r '.id // empty' "$2/task.json" 2>/dev/null)"
+  jq -e --arg task "$task_id" --arg step "$3" --arg order "$4" --arg answer "$5" \
+    '.task == $task and .step == $step and (.order // "") == $order
+     and ((.answer // "") | sub("\n+$"; "")) == ($answer | sub("\n+$"; ""))' "$1" >/dev/null 2>&1 || return 1
+  TASK_ANSWER_MATCHED="$1"
+}
+
+# The end of a refusal that a record may pass: a clause when $1 answers another call, then the
+# record the main session writes, whole. $1 the record file, $2 the task folder, $3 the step, $4
+# the words.
+task_answer_route() {
+  [ ! -f "$1" ] || printf ' %s answers another call, so it was not used.' "$1"
+  printf " Or the main session writes the person's answer to %s as %s, as the implement skill's references/finish.md says." "$1" \
+    "$(jq -nc --arg task "$(jq -r '.id // empty' "$2/task.json" 2>/dev/null)" --arg step "$3" --arg answer "$4" \
+      '{task: $task, step: $step, order: "", answer: ($answer | sub("\n+$"; ""))}')"
+}
+
+# Removes the record task_person_answered matched, so one answer serves one call. The two summary
+# printers call it, because an action prints its summary only after its writes.
+task_answer_consume() {
+  [ -n "$TASK_ANSWER_MATCHED" ] || return 0
+  rm -f "$TASK_ANSWER_MATCHED"
+  printf "task-helpers: the person's answer at %s stood in for an interactive run, and it is now removed.\n" "$TASK_ANSWER_MATCHED" >&2
+  TASK_ANSWER_MATCHED=""
+}
+
 # True when the task's runMode is light (task-schema.json, runMode). Every light rule is behind
 # this one test, so an interactive or autonomous task never reaches one. $1 the task folder.
 task_is_light() {
@@ -448,9 +507,13 @@ OWNED_OVERLAP_JQ='
 # $1 the task folder, $2 the stage, $3 what was skipped, $4 what a normal run would do.
 # COMPROMISES_FILE is the file's one name.
 COMPROMISES_FILE="COMPROMISES.md"
+compromise_row() {
+  printf '| %s | %s | %s | %s |' "$(basename -- "$1")" "$2" "$(printf '%s' "$3" | sed 's/|/\\|/g')" \
+    "$(printf '%s' "$4" | sed 's/|/\\|/g')"
+}
 log_compromise() {
   local file="$1/$COMPROMISES_FILE" row
-  row="| $(basename -- "$1") | $2 | $(printf '%s' "$3" | sed 's/|/\\|/g') | $(printf '%s' "$4" | sed 's/|/\\|/g') |"
+  row="$(compromise_row "$@")"
   [ -f "$file" ] && grep -qxF -- "$row" "$file" && return 0
   if [ ! -f "$file" ]; then
     printf '%s\n' "# Compromises" "" \
@@ -461,6 +524,17 @@ log_compromise() {
   fi
   printf '%s\n' "$row" >>"$file"
   printf 'compromise: %s: %s\n' "$2" "$3"
+}
+
+# Takes one row out of the log, when the step it names runs after all (gap row 365). The
+# arguments are log_compromise's. A missing row or file is left as it is.
+unlog_compromise() {
+  local file="$1/$COMPROMISES_FILE" row kept
+  row="$(compromise_row "$@")"
+  [ -f "$file" ] && grep -qxF -- "$row" "$file" || return 0
+  kept="$(grep -vxF -- "$row" "$file")"
+  printf '%s\n' "$kept" >"$file" || { printf 'task-helpers: could not write %s\n' "$file" >&2; return 0; }
+  printf 'compromise withdrawn: %s: %s\n' "$2" "$3"
 }
 
 # True when $2, a changed path, is one `task environment up` recorded in worktree.recipeChanges of
@@ -560,6 +634,10 @@ automated_tests() {
   printf '%s' "$answer"
 }
 
+# Research's runner check, under the task folder (gap row 366). Research `runner` writes it, and
+# scope `set-tests` reads it before a light task takes yes.
+TEST_RUNNER_RECORD="records/test-runner.json"
+
 # The orders implementation has started, as a JSON array of ids. Started means a ledger step
 # reached or an attempt spent, a frozen test record, or a build record. Design's `remove` and
 # implementation's `start` both read it. $1 the canonical task folder.
@@ -605,13 +683,16 @@ mark_task_in_progress() {
 # another task's uncommitted file, left beside it (live run, row 120: `tasks` whole took another
 # window's pending file). Moved here from task-actions.sh so the stage closes commit the same
 # way the task actions do. project-commit.sh is sourced here because only task-actions.sh
-# sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller.
+# sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller. A person's answer
+# record is left out at any depth, so one that matched no call never enters the history (gap row
+# 380). task_answer_consume removes the one that matched.
 commit_task_change() {
   local project="$1" subject="$2" why="$3" principle="$4" ruled_out="$5" task="$6" stage="$7"
   shift 7
   # shellcheck source=/dev/null
   source "${PLUGIN_ROOT}/scripts/lib/project-commit.sh" || die3 "the project-commit library failed to load"
-  commit_project "$project" "$subject" "$why" "$principle" "$ruled_out" "$task" "$stage" "tasks/$task" "$@"
+  commit_project "$project" "$subject" "$why" "$principle" "$ruled_out" "$task" "$stage" "tasks/$task" \
+    ":(exclude,glob)tasks/$task/**/person-answer.json" "$@"
 }
 
 # The stage-boundary commit (foundations.md, History: "AIDA commits at stage boundaries, and the
@@ -870,17 +951,59 @@ task_after_state() {
   fi
 }
 
-# The folder that holds every task tree of one repository: <parent of code>/<slug of the code
-# folder>.worktrees. It sits beside the code path, so the trees do not lie loose among the other
-# folders there (gap row 260). task_worktree makes a tree in it, and prune removes it when empty.
-# $1 the code path, $2 the action's own name. Dies through die3.
+# The folder that holds every task tree of one repository: <base>/<slug of the code folder>.worktrees.
+# The base is the project's worktreeBase (gap row 350). A project that records none gets the
+# default, the parent of the code path, so the trees do not lie loose among the other folders
+# there (gap row 260). The task skill asks for the field before it creates a task. A refused base stops
+# the action: worktree_base_refusal in paths.sh holds the rule. task_worktree makes a tree in the
+# group, and prune removes the group when empty. The base itself is never removed.
+# $1 the project folder, $2 the code path, $3 the action's own name. Dies through die3.
 task_worktree_group() {
-  local code
-  code="$(cd "$1" && pwd -P)" || die3 "$2: the code path is not on disk: $1"
+  local code base why
+  code="$(cd "$2" && pwd -P)" || die3 "$3: the code path is not on disk: $2"
   # shellcheck source=/dev/null
   command -v pb_slug >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/playbooks.sh" \
-    || die3 "$2: the library failed to load: playbooks.sh"
-  printf '%s/%s.worktrees' "$(dirname -- "$code")" "$(pb_slug "$(basename -- "$code")")"
+    || die3 "$3: the library failed to load: playbooks.sh"
+  base="$(jq -r '.worktreeBase // empty' "$1/project.json" 2>/dev/null)"
+  if [ -n "$base" ]; then
+    # shellcheck source=/dev/null
+    command -v worktree_base_refusal >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/paths.sh" \
+      || die3 "$3: the library failed to load: paths.sh"
+    why="$(worktree_base_refusal "$base" "$code")"
+    [ -z "$why" ] || die3 "$3: the project's worktreeBase $base is refused ($why). A task tree never sits at or under the code path, in another project or repository, or in a refused location. Nothing was made. Run the project set-worktree-base action again."
+    base="$(worktree_base_path "$base" "$code")"
+  else
+    base="$(dirname -- "$code")"
+  fi
+  printf '%s/%s.worktrees' "$base" "$(pb_slug "$(basename -- "$code")")"
+}
+
+# Whether a new tree stacks on the tree this action runs in, or starts from the trunk (gap row
+# 382). The trunk is the code path's HEAD: a branch name in no fixed list, and the base a plain
+# create always had. The tree this action runs in is stacked on only when it is another tree of
+# this repository, its branch is the recorded branch of a task that is not complete, and that
+# branch is not merged into the trunk. So a follow-up made in its parent's tree holds the parent's
+# unmerged work, and gets every later task once the parent is merged. A branch no task records
+# is not stacked on, because `--after` is the route for a chain. $1 the project folder, $2 the
+# resolved code path. Prints the reason alone for the trunk, or that tree, a tab, and the reason
+# to stack. Calls no die function.
+task_worktree_stack() {
+  local code="$2" top held owner
+  top="$(active_tree_for "$code" "$(pwd -P)")"
+  if [ "$top" = "$code" ]; then printf 'This is the trunk, the HEAD of %s' "$code"; return 0; fi
+  held="$(git -C "$top" symbolic-ref -q --short HEAD 2>/dev/null)"
+  [ -z "$held" ] || owner="$(find "$1/tasks" -name task.json -exec jq -r --arg b "$held" \
+    'select(.worktree.branch == $b) | "\(.id) \(.state)"' {} + 2>/dev/null | head -1)"
+  if [ -z "${owner:-}" ]; then
+    printf 'This is the trunk, the HEAD of %s. The tree this ran in, %s, holds %s, and no task of this project records it' \
+      "$code" "$top" "${held:-a detached HEAD}"
+  elif [ "${owner##* }" = complete ]; then
+    printf 'This is the trunk, the HEAD of %s. The tree this ran in holds %s, and its task %s is complete' "$code" "$held" "${owner% *}"
+  elif git -C "$code" merge-base --is-ancestor "$held" HEAD 2>/dev/null; then
+    printf 'This is the trunk, the HEAD of %s. The tree this ran in holds %s of task %s, which the trunk already holds' "$code" "$held" "${owner% *}"
+  else
+    printf '%s\tThe tree this ran in holds %s of task %s, which is open and not merged into the HEAD of %s' "$top" "$held" "${owner% *}" "$code"
+  fi
 }
 
 # The task's own git worktree (ideal/task.md, "A worktree per task, always"), in the group folder
@@ -896,16 +1019,15 @@ task_worktree_group() {
 # refuses a path it still registers; a branch gone too starts from HEAD again. A recorded path gone
 # from disk is not trusted as an address: it is computed again by the rule above, and the tree is
 # made and recorded there. That is the repair for a task carried to a second machine, and for a
-# folder named before the id was slugged. A recorded tree on disk is kept. The base is HEAD of the
-# directory this action was started from when that directory is inside the code repository, so a
-# follow-up made from its parent's tree stacks on the parent's work; otherwise it is the code path's
-# HEAD. A task whose record names `after` is cut from that task's branch instead, or with `inTree`
+# folder named before the id was slugged. A recorded tree on disk is kept. The base is the trunk,
+# the code path's HEAD, unless task_worktree_stack says to stack on the tree this action runs in.
+# A task whose record names `after` is cut from that task's branch instead, or with `inTree`
 # takes over that task's tree. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
-# said once, on stderr, and nothing asks.
+# said once, on stderr, and nothing asks. One stderr line names the base and why.
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule group base_branch after after_branch after_base pred
+  local found rule group base_branch after after_branch after_base pred why tab
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -921,7 +1043,7 @@ task_worktree() {
     || die3 "$who: the library failed to load: playbooks.sh"
   # The path rule, run here rather than read from the record, because the record is an address on
   # the machine that wrote it. One copy serves both branches below.
-  group="$(task_worktree_group "$code" "$who")" || exit 3
+  group="$(task_worktree_group "$project" "$code" "$who")" || exit 3
   rule="$group/$(pb_slug "$(basename -- "$code")")-$(pb_slug "$id")"
   # A task made with `after` is cut from that task's branch, and only once its build is finished:
   # cut earlier, the branch holds none of that build (gap row 291). A complete task whose branch is
@@ -985,12 +1107,6 @@ task_worktree() {
     branch="feature/$id"
     printf 'worktree: %s\n' "$wt" >&2
   fi
-  base_dir="$code"
-  said="$(git rev-parse --git-common-dir 2>/dev/null)"
-  if [ -n "$said" ] && [ "$(cd "$said" && pwd -P)" = "$(cd "$code" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" ]; then
-    base_dir="$(pwd -P)"
-  fi
-  base="$(git -C "$base_dir" rev-parse HEAD 2>/dev/null)" || die3 "$who: $base_dir has no commit to cut a worktree from"
   dirty="$(git -C "$code" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   [ "$dirty" -eq 0 ] || printf '%s: %s uncommitted change(s) in %s are not in the worktree\n' "$who" "$dirty" "$code" >&2
   # Two old ids such as a_b and a-b slug to one folder. The tree there is the other task's.
@@ -1010,12 +1126,19 @@ task_worktree() {
       || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
   else
     if [ -n "$after_branch" ]; then
-      base="$after_base"; base_branch="$after_branch"
+      base="$after_base"; base_branch="$after_branch"; why="Task $id builds on task ${after% *}"
     else
+      base_dir="$code"
+      why="$(task_worktree_stack "$project" "$code")"
+      tab="$(printf '\t')"
+      case "$why" in *"$tab"*) base_dir="${why%%"$tab"*}"; why="${why#*"$tab"}" ;; esac
+      base="$(git -C "$base_dir" rev-parse HEAD 2>/dev/null)" \
+        || { rmdir "$group" 2>/dev/null; die3 "$who: $base_dir has no commit to cut a worktree from"; }
       base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
     fi
     said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" \
       || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }
+    printf 'base: %s at %s. %s.\n' "$base_branch" "$(git -C "$code" rev-parse --short "$base")" "$why" >&2
   fi
   wt="$(cd "$wt" && pwd -P)"
   write_atomic "$task_json" "$(jq --arg p "$wt" --arg b "$branch" --arg base "$base_branch" \

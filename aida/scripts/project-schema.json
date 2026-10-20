@@ -102,6 +102,11 @@
         }
       ],
       "description": "Stops work starting in this project's repository without a task. Null until the offer has been made; once made, the offer and the answer are recorded together, so a decline is never re-asked every session. Written by a task-rule offer step, a later part; not produced by this part."
+    },
+    "worktreeBase": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The folder that holds this project's group of task trees, `<worktreeBase>/<slug of the code folder>.worktrees`, as an absolute path in its resolved form, or `..`, the default, read against codePath as its parent. The default stays relative so it follows codePath to another machine or a new code path. A person answers it once: at project create, or at the first task create of a project that has none. An unattended run records nothing and uses the default, so the next attended create asks. Written by `create --worktree-base` and by the project skill's set-worktree-base action, which is also the repair when the field is missing; read-worktree-base prints it, or the default. It may not be at or under codePath, because DDEV hands a nested tree to the parent project and a tool that registers projects by folder misses it. Unless it is `..`, the default, which has always held the trees, it may also not be at or under a registered code path or project folder, inside another git work tree whose top is below the home directory, a system root, or above the home directory. worktree_base_refusal in scripts/lib/paths.sh is the rule. The check reports that as a cross-field fault, and task_worktree refuses to make a tree there. A tree task.json already records stays where it is; prune removes only the group folder, never this one. Not in `required`: a project made before this field has none. The check names it then as a note with this producer, and the exit code stays what it was, so an old project does not fail a check it passed. task_worktree uses the default until a person answers."
     }
   },
   "$defs": {

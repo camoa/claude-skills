@@ -4,6 +4,198 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.17] - 2026-10-20
+
+Changes from four live runs and from owner requests. The runs are
+the periplus run, the dev-guides site run, a light-mode run over
+two Drupal projects, and a contrib-module run on
+drupal_ai_anthropic_provider. A person's answer reaches an unattended
+run as a record. Review searches for current practice when no guide
+exists. A light task takes automated tests when a script finds a test
+runner.
+
+### Added
+
+- A person's answer can travel into a light or autonomous run as a
+  record named `person-answer.json`. The main session writes it, and a
+  hook refuses it to every agent. It names the task, the step and the
+  person's exact words, and it passes one refusal. It lives in
+  `implementation/` for `grant-attempt`, `clear-halt`, `restart`,
+  `verify-record --ruling` and `fix-brief --allow`. There it also
+  answers `build-record` keeping a declared deviation, `review-record`
+  accepting a declared departure, and `finish` accepting runner
+  warnings. It lives in `review/` for review `close --row`, and in
+  `completion/` for completion `close`. It lives in the task folder for
+  `task environment up`, `not-applicable` and `down`, and for design
+  `close --approve-runs`. Each refusal prints the record to write.
+  Prune, tool install, surfaces and project offers still need a person
+  present. A main session started with `--agent` cannot write the
+  record.
+- When no guide body is on disk, review dispatches one outward search
+  for current practice, in every run mode. The reviewer waits for it.
+  The guides and framework-practices checks read met only when the
+  reviewer names a sourced finding for that lens. When the search finds
+  nothing, both checks read unknown and wait for `close --row
+  guides=met|unmet` and `--row framework-practices=met|unmet`.
+- Research `runner` runs the test-execution recipe's own preconditions
+  in the worktree, then in the code path. It writes
+  `records/test-runner.json`. On a light task, a met result sets
+  automated tests to yes. Research `check` refuses (exit 7) when the
+  contract says no automated tests and that record does not exist.
+- A project can choose where its task worktrees go. Project `create
+  --worktree-base`, `set-worktree-base` and `read-worktree-base` record
+  and read the base. An attended create asks once, and the parent of the
+  code path is the default. The base is refused under the code path, in
+  another repository, or in another registered project.
+- `task environment up` adopts a site that the worktree already runs,
+  when the record holds no address. It records the address and runs no
+  bring-up. `down` never tears an adopted site down: it prints the
+  tear-down lines. A second `down` runs the recipe's Status line to
+  decide that the site is gone. Prune refuses the last tree of an
+  adopted site. The configuration gate trusts the site's data, whose
+  age is unknown.
+- `dispatch-close --not-sent` withdraws a dispatch record that was
+  never sent, and spends no resume. It refuses when the role wrote its
+  report, when a resume was counted, or when a commit landed after the
+  open. `dispatch-open` refuses (exit 37) while a record is still open,
+  and names the flag.
+- `restart --split <commit>` reverts only the halted order's files of a
+  commit that also changes another order's files. Exit 113 names the
+  flag.
+- A builder can stop with `Stop: row-wrong: <row number>: <evidence>`
+  when a done-when row is wrong. `build-record` stops (exit 105),
+  quotes the row, and names the route: reword the row in design.
+- Design `verify --run` takes `--criterion <id>`, so a tool-output
+  criterion of a tests order is proved by a run line, with no test. The
+  line runs when it equals a check command of the project's check
+  recipe, or when a person approves it. The freeze runs the line and
+  refuses while it fails (exit 121). A spell checker needs its own row
+  in the project's copy of the review recipe, or an approval.
+- An action script reads a text argument written as `@/<absolute
+  path>` from that file. Use it for long reasoning, because Claude Code
+  refuses a command whose quoted text names git in an isolated
+  worktree.
+- Task `create` prints one `base:` line with the commit and the
+  reason, and completion follow-ups relays it.
+- `dispatch-open --recheck <order>:<row>` puts a confirmed record row
+  back to the row checker.
+
+### Changed
+
+- A new task worktree starts from the trunk. It stacks on the tree it
+  is made in only when that tree's branch belongs to an open task that
+  the trunk does not hold. A branch that no task records is never
+  stacked on: use `--after` to chain. The trunk is the code path's
+  HEAD, so leave the code path on its trunk branch. A follow-up stacked
+  on an unmerged parent replays the parent's history when the parent
+  is later squash-merged.
+- A light task can take automated tests yes, when the runner record
+  reads met. A yes takes the scope row out of `COMPROMISES.md`.
+- A test name no longer must end in the criterion or order id, and exit
+  28 is retired. The freeze commit subject is now `Add tests: <paths>`.
+  The freeze record lists its commits for restart. A record from an
+  older version gets a fallback, so a retake made on an older version
+  can lose earlier freezes at restart. Two classes that share a method
+  name can match the same test name.
+- `fix-record` records a round with no commit when each open finding
+  is scope-insufficient or reported already correct. `dispatch-close`
+  refuses (exit 112) a fixer report that lacks an outcome line, or a
+  `Ran` line and output, for a finding. The verifier then reads the
+  cited code at HEAD.
+- `fix-brief --allow` widens a fix scope to the order's own files in
+  any round, with no grant.
+- On an autonomous run, a row-checker rejection marked as a tests
+  repair goes back to the test author once. A second rejection, or a
+  row repair, halts the order.
+- The row checker does not judge again a record line it confirmed while
+  the line's text is unchanged.
+- When every file an order owns is a frozen test or support file, the
+  freeze refuses a red test with no `--locks-in` (exit 118). The test
+  author makes the test pass, and no implementer is dispatched.
+- A verify clause corrected after the build started halts only the
+  orders whose frozen records or judgements name that criterion. A
+  closed review against the old clause moves aside.
+- A change to a criterion's author alone is no longer drift.
+- `build-recheck` takes a left-out recipe flag from the record that
+  produced it. A flag that names another path refuses (exit 91).
+- `build-brief` lists under `deniedReads` each path that the order's
+  text names and the dispatch denies. Its next step then asks a person
+  to rule before the dispatch.
+- A builder can read the records of the orders it depends on. A test
+  author can read only the earlier tests its dispatch names in the
+  set-aside folder, and none of the task folder's diffs and records.
+  On an autonomous run, a fresh test author is told where those earlier
+  tests are. A glob operand, or a file written after the dispatch
+  opened, still passes the read hook.
+- `add-source` and the other actions that write `project.json` exit 0
+  with a NOTE line when the project check exits 6 only for other
+  uncommitted work. They keep exit 6 when their own files are not
+  committed, when the folder has no repository, or when git status
+  fails. `report` and `switch` still pass exit 6 on.
+- Review `close` and completion `read` name each criterion that only a
+  person can answer, with the `--row` form and the answer record. Run
+  the command that the criterion's verify clause names before the
+  person answers.
+- Scope recommends a machine criterion whenever a command can read the
+  fact. Some facts exist only after a step the task never takes, such
+  as a push. Such a fact stays a person criterion, with a command in
+  its verify clause.
+- A project recipe copy that was adapted on purpose reads as adapted,
+  not stale. CRLF line endings, a missing final newline or reformatting
+  can make an unchanged copy read as adapted.
+- Preconditions prints `folderRecipeMissing` when a project recipe
+  folder holds some recipes for a framework but not the review or
+  test-execution recipe.
+- A project's copy of the review recipe can add a check row with its
+  own id, such as a spell checker. Review runs it. The per-order build
+  checks do not. After a mid-task edit, run `recipe-refresh
+  --check-recipe <framework>=<path>`.
+- Design `check` and `close` refuse (exit 9) while an interface joins
+  two backticked names with `or`. Write the choice as plain text, or
+  run `update --keep-choices`.
+- Design `close` refuses a confirm order that owns a test file. It reads
+  the test globs from earlier freezes, so a project with no freeze is
+  not checked.
+- Review notes a change that no tool row read, and names the files.
+- `finish` names the orders it counted when the suite row reads
+  not-needed. `set-run-mode` says that the light contract stands when a
+  task leaves light.
+- The destructive-command hook reads a one-line quoted argument as one
+  word, so a reason text that names git push passes. A quoted push run
+  through ssh or watch is not checked.
+
+### Fixed
+
+- Another order's commits inside an order's range no longer fail its
+  owned-files check, enter its review patch, or block its review and
+  close. The first fix round after a reopen starts at HEAD when the
+  later commits belong to other orders.
+- A second restart at the same commit takes the next archive folder. A
+  restart pairs a revert with a short commit id. When a revert fails
+  and its own reverts are the only new commits, restart takes them
+  back. Otherwise it names every commit after its start and leaves the
+  reverts to a person.
+- A tool finding in a file new to the task reads unmet, not unknown.
+- The guard hooks hold when the session runs from a folder outside the
+  project's code path. One case is still not enforced: two open records
+  in two projects, no remembered project, and no session match. The
+  hook says so.
+- Design `close` finds the verdict for a disposition candidate that
+  holds a backslash, such as a PHP namespace. A candidate typed with a
+  newline or a leading tab still reads no verdict.
+- The disposition confirmer reads the task's worktree, not the main
+  checkout.
+- `build-record` takes a freeze commit that holds the order's work, and
+  the review diff starts before it.
+- On a worktree with no site, an empty recipe token names `task
+  environment up` and a project recipe folder.
+- The guides and framework-practices checks no longer stay unknown with
+  no route when the catalog holds no guide.
+- Under zsh, implement `preconditions` and task `environment up` no
+  longer print a stray `name=''` line. A variable was made local twice
+  in one function. A spec now fails on such a repeat. It does not see
+  a repeat inside a loop or after a nested function.
+
 ## [6.0.16] - 2026-10-10
 
 Changes from the periplus light-mode test, on 6.0.15. Completion closes

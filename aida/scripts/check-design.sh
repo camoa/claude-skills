@@ -31,7 +31,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - a work order whose proof is confirm declares no test either, and has at least one done-when
 #     row: its task has no automated tests, and a person confirms each row at review (gap row 196).
 #     Its task's contract says it has no automated tests. A contract answered yes after design, or
-#     a confirm set by hand on a task with tests, would build code with no test;
+#     a confirm set by hand on a task with tests, would build code with no test. It owns no file
+#     that a test glob of this project's earlier freezes matches: a test file on such an order is
+#     plain code that no check runs (gap row 367);
 #   - a work order whose proof is tests owns at least one criterion whose verifiedBy is machine,
 #     when it owns any criterion at all. The rule above asks whether an order owning a machine
 #     criterion declares a test. This asks the same question the other way, so the default proof is
@@ -78,6 +80,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/lib/schema-check.sh: the field-list comparison, sourced, never run
 #   <plugin root>/scripts/lib/proof.sh: what one order's proof kind means, sourced, never run
 #   <plugin root>/scripts/lib/task-helpers.sh: automated_tests and task_is_light, sourced, never run
+#   <project folder>/tasks/*/implementation*/tests-*.json: the test globs each freeze recorded,
+#     read only when an order's proof is confirm
+#   <plugin root>/scripts/lib/recipes.sh: tf_path_matches_catalog_glob, sourced in a subshell
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
 # folder otherwise, so a person can run it directly.
@@ -125,9 +130,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      file outside the project folder or under an ignored path, or has no done-when row, an
 #      order whose proof is observe and
 #      that declares a test, names no surface or has no done-when row, an order whose proof is
-#      confirm and that declares a test, has no done-when row, or sits on a task whose contract
-#      does not say it has no automated tests, an order that owns nothing and reaches no owner, an
-#      order of a light task that does not come after wo1, a dependency cycle, two orders sharing
+#      confirm and that declares a test, has no done-when row, owns a test file, or sits on a
+#      task whose contract does not say it has no automated tests, an order that owns nothing
+#      and reaches no owner, an order of a light task that does not come after wo1, a
+#      dependency cycle, two orders sharing
 #      a declared owned file, or an id named anywhere that resolves to nothing. Each is named in
 #      the JSON on stdout.
 #
@@ -179,6 +185,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record, observe and confirm orders
 #                 observeOrdersWithNoSurface: [ {id, path} ],
 #                 confirmOrdersOnTaskWithTests: [ {id, path} ],
+#                 confirmOrdersOwningTestFiles: [ {id, path, glob} ],   path is the owned test file
 #                 testOrdersOwningNoMachineCriterion: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
 #                 unknownNonGoalIds: [ {path, id} ] },
@@ -576,6 +583,8 @@ RECORD_ORDERS_OWNING_OUTSIDE_JSON='[]'
 RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON='[]'
 OBSERVE_ORDERS_WITH_NO_SURFACE_JSON='[]'
 CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON='[]'
+CONFIRM_ORDERS_OWNING_TEST_FILES_JSON='[]'
+CONFIRM_TEST_GLOBS=""
 TEST_ORDERS_OWNING_NO_MACHINE_JSON='[]'
 CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
@@ -664,6 +673,46 @@ else
   CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg tests "$(automated_tests "$TASK_PATH")" '
     [ $orders[] | select(.slot == "confirm-at-review") | select($tests != "no") | {id: .id, path: .path} ]
   ')"
+  # A confirm order is built with no test. So a test file it owns is written as plain code that no
+  # check runs and the freeze never sees (gap row 367). Which path is a test is the framework's to
+  # say, and this script knows no framework. Each freeze in this project recorded the implement
+  # recipe's test globs, so those records answer here with no lookup. A project that froze no test
+  # yet records none, and notChecked says so. recipes.sh empties TASK_PATH when it loads, so it
+  # loads only inside the subshell that matches.
+  if printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .slot == "confirm-at-review")' >/dev/null; then
+    # One jq call reads every record. jq stops at a record it cannot parse, so only then does
+    # each record get a call of its own.
+    CONFIRM_TEST_GLOBS="$(
+      [ -z "${ZSH_VERSION:-}" ] || setopt NULL_GLOB
+      set -- "$PROJECT_PATH"/tasks/*/implementation*/tests-*.json
+      [ -f "${1:-}" ] || exit 0
+      jq -r '(.testGlobs // [])[]? | strings' "$@" 2>/dev/null \
+        || for TEST_RECORD in "$@"; do jq -r '(.testGlobs // [])[]? | strings' "$TEST_RECORD" 2>/dev/null; done
+      )"
+    CONFIRM_TEST_GLOBS="$(printf '%s\n' "$CONFIRM_TEST_GLOBS" | sort -u | sed '/^$/d')"
+  fi
+  CONFIRM_ORDERS_OWNING_TEST_FILES_JSON="$(
+    # shellcheck source=/dev/null
+    [ -z "$CONFIRM_TEST_GLOBS" ] || source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
+    jq -r -n --argjson orders "$WORK_ORDERS_JSON" '
+      $orders[] | select(.slot == "confirm-at-review") | .id as $id | (.ownedFiles // [])[] | [$id, .] | @tsv' \
+    | while IFS="$TAB" read -r REC_ID REC_PATH; do
+        while IFS= read -r TEST_GLOB; do
+          [ -n "$TEST_GLOB" ] || continue
+          # The file name must match the glob's last segment first. That is one call of the
+          # segment matcher, where the whole-path matcher calls it once per segment.
+          if [ "${TEST_GLOB##*/}" != "**" ]; then
+            tf_path_matches_glob "${REC_PATH##*/}" "${TEST_GLOB##*/}" || continue
+          fi
+          if tf_path_matches_catalog_glob "$REC_PATH" "$TEST_GLOB"; then
+            printf '%s\t%s\t%s\n' "$REC_ID" "$REC_PATH" "$TEST_GLOB"
+            break
+          fi
+        done <<CONFIRM_GLOBS
+$CONFIRM_TEST_GLOBS
+CONFIRM_GLOBS
+      done | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {id: .[0], path: .[1], glob: .[2]})'
+  )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"
 
   # The same question asked the other way (live-run row 145). The list above asks whether an order
   # owning a machine-verified criterion declares a test. This one asks whether an order left at the
@@ -713,7 +762,7 @@ else
   SERVES_NOTHING_COUNT="$(printf '%s' "$ORDERS_SERVING_NOTHING_JSON" | jq 'length')"
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
   GATE_WITH_TESTS_COUNT="$(printf '%s' "$GATE_ORDERS_DECLARING_TESTS_JSON" | jq 'length')"
-  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" --argjson e "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length) + ($e | length)')"
+  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" --argjson e "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" --argjson f "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length) + ($e | length) + ($f | length)')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
   UNKNOWN_NONGOAL_COUNT="$(printf '%s' "$UNKNOWN_NONGOAL_IDS_JSON" | jq 'length')"
 
@@ -868,6 +917,10 @@ NOT_CHECKED_ITEMS+=("whether a work order that owns a criterion actually produce
 if [ "$CONTRACT_READABLE" != "true" ]; then
   NOT_CHECKED_ITEMS+=("the coverage joins against the contract: $CONTRACT_NOTE")
 fi
+if [ "$CONTRACT_READABLE" = "true" ] && [ -z "$CONFIRM_TEST_GLOBS" ] \
+   && printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .slot == "confirm-at-review")' >/dev/null; then
+  NOT_CHECKED_ITEMS+=("whether a confirm order owns a test file: no freeze in this project recorded a test glob, so nothing here says which path is a test.")
+fi
 if [ "$DESIGN_STARTED" != "true" ]; then
   NOT_CHECKED_ITEMS+=("the graph checks between work orders: $GRAPH_NOTE")
 fi
@@ -918,6 +971,7 @@ jq -n \
   --argjson recordOrdersWithNoDoneWhen "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" \
   --argjson observeOrdersWithNoSurface "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" \
   --argjson confirmOrdersOnTaskWithTests "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" \
+  --argjson confirmOrdersOwningTestFiles "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" \
   --argjson testOrdersOwningNoMachineCriterion "$TEST_ORDERS_OWNING_NO_MACHINE_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
   --argjson unknownNonGoalIds "$UNKNOWN_NONGOAL_IDS_JSON" \
@@ -958,6 +1012,7 @@ jq -n \
       recordOrdersWithNoDoneWhen: $recordOrdersWithNoDoneWhen,
       observeOrdersWithNoSurface: $observeOrdersWithNoSurface,
       confirmOrdersOnTaskWithTests: $confirmOrdersOnTaskWithTests,
+      confirmOrdersOwningTestFiles: $confirmOrdersOwningTestFiles,
       testOrdersOwningNoMachineCriterion: $testOrdersOwningNoMachineCriterion,
       unknownCriteriaIds: $unknownCriteriaIds,
       unknownNonGoalIds: $unknownNonGoalIds

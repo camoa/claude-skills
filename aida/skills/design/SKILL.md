@@ -25,6 +25,12 @@ named in the grant too. So is the project skill's `recipe-source` lookup. Any ot
 still asks for approval. Dispatching an agent needs no approval either; it is also named in this
 skill's own grant.
 
+`design-actions.sh` and `research-actions.sh` take a text value from a file. Write the text with the
+Write tool in the session's scratchpad folder. With no scratchpad, write it in the task folder, and
+delete it after the call. Then pass `@/<absolute path>` as the value. Use this for a text that names
+a command, such as git. Claude Code refuses a command whose quoted text names git when the session
+works in a worktree.
+
 **The dispatch message is the role, the run mode and the paths.** Name the role on the Agent
 call, and set the model where the step says. The message itself is one line per item: the run
 mode, `interactive` or `autonomous`, then each path the step hands over. One word a step names,
@@ -297,7 +303,8 @@ carries this text in place of it. A dispose that omits both records no reuse.
 Before that dispose, dispatch `internal-searcher` once per candidate the order's build or tests
 will call, with the message this file names. Its lines are the role, the run mode and the word
 `interface`. Then come the candidate as research named it, the order file's path, the code path,
-and the project folder. The code path is the task's worktree, from the `worktree:` line.
+and the project folder. The code path is the task's worktree, from the `worktree:` line. A
+`worktree: none` means the project's code path.
 **Light:** dispatch once for all orders. Repeat the candidate line and the order line, one pair
 per candidate, before the code path. Pass each returned block as that candidate's `--interface`.
 
@@ -322,7 +329,9 @@ A rejection that lives only in the conversation is not a rejection anyone can ch
 **Autonomous:** once every disposition of an order is recorded, dispatch `disposition-confirmer`
 once for that order, with the message this file names. One confirmer judges every candidate of
 the order. Its lines are the role and the run mode. Then the order file's path, from the
-`DISPOSED:` line. Then the verdict file's path, from the `confirmFile:` line. A dispatch that names
+`DISPOSED:` line. Then the verdict file's path, from the `confirmFile:` line. Then the code
+path, which is the task's worktree, from the `worktree:` line that `dispose` prints beside it.
+A `worktree: none` means the project's code path. A dispatch that names
 no role runs as the general agent with write tools and this session's model. This one must write
 nothing but its verdict file to mean anything.
 
@@ -501,8 +510,9 @@ this conversation; the id space is shared and minted in order, so naming it ahea
 
 Write `--interface` so that it names each exposed element in backticks. That is the service id,
 the class, the interface, the method, the route, the hook and the config key. The build's
-interface check counts only the backtick-quoted names. An order that exposes nothing takes no
-`--interface`.
+interface check counts only the backtick-quoted names, and wants each one in the builder's record.
+So write a choice the builder makes, such as two calls it may pick from, as plain text. An order
+that exposes nothing takes no `--interface`.
 
 Start `--diff-budget` with `small`, `medium` or `large`. The build reads the first word. An order
 whose budget starts with `large` gives its builder a second resume at the turn limit. Number the
@@ -617,7 +627,7 @@ Pass `--not-binding` when research said the source is not one this project accep
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
   --id <woId> --run "<one command>" [--pass "<exit 0 | stdout empty | stdout contains <text>>"] \
-  [--kind <config-assert|live-site|self-fixture>] --cite "<the source research recorded>"
+  [--kind <config-assert|live-site|self-fixture>] [--criterion <cN>] --cite "<the source research recorded>"
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
   --id <woId> --check "<one sentence to judge>" [--kind <config-assert|live-site|self-fixture>] \
   --cite "<the source research recorded>"
@@ -627,6 +637,12 @@ source that describes a result in words gives a `--check`. Such an entry is neve
 Give `--kind live-site` when the check needs a served site; the source says so or it does not.
 A research `--run` never runs until a person approves it at the close. Without that, the
 reviewer judges it as a check.
+Give `--criterion` when the command's output alone proves a machine criterion the order owns,
+such as a linter run. A `tests` order then owes no test for that criterion, so the criterion
+stays on it. The freeze runs the line over the test author's files, and the row-checker judges
+whether the line proves the whole clause. A clause that names two tools needs a line for each.
+A line runs unattended when it equals, word for word, an `argv` in the project's check recipe
+`check_commands`. Any other research line needs the person's approval at the close.
 `--clear` empties the list, and `--recipe` replaces it.
 
 A run line is argv, never a shell, so the script refuses a shell character. It also refuses a
@@ -681,6 +697,8 @@ zero it adds one `open:` line naming what is open. The report holds:
 - every work order whose proof is `observe` and that declares a test, names no surface, or has
   no done-when row;
 - every work order whose proof is `confirm` and that declares a test, or has no done-when row;
+- every work order whose proof is `confirm` and that owns a file a test glob matches. The globs
+  are the ones this project's earlier freezes recorded;
 - every work order whose proof is `confirm` on a task whose contract does not say it has no
   automated tests;
 - every work order that owns nothing and that no owning order depends on, directly or through
@@ -692,8 +710,10 @@ zero it adds one `open:` line naming what is open. The report holds:
 Interactive: before the close, show each such order's entries with their sources. Say that the
 source is not one this project accepted. The person keeps each entry, drops it with `--clear`,
 or asks for another source. A kept run entry runs only when the person also approves it: pass
-`--approve-runs` to the close on that yes, and the close stamps each such entry. Autonomous: the line and the rendered order carry it to a person
-later.
+`--approve-runs` to the close on that yes, and the close stamps each such entry. Autonomous: the
+line and the rendered order carry it to a person later. An autonomous `--approve-runs` refuses and
+lists the lines. It passes once the main session writes the person's answer to
+`person-answer.json` in the task folder, step `close`, with those lines as the answer.
 
 `check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
 proof is `tests` that owns criteria of which none is machine-verified. The design still closes with
@@ -733,6 +753,18 @@ build's interface check matches a shape only when the builder's record repeats i
 type holds `<` too, so the line never blocks the close. Name each real element instead, or write
 the shape as plain text with `update --interface`.
 
+`check` also prints `interfaceChoice:`, at every exit code. It names each pair of names in
+backticks that an order's interface joins with `or`. Such a pair is often a choice the builder
+makes, and a builder that takes one option leaves the other out of its record. `check` and
+`close` refuse, exit 9, while a pair is open, in both run modes. Answer each pair. Write a
+choice as plain text with `update --interface`. When each name must exist, such as two exit
+codes, keep the order's pairs:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
+  --id <woId> --keep-choices
+```
+The builder's record must then name both. A kept pair whose text changes is open again.
+
 `check` also prints `callsUndeclared:`, at every exit code. It names each `name()` call in an
 order's done-when rows and tests that no interface the order declares holds. It reads the order's
 own interface, its reuses and its `dependsOn` orders. The test author may not open source, so a
@@ -771,6 +803,9 @@ problem. Read the report file when the line is not enough, and fix the specific 
     row is a sentence the person confirms at review, so write it as one thing they can check. A
     `confirm` order on a task whose contract does not say it has no automated tests needs
     `update --proof tests` and its tests;
+  - a `confirm` order that owns a test file needs `remove-owned-file` for it. Nothing runs that
+    file, and the freeze never sees it. When the task does have tests, a person answers yes in
+    scope instead, and the order takes `update --proof tests` and its tests;
   - an order that owns nothing is reached only when an owning order depends on it. Add it to
     that owner's `--depends-on`. The edge points from the owner to the order it needs, never the
     other way. An order no owner needs is dead work, unless it owns a criterion of its own. The

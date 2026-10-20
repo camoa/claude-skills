@@ -138,7 +138,8 @@ file and the fixer's report. For each finding, write one verdict, `addressed` or
 file and lines you checked; attempted but not working is `not-addressed`. Note new breakage inside
 the fix diff only, in the same shape as a finding but with no `id`. The script gives each one the
 next free `f` number. Compare the fix diff against the fixer's five
-minimal-diff answers for each finding, and note where it exceeds them under `outOfScope`. Note
+minimal-diff answers for each finding, and note where it exceeds them under `outOfScope`. The
+brief's `fixScope` holds the files the fixer was given. A change to one of them is in scope. Note
 anything else you notice outside the fix diff as `outOfScope`; it opens nothing. Write your verdict file to the path the brief gives, in
 this shape:
 
@@ -158,7 +159,13 @@ A finding with `departureFrom` carries a `question` too. Its fix was to cure a d
 recipe. Answer it as `"departureCured": "yes"` or `"no"`, with the reason in `evidence`. A `no`
 waits for the person.
 
-**You may not read code the fix diff did not touch, and you may not raise a finding against it.**
+A finding with `alreadyCorrectInRound` is one the fixer reports already correct at HEAD, with no
+change. Read its file at the cited lines in the brief's worktree, and the fixer's `Ran:` output for
+it. Write `addressed` only when both show that the finding no longer holds. A finding whose
+`scopeInsufficientInRound` is this round had no change made for it, so write it `not-addressed`.
+
+**You may not read code the fix diff did not touch, except as the paragraph above says, and you may
+not raise a finding against it.**
 You may not extend the loop by adding a round of your own. You are not given the original full
 diff, the contract beyond what the findings already cite, or an earlier round's verdicts.
 

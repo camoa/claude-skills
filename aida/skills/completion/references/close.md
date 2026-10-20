@@ -21,6 +21,7 @@ each yes, run:
 Several accepted findings can go in one call, with one `--create` each. The script creates each
 task through the task skill, with a goal made of the evidence and one sentence naming the finding.
 It prints `created:` with the new ids, and `existing:` when a named finding already has a task.
+Each new tree prints one `<id> base:` line with the commit it was cut from and why. Show it.
 A name collision comes back at exit 3 with the task script's own line above; relay that line.
 
 Autonomous: run `follow-ups` once with no flag. Every finding still without a task is created
@@ -38,6 +39,10 @@ Any other word needs a reason. Interactive: ask the person why the task closes w
 review, in one sentence, and pass it as `--reason`. Say the verdict you read, in its own word: a
 review that failed, one that ran and did not close, or none at all. Autonomous: do not run
 `close`. Say the verdict and that a person closes this task with a reason, and stop.
+
+When `read` prints `personRoute`, a criterion waits for a person's met or unmet in review. In
+both modes, give the person that line first. Their answer in review can pass the review, and then
+the close needs no reason.
 
 ## Put each observed criterion to the person
 

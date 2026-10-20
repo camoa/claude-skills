@@ -27,6 +27,11 @@
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
       "description": "When `dispatch-open` wrote this record, UTC, to the second. Set by the script, never typed. A record left by a role that never returned looks like a live one otherwise. `dispatch-open` reads this and names the age in its refusal once the record is over a day old (live-run row 139). Nothing clears a stale record on its own: a person runs `dispatch-close`."
     },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The session that ran `dispatch-open`, from CLAUDE_CODE_SESSION_ID, which the platform sets in Bash to the `session_id` hook payloads carry. Absent when the variable is not set. A record naming the agent's role and stamped with the payload's `session_id` wins over every other record, in scripts/lib/paths.sh (gap row 358)."
+    },
     "resumedAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
@@ -37,11 +42,23 @@
       "minimum": 1,
       "description": "How many times `dispatch-close --no-report` kept this record open for a resume (gap row 301). A record carrying `resumedAt` and not this key counts one, as `dispatch-open --resume` writes it."
     },
+    "shapeRefusals": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1,
+      "description": "On a fixer's record: 1 once `dispatch-close` refused its finished report for a missing outcome line, a missing run, or a missing fix brief, with no resume spent (gap row 352). A second such fault spends a resume as `resumes` counts."
+    },
     "resumesAllowed": {
       "type": "integer",
       "minimum": 1,
       "maximum": 2,
       "description": "Present on an implementer's record (gap row 301): 2 when the order's diffBudget in the frozen snapshot starts with the word `large`, else 1. `dispatch-open` derives it and never takes it by hand. Absent means 1. The runtime reads `maxTurns` from the agent definition alone. The Agent tool takes no turn cap per call. So a larger turn budget is one more resume at the same cap."
+    },
+    "rowsToCheck": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^wo[1-9][0-9]*:[1-9][0-9]*$" },
+      "description": "Present on a row-checker's record for an order proved by its record (gap row 361): the done-when rows, keyed <order id>:<n>, that `dispatch-open` put to the checker. `dispatch-close` keeps the checker's verdicts on these rows alone, beside each row's line."
     },
     "reportPath": {
       "type": "string",

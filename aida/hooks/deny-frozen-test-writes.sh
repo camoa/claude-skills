@@ -41,8 +41,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # cp's -t names, and tar's extract folder and created archive. The person, and any other agent
 # type, is not its concern.
 #
-# Rule four, added for gap row 293, holds three roles to their own records. It is stated where it
-# runs, before the others.
+# Rule four, added for gap row 293, holds three roles to their own records. Since gap row 357 it
+# also keeps a person's answer record to the main session. It is stated where it runs, before the
+# others.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -69,11 +70,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # directory that command runs in, so dropping that second test misses one the other way.
 #
 # FAIL-OPEN, and visible where it can be. No jq, unreadable stdin, no tool_name, no project
-# registered for this working directory, or no dispatch.json: allow, silent. Those last two are
+# registered for this working directory and no open record naming the agent's type, or no
+# dispatch.json: allow, silent. Those last two are
 # every write outside an AIDA task, and a message on each would be noise, the rule version 5's
 # guard kept. The record is the task's own, <project>/tasks/<task>/implementation/dispatch.json,
 # found as the one whose codePath holds the payload's working directory, else the one open record
-# naming the agent's type (scripts/lib/paths.sh, dispatch_record_for). Records open for other
+# naming the agent's type (scripts/lib/paths.sh, dispatch_record_for). With no project for the
+# working directory, the project remembered for it answers the same way, else the one open record
+# naming this plugin's role in any registered project (dispatch_record_resolve). Records open for other
 # trees only: allow, through `systemMessage` naming why. dispatch.json unreadable, missing
 # fields, or no unit has frozen anything yet for this task and rules two and three are off: allow, through `systemMessage` naming why. Nothing is frozen
 # before the third step of implementation runs, and that is a real state, not a fault, the same
@@ -130,6 +134,20 @@ deny_own_record() {
   jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
   exit 0
 }
+# Gap row 357. person-answer.json, under implementation/, review/ or the task folder, carries a
+# person's answer into an unattended run, so only the main session, the thread the person types in,
+# writes it. A main session started with --agent carries an agent type and is refused too. Every agent
+# type is refused it through the file tools, and refused any Bash command that names it. A name
+# built at run time passes the Bash test.
+if [ -n "$AGENT" ]; then
+  case "$TOOL" in
+    Bash) ANSWER_TARGET="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)" ;;
+    *) ANSWER_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" ;;
+  esac
+  case "$ANSWER_TARGET" in
+    *person-answer.json*) deny_own_record "person-answer.json holds a person's answer, and only the main session writes it. This write's agent_type is $AGENT. Report the halt to the main session and stop." ;;
+  esac
+fi
 if [ "$TOOL" != "Bash" ]; then
   OWN_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
   OWN_OWNER="$(own_record_owner "$OWN_TARGET")"
@@ -177,21 +195,25 @@ source "$RECIPES_LIB" 2>/dev/null \
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
 
-MATCH="$(registry_resolve_by_directory "$CWD" 2>/dev/null)" || { echo '{}'; exit 0; }
-PROJECT_PATH="$(jq -r '.path // empty' <<<"$MATCH" 2>/dev/null)"
-[ -n "$PROJECT_PATH" ] || not_enforced "the matched project row carries no path"
-
 # Each task keeps its own record under its implementation folder (live-run row 139). The one this
 # agent works under is the one whose codePath holds the payload's working directory. A record
 # open for another tree is another task's dispatch, and it says so rather than passing in silence.
 # The directory is held in the same canonical form codePath is, so the two compare as strings,
-# and a working directory that no longer exists still normalizes textually.
+# and a working directory that no longer exists still normalizes textually. A session outside
+# every code path reads the project remembered for its folder as if it stood in the main checkout,
+# the main thread too. With none remembered, a role finds its record across the registered
+# projects, and the main thread is not held to rule one (gap row 358).
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
-dispatch_record_for "$PROJECT_PATH" "$CWD_CANON" "$AGENT"
+dispatch_record_resolve "$CWD_CANON" "$AGENT" "$(jq -r '.session_id // empty' <<<"$INPUT" 2>/dev/null)"
+case $? in
+  1) echo '{}'; exit 0 ;;
+  2) not_enforced "the matched project row carries no path" ;;
+esac
+PROJECT_PATH="$DISPATCH_PROJECT"
 DISPATCH_FILE="$DISPATCH_RECORD"
 if [ -z "$DISPATCH_FILE" ]; then
-  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in $PROJECT_PATH, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
+  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
   echo '{}'; exit 0
 fi
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \

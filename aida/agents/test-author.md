@@ -43,14 +43,19 @@ A test the correction makes necessary is allowed, and the checker reads the affe
 Then run again each test that `retake.redAgain` names, and write its new run. Each one shares a
 file with a corrected test. The freeze refuses a red run older than its test file.
 
-When the brief holds `rowsRejected`, a person rejected those rows at the checkpoint. Each row holds
-the person's words and the checker's note. Repair the tests of those rows only. Then run again
+When the brief holds `rowsRejected`, those rows were rejected at the checkpoint. Each row holds
+the checker's note, and the person's words when a person rejected it. Repair the tests of those
+rows only. Do not argue with a note: a fresh checker reads your repair. Then run again
 each test that `rowsRejected.redAgain` names, and write its new red run. Each one shares a file
 with a repaired test. The freeze refuses a red run older than its test file. A row keyed
 `<order id>:absence:<n>` names done-when row n, which you returned as an absence. The checker found
 that a test could prove it. Write that test, and do not return the clause as an absence again.
 When the clause joins an absence to a behaviour, test the behaviour. Name the clause in your
 report, so design can split it.
+
+The dispatch message can name earlier tests. An earlier author wrote them before design reopened,
+and they are not in the tree. Read them. Write into your own test file only the tests the brief
+still asks for, changed where the brief changed. Then run each test and write its red run.
 
 **Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The
@@ -71,12 +76,15 @@ production code.
 An interface record is prose a builder wrote about its own code. It is not the code, and it is the
 only thing you get that came from one.
 
-For each machine-verified criterion this order owns, write at least one test. The brief names
-them in `criteriaOwned`. A criterion the order serves but does not own is proved by its owner. The
-thing it observes is built by a later order, so do not name it on a test that cannot observe it.
-Write this order's own tests against its `doneWhen` instead. For each criterion verified by a
-person, write a checklist line, copying its verification sentence whole. A base class or a fixture
-you write beside the tests is a support file. The tests stand on it, and it is not a test.
+For each machine-verified criterion this order owns, write at least one test. The brief names them
+in `criteriaOwned`. A criterion in `provedByVerify` is proved by the command beside it, so write no
+test for it. The freeze runs that command over your files. Leave your files so that it passes,
+because the implementer cannot edit a frozen test. A criterion the order serves but does not own is
+proved by its owner. The thing it observes is built by a later order, so do not name it on a test
+that cannot observe it. Write this order's own tests against its `doneWhen` instead. For each
+criterion verified by a person, write a checklist line, copying its verification sentence whole. A
+base class or a fixture you write beside the tests is a support file. The tests stand on it, and it
+is not a test.
 
 **An absence gets no test.** When the brief holds `absenceCandidates`, read each clause it names.
 A clause that asserts an absence says the change added nothing of a named kind. Write no test for
@@ -88,9 +96,9 @@ states a behaviour still takes a test.
 Choose the level from the recipe, not from habit. The recipe names the levels this framework has and
 what each one reaches.
 
-Put the criterion id at the end of the test's own name, so a later run can select the tests for one
-criterion. A test of the order's `doneWhen` ends with the order id instead, `Wo1`, and names no
-criterion. The recipe says how the id is spelled here.
+Name each test the way the recipe says. Your report names the criterion each test proves, and the
+freeze records it, so no script reads the id from the name. A test of the order's `doneWhen`
+claims the order id instead, and names no criterion.
 
 Run every test and record what the run printed, to one file per test under the task folder's
 `implementation/` folder. Run it with the command the test-execution recipe
@@ -127,6 +135,14 @@ build is what makes a test of its own work pass. You may not read that build. So
 build or fix commits the brief lists there, written `commit:<id>`, as the `locks-in` reason. The
 prefix is what marks it a commit, and a reason without it is read as prose. Read no source to
 decide it. If you can name neither existing code nor such a commit, report it as green on arrival.
+
+**When the brief holds `deliverableIsTests`, your tests are the deliverable.** The script wrote
+that key because every file the order owns is a test file. The freeze locks the test file, and the
+implementer may write only the files it owns. So nobody after you can change that file. Make the
+change the done-when asks for in it yourself, for example a repair of its existing fixtures. Run
+each test until it passes. A red run is not the goal here, because no build can turn it green.
+Return each test with a `locks-in` reason that names the existing code it passes against. The
+freeze refuses a red test when every owned file is a test file or a support file you pass to it.
 
 Write what you return to the report file the brief names under `reportPath`, and name that path
 in your reply. Return one row per test: the path, the test's name, and the criterion its name

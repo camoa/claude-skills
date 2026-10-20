@@ -19,8 +19,13 @@ except `nearest` on a test row. Optional keys: `extensions`, `signal`, `silent_p
 row that runs a suite, and `cost` and `trap` on a test row. `argv` is a list of tokens, and a
 placeholder is always a whole token.
 
-The id list is closed. It grows only when the catalog validator and its index change together.
-Address a row by an id you already know. Never run a row whose id you do not know.
+The catalog's id list is closed. It grows only when the catalog validator and its index change
+together. A project's own copy of the review recipe may add a `## Check commands` row with an id of
+its own. Add one for a tool that no catalog id fits, such as a spell checker. Do not leave that
+tool as a command a person runs by hand. `skills/review/references/checks.md` says how review and
+the baseline treat the added row. A verify run line that equals its argv runs with no approval. A
+task past preconditions adopts the changed copy with `implement-actions.sh recipe-refresh
+--check-recipe <framework>=<path>`, or every check stops at exit 73.
 
 ## The verdicts
 

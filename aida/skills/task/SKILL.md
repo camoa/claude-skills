@@ -3,7 +3,7 @@ name: task
 description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
 argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
 arguments: [action, target]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh distill *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh distill *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh read-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh --run-mode * set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh distill *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh distill *), Agent, EnterWorktree
 ---
 
 # Task
@@ -16,6 +16,12 @@ does not run any of the six stages, and it does not pick which task is active: t
 
 Every action below needs the active project's own folder (the one holding `project.json`, never
 the code folder). Resolve that first, with the project skill, before using anything here.
+
+`task-actions.sh` takes a text value from a file. Write the text with the Write tool in the
+session's scratchpad folder. With no scratchpad, write it in the task folder, and delete it after
+the call. Then pass `@/<absolute path>` as the value. Use this for a text that names a command, such
+as git. Claude Code refuses a command whose quoted text names git when the session works in a
+worktree.
 
 ## Determine the run mode
 
@@ -51,7 +57,24 @@ accomplish and why, not a ticket. Write it back in one or two sentences and conf
 yes or no before writing anything. Autonomous with no goal given or implied by the conversation:
 **halt.** A task with no stated goal is not a record of anything.
 
-**3. Write it.** Run, with the run mode set as decided above. Add `--after <task-id>` when the
+**3. Write it.** First the worktree base. A project made before this setting may record none. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh read-worktree-base "<projectPath>"
+```
+Exit 0: a base is recorded. Use it silently; this is never asked a second time. Exit 1: it
+printed the default. Interactive: ask once, "Where should task worktrees go? Default:
+`<printed folder>`." An empty answer passes no folder, which records the default. A typed
+absolute path passes that path. Record it:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
+  set-worktree-base "<projectPath>" ["<folder>"]
+```
+Exit 3 refuses the folder, for the reason it prints: ask again. Autonomous: do not ask, and
+record nothing. The tree goes in the default folder. Say so; the next attended create asks. This
+is asked here
+because the first tree is about to be made, and a tree once made stays where it is.
+
+Then run the create, with the run mode set as decided above. Add `--after <task-id>` when the
 person said this task builds on another task of this project:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
@@ -60,14 +83,15 @@ person said this task builds on another task of this project:
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree in one folder per repository beside the code path, at
 `<parent of codePath>/<slug of the code folder>.worktrees/<slug of the code folder>-<name>`.
+The worktree base recorded above takes the place of `<parent of codePath>`.
 The tree is on the branch `feature/<name>`. The script records both in `task.json` and commits. The folder name is the
 slug of the code folder plus the task name, so a site name is predictable and unique. The tree is
 outside the code path for one reason. A nested worktree is invisible to a tool that registers
 projects by folder, and DDEV hands it to the parent project. A tree that `task.json` already
 records on disk stays where it is.
-The tree is cut from HEAD of the folder this call runs in, when that folder is in the code
-repository. So a task made from inside another task's tree starts from that task's work. From
-anywhere else the tree is cut from HEAD of the code path. With `--after`, the tree is cut from
+The tree is cut from the trunk, HEAD of the code path. Made from inside another task's tree, it
+starts from that task's work only while that task is open and its branch is not in the trunk.
+The `base:` line names the commit and the reason. Show it. With `--after`, the tree is cut from
 that task's branch, and `task.json` records `after`. Use it for a chain of tasks made up front,
 because a tree cut now from trunk holds none of the earlier builds. While that task's build is
 unfinished, no tree is made: `worktree:` reads `none` and `after-build:` reads `unfinished`. Skip
@@ -162,6 +186,15 @@ out after the line. The implementation step runs the same line before an order's
 command as it ran and that command's own output in `records/environment-up.txt`, in this order,
 and one line in that record marking the address command, so `down` can find that command's output
 later.
+A site the worktree already runs is adopted. This applies when `task.json` records no address and
+no marker, and the recipe's `## Status` line says the site is up. Then `up` writes and commits the
+`## Files` blocks, runs the address command with its `root:` check, and records the address with
+`adopted: true`. The root check runs before the commit, so a site in another tree leaves nothing.
+It runs no precondition, token or bring-up line, because the seed would replace that site's database.
+It records no named file in `worktree.recipeChanges`, and prints `environment: adopted` in place of
+`environment: coming-up`. It also says that no bring-up took a seed. A configuration gate then
+restores the seed the worktree already holds, whose age is unknown. Say so to the person.
+`show` then prints `precondition check: not run`.
 First it writes each `## Files` block absent from the worktree. A file that holds the block of an
 earlier version of the recipe is replaced. Any other file with other content refuses at 3. The
 earlier versions are the ones the navigator store holds, so nothing is fetched. Then it runs each
@@ -202,7 +235,13 @@ It prints `environment: coming-up`, then `address:`. Running it twice is safe: t
 promises every step runs again cleanly.
 
 `down` runs the tear-down lines, each one and its output to `records/environment-down.txt`, and removes
-`environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. With
+`environment` from `task.json`. It runs unattended too: tearing a copy down loses nothing. An
+adopted site is no copy, so `down` runs no tear-down line for it. It keeps `adopted` and the filled
+tear-down lines, commits, and says the site stays up in the worktree. Prune refuses a tree whose
+record says `adopted`. A tree another task holds stays, and that record stays with it. A second
+`down` runs the recipe's `## Status` line in the worktree. A site that is down loses the mark, so
+prune can remove the tree. A site still up is refused at 3 with the tear-down lines. With no
+`## Status` line, only a person can say the site is gone, so it refuses unattended at 70. With
 nothing up it says so and exits 0. It reads the recipe from the marker as it reads it from a
 finished record, so a site that was coming up is torn down the same way. A marker with no address
 key holds none of the other address keys either. `up` marks the address command in
@@ -249,7 +288,8 @@ tree goes, the branch stays.
 
 **3. Remove.** Run the action once with every id that got a yes, in the order given, or with
 `--all` when every tree got one. For each tree the script tears the site down when one is up,
-then removes the tree. It deletes the branch when it is merged. It clears `worktree` and
+then removes the tree. It removes the group folder when it is empty, never the worktree base
+itself. It deletes the branch when it is merged. It clears `worktree` and
 `environment` from `task.json` and commits. It prints one `pruned:` line per tree naming what
 happened to the branch. A tree that another task also records stays, and its line says `kept`:
 a later task made with `--in-tree` builds in it. Show them. Exit 3 names the tree it stopped at and why. The task is not
@@ -391,6 +431,14 @@ whether end to end is on. Light keeps one script that walks the demo path, and r
 fails the task without it. When end to end is off, say that a person sets it up with
 `/aida:surfaces e2e` before the run. When the project declined end to end, light keeps no
 such script.
+
+A light or autonomous run still stops for a person, and a dispatched agent cannot answer for one.
+So when one session coordinates agents that run the tasks, that session holds every person-only
+call. An agent never runs `set-run-mode` and never writes a person's answer. It reports the stop
+to the coordinator once and stops. The coordinator puts the stop to the person. Then it runs the
+call itself. For an implement call, review's `close`, or `environment` `up`, `not-applicable` or
+`down`, it can instead write the answer as a record. The exit 70 refusal prints that record.
+The implement skill's `references/finish.md` says how.
 
 When the mode covers review, two lines can follow, on light or autonomous. The `sign-off:` line
 names the criteria a person answers, so an unattended review writes no verdict. The

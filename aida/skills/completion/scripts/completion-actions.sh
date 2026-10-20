@@ -12,8 +12,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # One completion record, at <task folder>/completion/completed.json (scripts/completed-schema.json),
 # and one body, at <task folder>/completion/pr-body.md. Both live in their own folder beside
-# review/, for the reason review's record does: implementation's own `restart` archives
-# implementation/ whole, and neither file has anything to do with a build restart.
+# review/, for the reason review's record does: implementation's own `restart` moves records out
+# of implementation/ into an archive folder, and neither file has anything to do with a build
+# restart.
 #
 # Usage:
 #   completion-actions.sh read       <task_folder>
@@ -176,7 +177,7 @@ cp_paths() {
 CP_TASK_DOC=""; CP_TASK_ID=""; CP_STATE=""; CP_RUN_MODE="interactive"
 CP_ALIGNMENT_STATE=""; CP_FINISHED_STATE=""; CP_REVIEW_STATE=""; CP_RECORD_STATE=""
 CP_ALIGNMENT_DOC="null"; CP_FINISHED_DOC="null"; CP_REVIEW_DOC="null"
-CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=""; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"; CP_OBSERVED="[]"
+CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=""; CP_PERSON_ROUTE=""; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"; CP_OBSERVED="[]"
 
 # Reads one record as JSON text into the named variable, or dies when it is present and
 # unreadable. Missing is a real state every action reports in words, never a refusal. $1 the
@@ -305,6 +306,13 @@ cp_load() {
   # A review of an earlier build is no review of this one (gap row 335).
   CP_REVIEW_WHY="$(task_review_outdated "$TASK_PATH")" \
     && { CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=" ($CP_REVIEW_WHY, so run the review stage again)"; }
+  # A criterion only a person answers, such as one checked after a gated push, waits for that
+  # answer in review, not for a reason here (gap row 378). A review of an earlier build runs
+  # again first, so it names no route.
+  local waiting
+  waiting="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.criteria // [])[] | select(.verdict == "unanswered" and .answeredBy == "nobody") | .id ] | join(", ")' 2>/dev/null)"
+  [ -z "$waiting" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
+    || CP_PERSON_ROUTE="These criteria wait for a person to answer met or unmet: $waiting. The person answers each with review close --row <criterion>=met|unmet at the reviewed commit. A light or autonomous run takes that answer from $TASK_PATH/review/person-answer.json, written by the main session with step close. Before either, run the command a criterion's verify clause names, and show its output to the person."
   cp_load_children "$who"
   cp_load_follow_ups "$who"
   cp_load_observed "$who"
@@ -359,7 +367,8 @@ do_read() {
     passed) closes="on the review verdict, with nothing asked" ;;
     *)      closes="on a person's reason (--reason), because the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY" ;;
   esac
-  cp_print_summary "read" "$(jq -nc --arg closes "$closes" --arg next "$next_step" '{closes: $closes, nextStep: $next}')"
+  cp_print_summary "read" "$(jq -nc --arg closes "$closes" --arg next "$next_step" --arg route "$CP_PERSON_ROUTE" \
+    '{closes: $closes, nextStep: $next} + (if $route == "" then {} else {personRoute: $route} end)')"
   if [ "$CP_STATE" = "complete" ]; then
     echo "READ: $CP_TASK_ID is already complete. Nothing is left to close." >&2
   fi
@@ -377,12 +386,16 @@ cp_refuse_complete() {
 }
 
 # Exit 70. A person's answer is accepted only when a person is present. Review and tests-freeze
-# apply the same rule under the same number. $1 the action, $2 the flag, $3 what the flag would
-# have decided.
+# apply the same rule under the same number. A person's answer at completion/person-answer.json
+# passes it too, without a change of mode (gap row 380, task_person_answered). It sits in the
+# stage's own folder, as implement's and review's do, so it never shares a file with a review
+# record still waiting. One record answers the whole call. $1 the action, $2 the flag, $3 what the
+# flag would have decided, $4 every person's flag of the call, one "<flag> <value>" per line.
 cp_require_person() {
-  local who="$1" flag="$2" what="$3"
+  local who="$1" flag="$2" what="$3" answer_file="$COMPLETION_DIR/person-answer.json"
   [ "$CP_RUN_MODE" = "autonomous" ] || return 0
-  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written."
+  task_person_answered "$answer_file" "$TASK_PATH" "$who" "" "$4" && return 0
+  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written.$(task_answer_route "$answer_file" "$TASK_PATH" "$who" "$4")"
 }
 
 # The one follow up row for finding $1, or nothing when the review holds no follow up finding of
@@ -394,7 +407,8 @@ cp_follow_up_row() {
 # Creates the task for the follow up finding whose row is $2, through task-actions.sh create, the
 # one producer of a task. The id is `<source task>-<finding id>`, so nobody has to name it. The
 # goal is the evidence, then one sentence naming the finding, the source task, the lens, the file
-# and the lines. The task script's own output is relayed only when it refuses. $1 the action.
+# and the lines. The task script's own output is relayed only when it refuses, but for the line
+# naming the commit the tree was cut from (gap row 382). $1 the action.
 cp_create_follow_up_task() {
   local who="$1" row="$2" fid task_id goal said
   fid="$(printf '%s' "$row" | jq -r '.finding')"
@@ -405,6 +419,7 @@ cp_create_follow_up_task() {
   said="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$TASK_SCRIPT" --run-mode "$CP_RUN_MODE" \
       create --project "$PROJECT_DIR" --name "$task_id" -- "$goal" 2>&1)" \
     || { printf '%s\n' "$said" >&2; die 3 "$who: task create refused $task_id, so nothing was written for $fid. Its own line is above."; }
+  printf '%s\n' "$said" | grep '^base: ' | sed "s/^/$task_id /" >&2
   printf '%s' "$task_id"
 }
 
@@ -518,7 +533,17 @@ cp_render_body() {
                 ($restore | split(" ")) as $ids
                 | [(if ($ids | length) == 1 then "Commit " + $ids[0] + " puts" else "Commits " + ($ids | join(" and ")) + " put" end)
                    + " back the files `task environment up` changed for the site of this worktree, so trunk keeps its own: " + $restorePaths + "."] end)
-            + (if ($taskDoc.environment.recipe // null) == null
+            # An adopted site stays up with its own database, and prune refuses its tree (gap row
+            # 360). After `down` let go of it, the record keeps the filled tear-down lines.
+            + (if ($taskDoc.environment.adopted // false) == true
+               then ["The site of this task was adopted: it ran in the worktree before the task, so its database is no copy and nothing tears it down. It stays up and registered after the merge.",
+                     "`task prune " + $task + "` refuses the tree until a person "
+                     + (if ($taskDoc.environment.recipe // null) != null
+                        then "runs `task environment " + $task + " down`, which lets go of the site and prints its tear-down lines, runs those lines in the worktree, and runs `task environment " + $task + " down` again."
+                        else "tears the site down in the worktree with "
+                          + (if ($taskDoc.environment.tearDown // null) != null then "these lines, which delete that database: `" + $taskDoc.environment.tearDown + "`," else "the recipe'"'"'s ## Tear down lines," end)
+                          + " and runs `task environment " + $task + " down`." end)]
+             elif ($taskDoc.environment.recipe // null) == null
                then ["After the merge: `task prune " + $task + "` from the main checkout removes the tree and the merged branch."]
                else [(if ($taskDoc.environment.address // null) == null
                       then "A site of this task is coming up: the record holds the marker `up` writes before the bring-up, and no address."
@@ -644,6 +669,8 @@ CP_RECIPE_ROWS
       || { printf '%s\n' "$said" >&2; die 3 "$who: task environment down refused $CP_TASK_ID, so the site is still up and nothing was put back. Its own line is above."; }
     CP_TASK_DOC="$(jq -c '.' "$TASK_PATH/task.json" 2>/dev/null)"
     [ -n "$CP_TASK_DOC" ] || die 3 "$who: $TASK_PATH/task.json could not be read after the site went down."
+    # A let-go leaves the site up, so its lines are the person's to read (gap row 360).
+    [ "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.adopted // false')" != true ] || printf '%s\n' "$said"
   fi
   while IFS= read -r p; do
     [ -n "$p" ] || continue
@@ -668,8 +695,10 @@ CP_RESTORE_TODO
 
 do_close() {
   local task_arg="" reason="" leaves="" captures_offered="" captures_skipped="" fid value
-  local observed_answers="" observed_skipped="" cid
+  local observed_answers="" observed_skipped="" cid person_words=""
   while [ "$#" -gt 0 ]; do
+    case "$1" in --observed-accepted|--captures-offered|--reason|--leave) person_words="$person_words$1 ${2:-}
+" ;; esac
     case "$1" in
       --observed-accepted)
         # A person's answer to one criterion a model observed through a browser (live-run row 104).
@@ -712,14 +741,15 @@ do_close() {
   cp_paths "close" "$task_arg"
   cp_load "close"
   cp_refuse_complete "close"
-  [ -z "$reason" ] || cp_require_person "close" "--reason" "a person decided to close without a passed review"
-  [ -z "$leaves" ] || cp_require_person "close" "--leave" "a person decided to leave a finding without a task"
-  [ -z "$captures_offered" ] || cp_require_person "close" "--captures-offered" "a person was offered the notes as plays"
-  [ -z "$observed_answers" ] || cp_require_person "close" "--observed-accepted" "a person accepted or rejected what a model observed"
-  # Unattended, nothing is offered and the record says why; a person names a play, a script never does.
-  [ "$CP_RUN_MODE" != "autonomous" ] || captures_skipped="autonomous"
+  [ -z "$reason" ] || cp_require_person "close" "--reason" "a person decided to close without a passed review" "$person_words"
+  [ -z "$leaves" ] || cp_require_person "close" "--leave" "a person decided to leave a finding without a task" "$person_words"
+  [ -z "$captures_offered" ] || cp_require_person "close" "--captures-offered" "a person was offered the notes as plays" "$person_words"
+  [ -z "$observed_answers" ] || cp_require_person "close" "--observed-accepted" "a person accepted or rejected what a model observed" "$person_words"
+  # Unattended with no answer record, nothing is offered and the record says why; a person names a
+  # play, a script never does.
+  [ "$CP_RUN_MODE" != "autonomous" ] || [ -n "$captures_offered" ] || captures_skipped="autonomous"
   # Unattended, nothing a model observed is put to anyone, and the record says so the same way.
-  [ "$CP_RUN_MODE" != "autonomous" ] || observed_skipped="autonomous"
+  [ "$CP_RUN_MODE" != "autonomous" ] || [ -n "$observed_answers" ] || observed_skipped="autonomous"
 
   # A parent refuses to close while a child is open, and the person closes the parent.
   local open_children
@@ -741,7 +771,8 @@ do_close() {
     undecided="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy == "nobody") | (.id + ": " + .detail) ] | join(" ")' 2>/dev/null)"
     local decide_route=""
     [ -z "$undecided" ] \
-      || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. A --reason here closes the task with every one of those decisions unmade."
+      || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. Or the run mode stays, and the main session writes those rows to $TASK_PATH/review/person-answer.json with step close. A --reason here closes the task with every one of those decisions unmade."
+    decide_route="$decide_route${CP_PERSON_ROUTE:+ $CP_PERSON_ROUTE A --reason here closes the task with those criteria unanswered.}"
     case "$CP_RUN_MODE" in
       autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}$decide_route" ;;
       *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it.$decide_route" ;;
@@ -806,9 +837,10 @@ CP_LEAVES2
   # Last of the refusals, because it takes the site down and commits.
   cp_restore_env_files "close"
 
+  # A person's answer record that passed a refusal is the person's word, so the person closed it.
   local closed_by record
   case "$CP_RUN_MODE" in
-    autonomous) closed_by="nobody" ;;
+    autonomous) [ -n "$TASK_ANSWER_MATCHED" ] && closed_by="person" || closed_by="nobody" ;;
     *)          closed_by="person" ;;
   esac
   record="$(jq -nc --arg task "$CP_TASK_ID" --arg today "$(date -u +%Y-%m-%d)" --arg verdict "$CP_REVIEW_VERDICT" \
@@ -849,6 +881,7 @@ CP_LEAVES2
       complete --project "$PROJECT_DIR" "$CP_TASK_ID" -- "$summary" 2>&1)" \
     || { printf '%s\n' "$said" >&2; die 3 "close: task complete refused $CP_TASK_ID after the body and the record were written. Run close again once the task script's own line above is answered."; }
   CP_STATE="$(jq -r '.state // ""' "$TASK_PATH/task.json" 2>/dev/null)"
+  task_answer_consume
 
   cp_print_summary "close" "$(jq -nc --arg closedBy "$closed_by" --arg reason "$reason" --arg body "$BODY_FILE" --arg record "$RECORD_FILE" \
     --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" \
@@ -892,6 +925,9 @@ do_step() {
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
+# A text argument may be @/<path>, read from that file (task-helpers.sh, text_args).
+text_args "$@"
+set -- ${TEXT_ARGS[@]+"${TEXT_ARGS[@]}"}
 ACTION="${1:-}"
 if [ "$ACTION" = "-h" ] || [ "$ACTION" = "--help" ]; then
   usage

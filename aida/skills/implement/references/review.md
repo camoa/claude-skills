@@ -84,7 +84,8 @@ Run:
 It refuses when a review record already exists for this order, unless the ledger never moved past
 `checks-passed`: a crash between writing the record and writing the ledger leaves that one state,
 and this call then finishes the write rather than refusing forever. It also refuses when the code
-path moved, or its tree is dirty, since the build record. And it refuses when the findings file
+path moved, or its tree is dirty, since the build record. A commit that another order's record
+holds, on that order's files alone, does not count as a move. And it refuses when the findings file
 named by `--findings` is missing, empty, or not the shape it reads. A finding citing neither a
 criterion nor a non-goal, or an id the contract does not hold, is recorded but never reaches a
 fixer.
@@ -195,7 +196,11 @@ ruling with no round, under Rulings below. It writes `implementation/brief-<orde
 - `reportPath`, `implementation/answers-<order id>-fix<round>.md`, and the order's diff budget;
 - the round number;
 - `headNow`, the code repository's own commit at the moment of this call, or the order's last
-  record when commits came after it, so the round holds them;
+  record when commits came after it, so the round holds them. A later commit that changes only
+  another order's files is that order's, so the round begins after each one that comes first. The
+  first round after a closed-order-defect reopens the order begins at the current commit, when
+  each later commit is in another order's record or only on the stopped order's files. A second
+  call for one round keeps the first brief's `headNow`;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
 It prints the brief's path, the report path and `headNow`. It prints one line per finding with its
@@ -207,11 +212,18 @@ for each finding whose fix scope names a file the order does not own. It stored 
 finding. `fix-brief` withholds those paths from the fixer. A person may grant one with `--allow`,
 one flag per path. The path joins the scope union and the brief records it under `allowedFiles`.
 The fixer's dispatch record carries it, and the owned-files check after the round accepts it.
-Unattended, `--allow` refuses (exit 100). A path the order already owns, a frozen test or a
-support file, or a path no open finding's fix scope names, refuses (exit 3). A finding whose
-whole fix scope is withheld is still handed over. The fixer reports it scope-insufficient in
-round one, and the ruling route below opens for it. When an `outsideOwned:` line printed, put it
-to the person before running `fix-brief`. Open with: "A review finding wants a change in a
+Unattended, `--allow` refuses (exit 100). A path the order owns needs no grant. When no fix
+scope names it, it joins the scope union in any round, and not `allowedFiles`. A finding with
+origin `repair` needs this, because its fix scope is the one file the stopped build named.
+Three paths refuse (exit 3):
+
+- a frozen test or a support file;
+- an owned path that a fix scope already names;
+- a path outside the order's files that no open finding's fix scope names.
+
+A finding whose whole fix scope is withheld is still handed over. The fixer reports it
+scope-insufficient in round one, and the ruling route below opens for it. When an
+`outsideOwned:` line printed, put it to the person before running `fix-brief`. Open with: "A review finding wants a change in a
 file this order does not own. Only you can allow that. Allow the file and the fixer may change
 it. Withhold it and the fixer reports the finding, and you rule on it after the round." Then
 name the finding and the files.
@@ -225,10 +237,9 @@ present. A commit that answers the verifier then gets a fresh verifier, not a ru
 present when the task's implement stage is interactive. A light task reads unattended until
 `task set-run-mode` sets it interactive. In
 that round `--allow` may name a path that no fix scope names, because the fixer's report names
-it. A path the order owns then joins the scope with no grant. A path another order owns
-refuses (exit 3). `fix-brief` opens the round only when the round can take every open finding.
-The ledger records it, and the order's allowed rounds rise by one. Otherwise `fix-brief`
-refuses (exit 54), and the message names what to rule or allow first. A second `fix-brief` call
+it. A path only another order owns refuses (exit 3). `fix-brief` opens the round only when the round
+can take every open finding. The ledger records it, and the order's allowed rounds rise by one.
+Otherwise `fix-brief` refuses (exit 54), and the message names what to rule or allow first. A second `fix-brief` call
 reuses the open repair round, so a mistyped `--allow` can be corrected. A second repair round
 never opens.
 
@@ -284,7 +295,20 @@ finding, and `clear-halt` is the person's way past. Its reason may not hold the 
 another, and a reason carrying it would forge one.
 
 The commit the round began from is `fix-brief`'s own `headNow`. Equal to the current commit, or
-not an ancestor of it, refuses (exit 71), the same rule `build-record` applies.
+not an ancestor of it, refuses (exit 71), the same rule `build-record` applies. One case is
+recorded with no commit: `fix-brief` handed the round to a fixer, and every open finding is named
+by `--scope-insufficient` or by a line `Outcome: <id>: already-correct` in the report. The round is spent, and the checks run at HEAD.
+The message for exit 71 names the findings that are neither. `fix-record` marks each
+already-correct finding with `alreadyCorrectInRound`. Its `alreadyCorrect:` line names them.
+The cited file must exist at HEAD. When it changed since the review, the verifier reads its
+cited code at HEAD and the report's run for it, and addressed closes the finding. So no ruling is
+needed for a finding that is real and already fixed. When it is unchanged since the review, the
+claim disputes the reviewer. An addressed reading then makes the finding pending for a person, and
+an unattended order halts. Each `--scope-insufficient` needs a line
+`Outcome: <id>: scope-insufficient` in the report, and the verifier may not read that finding
+addressed in that round (exit 52). A round with no commit addresses no check finding. With a person
+present, a finding the verifier read not-addressed at the cap goes to the repair round above.
+There the fixer can report it already correct with its run.
 A task site that is down refuses (exit 103) before any check runs, as build.md says for `build-record`.
 
 **`fix-record` refuses when the code repository's tree is not clean.** The fixer commits its own
@@ -349,8 +373,8 @@ Run:
 ```
 It refuses when the order is not at `fixed`, when it is halted, when nothing is open, or when this
 round is already verified. It refuses when HEAD is not where the fix record left it (exit 63). It writes `implementation/brief-<order id>-verify-<round>.json`. The
-brief holds the open findings the fixer received, the fix diff as a path, and the fixer's report as
-a path. It names the path the verdicts go to, `implementation/verify-<order id>-<round>.json`.
+brief holds the open findings the fixer received, the scope the fixer was given, the fix diff as a
+path, and the fixer's report as a path. It names the path the verdicts go to, `implementation/verify-<order id>-<round>.json`.
 Nothing else: not the original diff, not an earlier round's verdicts. It prints the brief's path, the three paths it
 names, and one line per finding.
 
@@ -465,7 +489,9 @@ Run:
 ```
 It refuses when an actionable finding is still open, or when the last fix round was never
 verified. It also refuses when the code repository's tree is not clean, or when HEAD is not where
-the last record left it. Nothing is open then, so no round or ruling can take the later commits.
+the last record left it. Another order's commits, as review-record reads them, do not count, and
+the range then ends at the last record. Nothing is open then, so no round or ruling can take the
+later commits.
 A person moves the branch back, and that work goes to a follow-up task, or runs `restart`. On success it writes `lastStep = "closed"` and the commit range the
 order produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`

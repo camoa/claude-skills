@@ -13,6 +13,9 @@ pass, and ask for each one only once.
 
 Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. A lens
 check names the low findings of one lens. The person confirms them, met, or rejects them, unmet.
+The guides check and the practices check can wait the same way when no guide body is on disk.
+Then the review's own search found no practice, or the reviewer named none it judged against.
+Ask whether any guide covers the task. When none does, the person judges the diff, met or unmet.
 
 A check whose id begins `decision-` is a decision a build left. Ask it in the
 words of `references/review.md` under the implement skill, under Rulings for a finding and under
@@ -43,17 +46,21 @@ person's word. A medium or high finding that cites no criterion still fails its 
 the person to rule it `wrong` or `deferred`. A lens check whose medium and high findings are all ruled
 then waits for the person, the way a lens check with low findings only does.
 
-The person answers met or unmet per criterion, from its rows. Their answer becomes one flag
-below. Autonomous, there is
-nobody to ask: each such criterion reads unanswered, no row flag is accepted, and the task gets no
-sign off. A run with nobody present cannot sign off a task carrying one person verified criterion.
+The person answers met or unmet per criterion, from its rows. When a criterion's verify clause
+names a command, wait until the person says the step before that check is done. Then run the
+command, and show its output with the question. Their answer becomes one flag below. Autonomous, there is
+nobody to ask: each such criterion reads unanswered, and the task gets no sign off. A run with
+nobody present cannot sign off a task carrying one person verified criterion. `close` names each
+one and its route. When the person answers, `close` runs again at the same commit with the rows.
+On a light or autonomous run, a row passes only through `review/person-answer.json` with step
+`close`, which only the main session writes.
 
 ## Check 1 joins on the test name
 
 A machine verified criterion reads met when its row state is confirmed and no failing test in check 8
-carries its id. It reads unmet when a failing test carries the id. It reads unanswered when the suite
-could not run. Implementation puts the criterion id at the end of each test's name, delimited, so the
-script compares strings. Do not re-derive that join by hand.
+is one it froze. It reads unmet when a failing test is one it froze. It reads unanswered when the
+suite could not run. The freeze record names the tests each criterion froze, so the script compares
+strings. Do not re-derive that join by hand.
 
 A suite reading not-needed reads the row state the same way a passing suite does. No order in the
 task runs a test, so no suite was ever going to name the criterion, and the build already confirmed

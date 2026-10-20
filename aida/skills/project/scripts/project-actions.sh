@@ -97,13 +97,15 @@ die() { printf 'project-actions: %s\n' "$2" >&2; exit "$1"; }
 usage() {
   cat <<'EOF' >&2
 usage: project-actions.sh create --name <name> --path <codePath> [--projects-home <dir>]
-                                  [--framework <fw>]...
+                                  [--framework <fw>]... [--worktree-base <dir>]
        project-actions.sh report
        project-actions.sh switch <name-or-path>
        project-actions.sh list [active|complete|archived]...
        project-actions.sh state <name-or-path> <active|complete|archived> -- <why...>
        project-actions.sh set-code-path <name-or-path> <newCodePath>
        project-actions.sh set-frameworks <name-or-path> <framework>...
+       project-actions.sh set-worktree-base <name-or-path> [<folder>]
+       project-actions.sh read-worktree-base <name-or-path>
        project-actions.sh git-init <name-or-path>
        project-actions.sh add-source <name-or-path> <kind> <folder|catalog>
        project-actions.sh recipe-source <projectFolder> <phase> <framework>
@@ -133,6 +135,8 @@ source "$COMMIT_LIB"
 source "$SOURCES_LIB"  # the one source walk, for recipe-source and agentic-source below
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh"
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/paths.sh"  # worktree_base_refusal, for worktree_base_value
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.
@@ -282,16 +286,30 @@ EOF
 
 # The one writer of a new project file. create and the version 5 pickup both call it, so the
 # initial shape lives here once. frameworks is written when $4 is a JSON array. When $4 is null
-# the field is absent, and the check names it as missing for its producer to fill. Sources,
+# the field is absent, and the check names it as missing for its producer to fill. worktreeBase is
+# written when $5 is given, the same way. Sources,
 # playbook subscriptions, surfaces and the task rule start empty or null.
 # ideal/project.md declares each of them lazily, the first time a later stage needs it.
 write_project_file() {
   local project_path="$1" code_path="$2" name="$3" fw_json="$4"
-  jq -n --arg codePath "$code_path" --arg name "$name" --argjson frameworks "$fw_json" '
+  jq -n --arg codePath "$code_path" --arg name "$name" --argjson frameworks "$fw_json" --arg wb "${5:-}" '
     {schemaVersion: 1, codePath: $codePath, name: $name}
     + (if $frameworks == null then {} else {frameworks: $frameworks} end)
     + {state: "active", sources: [], playbookSubscriptions: {}, surfaces: null, taskRule: null}
+    + (if $wb == "" then {} else {worktreeBase: $wb} end)
   ' > "$project_path/project.json"
+}
+
+# The value worktreeBase records (gap row 350): $1 in canonical form when given, else `..`, the
+# default, which paths.sh reads as the parent of the code path $2. Stops the script when
+# worktree_base_refusal refuses it, so nothing is written. $3 the action's own name. create and
+# set-worktree-base both ask here.
+worktree_base_value() {
+  local base="${1:-..}" why
+  [ "$base" = ".." ] || base="$(canon_path "$base")"
+  why="$(worktree_base_refusal "$base" "$2")"
+  [ -z "$why" ] || die3 "$3: $base is refused ($why). A task tree never sits at or under the code path, in another project or repository, or in a refused location $2. Nothing was changed."
+  printf '%s' "$base"
 }
 
 # Makes a project folder a repository with its first commit. It writes the ignore file when the
@@ -321,6 +339,24 @@ run_check() {
   return $?
 }
 
+# The check closes every action that writes project.json. It exits 6 on uncommitted work anywhere
+# in the folder, such as a stage's edits in progress. That made a write that landed read as a
+# failure. When the files the action wrote are committed, the action did its job, so this returns 0
+# with a note. A folder that is not a repository, or an own file the commit missed, keeps exit 6.
+# $1 the project folder, then the files the action wrote, relative to it.
+check_after_write() {
+  local project_path="$1" rc own
+  shift
+  run_check "$project_path"; rc=$?
+  [ "$rc" -eq 6 ] || return "$rc"
+  git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1 || return 6
+  # A git status that fails says nothing about the own files, so it keeps exit 6.
+  own="$(git -C "$project_path" status --porcelain -- "$@")" || return 6
+  [ -z "$own" ] || return 6
+  echo "NOTE: this action committed its own change. The uncommitted work listed above is not its own, and it was left as it is."
+  return 0
+}
+
 # The one name refusal, for every route that writes a registry row. $1 the name, $2 what to tell
 # the person when a row already holds it. Returns when the name is free, and stops the script
 # otherwise. The two outcomes stay apart. An unreadable store is not a name collision. Saying it
@@ -345,13 +381,14 @@ project_line() {
 # ------------------------------------------------------------------------------------------------
 
 do_create() {
-  local name="" code_path="" frameworks=() projects_home="$PROJECTS_HOME_DEFAULT"
+  local name="" code_path="" frameworks=() projects_home="$PROJECTS_HOME_DEFAULT" worktree_base=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --name) name="${2:?--name needs a value}"; shift 2 ;;
       --path) code_path="${2:?--path needs a value}"; shift 2 ;;
       --projects-home) projects_home="${2:?--projects-home needs a value}"; shift 2 ;;
       --framework) frameworks+=("${2:?--framework needs a value}"); shift 2 ;;
+      --worktree-base) worktree_base="${2:?--worktree-base needs a value}"; shift 2 ;;
       *) die3 "create: unrecognized argument: $1" ;;
     esac
   done
@@ -369,6 +406,11 @@ do_create() {
   esac
 
   code_path="$(canon_path "$code_path")"
+  # Without the option nothing is recorded: an unattended run uses the default, and the next attended
+  # project or task create asks once.
+  if [ -n "$worktree_base" ]; then
+    worktree_base="$(worktree_base_value "$worktree_base" "$code_path" create)" || exit 3
+  fi
 
   # The library's own reader, not a raw read of REGISTRY_FILE: registry__current tells a missing
   # store (fine, nothing registered yet) apart from a corrupt one (refuses and fails loudly), so
@@ -403,7 +445,7 @@ do_create() {
 
   mkdir -p "$project_path/records" || die3 "cannot create $project_path"
 
-  write_project_file "$project_path" "$code_path" "$name" "$(printf '%s\n' "${frameworks[@]}" | jq -R . | jq -s .)" \
+  write_project_file "$project_path" "$code_path" "$name" "$(printf '%s\n' "${frameworks[@]}" | jq -R . | jq -s .)" "$worktree_base" \
     || die3 "could not write $project_path/project.json"
 
   cat > "$project_path/project_state.md" <<EOF
@@ -452,13 +494,12 @@ EOF
 # ------------------------------------------------------------------------------------------------
 
 do_report() {
-  local cwd match
+  local cwd match project_path
   cwd="$(pwd -P)"
 
   if match="$(registry_resolve_by_directory "$cwd")"; then
     echo "CASE: 1"
     project_line "$match"
-    local project_path
     project_path="$(printf '%s' "$match" | jq -r '.path')"
     registry_touch_last_accessed "$project_path"
     run_check "$project_path"
@@ -473,7 +514,6 @@ do_report() {
     if [ -n "$match" ] && [ "$match" != "null" ]; then
       echo "CASE: 2"
       project_line "$match"
-      local project_path
       project_path="$(printf '%s' "$match" | jq -r '.path')"
       registry_touch_last_accessed "$project_path"
       run_check "$project_path"
@@ -745,7 +785,7 @@ do_state() {
     echo "OPEN TASKS: unknown. No task system has been built yet in this project, so nothing here can be listed as open or closed."
   fi
 
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -796,7 +836,7 @@ do_set_code_path() {
     "project" "code-path" project.json \
     || printf 'project-actions: the code-path change was written but not committed.\n' >&2
 
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
   local check_rc=$?
 
   # Exit 5 is the check's own safety refusal, the same one create undoes. A refused code path is
@@ -845,7 +885,41 @@ do_set_frameworks() {
     || printf 'project-actions: the frameworks were written but not committed.\n' >&2
 
   echo "FRAMEWORKS: $*"
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
+}
+
+# ------------------------------------------------------------------------------------------------
+# set-worktree-base: the folder that holds the project's group of task trees (gap row 350)
+# ------------------------------------------------------------------------------------------------
+
+# Records the folder as worktreeBase, or the default, the parent of the code path, when none is
+# given. It is the repair the check names when the field is missing. A refused folder writes
+# nothing. A tree that a task already records stays where it is, so this moves no tree.
+do_set_worktree_base() {
+  local target="${1:?set-worktree-base: a name or a path is required}" match project_path base
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+  base="$(worktree_base_value "${2:-}" "$(printf '%s' "$match" | jq -r '.codePath')" set-worktree-base)" || exit 3
+  write_project_field "$project_path" "could not update worktreeBase in $project_path/project.json" \
+    --arg b "$base" '.worktreeBase = $b'
+  commit_project "$project_path" "Set the worktree base to ${base}" "requested" "" "" "project" "worktree-base" project.json \
+    || printf 'project-actions: the worktree base was written but not committed.\n' >&2
+  echo "WORKTREE BASE: $base"
+  check_after_write "$project_path" project.json
+}
+
+# read-worktree-base: prints the recorded worktreeBase as an absolute path and exits 0. When the
+# project records none, prints the default, the parent of the code path, and exits 1, so the skill
+# asks once and offers that default.
+do_read_worktree_base() {
+  local target="${1:?read-worktree-base: a name or a path is required}" match project_path base rc=0
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 3; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+  base="$(jq -r '.worktreeBase // empty' "$project_path/project.json" 2>/dev/null)"
+  [ -n "$base" ] || { base=".."; rc=1; }
+  worktree_base_path "$base" "$(printf '%s' "$match" | jq -r '.codePath')"
+  printf '\n'
+  return "$rc"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -930,7 +1004,7 @@ do_add_source() {
     || printf 'project-actions: the source was written but not committed.\n' >&2
 
   echo "SOURCE: ${folder} provides ${kind}"
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1054,7 +1128,7 @@ do_subscription() {
   commit_project "$project_path" "$(printf '%s' "$op" | sed 's/^s/S/; s/^u/U/') $fw playbook $set_id" "requested" "" "" "project" "playbook" project.json \
     || printf 'project-actions: the subscription was written but not committed.\n' >&2
   echo "SUBSCRIPTIONS: $(jq -r --arg k "$fw" '$k + " " + ((.playbookSubscriptions[$k] // []) | join(" "))' "$project_path/project.json")"
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1084,7 +1158,7 @@ do_drop_retired() {
       || printf 'project-actions: the retired fields were dropped but not committed.\n' >&2
     echo "DROPPED: $present"
   fi
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1209,8 +1283,8 @@ do_task_rule() {
       "project" "task-rule" project.json \
       || printf 'project-actions: the task-rule field was written but not committed.\n' >&2
     echo "DECLINED: the task rule was offered for ${project_name} and will not be offered again."
-    run_check "$project_path"
-    return 0
+    check_after_write "$project_path" project.json
+    return
   fi
 
   # ideal/project.md, "Starting a new project": everything opted into can be set at any time, but
@@ -1281,7 +1355,7 @@ do_task_rule() {
     "project" "task-rule" project.json \
     || printf 'project-actions: the task-rule field was written but not committed.\n' >&2
 
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 do_task_rule_remove() {
@@ -1322,7 +1396,7 @@ do_task_rule_remove() {
   commit_project "$project_path" "Remove the task rule" "requested" "" "" "project" "task-rule" project.json \
     || printf 'project-actions: the task-rule removal was written but not committed.\n' >&2
 
-  run_check "$project_path"
+  check_after_write "$project_path" project.json
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1547,6 +1621,8 @@ case "$action" in
   state) do_state "$@" ;;
   set-code-path) do_set_code_path "$@" ;;
   set-frameworks) do_set_frameworks "$@" ;;
+  set-worktree-base) do_set_worktree_base "$@" ;;
+  read-worktree-base) do_read_worktree_base "$@" ;;
   git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
   recipe-source) do_recipe_source "$@" ;;

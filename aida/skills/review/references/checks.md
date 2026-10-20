@@ -22,9 +22,10 @@ framework. **These are review's only two lookups.** Name the role, and pass the 
 its own word: SKILL.md holds both rules. The role identifies a path and never opens the body. Never
 fetch a catalog address yourself, and never read a cached copy behind the navigator's back. The
 role reads a folder source this project configured itself first, so it wins over the catalog.
-When a folder answers for `test-execution`, the role also returns the catalog's copy, or the
-lookup's word. Pass it as `--catalog-recipe`. A project copy behind the catalog's copy becomes a
-catalog note, because the copy can fall behind after preconditions compared them.
+When a folder answers for `test-execution` or `review`, the role also returns the catalog's copy,
+or the lookup's word. Pass the `test-execution` one as `--catalog-recipe` and the `review` one as
+`--catalog-check-recipe`. A project copy behind the catalog's copy becomes a catalog note, because
+the copy can fall behind after preconditions compared them.
 
 Then invoke the tool skill with `require --advisory <path>` for each `review` recipe path, from
 the worktree. Read its `TOOLING:` lines to the person, and go on whatever they say. A missing tool
@@ -39,6 +40,7 @@ Run, with one `--recipe` and one `--check-recipe` per framework:
   --check-recipe <framework>=<path to the review recipe> \
   --lookup-failed <framework>=<no-recipe|listing-unreachable|fetch-failed> \
   --catalog-recipe <framework>=<the catalog's copy or the lookup's word, when a folder answered> \
+  --catalog-check-recipe <framework>=<the same, for the review recipe> \
   --value <name>=<value>...
 ```
 `--recipe` names the `test-execution` recipe, for its `## Test commands` block, which carries the
@@ -63,6 +65,14 @@ person wants more, and say they can open it in an editor.
 **The check block is not fixed at three rows.** The script runs every row the `review` recipe
 declares, including a duplication tool or a design-metrics tool, and records one check row each. The
 reviewer reads those rows before it judges, so do not re-derive a measurement here.
+
+**A change no tool row reads gets a catalog note.** A row that names `extensions` reads only those
+files. When no row read a file this change touched, every tool row reads undeclared, and the note
+names the files. A project adds a tool for them as a row with its own id and `extensions` in its
+own copy of the review recipe. Review then runs that row like any other. The baseline keeps a
+result for every row by its id, so a failing added row subtracts as the three floor rows do. A
+task past preconditions adopts the copy with `implement-actions.sh recipe-refresh --check-recipe`,
+or every check stops at exit 73.
 
 **The tool rows leave the frozen tests out, as the build's do.** The frozen tests are the reference
 this stage judges against, and no role after the freeze may change them. A row's detail names each

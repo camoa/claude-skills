@@ -61,6 +61,13 @@
       "$ref": "#/$defs/toolResult",
       "description": "What the security command the caller supplied with --security found across the scope above. Undeclared when no --security flag was given, and read later the same way codingStandards is."
     },
+    "toolRows": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/toolResult"
+      },
+      "description": "Every other row the check recipes declare, such as duplication or a row a project added, keyed by its row id and read later the same way codingStandards is. Review subtracts a failing row's result here. A baseline taken before this field existed holds none, and review reads such a row as having no baseline."
+    },
     "checkRecipes": {
       "type": "array",
       "default": [],

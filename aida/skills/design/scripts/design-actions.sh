@@ -39,7 +39,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] \
+#                        [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] [--keep-choices] \
 #                        [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path> [--shared]
@@ -54,7 +54,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh remove         <task_folder> --id <woId> --reason <text> [--merged-into <woId>]
 #   design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
 #   design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
-#   design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] --cite <source>
+#   design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] [--criterion <cN>] --cite <source>
 #   design-actions.sh verify         <task_folder> --id <woId> --check <text> [--kind <kind>] --cite <source>
 #   design-actions.sh verify         <task_folder> --id <woId> --clear
 #   design-actions.sh render     <task_folder> --id <woId>
@@ -180,7 +180,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      or `read-guide` found design-guides-read.json already on disk and not valid JSON; or
 #      `update` was given --reasoning with --append-reasoning or --strike-reasoning; or
 #      --strike-reasoning named no paragraph that is there and live; or --absence-reviewed named
-#      no done-when row; or `close` was given
+#      no done-when row; or --keep-choices found no pair on the order; or `close` was given
 #      --critique-outcome with no finished critique file to record it beside, or unattended; or
 #      `close` found something that is not a file where a critique file has to move; or `verify`
 #      was given no single mode, a recipe with no `## Verifier` or nothing in it to carry, an
@@ -213,6 +213,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   8  an unattended `close` found a disposition made unattended, or one only a paragraph records,
 #      that records/disposition-<order>.json does not confirm: no value for the candidate, or
 #      another value (gap row 293). One line per such disposition says which, and what to do.
+#   9  `check` or `close` found two names in backticks that an order's interface joins with `or`,
+#      and that `update --keep-choices` did not keep (gap row 345). Such a pair is often a choice
+#      the builder makes, and the build's interface check wants both names in its record. Each
+#      order prints as `<wo> <a> or <b>`. Rewrite a choice as plain text with `update --interface`,
+#      or keep the order's pairs. `check` reports it only when the design check itself is clean.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
@@ -264,6 +269,7 @@ die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
 die6() { printf 'design-actions: %s\n' "$1" >&2; exit 6; }
 die7() { printf 'design-actions: %s\n' "$1" >&2; exit 7; }
 die8() { printf 'design-actions: %s\n' "$1" >&2; exit 8; }
+die9() { printf 'design-actions: %s\n' "$1" >&2; exit 9; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { printf 'design-actions: %s\n' "$1" >&2; exit 79; }
 
@@ -286,7 +292,7 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] \
+                                         [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] [--keep-choices] \
                                          [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path> [--shared]
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
@@ -299,7 +305,7 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh remove         <task_folder> --id <woId> --reason <text> [--merged-into <woId>]
        design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
        design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
-       design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] --cite <source>
+       design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] [--criterion <cN>] --cite <source>
        design-actions.sh verify         <task_folder> --id <woId> --check <text> [--kind <kind>] --cite <source>
        design-actions.sh verify         <task_folder> --id <woId> --clear
        design-actions.sh render         <task_folder> --id <woId>
@@ -508,6 +514,7 @@ open_summary_of() {
         ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
         ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
         ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person, and the contract does not say the task has no automated tests: update --proof tests"),
+        ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
         ((.graph.ordersNotAfterSkeleton // [])[] | "order " + . + " does not come after wo1, the walking skeleton: add wo1 to its dependsOn"),
@@ -645,6 +652,33 @@ unaccounted_findings() {
       done
 }
 
+# `choicePairs`, read from a work order document: each pair of backticked interface names joined
+# by `or`, with at most two words after it, as `<a> or <b>` (gap row 345). Such a pair is often a
+# choice the builder makes, such as `os.DirEntry` or an explicit `stat`. The build's interface
+# check wants both names in the builder's record, so a builder that takes one option stops.
+CHOICE_PAIRS_JQ='
+def choicePairs:
+  ((.interface // "") | if type == "string" then split("`") else [] end) as $p
+  | ($p | length) as $n
+  | (if $n % 2 == 1 then $n - 2 else $n - 3 end) as $last
+  | [ range(1; $last - 1; 2) as $i
+      | select(($p[$i] | length) > 0 and ($p[$i + 2] | length) > 0)
+      | select($p[$i + 1] | test("^,?\\s+or\\s+([a-z]+\\s+)?([a-z]+\\s+)?$"))
+      | $p[$i] + " or " + $p[$i + 2] ]
+  | unique;
+'
+
+# One line per order whose interface holds a choice pair that `update --keep-choices` did not
+# keep: `<wo> <pair>[, <pair>]`. A kept pair is held by its text, so a pair that changes is named
+# again. Prints nothing when every pair is kept or none exists.
+open_choices() {
+  local f
+  find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+    | while IFS= read -r f; do jq -r "$CHOICE_PAIRS_JQ"'
+        . as $wo | choicePairs - ($wo.choicesKept // []) | select(length > 0)
+        | $wo.id + " " + join(", ")' "$f" 2>/dev/null; done
+}
+
 # Prints $1, a work order document, with $2 added to its `reasoning` as a new paragraph. The
 # paragraph follows a blank line, or is the whole field when it was empty. `dispose` and
 # `update --append-reasoning` both write this way, so an earlier paragraph is never lost
@@ -657,7 +691,8 @@ reasoning_appended() {
 # <candidate>` line each. The order's `dispositions` list comes first. Then each candidate a live
 # `Candidate <c> (` paragraph names and the list does not, with its last paragraph's outcome and the
 # run mode `unrecorded`. An order disposed before the list existed holds only paragraphs, and
-# those are counted too (gap row 293).
+# those are counted too (gap row 293). The candidate goes out raw, never through @tsv, which
+# writes a backslash as two. The callers compare it to the text the confirmer keyed (gap row 387).
 standing_dispositions() {
   jq -r '
     ((.dispositions // []) | map(.candidate)) as $listed
@@ -667,7 +702,7 @@ standing_dispositions() {
             | select(.candidate as $c | $listed | index($c) | not) ]
           | reduce .[] as $p ({}; .[$p.candidate] = $p.disposition)
           | to_entries | map({candidate: .key, disposition: .value, runMode: "unrecorded"})))[]
-    | [.disposition, .runMode, .candidate] | @tsv' "$1"
+    | "\(.disposition)\t\(.runMode)\t\(.candidate)"' "$1"
 }
 
 # The sha256 of the file at $1, or nothing when it cannot be read. The caller resolves the hash
@@ -936,12 +971,16 @@ do_create() {
 # --absence-reviewed <n> stores the text of done-when row n, counted from 1, in `absenceReviewed`.
 # `check` stops printing that row under `absenceJoined:` (gap row 237). The text is the key, so a
 # row whose text changes flags again. Each write drops the entries no row holds any more.
+# --keep-choices stores every choice pair the order's interface holds now in `choicesKept`, after
+# any --interface in the same call. `check` and `close` stop refusing on those pairs (gap row 345).
+# Each name of a kept pair must then appear in the builder's record. A pair whose text changes is
+# named again. The order has to hold a pair.
 # ------------------------------------------------------------------------------------------------
 
 do_update() {
   local id="" title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
   local interface="" reasoning="" append_reasoning="" strike_n="" absence_n="" diff_budget="" surfaces_json='[]' proof=""
-  local set_absence=false set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
+  local set_keep=false set_absence=false set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
   local set_interface=false set_reasoning=false set_append=false set_strike=false set_diffbudget=false set_surfaces=false set_proof=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -978,6 +1017,7 @@ do_update() {
       --absence-reviewed)
         need_value "update" "--absence-reviewed" "$#" "${2:-}"
         absence_n="$2"; set_absence=true; shift 2 ;;
+      --keep-choices) set_keep=true; shift ;;
       --diff-budget)
         need_value "update" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; set_diffbudget=true; shift 2 ;;
@@ -1039,6 +1079,11 @@ do_update() {
   fi
   if [ "$set_reasoning" = "true" ]; then
     doc="$(printf '%s' "$doc" | jq --arg v "$reasoning" '.reasoning = $v')"
+  fi
+  if [ "$set_keep" = "true" ]; then
+    printf '%s' "$doc" | jq -e "$CHOICE_PAIRS_JQ"'choicePairs | length > 0' >/dev/null \
+      || die3 "update: $id's interface joins no two names in backticks with or, so it has no pair to keep"
+    doc="$(printf '%s' "$doc" | jq "$CHOICE_PAIRS_JQ"'.choicesKept = choicePairs')"
   fi
   if [ "$set_strike" = "true" ]; then
     local live
@@ -1466,10 +1511,11 @@ verify_flush_entry() {
 }
 
 do_verify() {
-  local id="" recipe="" run="" check="" cite="" pass="" kind="" binding=true clear=false modes=0
+  local id="" recipe="" run="" check="" cite="" pass="" kind="" criterion="" binding=true clear=false modes=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)     need_value "verify" "--id" "$#" "${2:-}"; id="$2"; shift 2 ;;
+      --criterion) need_value "verify" "--criterion" "$#" "${2:-}"; criterion="$2"; shift 2 ;;
       --recipe) need_value "verify" "--recipe" "$#" "${2:-}"; recipe="$2"; modes=$((modes + 1)); shift 2 ;;
       --run)    need_value "verify" "--run" "$#" "${2:-}"; run="$2"; modes=$((modes + 1)); shift 2 ;;
       --check)  need_value "verify" "--check" "$#" "${2:-}"; check="$2"; modes=$((modes + 1)); shift 2 ;;
@@ -1484,6 +1530,7 @@ do_verify() {
   require_wo_id_arg "verify" "$id"
   [ "$modes" -eq 1 ] || die3 "verify: pass exactly one of --recipe, --run, --check or --clear"
   [ -z "$pass" ] || [ -n "$run" ] || die3 "verify: --pass belongs to --run"
+  [ -z "$criterion" ] || [ -n "$run" ] || die3 "verify: --criterion belongs to --run. Only a command's output proves a criterion with no test"
   [ -z "$kind" ] || [ -n "$run$check" ] || die3 "verify: --kind belongs to --run and --check. A recipe's entries carry their own"
   verify_kind_ok "verify" "$kind"
   [ "$binding" = "true" ] || [ -n "$recipe" ] || die3 "verify: --not-binding belongs to --recipe. A research line is never binding"
@@ -1545,6 +1592,15 @@ do_verify() {
       verify_pass_ok "verify" "$pass"
       refuse_if_unsafe "design-actions" "--run" "$run" || die3 "verify: the run line above is refused"
       entry="$(jq -nc --arg r "$run" --arg p "$pass" --arg c "$cite" '{run: $r, pass: $p, cites: $c, binding: false}')"
+      if [ -n "$criterion" ]; then
+        # The freeze reads the link only on a machine criterion this order owns, so the writer
+        # refuses any other rather than leave a link nothing reads.
+        [ "$(jq -r --argjson wo "$doc" --arg c "$criterion" '
+            ([ (.criteria // [])[]? | select(type == "object") | select(.verifiedBy == "machine") | .id ] | index($c) != null)
+            and (($wo.criteriaOwned // []) | index($c) != null)' "$ALIGNMENT_FILE" 2>/dev/null)" = "true" ] \
+          || die3 "verify: $criterion is not a machine-verified criterion $id owns. --criterion names one, and update --criteria-owned comes first"
+        entry="$(printf '%s' "$entry" | jq -c --arg k "$criterion" '. + {criterion: $k}')"
+      fi
     else
       entry="$(jq -nc --arg k "$check" --arg c "$cite" '{check: $k, cites: $c, binding: false}')"
     fi
@@ -1872,6 +1928,9 @@ do_check() {
   local unaccounted
   unaccounted="$(unaccounted_findings)"
   [ -z "$unaccounted" ] || [ "$verdict" -ne 0 ] || verdict=7
+  local choices
+  choices="$(open_choices)"
+  [ -z "$choices" ] || [ "$verdict" -ne 0 ] || verdict=9
   lines="$(wc -l <"$CHECK_FILE" | tr -d '[:space:]')"
   echo "action: check"
   echo "status: $verdict"
@@ -1961,6 +2020,11 @@ do_check() {
   else
     echo "interfaceShaped: none"
   fi
+  if [ -n "$choices" ]; then
+    echo "interfaceChoice: $(printf '%s\n' "$choices" | paste -s -d ';' - | sed 's/;/; /g') | each pair of names in backticks is joined by or, so it may be a choice the builder makes. The build's interface check wants both names in the builder's record. Write a choice as plain text with update --interface. When each name must exist, keep the order's pairs with update --keep-choices"
+  else
+    echo "interfaceChoice: none"
+  fi
   # The calls an order's done-when rows and tests make that nothing it declares names (gap row
   # 231). The test author may not read source, so a signature the brief lacks sent it to a runtime.
   # A `name()` token is looked for as `name(` in the order's interface, its reuses and the
@@ -1998,6 +2062,8 @@ do_check() {
   if [ "$verdict" -eq 7 ]; then
     printf '%s\n' "$unaccounted" | sed 's/^/unaccounted: /'
     echo "next: account for each finding above, cited by the order it affects or set aside with a reason"
+  elif [ "$verdict" -eq 9 ]; then
+    echo "next: answer each pair under interfaceChoice, as plain text with update --interface or kept with update --keep-choices"
   elif [ "$verdict" -ne 0 ]; then
     echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
   elif task_is_light "$TASK_PATH"; then
@@ -2033,10 +2099,7 @@ do_close() {
       --recipe-path)   need_value "close" "--recipe-path" "$#" "${2:-}";   fit_path="$2"; shift 2 ;;
       --recipe-reason) need_value "close" "--recipe-reason" "$#" "${2:-}"; fit_reason="$2"; shift 2 ;;
       --no-recipe)     no_recipe=true; shift ;;
-      --approve-runs)
-        [ "$RUN_MODE" != "autonomous" ] \
-          || die3 "close: --approve-runs is a person's yes to the commands research wrote, and an autonomous close has nobody to give it"
-        approve_runs=true; shift ;;
+      --approve-runs) approve_runs=true; shift ;;
       --critique-outcome)
         need_value "close" "--critique-outcome" "$#" "${2:-}"
         is_blank "$2" && die3 "close: --critique-outcome must not be blank"
@@ -2152,11 +2215,30 @@ $wo_id, $cand, $disp: the confirmer answered $got. Dispose it again with --verdi
     || die7 "close: a research finding is in no work order's findings. Account for each one with account, cited or set aside with a reason:
 $unaccounted"
 
+  local choices
+  choices="$(open_choices)"
+  [ -z "$choices" ] \
+    || die9 "close: an order's interface joins two names in backticks with or, and the build's interface check wants both in the builder's record. Write a choice as plain text with update --interface, or keep the order's pairs with update --keep-choices:
+$choices"
+
   # A run line that is not binding was written by a model from research, and only a person stands
   # between it and the worktree. The person approves such lines at this close, the design's
   # approval, and the stamp lands on each entry before the hash covers it. A line with no stamp
   # never runs: the build hands it to the reviewer as a check.
-  local wo_file approved_count=0 n_approved
+  # An autonomous close has nobody to give that approval. A person's answer, held as a record,
+  # stands in (gap row 357): person-answer.json in the task folder, not under design/, which the
+  # hash reads. It holds step close, no order, and as its answer each line this close would stamp,
+  # one per line, as the refusal lists them (gap row 370).
+  local wo_file approved_count=0 n_approved answer_file="$TASK_PATH/person-answer.json" to_stamp
+  if [ "$approve_runs" = true ] && [ "$RUN_MODE" = "autonomous" ]; then
+    to_stamp="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
+      | while IFS= read -r wo_file; do
+          jq -r '(.verify // [])[] | select(has("run") and .binding == false and (has("approved") | not)) | .run' "$wo_file"
+        done)"
+    task_person_answered "$answer_file" "$TASK_PATH" "close" "" "$to_stamp" \
+      || die3 "close: --approve-runs is a person's yes to the commands research wrote, and an autonomous close has nobody to give it. Or the main session writes the person's answer to $answer_file: step close, order empty, and as its answer these lines, one per line:
+$to_stamp"
+  fi
   if [ "$approve_runs" = true ]; then
     while IFS= read -r wo_file; do
       [ -n "$wo_file" ] || continue
@@ -2169,6 +2251,7 @@ $unaccounted"
       approved_count=$((approved_count + n_approved))
     done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort)
     echo "approvedRuns: $approved_count"
+    task_answer_consume
   fi
 
   local hash
@@ -2316,7 +2399,7 @@ $unaccounted"
 #
 # Each call also writes the outcome to the order's `dispositions`, one entry per candidate.
 # Unattended, it prints `confirmFile:`, the order's verdict file, which maps each candidate to the
-# confirmer's value. An unattended `close` counts the dispositions against that file, because one
+# confirmer's value, and `worktree:`, where the confirmer reads the cited files (gap row 356). An unattended `close` counts the dispositions against that file, because one
 # confirmer once judged the last of six paragraphs and the other five stood (gap row 293).
 #
 # The table. Rows are tried in order and the first that applies decides. Extend is the downgrade
@@ -2413,7 +2496,7 @@ do_dispose() {
   fi
   # What stood for this candidate before this call, read before the write below.
   local before verdict_file held
-  before="$(standing_dispositions "$file" | awk -F'\t' -v c="$candidate" '$3 == c { print $1 }')"
+  before="$(standing_dispositions "$file" | c="$candidate" awk -F'\t' '$3 == ENVIRON["c"] { print $1 }')"
   doc="$(printf '%s' "$doc" | jq --arg c "$candidate" --arg o "$outcome" --arg m "$RUN_MODE" '
     {candidate: $c, disposition: $o, runMode: $m} as $e
     | .dispositions = (.dispositions // [])
@@ -2431,7 +2514,10 @@ do_dispose() {
   echo "DISPOSED: $file"
   echo "proposed: $verdict"
   echo "disposition: $outcome"
-  [ "$RUN_MODE" != "autonomous" ] || echo "confirmFile: $verdict_file"
+  if [ "$RUN_MODE" = "autonomous" ]; then
+    echo "confirmFile: $verdict_file"
+    echo "worktree: $(jq -r '.worktree.path // "none"' "$TASK_PATH/task.json" 2>/dev/null)"
+  fi
   echo "reuses: $(printf '%s' "$doc" | jq -r '(.reuses // []) | length')"
   wo_summary "$doc"
   render_wo "$id"
@@ -2512,6 +2598,9 @@ do_distill() {
 # Dispatch
 # ------------------------------------------------------------------------------------------------
 
+# A text argument may be @/<path>, read from that file (task-helpers.sh, text_args).
+text_args "$@"
+set -- ${TEXT_ARGS[@]+"${TEXT_ARGS[@]}"}
 ACTION="${1:-}"
 if [ "$ACTION" = "-h" ] || [ "$ACTION" = "--help" ]; then
   usage

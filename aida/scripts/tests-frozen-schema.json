@@ -51,6 +51,11 @@
       "default": "tests",
       "description": "Copied from the frozen work order. `gate` says this unit froze no test on purpose: its deliverable is exported configuration, and its build runs the implement recipe's `## Configuration gate` lines as its own check in place of order-tests (live-run row 65). `record` says the same for a unit whose deliverable is a document in the task folder: no test, `rows` empty unless a person-verified criterion adds a checklist, and the one row it owes, the done-when judgement from `--row <unit_id>=...`, sits on the ledger's order entry (nyc defect 17). `observe` says the unit froze no test and no row: a model judges its done-when rows against its surfaces after the build, and `rows` holds only the checklist rows of its person-verified criteria (live-run row 104). `confirm` says the same for a code unit of a task with no automated tests: no test and no row, and a person confirms its done-when rows at review (gap row 196). Absent on a record written before this field existed, which reads as tests."
     },
+    "freezeCommits": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+      "description": "Every commit a freeze of this unit made: this one when it committed, and each one the record it replaced held. `commit` is HEAD whether or not the freeze committed, so a restart reads this list to tell a freeze from another commit. The freeze subject names no AIDA term, so no reader rests on it (live-run row 374). Absent on a record written before this field existed, which reads as `commit` and the retakenFrom commit when `proof` is tests, and as empty otherwise."
+    },
     "retakenFrom": {
       "type": "object",
       "additionalProperties": false,
@@ -138,7 +143,7 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "The test's own name, as the `--test` flag named it. Checked to carry, at its own end, the criterion id (or ids, chained from the right) it claims, or the unit's own id on the doneWhen row, so a person or a later step can tell what a test is meant to prove without opening the file."
+          "description": "The test's own name, as the `--test` flag named it. The row this entry sits in says what the test proves, so the name follows the test-authoring recipe and need not carry an AIDA id (live-run row 374)."
         },
         "sha256": {
           "type": "string",

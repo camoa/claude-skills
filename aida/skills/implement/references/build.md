@@ -39,7 +39,7 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-brief "<task_folder>" <order id>
 ```
 
-It reads the frozen copy and the frozen tests. It writes eleven things to
+It reads the frozen copy and the frozen tests. It writes twelve things to
 `implementation/brief-<order id>-build.json`:
 
 - this order's own record, with the files it owns and, under `findings`, the research findings
@@ -63,11 +63,22 @@ It reads the frozen copy and the frozen tests. It writes eleven things to
   whose proof is `record`;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null;
 - `beforeLookPath`, on an order whose proof is `observe` only: the folder the before-look goes
-  in, `implementation/observed-<order id>-before/`.
+  in, `implementation/observed-<order id>-before/`;
+- `deniedReads`, present only when the order's own text names a path the implementer's dispatch
+  denies: another order's owned file. The deny stands. Do not tell the implementer to read one.
+  The summary's `next` then asks a person to rule first. A file outside the code path that an
+  order this one depends on owns is never denied, so a record it reads is not listed.
 
 It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
 and counts, never the brief. The allowed count is two unless a person has granted this order one more; see
 `references/finish.md`. It is the order's own recorded allowance, never the constant alone.
+
+**An order with nothing left to write gets no implementer.** Every file it owns is a frozen test or
+support file, and every frozen test locks in, so its freeze commit holds the work. A fixture repair
+is one, in `references/tests.md`. On its first attempt `build-brief` marks the brief
+`nothingToWrite`, writes the report's stop and deviation lines and the declared interface as the
+interface record, and its `next` says so. Dispatch nothing. Run `build-record` below with
+`--started-at` as `headNow`, the freeze commit, which `build-record` reads as the attempt's range.
 
 **No role writes a file whose name holds "report".** Claude Code refuses that write from a
 subagent. So the implementer's and the fixer's files are named `answers-*`.
@@ -148,8 +159,8 @@ when code was committed after it. `build-record` refuses it (exit 105), records 
 attempt. It names each commit made after the attempt began, and the person reverts or keeps them
 before the next build. Interactive puts the stop to the person,
 opening with: "The builder stopped instead of working around something, and only you may change
-it. It says a test is wrong, the interface does not fit, it needs a file it does not own, or its
-attempts ran out.
+it. It says a test is wrong, a done-when row is wrong, the interface does not fit, it needs a file
+it does not own, or its attempts ran out.
 Repair that and the next attempt continues. Leave it and this unit of work stays stopped." Then
 say in plain words
 what the builder's report names. The person, or design, adds a file the unit needs:
@@ -183,6 +194,14 @@ open with: "A finished unit of work had a defect, and the next unit found it. It
 repairs it, and a reviewer checks the repair and where the defect lies. Nothing needs your
 decision unless the reviewer finds the defect elsewhere." Then name the file and the reopened
 order.
+
+**A done-when row that cannot hold is no defect, so it never reopens an order.** The stop line
+reads `Stop: row-wrong: <row number>: <the evidence>`. `build-record` stops as at any stop
+(exit 105), and its message quotes that row from the snapshot. The person rules on the row. A
+wrong row is reworded in design, and design closes again. Then `start` halts the order for
+design drift, and `restart` answers that halt. A row that stands goes back to the builder.
+Unattended, the order halts, and the halt quotes the row. `clear-halt` and `restart` refuse on an
+autonomous run (exit 68), so a person first sets the task to interactive.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
@@ -293,6 +312,11 @@ Equal to the code repository's own current commit, or not an ancestor of it, ref
 either makes the range this attempt claims false. The build record keeps this attempt's range
 only. Review and close read the order's range from the freeze, so a second attempt that changes
 one line is reviewed with the code the first attempt wrote.
+One equal commit is not refused. When it is this order's own freeze commit and every frozen test
+locks in, the freeze commit holds the order's work. A tests order whose deliverable is its test
+file is this case. So is a code order whose tests all pass on the code that is there already, and
+its range then holds its test files alone. The range then starts at the parent of the freeze commit, and review and close
+read it from there.
 
 **`build-record` refuses when the code repository's tree is not clean.** The implementer commits
 its own work before it returns. A dirty tree means that commit did not happen. This attempt is not
@@ -406,14 +430,18 @@ Run the checks again over the recorded range instead:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-recheck "<task_folder>" <order id> \
   [--interface <path to the interface record>] \
-  --test-recipe <framework>=<path to the test-execution recipe> \
-  --check-recipe <framework>=<path to the review recipe> \
+  [--test-recipe <framework>=<path to the test-execution recipe>]... \
+  [--check-recipe <framework>=<path to the review recipe>]... \
   [--implement-recipe <framework>=<path to the implement recipe>]... \
   [--value <name>=<value>]... \
   [--nothing-ran <literal substring>]
 ```
 The recipe flags and `--interface` are `build-record`'s. The range and the report path are read
-from the build record, so neither is passed. The interface record is read again from its file,
+from the build record, so neither is passed. A recipe flag left out is taken from its record:
+the test-execution recipe and a gate order's implement recipe from `preconditions.json`, the
+review recipe from `baseline.json`. The `filledFromRecords:` line names each flag taken. A flag
+that names another path than its record refuses (exit 91), and nothing runs. Pass the recorded
+path, or leave the flag out. The interface record is read again from its file,
 so an amended record is what the check reads. No implementer is dispatched and no attempt is
 spent. The `next:` line offers this route beside `build` when the last attempt was stopped by
 the tool rows, owned-files or interface-record alone. When interface-record is among them, the
@@ -457,7 +485,8 @@ This step runs all eight deciding checks. The record holds every one.
   own `verify` run entries run first, then the `## Configuration gate` lines of the implement
   recipe. The worse verdict stands. The first line that does not pass is named, with its
   output. A placeholder given several `--value` entries runs its line once per value. It reads
-  unknown when the task records no environment. An order with no verify lines also reads
+  unknown when the task records no environment. `task environment up` records a site the
+  worktree already runs, with no bring-up. An order with no verify lines also reads
   unknown when no `--implement-recipe` was passed, or when that recipe carries no such block.
   An order with verify lines runs them alone then, and the detail says the block did not run.
   A verify line that is not binding runs only when the person approved it at the design close.

@@ -25,6 +25,12 @@ skill. Stop; there is nowhere to act.
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
 
+`implement-actions.sh` takes a text value from a file. Write the text with the Write tool in the
+session's scratchpad folder. With no scratchpad, write it in the task folder, and delete it after
+the call. Then pass `@/<absolute path>` as the value. In a value such as `<id>=<reason>`, the path
+follows the `=` or the `::`. Use this for a text that names a command, such as git. Claude Code
+refuses a command whose quoted text names git when the session works in a worktree.
+
 ## Read what is already there
 
 Run:
@@ -201,6 +207,14 @@ that hold it. The refusal names the record's age when it opened over a day ago, 
 that never returned leaves one.
 `build-record` and `fix-record` refuse too while a record for their order is open.
 
+**Open the dispatch record just before the Agent call**, never ahead of a question to the person.
+The answer can change the brief, and the open record then blocks the record steps. A record whose
+role was never dispatched closes with `dispatch-close "<task_folder>" --not-sent`. That close
+spends no resume. It refuses when one of these shows that a role may have run. A fixer's or test
+author's report exists. Another role's file is newer than the record. A commit is newer than the
+record, in the code path or in a record order's files. A fresh `dispatch-open` refuses while a fixer's finished
+report waits for `fix-record`. Run `fix-record` first, or `fix-brief` again for a changed round.
+
 **A role the runtime stops at its turn limit is resumed once.** This holds for every role this
 skill dispatches. An implementer whose order's diff budget starts with `large` is resumed twice.
 The script reads that word from the frozen order. The signal is the runtime's own mark that the
@@ -208,8 +222,12 @@ role stopped at its turn limit. The script also sees it for the reviewer, the ro
 implementer. A plain close refuses (exit 111) when the file the role writes is missing. That is
 the findings or verdicts file the brief names, the row-checker's `row-check-<order id>.json`, or
 the implementer's answers file, which also needs its stop line. The fixer and the test author end
-the report their brief pins with `Report: complete`. A plain close whose report
-lacks that line takes the step below itself (exit 112). After a 112, do not close again: resume
+the report their brief pins with `Report: complete`. A fixer's report also gives each finding an
+`Outcome:` line, and a `Ran:` line with its output when the finding is fixed or already correct.
+A plain close whose report lacks one of these lines takes the step below itself (exit 112).
+The first time a fixer's report misses an outcome or run line, or its fix brief is missing, the
+112 spends no resume, with or without `--no-report`, because the fixer finished. Resume it by
+message to add the lines. A second such fault spends a resume. After a 112, do not close again: resume
 the agent. A `--no-report` close after a 112 spends a resume. Add `--no-report` only on the
 runtime's mark. A role can finish before the runtime marks it stopped. If its file passes, the
 close says so and removes the record, and the role is not resumed. Otherwise the record stays

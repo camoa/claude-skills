@@ -12,11 +12,23 @@
 #   normalize_abs <path>        collapses "." and ".." textually, drops a trailing slash
 #   resolve_against <p> <base>  prints p when it is absolute, base/p when it is not
 #   is_under <path> <root>      true when path is root itself or falls under it
-#   dispatch_record_for <project path> <dir> [<agent type>]
+#   path_refusal <path>         prints why the path may not be a code path, or nothing
+#   worktree_base_refusal <base> <codePath>
+#                               prints why the folder may not hold the task trees, or nothing
+#   worktree_base_path <base> <codePath>
+#                               prints the base as an absolute path, read against the code path
+#   dispatch_record_for <project path> <dir> [<agent type>] [<session id>]
 #                               sets DISPATCH_RECORD to the open dispatch record of the task whose
 #                               codePath holds dir, else to the one open record whose role is the
 #                               agent type, or empty, and DISPATCH_OPEN_COUNT to how many records
-#                               are open. One of the two functions here that read the disk.
+#                               are open. One of the functions here that read the disk.
+#   dispatch_record_resolve <canonical dir> [<agent type>] [<session id>]
+#                               dispatch_record_for under the project that owns dir or is
+#                               remembered for it, else the one open record naming this plugin's
+#                               role in any registered project. Sets DISPATCH_PROJECT too. Needs
+#                               registry.sh sourced.
+#   plugin_role <plugin root> <agent type>
+#                               true when the type names one of that plugin's roles
 #   main_checkout <project codePath> <canonical record codePath>
 #                               prints the project's main checkout in canonical form, or nothing
 #                               when it is the record's own tree or is not on disk.
@@ -70,6 +82,69 @@ is_under() {
   return 1
 }
 
+# Why absolute path $1 may not be a code path, or nothing when it may. Prints refused-system-root,
+# refused-home or refused-above-home. Without $HOME only the system roots are tested. $HOME is
+# compared in its resolved form, since callers pass resolved paths. Ported from
+# version 5's set-code-path safety filter, with the home directory itself added.
+path_refusal() {
+  local p home
+  p="$(normalize_abs "$1")"
+  case "$p" in
+    /|/etc|/usr|/bin|/sbin|/lib|/lib64|/boot|/sys|/proc|/dev|/var|/opt|/root)
+      printf 'refused-system-root'; return 0 ;;
+  esac
+  [ -n "${HOME:-}" ] || return 0
+  home="$( (cd "$HOME" 2>/dev/null && pwd -P) || normalize_abs "$HOME")"
+  if [ "$p" = "$home" ]; then printf 'refused-home'
+  elif is_under "$home" "$p"; then printf 'refused-above-home'
+  fi
+}
+
+# Why $1 may not be the base folder of a project's task trees, or nothing when it may (gap row
+# 350). $2 is the project's code path, and a relative $1 is read against it. DDEV hands a tree inside the code path to the parent
+# project, and a tool that registers projects by folder misses it. So a base at or under the code
+# path is refused. Each path is read in its resolved form when it is on disk, so a link into the
+# checkout is caught. The default, `..`, is never refused for where it lies: the trees have always
+# gone there. Any other folder is also refused when it is a system root or above the home
+# directory, as for a code path, though the home directory itself is allowed: the default yields it
+# for a code path at ~/x. It is refused at or under any registered code path or project folder,
+# and inside any other git work tree, for the same reason as the code path. A work tree whose top
+# is the home directory or above it does not count, so a dotfiles repository at home refuses
+# nothing. The git test reads the nearest folder of the base that is on disk. The third function
+# here that reads the disk.
+worktree_base_refusal() {
+  local base code why="" row anc top home reg
+  code="$(cd "$2" 2>/dev/null && pwd -P)" || code="$(normalize_abs "$2")"
+  base="$(worktree_base_path "$1" "$code")"
+  if is_under "$base" "$code"; then printf 'inside-code-path'; return 0; fi
+  [ "$1" != ".." ] || return 0
+  why="$(path_refusal "$base")"
+  if [ -n "$why" ] && [ "$why" != "refused-home" ]; then printf '%s' "$why"; return 0; fi
+  reg="${AIDA_REGISTRY_PATH:-${HOME:-}/.claude/aida/registry.json}"
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    row="$( (cd "$row" 2>/dev/null && pwd -P) || normalize_abs "$row")"
+    if is_under "$base" "$row"; then printf 'inside-registered-project'; return 0; fi
+  done <<WB_ROWS
+$(jq -r '.projects[]? | (.codePath // empty), (.path // empty)' "$reg" 2>/dev/null)
+WB_ROWS
+  anc="$base"
+  while [ ! -d "$anc" ]; do anc="${anc%/*}"; [ -n "$anc" ] || anc="/"; done
+  top="$(git -C "$anc" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  top="$( (cd "$top" 2>/dev/null && pwd -P) || normalize_abs "$top")"
+  home="$( (cd "${HOME:-/}" 2>/dev/null && pwd -P) || normalize_abs "${HOME:-/}")"
+  is_under "$home" "$top" || printf 'inside-git-repository'
+}
+
+# The base folder $1 as an absolute path: read against the code path $2 when relative, and in its
+# resolved form when it is on disk. The default is recorded as `..`, the parent of the code path,
+# so it follows the code path to another machine or a new code path.
+worktree_base_path() {
+  local base
+  base="$(resolve_against "$1" "$2")"
+  (cd "$base" 2>/dev/null && pwd -P) || normalize_abs "$base"
+}
+
 # The open dispatch record for the working directory $2, under the project folder $1. Each task
 # keeps its own at <project>/tasks/<task>/implementation/dispatch.json (live-run row 139), and a
 # record's codePath is that task's worktree, the tree every stage action runs inside. So the
@@ -84,15 +159,23 @@ is_under() {
 # checkout and not the worktree (gap row 230). So when no record's codePath holds $2, the record
 # is the one open record whose role is the agent type $3, bare or `<plugin>:<role>`. Two such
 # records are two tasks with the same role out, and nothing tells them apart, so none is chosen.
+# A record naming that role and stamped with the payload's session id $4 wins over every other,
+# the codePath match too: dispatch-open stamps the session that opened it (gap row 358).
 DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
 dispatch_record_for() {
-  local project="$1" dir="$2" agent="${3:-}" f code by_role="" by_role_count=0
+  local project="$1" dir="$2" agent="${3:-}" sid="${4:-}" f code role_sid by_role="" by_role_count=0
+  local by_session="" by_session_count=0
   DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     DISPATCH_OPEN_COUNT=$((DISPATCH_OPEN_COUNT + 1))
-    if [ -n "$agent" ] && role_matches "$agent" "$(jq -r '.role // empty' "$f" 2>/dev/null)"; then
+    role_sid=""
+    [ -z "$agent" ] || role_sid="$(jq -r '[.role // "", .sessionId // ""] | @tsv' "$f" 2>/dev/null)"
+    if [ -n "$agent" ] && role_matches "$agent" "${role_sid%%	*}"; then
       by_role="$f"; by_role_count=$((by_role_count + 1))
+      if [ -n "$sid" ] && [ "${role_sid#*	}" = "$sid" ]; then
+        by_session="$f"; by_session_count=$((by_session_count + 1))
+      fi
     fi
     [ -z "$DISPATCH_RECORD" ] || continue
     code="$(jq -r '.codePath // empty' "$f" 2>/dev/null)"
@@ -103,7 +186,73 @@ dispatch_record_for() {
   done <<DR_FILES
 $(find "$project/tasks" -mindepth 3 -maxdepth 3 -type f -path '*/implementation/dispatch.json' 2>/dev/null | sort)
 DR_FILES
-  if [ -z "$DISPATCH_RECORD" ] && [ "$by_role_count" -eq 1 ]; then DISPATCH_RECORD="$by_role"; fi
+  if [ "$by_session_count" -eq 1 ]; then DISPATCH_RECORD="$by_session"
+  elif [ -z "$DISPATCH_RECORD" ] && [ "$by_role_count" -eq 1 ]; then DISPATCH_RECORD="$by_role"; fi
+}
+
+# The open dispatch record for an agent of type $2 whose tool call runs in the canonical directory
+# $1, wherever the session runs (gap row 358). $3 is the payload's session id. The project that
+# owns $1 answers first, then the project remembered for $1, which session-start and next also
+# read. Each answers through dispatch_record_for, so a remembered folder behaves as the main
+# checkout does. An agent type that is not one of this plugin's roles leaves before that second
+# read, and pays nothing more. With no project remembered, every registered project's open records
+# are read for one of this plugin's roles. The record stamped with $3 wins; else the one record
+# naming $2 is the record; else none is. The person never reaches that search. Sets
+# DISPATCH_PROJECT to the project read, besides the two globals dispatch_record_for sets. On the
+# search, DISPATCH_OPEN_COUNT counts only records naming $2. Returns 1 when no project and no
+# record answers, and 2 when the owning row has no path.
+DISPATCH_PROJECT=""
+dispatch_record_resolve() {
+  local dir="$1" agent="${2:-}" sid="${3:-}" row f p choice role_sid matched="" by_session="" by_session_count=0
+  DISPATCH_PROJECT=""; DISPATCH_RECORD=""; DISPATCH_OPEN_COUNT=0
+  if row="$(registry_resolve_by_directory "$dir" 2>/dev/null)"; then
+    DISPATCH_PROJECT="$(jq -r '.path // empty' <<<"$row" 2>/dev/null)"
+    [ -n "$DISPATCH_PROJECT" ] || return 2
+    dispatch_record_for "$DISPATCH_PROJECT" "$dir" "$agent" "$sid"
+    return 0
+  fi
+  [ -z "$agent" ] || plugin_role "${CLAUDE_PLUGIN_ROOT:-}" "$agent" || return 1
+  choice="$(registry_read_directory_choice "$dir" 2>/dev/null | jq -r '.project // empty' 2>/dev/null)"
+  if [ -n "$choice" ]; then
+    DISPATCH_PROJECT="$(registry_list_projects 2>/dev/null \
+      | jq -r --arg n "$choice" 'select(.name == $n) | .path // empty' 2>/dev/null | head -1)"
+    if [ -n "$DISPATCH_PROJECT" ]; then
+      dispatch_record_for "$DISPATCH_PROJECT" "$dir" "$agent" "$sid"
+      return 0
+    fi
+  fi
+  [ -n "$agent" ] || return 1
+  # A glob, not find: find lists every file of every implementation folder, which doubled the cost
+  # of each tool call outside a project. NULL_GLOB keeps zsh going past a glob with no match.
+  [ -z "${ZSH_VERSION:-}" ] || setopt LOCAL_OPTIONS NULL_GLOB
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    for f in "$p"/tasks/*/implementation/dispatch.json; do
+      [ -f "$f" ] || continue
+      role_sid="$(jq -r '[.role // "", .sessionId // ""] | @tsv' "$f" 2>/dev/null)"
+      role_matches "$agent" "${role_sid%%	*}" || continue
+      DISPATCH_OPEN_COUNT=$((DISPATCH_OPEN_COUNT + 1)); matched="$f"
+      if [ -n "$sid" ] && [ "${role_sid#*	}" = "$sid" ]; then
+        by_session="$f"; by_session_count=$((by_session_count + 1))
+      fi
+    done
+  done <<DRR_PROJECTS
+$(registry_list_projects 2>/dev/null | jq -r '.path // empty' 2>/dev/null)
+DRR_PROJECTS
+  if [ "$by_session_count" -eq 1 ]; then DISPATCH_RECORD="$by_session"
+  elif [ "$DISPATCH_OPEN_COUNT" -eq 1 ]; then DISPATCH_RECORD="$matched"; fi
+  [ -z "$DISPATCH_RECORD" ] || DISPATCH_PROJECT="${DISPATCH_RECORD%/tasks/*/implementation/dispatch.json}"
+  [ "$DISPATCH_OPEN_COUNT" -gt 0 ]
+}
+
+# True when agent type $2 names one of the roles of the plugin at $1: agents/<name>.md exists, and
+# a prefix, when the type has one, is that plugin's name. Another plugin's role or a person's own
+# agent of the same bare name is then not this plugin's.
+plugin_role() {
+  [ -n "$2" ] && [ -f "$1/agents/${2##*:}.md" ] || return 1
+  case "$2" in
+    *:*) [ "${2%%:*}" = "$(jq -r '.name // empty' "$1/.claude-plugin/plugin.json" 2>/dev/null)" ] ;;
+  esac
 }
 
 # The project's registered codePath is its main checkout, and a task's worktree is a second tree

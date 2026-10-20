@@ -42,6 +42,10 @@ deleted. Any other change, such as a deleted file or a staged new one, refuses w
 both modes. The ledger records each move under `setAside`. The `setAside:` line names the folder,
 so give the person that path. The `leftovers:` line names each file that was kept or set aside.
 
+Unattended, a start after a design reopen sets aside the tests an author has not frozen yet. Do
+not copy them back by hand. The next fresh `dispatch-open` of a test author names the latest copy
+of each test file that order owns. Put its `earlier tests:` paths in the dispatch message.
+
 The freeze keeps its own warning about uncommitted files. It names a file that the test author
 made during its own run, after this check.
 
@@ -91,6 +95,15 @@ snapshot's copy. A changed criterion drifts each order that serves or owns it, w
 naming the criterion, the same as a changed order file. An order serving none of the changed
 criteria is untouched. The snapshot then takes the live contract, so the tests are written from
 the criterion the person approved. That needs design closed on the live files too.
+
+A criterion whose verify clause alone changed halts fewer orders. A started order is spared when
+its frozen test record exists and names that criterion in no row. Its observed record must not
+name it either, and the ledger must hold no judgement of it by that order. The briefs quoted the
+old clause, but nothing frozen or judged rests on it. Review reads the clause from the refreshed
+snapshot. The `clauseSpared:` line names each spared order and its criteria. When a review
+already closed, that pass moves aside, the line says so, and review runs again. A clause changed
+unattended spares nothing without a recorded reason: a scope decision on that criterion, added
+after the snapshot.
 
 Only a started order halts for drift: one with a step reached, a frozen test record or a build
 record. A drifted order that has not started is taken fresh from the live design instead, and

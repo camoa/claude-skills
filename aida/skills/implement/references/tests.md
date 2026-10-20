@@ -21,8 +21,8 @@ Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup once 
 lookup's answer in its own word: SKILL.md holds both rules.
 
 **`point: test-authoring`, only when `lookups=` names it.** This answers where a test file goes,
-which levels exist and when each is right, what a test may not do in this framework, and how a
-criterion id attaches to a test. The test author and the row-checker read it, so an order
+which levels exist and when each is right, what a test may not do in this framework, and
+whether a test names its criterion. The test author and the row-checker read it, so an order
 whose roles hold neither skips it.
 
 **Light:** do not ask for `point: implement`. Preconditions resolved it, so read each path from
@@ -66,6 +66,19 @@ no `proof` at all is proved by tests; `start` names it on its `proofAbsent:` lin
 Its done-when rows are its checkpoint. Put them to the `row-checker`, or to the person, the way
 the checkpoint below puts a test's rows. The question is whether each row names something a reader
 can confirm from the deliverable alone.
+Key each row `<order id>:<n>`, with n its done-when row counted from 1.
+`dispatch-open` prints the rows to put to the checker. Put those rows and no other.
+It leaves out a row that the last checker to judge it confirmed. That holds while three things
+are unchanged: the line's text, the order's owned files and the checker's rules.
+The checker's verdict drifts from pass to pass, so a second reading of an unchanged line buys a new
+rejection and no new judgement (gap row 361). The match is on the text, because a reworded line
+shifts the numbers. `dispatch-close` keeps verdicts only on the rows `dispatch-open` named.
+A line whose meaning rests on another line's wording keeps its verdict when only that line changes.
+Put it back with `--recheck <order id>:<n>`, which puts back any row the person asks for.
+A person's answer on a row is not carried, because no record keeps it per line.
+When no row is left, nothing opens.
+`tests-freeze` refuses a model's confirmed `--row` while any line's latest checker verdict is not
+a confirmation. It names on the judgement the rows carried from an earlier pass.
 Freeze with no `--test`, one `--row <order id>=...` carrying that judgement, and a `--checklist`
 for each criterion a person verifies. The build reads that row as the order's own check,
 `done-when`. `close` writes the row's judge, person or model, on the criteria the order owns.
@@ -89,7 +102,8 @@ when it owns none, and the person answers those criteria at review.
 
 Run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-brief "<task_folder>" <order id>
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh tests-brief "<task_folder>" <order id> \
+  --test-glob <pattern from the implement recipe>
 ```
 
 It reads the frozen copy and never the live files. It writes exactly eight things to
@@ -130,11 +144,16 @@ in a file that holds a test of the finding's criterion, the same way `rowsReject
 record a person removed is named under `absent`, and the brief carries what is left. The summary
 prints a `retake:` line.
 
-`rowsRejected`, only while a row a person rejected at the checkpoint below stands. It holds each
-row's key, the person's words verbatim, and the checker's note. Its `redAgain` list names each
+`rowsRejected`, only while a row rejected at the checkpoint below stands. It holds each row's
+key, the checker's note, and the person's words verbatim when a person rejected it. Its `redAgain` list names each
 test with a red run in a file that holds a rejected row's test. The repair edits that file, so
 each of those tests needs a new red run. The `whatToDo` asks for those runs only when the list is
 not empty. The summary prints a `rowsRejected:` line.
+
+`deliverableIsTests`, only when every file the order owns matches a `--test-glob`. Its `whatToDo`
+tells the author to make the change in the test file and freeze each test with a locks-in reason,
+below. Pass the same globs the freeze takes. Without them the key is never written, and exit 118
+at the freeze is the only check left. The summary prints a `deliverableIsTests:` line.
 
 One more key is for the freeze, not the author. `roundStartedAt` is the time this order's test
 round began. A brief written again for a retake or a rejected row keeps the earlier time, because
@@ -182,7 +201,10 @@ files and the support files its frozen record holds are left out. A test from be
 the same calls. Tests in other trees stay readable, such as a framework's committed core and
 contrib tests, which are the fair place to look up a framework base class. A file the author
 writes is untracked, so it stays readable. A search of a folder that holds a denied file is
-refused, so the author searches its own test file by its path. The
+refused, so the author searches its own test file by its path. Every file in the task's set-aside
+folder is denied too, because an implementer's file can sit there beside the tests. Only the
+earlier tests that the script names stay readable. The task folder's diffs, build and fix records,
+and review and verify records are denied for the same reason. The
 script refuses the dispatch (exit 47) when this order owns no file a test glob matches and no
 directory. The freeze would refuse every test the author wrote, so design adds the order's test
 file with `add-owned-file` first. The test runner still loads
@@ -230,8 +252,8 @@ freeze below. The red-run file per test goes under `--red`, each support file un
 
 **A criterion this order serves but does not own is proved by its owner.** Exactly one order owns a
 criterion, and most orders own none. A supporting order cannot observe a criterion whose outcome a
-later order builds, so its tests are written against its own done-when. Such a test ends its name
-with the order id, `Wo1`, and no criterion id. The author writes a test for every machine-verified
+later order builds, so its tests are written against its own done-when. Such a test claims the
+order id, and no criterion id. The author writes a test for every machine-verified
 criterion the order owns, and for its done-when where nothing it owns covers that.
 
 **A test green on its first run has four outcomes.** The test was wrong: it is corrected once.
@@ -239,6 +261,17 @@ Still green, and the author can name the existing code that satisfies it: it loc
 in, and the reason is recorded with `--locks-in`. Still green with no existing code to name: it is
 reported by name and the step stops. Failed: it is frozen with its red run. A green test is never
 deleted quietly and never weakened into failing.
+
+**An order that owns only test files has its tests as its deliverable.** A fixture repair is one.
+The freeze locks the test file, and the implementer may write only owned files. So no build can
+turn a red test green. The author makes the done-when's change in its own test file and runs each
+test until it passes. Each test then freezes with `--locks-in`, naming the existing code it passes
+against. Design marks nothing: the owned files already say it, and `tests-brief` writes
+`deliverableIsTests` from them. The freeze refuses a test with a red run and no `--locks-in` when
+every owned file is a test file or a `--support` file (exit 118), before anything is frozen. Resume
+the author with `dispatch-open --resume`, as for exit 27. An owned directory leaves the implementer
+a file to write, so it refuses nothing. The build step then dispatches no implementer, as
+`references/build.md` says.
 
 **A test of the order's own work names a commit, not code.** After a retake the tree still holds
 this order's earlier build, so a test of its done-when arrives green. The code that satisfies it is
@@ -356,7 +389,9 @@ agent's answer.
 Close the dispatch record as soon as it returns, per SKILL.md.
 
 **A confirmed row is the checker's, in both modes.** It becomes
-`--row <criterion id>=confirmed::model::<its note>` for the freeze below. The done-when row is keyed
+`--row <criterion id>=confirmed::model::<its note>` for the freeze below. `tests-freeze` refuses
+(exit 64) a model's confirmed row that the verdict file rejects, because no model settles the
+checker's rejection (gap row 373). The done-when row is keyed
 by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. Do not put a
 confirmed row to the person. There is one exception: an interactive run where another row of this
 order goes back to the test author. Then list this order's confirmed rows, each with the checker's
@@ -394,11 +429,18 @@ reads confirmed; that freeze clears both records. A note may not hold the text
 carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.
 
 **Unattended, there is nobody to ask.** A rejected row becomes
-`--row <criterion id>=rejected::model::<its note>`, and it is not sent back to the test author the
-way a person's rejection is. Nobody is present to judge the correction, so `tests-freeze` writes
-the halt onto the order, with the checker's own note as the reason. Then it refuses. Report the
-halt, and take the next ready order instead. A person clears it with `clear-halt` once the test
-is repaired, in `references/finish.md`.
+`--row <criterion id>=rejected::model::<its note>`. `tests-freeze` reads the checker's verdict file
+to decide what follows (gap row 373). A row the checker marks `"repair": "tests"` goes back to the
+test author once, the way a person's rejection does. The refusal (exit 65) records it under
+`rowsRejected` with the checker's note, and adds its key to `rowsSentBack`. Run `tests-brief`,
+dispatch the test author fresh, then put the `checkAgain` rows to a fresh checker. The author
+rewrites the tests and never answers the rejection. Only the checker's next verdict confirms the row.
+Every other rejection halts the order, with the checker's note as the reason. That is a row
+marked `"repair": "row"`, a row in `rowsSentBack` already, or an order with no test author.
+A rejection that says the requirement is wrong needs design or a person, and no model may settle
+it. A second rejection of one row means the author could not meet the note. Report the halt, and
+take the next ready order instead. A person clears it with `clear-halt` once the test or the
+design is repaired, in `references/finish.md`.
 
 **A person's row needs a person.** A row judged `person` on an autonomous run refuses, because
 nobody was there to say it. A row judged `model` is accepted on both runs, because the checker runs
@@ -425,7 +467,7 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
 ```
 
 A `--test` names its criteria or the order's own id, never both. The second form marks a test of
-the order's done-when, and its name ends with the order id. A `--test` path must be a file the
+the order's done-when. A `--test` path must be a file the
 order owns. The freeze refuses any other (exit 27) and names the test file design chose. Do not
 move the tests yourself. Run `dispatch-open` with `--resume` and resume the test author, which
 writes the tests into that file and takes a new red run for each. Then freeze again.
@@ -449,15 +491,17 @@ would rewind the step and leave a spent attempt counter and a stale build record
 longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward
 from here, not back.
 
-The script checks the file exists, sits inside the code repository, matches the framework's own
-declared pattern, and carries at the end of its name the criterion it claims. A done-when test
-carries the order id there instead. It checks every machine-verified criterion this order owns has
-a test (a `gate` or `record` order excepted), and every criterion a person verifies has a checklist line. A criterion this order only
-serves needs no test from it, because its proof lives with its owner (exit 29 reads the owned
-list). A person-verified criterion is different: each order that serves it needs its checklist
-line, owned or not (exit 30). A test that names neither a criterion this order serves or owns nor
-this order's id refuses (exit 31). A name that does not end in what it claims refuses (exit 28).
-A record that would hold no row refuses (exit 74).
+The script checks the file exists, sits inside the code repository, and matches the framework's own
+declared pattern. It checks every machine-verified criterion this order owns has a test (a `gate`
+or `record` order excepted), and every criterion a person verifies has a checklist line. A
+criterion that a verify run line of the order names, and that runs, needs no test. It needs a row:
+`dispatch-open` names the line, and the row-checker judges whether it proves the clause. The freeze
+runs the line over the files it freezes, and refuses while it fails (exit 121), so the test author
+repairs the files first. A criterion this order only serves needs no test from it, because its
+proof lives with its owner (exit 29 reads the owned list). A person-verified criterion is
+different: each order that serves it needs its checklist line, owned or not (exit 30). A test that
+names neither a criterion this order serves or owns nor this order's id refuses (exit 31). A record
+that would hold no row refuses (exit 74).
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
 place. A test with neither refuses (exit 33). A `--locks-in` reason written `commit:<id>` must
 name one of this order's own build or fix commits on the branch. An id that is not hexadecimal,
