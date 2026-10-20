@@ -1118,6 +1118,7 @@ usage: implement-actions.sh read  <task_folder>
                             --started-at <commit the attempt began from>
                             [--test-recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
+                            [--implement-recipe <framework>=<path>]...
                             [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
                             [--accept-deviation <the person's reason>]
@@ -1137,6 +1138,7 @@ usage: implement-actions.sh read  <task_folder>
                             --started-at <commit the round began from>
                             [--test-recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
+                            [--implement-recipe <framework>=<path>]...
                             [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
                             [--scope-insufficient <finding id>=<reason>]...
@@ -7971,6 +7973,49 @@ br_require_gate_tokens() {
     || die 3 "$BRC_WHO: the token {${found%%	*}} in the lines from ${found#*	} has no value, so no check ran and no attempt was spent. A value comes from --value ${found%%	*}=<value>, from the tokens preconditions recorded, or from the task's environment record, which task environment <task-id> up writes."
 }
 
+# The implement recipe a gate order's configuration gate reads, taken from preconditions.json when
+# no --implement-recipe was passed (gap rows 349 and 391). A gate left unknown for a missing flag
+# spends an attempt that no later step can read again. The recipe taken is the one recorded
+# recipe whose file carries the block br_gate_check reads. Two such recipes are two answers to one
+# question, so the person names one. Given implement flags are compared and nothing is added to
+# them, since a second recipe carrying the block refuses at 72. An order with no verify lines of
+# its own refuses at 3 when nothing records an implement recipe, because its gate could only read
+# unknown. $1 the action, $2 the order's JSON, $3 the given list, $4 the sentence that says what a
+# disagreement costs, $5 the sentence a refusal ends on. build-record and fix-record pass no list,
+# so a flag given there runs as given. Sets RF_LIST and RF_FILLED as rf_fill_from_record does.
+br_fill_gate_recipes() {
+  local who="$1" given="$3" pre_file="$IMPL_DIR/preconditions.json" unit_id kept
+  local gate_all gate_recorded="" gate_given="" gate_line
+  RF_LIST="$given"; RF_FILLED=""
+  br_order_facts "$2"
+  [ "$BR_ORDER_SLOT" = "configuration-gate" ] || return 0
+  unit_id="$(printf '%s' "$2" | jq -r '.id')"
+  gate_all="$(jq -r '[ (.frameworks // [])[] | select((.implementRecipePath // "") != "")
+                       | .framework + "\t" + .implementRecipePath ] | join("\n")' "$pre_file" 2>/dev/null)"
+  while IFS= read -r gate_line; do
+    [ -n "$gate_line" ] || continue
+    if [ -n "$(cr_lookup "$given" "${gate_line%%	*}")" ]; then
+      gate_given="$gate_given$gate_line
+"
+    elif [ ! -f "${gate_line#*	}" ] || [ -n "$(sh_blocks_under "${gate_line#*	}" "Configuration gate" 1 | grep '[^[:space:]]')" ]; then
+      gate_recorded="$gate_recorded$gate_line
+"
+    fi
+  done <<BR_FILL_GATE
+$gate_all
+BR_FILL_GATE
+  if [ -n "$given" ]; then
+    gate_recorded="$gate_given"
+  else
+    kept="$(brv_kept "$2")" || exit $?
+    [ -n "$gate_all" ] || [ "$(printf '%s' "$kept" | jq 'length')" -gt 0 ] \
+      || die 3 "$who: $unit_id is proved by its configuration gate, no --implement-recipe was passed, and $pre_file records no implement recipe. $5 Pass --implement-recipe <framework>=<path>."
+    [ "$(printf '%s' "$gate_recorded" | grep -c .)" -le 1 ] \
+      || die 3 "$who: $pre_file records more than one implement recipe that carries a ## Configuration gate: $(printf '%s' "$gate_recorded" | tr '\t\n' '= ' | sed 's/ $//'). Nothing here may choose between two answers to one question. $5 Pass the one --implement-recipe the attempt took."
+  fi
+  rf_fill_from_record "$who" "--implement-recipe" "$given" "$gate_recorded" "$pre_file" 91 "$4" ""
+}
+
 # Refuses at 103, before any check runs, when the task's site is down (gap row 212). A site
 # command such as `ddev drush` starts a stopped site and prints its start-up text. So every
 # `stdout empty` line would fail for a reason that is not the check. The test runs when the task
@@ -8983,6 +9028,10 @@ do_build_record() {
     br_require_observed "build-record" "$unit_id" "$observed_path"
     criteria_judged_json="$(jq -c '[ .rows[] | .criterion // empty ] | unique | if length == 0 then null else . end' "$observed_path")"
   fi
+  if [ -z "$gate_recipes" ]; then
+    br_fill_gate_recipes "build-record" "$UNIT_JSON" "" "" "No check ran and no attempt was spent."
+    gate_recipes="$RF_LIST"
+  fi
 
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc" "$RV_RANGE_PATHS"
 
@@ -9288,12 +9337,8 @@ EOF_PATHS
   # --- the recipe flags, taken from the records that produced them (gap row 349). A flag left out
   # would make its check read unknown or undeclared over the stop this re-check is meant to clear,
   # and an unknown configuration gate then refuses the next re-check. A flag naming another path
-  # than its record refuses at 91. On a gate order the implement recipe taken is the gate's own:
-  # the one recorded recipe whose file carries the block br_gate_check reads. Two such recipes are
-  # two answers to one question, so the person names one. Given implement flags are compared and
-  # nothing is added to them, since a second recipe carrying the block refuses at 72 -------------
+  # than its record refuses at 91. A gate order's implement recipe comes from br_fill_gate_recipes -
   local pre_file="$IMPL_DIR/preconditions.json" base_file="$IMPL_DIR/baseline.json" filled=""
-  local gate_all gate_recorded="" gate_given="" gate_line
   local rf_cost="The re-check would read one recipe and the task's records the other. Nothing ran, and $record_file is unchanged."
   rf_fill_from_record "build-recheck" "--test-recipe" "$test_recipes" "$(pre_test_recipes "$pre_file")" "$pre_file" 91 "$rf_cost" "--recipe"
   test_recipes="$RF_LIST"; filled="$RF_FILLED"
@@ -9301,33 +9346,8 @@ EOF_PATHS
     "$(jq -r '[ (.checkRecipes // [])[] | .framework + "\t" + .path ] | join("\n")' "$base_file" 2>/dev/null)" \
     "$base_file" 91 "$rf_cost" "--check-recipe"
   check_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
-  br_order_facts "$RV_UNIT_JSON"
-  if [ "$BR_ORDER_SLOT" = "configuration-gate" ]; then
-    gate_all="$(jq -r '[ (.frameworks // [])[] | select((.implementRecipePath // "") != "")
-                         | .framework + "\t" + .implementRecipePath ] | join("\n")' "$pre_file" 2>/dev/null)"
-    while IFS= read -r gate_line; do
-      [ -n "$gate_line" ] || continue
-      if [ -n "$(cr_lookup "$gate_recipes" "${gate_line%%	*}")" ]; then
-        gate_given="$gate_given$gate_line
-"
-      elif [ ! -f "${gate_line#*	}" ] || [ -n "$(sh_blocks_under "${gate_line#*	}" "Configuration gate" 1 | grep '[^[:space:]]')" ]; then
-        gate_recorded="$gate_recorded$gate_line
-"
-      fi
-    done <<RC_GATE
-$gate_all
-RC_GATE
-    if [ -n "$gate_recipes" ]; then
-      gate_recorded="$gate_given"
-    else
-      [ -n "$gate_all" ] \
-        || die 3 "build-recheck: $unit_id is proved by its configuration gate, no --implement-recipe was passed, and $pre_file records no implement recipe. Nothing ran, and $record_file is unchanged. Pass --implement-recipe <framework>=<path>."
-      [ "$(printf '%s' "$gate_recorded" | grep -c .)" -le 1 ] \
-        || die 3 "build-recheck: $pre_file records more than one implement recipe that carries a ## Configuration gate: $(printf '%s' "$gate_recorded" | tr '\t\n' '= ' | sed 's/ $//'). Nothing here may choose between two answers to one question. Nothing ran, and $record_file is unchanged. Pass the one --implement-recipe the attempt took."
-    fi
-    rf_fill_from_record "build-recheck" "--implement-recipe" "$gate_recipes" "$gate_recorded" "$pre_file" 91 "$rf_cost" ""
-    gate_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
-  fi
+  br_fill_gate_recipes "build-recheck" "$RV_UNIT_JSON" "$gate_recipes" "$rf_cost" "Nothing ran, and $record_file is unchanged."
+  gate_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
 
   br_require_clean_tree "build-recheck" "$codepath" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 
@@ -11187,6 +11207,10 @@ RV_AC
   tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
   [ -n "$tests_doc" ] \
     || die 3 "fix-record: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  if [ -z "$gate_recipes" ]; then
+    br_fill_gate_recipes "fix-record" "$RV_UNIT_JSON" "" "" "No check ran and no round was spent."
+    gate_recipes="$RF_LIST"
+  fi
 
   br_require_clean_tree "fix-record" "$RV_RANGE_REPO" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 

@@ -298,7 +298,10 @@ Run:
 to. Pass it only for a record a person put somewhere else. `--implement-recipe` is the path
 resolved above, the one the implementer was given. Pass it for
 an order whose proof is `gate`: the script reads that recipe's `## Configuration gate` lines and
-runs them as the order's own check. Every other order ignores it.
+runs them as the order's own check. Every other order ignores it. Left out on a gate order, the
+recorded implement recipe that carries the block is taken from `preconditions.json`. A gate order
+with no verify lines refuses (exit 3) when nothing records an implement recipe, and no attempt is
+spent.
 
 `--observed` is the record written above. An order whose proof is `observe` refuses without it
 (exit 92). The script refuses a missing or malformed record (exit 93). It refuses a row whose
@@ -487,7 +490,7 @@ This step runs all eight deciding checks. The record holds every one.
   output. A placeholder given several `--value` entries runs its line once per value. It reads
   unknown when the task records no environment. `task environment up` records a site the
   worktree already runs, with no bring-up. An order with no verify lines also reads
-  unknown when no `--implement-recipe` was passed, or when that recipe carries no such block.
+  unknown when no implement recipe was passed or recorded, or when it carries no such block.
   An order with verify lines runs them alone then, and the detail says the block did not run.
   A verify line that is not binding runs only when the person approved it at the design close.
   A gate line that printed `There are no changes to import` is a finding for the reviewer, not
