@@ -1883,8 +1883,8 @@ recipe_stale_line() {
   # Gap row 385. A copy adapted on purpose keeps the catalog's name and the version it started
   # from. The store keeps every body it served beside $3, so the catalog's body at the copy's own
   # version tells an adapted copy from a plain one. With no such body, the copy reads as plain.
-  while IFS= read -r body; do
-    [ -n "$mine" ] && [ -n "$body" ] && [ ! "$body" -ef "$have" ] \
+  [ -z "$mine" ] || while IFS= read -r body; do
+    [ -n "$body" ] && [ ! "$body" -ef "$have" ] \
       && [ "$(recipe_name_of "$body")" = "$name" ] \
       && [ "$(recipe_name_of "$body" version)" = "$mine" ] || continue
     cmp -s "$body" "$have" && { adapted=""; break; }
