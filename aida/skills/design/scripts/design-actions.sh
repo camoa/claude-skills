@@ -691,7 +691,8 @@ reasoning_appended() {
 # <candidate>` line each. The order's `dispositions` list comes first. Then each candidate a live
 # `Candidate <c> (` paragraph names and the list does not, with its last paragraph's outcome and the
 # run mode `unrecorded`. An order disposed before the list existed holds only paragraphs, and
-# those are counted too (gap row 293).
+# those are counted too (gap row 293). The candidate goes out raw, never through @tsv, which
+# writes a backslash as two: the callers compare it to the text the confirmer keyed (gap row 387).
 standing_dispositions() {
   jq -r '
     ((.dispositions // []) | map(.candidate)) as $listed
@@ -701,7 +702,7 @@ standing_dispositions() {
             | select(.candidate as $c | $listed | index($c) | not) ]
           | reduce .[] as $p ({}; .[$p.candidate] = $p.disposition)
           | to_entries | map({candidate: .key, disposition: .value, runMode: "unrecorded"})))[]
-    | [.disposition, .runMode, .candidate] | @tsv' "$1"
+    | "\(.disposition)\t\(.runMode)\t\(.candidate)"' "$1"
 }
 
 # The sha256 of the file at $1, or nothing when it cannot be read. The caller resolves the hash
@@ -2495,7 +2496,7 @@ do_dispose() {
   fi
   # What stood for this candidate before this call, read before the write below.
   local before verdict_file held
-  before="$(standing_dispositions "$file" | awk -F'\t' -v c="$candidate" '$3 == c { print $1 }')"
+  before="$(standing_dispositions "$file" | c="$candidate" awk -F'\t' '$3 == ENVIRON["c"] { print $1 }')"
   doc="$(printf '%s' "$doc" | jq --arg c "$candidate" --arg o "$outcome" --arg m "$RUN_MODE" '
     {candidate: $c, disposition: $o, runMode: $m} as $e
     | .dispositions = (.dispositions // [])
