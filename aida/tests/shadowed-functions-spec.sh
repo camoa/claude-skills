@@ -7,6 +7,7 @@
 # source line does. Every library's names are then reserved for it, not only the ones it names:
 # scripts/lib/task-helpers.sh sources three more libraries, so the set a script really gets is
 # transitive and no text search can tell which library a variable or a loop word stands for.
+# A last pass fails on a variable made local twice in one function, which zsh prints to stdout.
 #
 # What counts as a definition, and what that misses, is tests/defname.awk, which this reads below.
 #
@@ -49,14 +50,15 @@ awk '{ if (($1 in seen) && seen[$1] != $2)
 # A name made local twice in one function is the same fault inside one scope. Under zsh, a second
 # `local name` with no value and no option prints `name=<value>` to stdout, and bash prints nothing,
 # so the stray line passes every bash test (gap row 388). A function's scope opens at a definition
-# and closes at a `}` in column 1. Quoted text is blanked first, so a word inside a value never
-# counts. A declaration with an option, or with a value, prints nothing and is not a fault.
+# and closes at a `}` in column 1. Quoted text is blanked first and a comment is cut, so a word
+# inside a value or a comment never counts. A declaration with an option, or with a value, prints nothing and is not a fault.
 (cd "$PLUGIN" && find hooks scripts skills tests -name '*.sh' | sort) \
   | while IFS= read -r p; do
       awk -v F="$p" -v q="'" "$DEFN"'
         defname($0) != "" || /^}/ { split("", seen); next }
-        { line = $0; sub(/^[ \t]*#.*/, "", line)
+        { line = $0
           gsub("\"(\\$\\([^)]*\\)|\\\\.|[^\"\\\\])*\"|" q "[^" q "]*" q, "Q", line)
+          sub(/(^|[ \t])#.*/, "", line)
           nc = split(line, cmd, /[;&|()]/)
           for (c = 1; c <= nc; c++) {
             nw = split(cmd[c], w, " "); i = 1
