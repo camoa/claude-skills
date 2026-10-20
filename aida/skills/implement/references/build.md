@@ -300,8 +300,9 @@ resolved above, the one the implementer was given. Pass it for
 an order whose proof is `gate`: the script reads that recipe's `## Configuration gate` lines and
 runs them as the order's own check. Every other order ignores it. Left out on a gate order, the
 recorded implement recipe that carries the block is taken from `preconditions.json`. A gate order
-with no verify lines refuses (exit 3) when nothing records an implement recipe, and no attempt is
-spent.
+with no verify lines refuses (exit 3) when no recorded implement recipe carries the block. Two
+recorded recipes that carry it also refuse (exit 3), so pass the one to use. Neither refusal
+spends an attempt.
 
 `--observed` is the record written above. An order whose proof is `observe` refuses without it
 (exit 92). The script refuses a missing or malformed record (exit 93). It refuses a row whose

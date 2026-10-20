@@ -7979,8 +7979,8 @@ br_require_gate_tokens() {
 # recipe whose file carries the block br_gate_check reads. Two such recipes are two answers to one
 # question, so the person names one. Given implement flags are compared and nothing is added to
 # them, since a second recipe carrying the block refuses at 72. An order with no verify lines of
-# its own refuses at 3 when nothing records an implement recipe, because its gate could only read
-# unknown. $1 the action, $2 the order's JSON, $3 the given list, $4 the sentence that says what a
+# its own refuses at 3 when no recorded implement recipe carries the block, because its gate could
+# only read unknown. $1 the action, $2 the order's JSON, $3 the given list, $4 the sentence that says what a
 # disagreement costs, $5 the sentence a refusal ends on. build-record and fix-record pass no list,
 # so a flag given there runs as given. Sets RF_LIST and RF_FILLED as rf_fill_from_record does.
 br_fill_gate_recipes() {
@@ -8008,8 +8008,11 @@ BR_FILL_GATE
     gate_recorded="$gate_given"
   else
     kept="$(brv_kept "$2")" || exit $?
-    [ -n "$gate_all" ] || [ "$(printf '%s' "$kept" | jq 'length')" -gt 0 ] \
-      || die 3 "$who: $unit_id is proved by its configuration gate, no --implement-recipe was passed, and $pre_file records no implement recipe. $5 Pass --implement-recipe <framework>=<path>."
+    if [ -z "$gate_recorded" ] && [ "$(printf '%s' "$kept" | jq 'length')" -eq 0 ]; then
+      [ -n "$gate_all" ] \
+        || die 3 "$who: $unit_id is proved by its configuration gate, no --implement-recipe was passed, and $pre_file records no implement recipe. $5 Pass --implement-recipe <framework>=<path>."
+      die 3 "$who: $unit_id is proved by its configuration gate, no --implement-recipe was passed, and no implement recipe $pre_file records carries a ## Configuration gate: $(printf '%s' "$gate_all" | tr '\t\n' '= ' | sed 's/ $//'). $5 Pass --implement-recipe <framework>=<path> for a recipe that carries the block."
+    fi
     [ "$(printf '%s' "$gate_recorded" | grep -c .)" -le 1 ] \
       || die 3 "$who: $pre_file records more than one implement recipe that carries a ## Configuration gate: $(printf '%s' "$gate_recorded" | tr '\t\n' '= ' | sed 's/ $//'). Nothing here may choose between two answers to one question. $5 Pass the one --implement-recipe the attempt took."
   fi
