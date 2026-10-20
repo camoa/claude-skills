@@ -692,7 +692,7 @@ reasoning_appended() {
 # `Candidate <c> (` paragraph names and the list does not, with its last paragraph's outcome and the
 # run mode `unrecorded`. An order disposed before the list existed holds only paragraphs, and
 # those are counted too (gap row 293). The candidate goes out raw, never through @tsv, which
-# writes a backslash as two: the callers compare it to the text the confirmer keyed (gap row 387).
+# writes a backslash as two. The callers compare it to the text the confirmer keyed (gap row 387).
 standing_dispositions() {
   jq -r '
     ((.dispositions // []) | map(.candidate)) as $listed

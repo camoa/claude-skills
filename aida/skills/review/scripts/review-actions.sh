@@ -1527,13 +1527,14 @@ RW_FIT
 
   # Gap row 300. A departure an order's review-record recorded not-applicable, because the task has
   # no automated tests, is a catalog note: nothing else shows a person an edited or deleted assertion.
+  # The answer goes out raw, never through @tsv, which writes a backslash as two (gap row 387).
   local rv_file rv_ref rv_words
   while IFS= read -r rv_file; do
     case "$rv_file" in ""|*-findings.json) continue ;; esac
     while IFS="$(printf '\t')" read -r rv_ref rv_words; do
       [ -z "$rv_ref" ] || rw_catalog_note "review-record recorded the recipe not-applicable for $(basename "$rv_file" .json | sed 's/^review-//'), because the task has no automated tests; the reviewer answered departed: $rv_words" "$rv_ref"
     done <<RW_NA
-$(jq -r '(.recipes // [])[] | select(has("departedAnswer")) | [.ref, .departedAnswer] | @tsv' "$rv_file" 2>/dev/null)
+$(jq -r '(.recipes // [])[] | select(has("departedAnswer")) | "\(.ref)\t\(.departedAnswer)"' "$rv_file" 2>/dev/null)
 RW_NA
   done <<RW_REVIEWS
 $(find "$TASK_PATH/implementation" -maxdepth 1 -type f -name 'review-*.json' 2>/dev/null | sort)
