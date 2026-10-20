@@ -3484,7 +3484,7 @@ do_preconditions() {
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
   local harness_needed harness_reason env_asked=no env_owner="" tooling_entries
   local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc build_json build_entries unchecked_json review_tools smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
-  local pc_folder_gap="" pc_te_source pc_rv_source
+  local pc_folder_gap="" pc_held pc_holders pc_line pc_where pc_missing
   local pc_build_doc tool_rows_json pc_row_id pc_row_json
 
   while [ "$#" -gt 0 ]; do
@@ -3917,23 +3917,40 @@ EOF
 $catalog_recipes
 PC_CATALOG
 
-  # A project folder that holds one of the two command recipes and not the other (gap row 383).
-  # The missing one then comes from the catalog, whose commands may assume another environment,
-  # and review reads its rows undeclared with nothing said before. The walk is the one the lookup
-  # ran, so the script reads the fact itself. Review is always needed; test-execution only when an
-  # order needs the harness. Reported only.
+  # A project folder that holds a recipe for a framework but not one of the two command recipes
+  # (gap row 383). The missing phase then comes from the catalog, whose commands may assume the
+  # environment the folder replaced, and nothing says so before review. The live folder held only
+  # worktree-environment.md. The walks are the ones the lookup ran, so the script reads the fact
+  # itself, folders ranked behind a catalog source excluded. Review is always needed;
+  # test-execution only when an order needs the harness. Reported only.
   while IFS= read -r fw; do
     [ -n "$fw" ] || continue
-    pc_te_source=""; pc_rv_source=""
-    ! sw_probe "$project_folder/project.json" processRecipes process-recipes "$fw" test-execution yes \
-      || pc_te_source="$SW_SOURCE"
-    ! sw_probe "$project_folder/project.json" processRecipes process-recipes "$fw" review yes \
-      || pc_rv_source="$SW_SOURCE"
-    if [ -n "$pc_te_source" ] && [ -z "$pc_rv_source" ]; then
-      pc_folder_gap="$pc_folder_gap${pc_folder_gap:+ }$fw: $pc_te_source holds test-execution.md and no review.md."
-    elif [ -n "$pc_rv_source" ] && [ -z "$pc_te_source" ] && [ "$harness_needed" = "yes" ]; then
-      pc_folder_gap="$pc_folder_gap${pc_folder_gap:+ }$fw: $pc_rv_source holds review.md and no test-execution.md."
-    fi
+    pc_held=""; pc_holders=""
+    # A source the walk does not read prints with an empty first field; a catalog one ends it.
+    while IFS= read -r pc_line; do
+      case "$pc_line" in
+        "	catalog	"*) break ;;
+        ""|"	"*) continue ;;
+      esac
+      pc_held="$pc_held${pc_held:+, }${pc_line%%	*}.md"
+      pc_where="${pc_line#*	}"
+      case ", $pc_holders, " in *", $pc_where, "*) ;; *) pc_holders="$pc_holders${pc_holders:+, }$pc_where" ;; esac
+    done <<PC_HELD
+$(sw_list "$project_folder/project.json" processRecipes process-recipes "$fw")
+PC_HELD
+    [ -n "$pc_held" ] || continue
+    pc_missing=""
+    sw_probe "$project_folder/project.json" processRecipes process-recipes "$fw" review yes \
+      || pc_missing="review"
+    [ "$harness_needed" = "yes" ] \
+      && ! sw_probe "$project_folder/project.json" processRecipes process-recipes "$fw" test-execution yes \
+      && pc_missing="${pc_missing:+$pc_missing and }test-execution"
+    case "$pc_missing" in
+      "") continue ;;
+      *" and "*) pc_missing="the $pc_missing recipes come" ;;
+      *) pc_missing="the $pc_missing recipe comes" ;;
+    esac
+    pc_folder_gap="$pc_folder_gap${pc_folder_gap:+ }$fw: $pc_holders holds $pc_held, so $pc_missing from the catalog."
   done <<PC_FOLDER
 $frameworks
 PC_FOLDER
@@ -4198,7 +4215,7 @@ PC_TOOL_ROWS
                          else join(", ") + ": the review recipe names no tool under requires_tooling that this row runs, so nothing checked its program before the build. A missing program reads unknown at build-record." end),
      staleRecipe: (if $staleRecipe == "" then "none" else $staleRecipe end),
      folderRecipeMissing: (if $folderRecipeMissing == "" then "none"
-                           else $folderRecipeMissing + " The other one comes from the catalog. Add the file there, or confirm the catalog recipe fits." end),
+                           else $folderRecipeMissing + " Add the file to that folder, or confirm the catalog recipe fits." end),
      failedOutput: $failedOutput,
      nextAdvice: $nextAdvice,
      next: $next}')"

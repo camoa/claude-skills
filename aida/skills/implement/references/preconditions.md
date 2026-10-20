@@ -25,11 +25,11 @@ Dispatch `catalog-identifier` once more, with `point: review` and each framework
 second recipe, never the same file as the `test-execution` one above. Pass its path straight
 through; the script reads its `## Check commands` block itself, per SKILL.md.
 
-A folder that holds one of these two recipes and not the other leaves the other to the catalog.
-The catalog's commands can assume another environment, and review then reads its tools
-undeclared. The script walks the folders itself and names each such folder on the
-`folderRecipeMissing:` line. A missing `test-execution` file counts only when an order needs the
-harness. Read that line to the person.
+A folder that holds any recipe for a framework, such as `worktree-environment.md`, but not one
+of these two, leaves that phase to the catalog. The catalog's commands can assume the environment
+the folder replaced. The script walks the folders itself. The `folderRecipeMissing:` line names
+the folder, the files it holds, and each phase the catalog answers. A missing `test-execution`
+file counts only when an order needs the harness. Read that line to the person.
 
 Dispatch it a third time, with `point: implement` and each framework. Do not read that recipe
 here and do not pass it to anyone. The per-order tests step resolves it again for its globs. This
