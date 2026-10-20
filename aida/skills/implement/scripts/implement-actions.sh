@@ -133,6 +133,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # resume. It refuses when a fixer's or test author's report exists, when another role's file was
 # written after the record opened, or when the record counts a resume. It also refuses on a commit
 # after the record opened, in the code path or in a record order's files (gap row 343).
+# tests-brief, build-brief, review-brief, fix-brief and verify-brief write a brief again for one
+# role. Each removes that role's open record for the order when it shows none of these signs, and
+# counts nothing (gap row 389).
 #   implement-actions.sh step <name>
 #
 # `step` prints one of this skill's own step files, from
@@ -4863,6 +4866,7 @@ TB_OWNED
      | if $deliverableIsTests == null then . else .deliverableIsTests = $deliverableIsTests end
      | .worktree = $worktree')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
+  im_void_unsent_dispatch test-author "$unit_id"
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
     {order: .unit.id,
@@ -6841,6 +6845,7 @@ do_build_brief() {
     printf '%s\n' "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.interface // ""')" >"$IMPL_DIR/interface-$unit_id.md" \
       || die 3 "build-brief: could not write the interface record for $unit_id."
   fi
+  im_void_unsent_dispatch implementer "$unit_id"
   write_atomic "$brief_file" "$brief_json"
   # headNow is printed because the caller passes it back as --started-at, and the report path
   # because the dispatch names it. Everything else the implementer reads from the file. The
@@ -10175,6 +10180,7 @@ RB_COMMITS
     + (if $recipes == "" then {} else
        {recipeAnswer: "One answer per recipe: ref, verdict, evidence. A departed answer that a fix inside the order cures adds finding: the id of a finding with a fixScope, on a file the evidence names."} end)')"
   [ -n "$brief_json" ] || die 3 "review-brief: could not assemble the brief for $unit_id."
+  im_void_unsent_dispatch reviewer "$unit_id"
   write_atomic "$brief_file" "$brief_json"
   # The check verdicts are printed one per line because review.md routes on interface-record's;
   # the detail and the tool output stay in the brief and the build record.
@@ -10867,6 +10873,7 @@ FB_ALLOW
       playbooksPath: $playbooksPath
     }')"
   [ -n "$brief_json" ] || die 3 "fix-brief: could not assemble the brief for $unit_id."
+  im_void_unsent_dispatch fixer "$unit_id"
   write_atomic "$brief_file" "$brief_json"
   # A finding is named by id, severity and the id it cites. Its evidence stays in the brief.
   im_print_summary "fix-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
@@ -11423,6 +11430,7 @@ do_verify_brief() {
      fixRecord: $fixRecord,
      verdictsPath: $verdictsPath}')"
   [ -n "$brief_json" ] || die 3 "verify-brief: could not assemble the brief for $unit_id."
+  im_void_unsent_dispatch reviewer "$unit_id"
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "verify-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
     {order: .unit,
@@ -13544,6 +13552,76 @@ im_refuse_open_dispatch() {
     || die 37 "$1: the $od_role record for $2 is still open in $IMPL_DIR/dispatch.json, so the $od_role has not finished. Run dispatch-close. If it keeps the record open, resume the role as it says, then run dispatch-close again. Then run $1. Nothing is written."
 }
 
+# The facts a close reads from an open dispatch record $1, as DF_PATH (the role's report),
+# DF_LINE (its completion line), DF_OPENED and DF_WRITTEN (epoch seconds), DF_UNIT (the order from
+# the snapshot), DF_PROJECT and DF_OWNED. A record order's range lives in the project folder, so its
+# owned files there are read, never the whole folder, where other tasks' records change (gap row
+# 312). An unreadable snapshot reads as a code order, so this adds no refusal. TASK_PATH is set.
+im_dispatch_facts() {
+  DF_PATH="$(jq -r '.reportPath // ""' "$1" 2>/dev/null)"
+  DF_LINE="$(jq -r '.completionLine // ""' "$1" 2>/dev/null)"
+  DF_OPENED="$(jq -r '(.openedAt // "") | fromdateiso8601? // ""' "$1" 2>/dev/null)"
+  [ -n "$DF_OPENED" ] || DF_OPENED="$(im_mtime "$1")"
+  DF_WRITTEN="$(im_mtime "$DF_PATH" 2>/dev/null)"
+  DF_UNIT="$(jq -c --arg u "$(jq -r '.unit // ""' "$1")" \
+    '[ .workOrders[]? | select(.id == $u) ][0] // {}' "$TASK_PATH/implementation/snapshot.json" 2>/dev/null)"
+  br_order_facts "$DF_UNIT"
+  DF_PROJECT=""; DF_OWNED=""
+  if [ "$BR_ORDER_RANGE" = "project" ] && DF_PROJECT="$(resolve_project_folder "$TASK_PATH")"; then
+    DF_OWNED="$(printf '%s' "$DF_UNIT" | jq -r '(.ownedFiles // [])[]')"
+  else
+    DF_PROJECT=""
+  fi
+}
+
+# A record opened and never sent has no file its role wrote and no commit after it opened (gap row
+# 343). A record that counts a resume had a role return. dispatch-open removes a fixer's or test
+# author's report, so one there was written since. A record reopened with --resume keeps the
+# report, and is read by time like the other roles. Prints why the open record $1 may have had a
+# role run, or nothing when it shows none. TASK_PATH is set.
+im_unsent_fault() {
+  local ns_head ns_proj="" ns_t ns_f ns_why=""
+  im_dispatch_facts "$1"
+  ns_head="$(git -C "$(jq -r '.codePath // ""' "$1")" log -1 --format=%ct 2>/dev/null)"
+  while IFS= read -r ns_f; do
+    [ -n "$ns_f" ] || continue
+    ns_t="$(git -C "$DF_PROJECT" log -1 --format=%ct -- "$ns_f" 2>/dev/null)"
+    if [ -n "$ns_t" ] && [ "$ns_t" -gt "${ns_proj:-0}" ]; then ns_proj="$ns_t"; fi
+  done <<NS_OWNED
+$DF_OWNED
+NS_OWNED
+  if [ -z "$DF_PATH" ]; then
+    ns_why="it names no file its role writes, so nothing shows that no role ran"
+  elif [ -f "$DF_PATH" ] && [ -n "$DF_LINE" ] && [ "$(jq -r 'has("resumedAt")' "$1")" = "false" ]; then
+    ns_why="$DF_PATH exists, and dispatch-open removed it, so its role wrote it"
+  elif [ -f "$DF_PATH" ] && [ "$DF_WRITTEN" -ge "$DF_OPENED" ]; then
+    ns_why="$DF_PATH was written after it opened"
+  elif [ "$(jq -r 'has("resumes")' "$1")" = "true" ]; then
+    ns_why="it counts a resume, so its role has returned"
+  elif [ -z "$ns_head" ]; then
+    ns_why="git could not read the last commit in its code path"
+  elif [ "$ns_head" -gt "$DF_OPENED" ]; then
+    ns_why="its code path has a commit at $(im_iso_of "$ns_head"), after it opened at $(im_iso_of "$DF_OPENED")"
+  elif [ -n "$ns_proj" ] && [ "$ns_proj" -gt "$DF_OPENED" ]; then
+    ns_why="the order's files in the project folder have a commit at $(im_iso_of "$ns_proj"), after it opened at $(im_iso_of "$DF_OPENED")"
+  fi
+  printf '%s' "$ns_why"
+}
+
+# A brief action that writes the brief again for role $1 on order $2 removes that role's open
+# record when it shows no role ran, and counts nothing (gap row 389). No role was sent with the old
+# brief, and dispatch-open derives the record from the brief, such as a fixer's allowed files. A
+# record that shows a role may have run stays open, and dispatch-close judges it. IMPL_DIR and
+# TASK_PATH are set.
+im_void_unsent_dispatch() {
+  local vd_file="$IMPL_DIR/dispatch.json"
+  [ "$(jq -r --arg u "$2" 'select(.unit == $u) | .role // "" | split(":") | last' "$vd_file" 2>/dev/null)" = "$1" ] \
+    || return 0
+  [ -z "$(im_unsent_fault "$vd_file")" ] || return 0
+  rm -f "$vd_file" || die 3 "could not remove $vd_file"
+  echo "dispatch: removed $vd_file, the $1 record for $2. No role ran with it, and the brief it was opened on is written again. Nothing was counted."
+}
+
 # Gap row 361. The checker's verdict on a record order's done-when line drifts from pass to pass,
 # so a line it confirmed is carried while its carry key is unchanged. The key is the line's text,
 # the order's owned files and the hash of the checker's own rule file, so a changed document target
@@ -14241,52 +14319,12 @@ do_dispatch_close() {
   # nothing is checked.
   local cut_off="" rp_path="" rp_line="" rp_cause="" rp_dirty rp_written rp_opened rp_unit rp_where rp_project rp_owned
   if [ -f "$dispatch_file" ]; then
-    rp_path="$(jq -r '.reportPath // ""' "$dispatch_file" 2>/dev/null)"
-    rp_line="$(jq -r '.completionLine // ""' "$dispatch_file" 2>/dev/null)"
-    rp_opened="$(jq -r '(.openedAt // "") | fromdateiso8601? // ""' "$dispatch_file" 2>/dev/null)"
-    [ -n "$rp_opened" ] || rp_opened="$(im_mtime "$dispatch_file")"
-    rp_written="$(im_mtime "$rp_path" 2>/dev/null)"
-    # A record order's range lives in the project folder, so its owned files there are read, never
-    # the whole folder, where other tasks' records change (gap row 312). An unreadable snapshot
-    # reads as a code order, so this adds no refusal.
-    rp_unit="$(jq -c --arg u "$(jq -r '.unit // ""' "$dispatch_file")" \
-      '[ .workOrders[]? | select(.id == $u) ][0] // {}' "$TASK_PATH/implementation/snapshot.json" 2>/dev/null)"
-    br_order_facts "$rp_unit"
-    rp_project=""; rp_owned=""
-    if [ "$BR_ORDER_RANGE" = "project" ] && rp_project="$(resolve_project_folder "$TASK_PATH")"; then
-      rp_owned="$(printf '%s' "$rp_unit" | jq -r '(.ownedFiles // [])[]')"
-    else
-      rp_project=""
-    fi
-    # A record opened and never sent has no file its role wrote and no commit after it opened. It
-    # is removed and spends no resume (gap row 343). A record that counts a resume had a role return.
-    # dispatch-open removes a fixer's or test author's report, so one there was written since. A
-    # record reopened with --resume keeps the report, and is read by time like the other roles.
+    im_dispatch_facts "$dispatch_file"
+    rp_path="$DF_PATH"; rp_line="$DF_LINE"; rp_opened="$DF_OPENED"; rp_written="$DF_WRITTEN"
+    rp_unit="$DF_UNIT"; rp_project="$DF_PROJECT"; rp_owned="$DF_OWNED"
     if [ "$not_sent" = true ]; then
-      local ns_head ns_proj="" ns_t ns_f ns_why=""
-      ns_head="$(git -C "$(jq -r '.codePath // ""' "$dispatch_file")" log -1 --format=%ct 2>/dev/null)"
-      while IFS= read -r ns_f; do
-        [ -n "$ns_f" ] || continue
-        ns_t="$(git -C "$rp_project" log -1 --format=%ct -- "$ns_f" 2>/dev/null)"
-        if [ -n "$ns_t" ] && [ "$ns_t" -gt "${ns_proj:-0}" ]; then ns_proj="$ns_t"; fi
-      done <<NS_OWNED
-$rp_owned
-NS_OWNED
-      if [ -z "$rp_path" ]; then
-        ns_why="it names no file its role writes, so nothing shows that no role ran"
-      elif [ -f "$rp_path" ] && [ -n "$rp_line" ] && [ "$(jq -r 'has("resumedAt")' "$dispatch_file")" = "false" ]; then
-        ns_why="$rp_path exists, and dispatch-open removed it, so its role wrote it"
-      elif [ -f "$rp_path" ] && [ "$rp_written" -ge "$rp_opened" ]; then
-        ns_why="$rp_path was written after it opened"
-      elif [ "$(jq -r 'has("resumes")' "$dispatch_file")" = "true" ]; then
-        ns_why="it counts a resume, so its role has returned"
-      elif [ -z "$ns_head" ]; then
-        ns_why="git could not read the last commit in its code path"
-      elif [ "$ns_head" -gt "$rp_opened" ]; then
-        ns_why="its code path has a commit at $(im_iso_of "$ns_head"), after it opened at $(im_iso_of "$rp_opened")"
-      elif [ -n "$ns_proj" ] && [ "$ns_proj" -gt "$rp_opened" ]; then
-        ns_why="the order's files in the project folder have a commit at $(im_iso_of "$ns_proj"), after it opened at $(im_iso_of "$rp_opened")"
-      fi
+      local ns_why
+      ns_why="$(im_unsent_fault "$dispatch_file")"
       [ -z "$ns_why" ] \
         || die 3 "dispatch-close: --not-sent refused, because $ns_why. A role may have run, so close the record as a returned role: run dispatch-close without --not-sent. The record stays open."
       rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
