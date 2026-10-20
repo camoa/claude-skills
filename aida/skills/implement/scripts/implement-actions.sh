@@ -3484,7 +3484,7 @@ do_preconditions() {
   local snapshot_doc scope_json suite_json_file suite_json baseline_json existing_commit
   local harness_needed harness_reason env_asked=no env_owner="" tooling_entries
   local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc build_json build_entries unchecked_json review_tools smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
-  local pc_folder_gap="" pc_held pc_holders pc_line pc_where pc_missing
+  local pc_folder_gap="" pc_held pc_holders pc_where pc_missing
   local pc_build_doc tool_rows_json pc_row_id pc_row_json
 
   while [ "$#" -gt 0 ]; do
@@ -5950,7 +5950,7 @@ redAgain: $(printf '%s' "$rows_meta_json" | jq -c --argjson entries "$tf_red_ent
   # red in it stale when one test changes (gap row 258). That is kept on purpose. An edit to one
   # test can change what the others run, and it moves every line their reds cite. The refusal
   # prints the names on a `redAgain:` line, as JSON, so whoever runs them again need not guess.
-  local tf_brief tf_round_at="" tf_round_epoch="" tf_red_epoch tf_test_path tf_test_epoch stale_reds=""
+  local tf_brief tf_round_at="" tf_round_epoch="" tf_red_epoch tf_test_path stale_reds=""
   local stale_names=""
   tf_brief="$IMPL_DIR/brief-$unit_id-tests.json"
   if [ "$red_count" -gt 0 ] && [ -f "$tf_brief" ]; then
@@ -6203,7 +6203,7 @@ TF_EOF
   # like. Reading a bare hex word as an id would refuse a prose reason nobody meant as one. The id
   # may be shorter than the brief printed, because `start`'s own line prints seven characters.
   local tf_lock_total tf_lock_i tf_lock_reason tf_lock_id tf_lock_name tf_lock_hit
-  local tf_own_commits tf_own_loaded tf_own_c tf_carried tf_lost=""
+  local tf_own_commits tf_own_loaded tf_own_c tf_lost=""
   tf_lock_total="$(printf '%s' "$locks_json" | jq 'length')"
   tf_own_commits=""
   tf_own_loaded=false

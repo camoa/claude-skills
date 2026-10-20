@@ -46,5 +46,31 @@ awk '{ if (($1 in seen) && seen[$1] != $2)
         "$LIBFNS" "$PLUGIN/$p"
     done >>"$HITS"
 
+# A name made local twice in one function is the same fault inside one scope. Under zsh, a second
+# `local name` with no value and no option prints `name=<value>` to stdout, and bash prints nothing,
+# so the stray line passes every bash test (gap row 388). A function's scope opens at a definition
+# and closes at a `}` in column 1. Quoted text is blanked first, so a word inside a value never
+# counts. A declaration with an option, or with a value, prints nothing and is not a fault.
+(cd "$PLUGIN" && find hooks scripts skills tests -name '*.sh' | sort) \
+  | while IFS= read -r p; do
+      awk -v F="$p" -v q="'" "$DEFN"'
+        defname($0) != "" || /^}/ { split("", seen); next }
+        { line = $0; sub(/^[ \t]*#.*/, "", line)
+          gsub("\"(\\$\\([^)]*\\)|\\\\.|[^\"\\\\])*\"|" q "[^" q "]*" q, "Q", line)
+          nc = split(line, cmd, /[;&|()]/)
+          for (c = 1; c <= nc; c++) {
+            nw = split(cmd[c], w, " "); i = 1
+            while (w[i] == "then" || w[i] == "else" || w[i] == "do" || w[i] == "{") i++
+            if (w[i] != "local" && w[i] != "typeset" && w[i] != "declare") continue
+            opt = 0; for (j = i + 1; j <= nw; j++) if (w[j] ~ /^-/) opt = 1
+            for (j = i + 1; j <= nw; j++) {
+              name = w[j]; sub(/=.*/, "", name)
+              if (name !~ /^[A-Za-z_][A-Za-z0-9_]*$/) continue
+              if (!opt && w[j] !~ /=/ && (name in seen))
+                print "declared twice: " F ":" FNR ": " name ", already local at line " seen[name]
+              if (!(name in seen)) seen[name] = FNR
+            } } }' "$PLUGIN/$p"
+    done >>"$HITS"
+
 cat "$HITS"
 [ ! -s "$HITS" ]

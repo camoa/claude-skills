@@ -1505,7 +1505,7 @@ environment_check() {
 }
 
 do_environment() {
-  local project_path="" id="" sub="" setup_recipes="" n tab; tab="$(printf '\t')"
+  local project_path="" id="" sub="" setup_recipes="" n tab probe_dir; tab="$(printf '\t')"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project_path="${2:?--project needs a value}"; shift 2 ;;
@@ -1579,7 +1579,7 @@ do_environment() {
     if [ -z "$RECIPE" ] && [ "$(jq -r '.environment.adopted // false' "$task_json")" = true ]; then
       wt="$(jq -r '.worktree.path // empty' "$task_json")"
       RECIPE="$(jq -r '.environment.adoptedRecipe // empty' "$task_json")"
-      local probe_dir rc=2
+      local rc=2
       if [ -f "$RECIPE" ] && [ -n "$wt" ] && [ -d "$wt" ] && ! task_env_restore_commit "$task_dir" "$wt" worktree >/dev/null; then
         probe_dir="$(mktemp -d)" || die3 "environment: could not create a temporary folder"
         ( ENV_TREE="$wt"; ENV_HEAD="$(git -C "$wt" rev-parse -q --verify HEAD)"; rc=0
@@ -1697,7 +1697,7 @@ TA_OTHERS
   # its refusal then means only that no site is adopted. The later checks name a refusal that
   # matters. A record with an address or a marker keeps the full bring-up, which is how a task
   # refreshes its copy.
-  local adopt="" probe_wt probe_dir
+  local adopt="" probe_wt
   probe_wt="$(jq -r '.worktree.path // empty' "$task_json")"
   if [ -n "$probe_wt" ] && [ -d "$probe_wt" ] \
     && [ -z "$(jq -r '.environment.address // .environment.state // empty' "$task_json")" ] \
@@ -1808,7 +1808,7 @@ $capture"
   # A file git tracks neither at HEAD nor at the fork point is never recorded, whatever its name:
   # it cannot reach trunk, and completion's restore would delete it (gap row 262). An adopted site
   # ran no check, so a named file it changed may be the task's own work, and none is recorded.
-  local recipe_changes changes_doc fork kind n blob
+  local recipe_changes changes_doc fork blob
   fork="$(task_fork_point "$task_dir" "$wt")"
   recipe_changes="$({ printf '%s\n' "$file_list" | cut -f2 | sed "s/^/files$tab/"
       [ -n "$adopt" ] || recipe_precondition_names "$RECIPE" | sed "s/^/named$tab/"; } \

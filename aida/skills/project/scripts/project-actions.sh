@@ -494,13 +494,12 @@ EOF
 # ------------------------------------------------------------------------------------------------
 
 do_report() {
-  local cwd match
+  local cwd match project_path
   cwd="$(pwd -P)"
 
   if match="$(registry_resolve_by_directory "$cwd")"; then
     echo "CASE: 1"
     project_line "$match"
-    local project_path
     project_path="$(printf '%s' "$match" | jq -r '.path')"
     registry_touch_last_accessed "$project_path"
     run_check "$project_path"
@@ -515,7 +514,6 @@ do_report() {
     if [ -n "$match" ] && [ "$match" != "null" ]; then
       echo "CASE: 2"
       project_line "$match"
-      local project_path
       project_path="$(printf '%s' "$match" | jq -r '.path')"
       registry_touch_last_accessed "$project_path"
       run_check "$project_path"
