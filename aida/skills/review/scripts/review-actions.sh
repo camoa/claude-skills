@@ -1007,7 +1007,7 @@ rw_check_coverage_verdict() {
 # Sets RW_MUTATION.
 RW_MUTATION=""
 rw_run_mutation() {
-  local fw_count fwi fw_obj fw row outfile rc tool has_paths
+  local fw_count fwi fw_obj fw row outfile rc tool has_paths stopped
   local detail output survivors score combined mut_file
   verdict=""; detail=""; output=""; survivors='[]'; score=""; combined=""; tool=""; has_paths=false
   # A task with no automated tests has no test for a mutant to fail, so the row does not apply and
@@ -1070,6 +1070,13 @@ rw_run_mutation() {
       *mutmut*)    tool="mutmut";    score="$(printf '%s' "$output" | grep -v '^[[:space:]]*$' | tail -1)" ;;
       *)           score="$(printf '%s' "$output" | grep -i 'score' | head -1)" ;;
     esac
+    # Infection prints its score lines only once a mutant ran. Without them its last words, an error
+    # or the paths it found no source in, name the files it was handed, and those lines are not
+    # survivors (gap row 392).
+    stopped=""
+    if [ "$tool" = "infection" ] && [ -z "$score" ]; then
+      stopped=" Its last line: $(pc_trim "$(printf '%s\n' "$output" | sed "s/$(printf '\033')\\[[0-9;]*m//g" | grep '[^[:space:]]' | tail -1)")"
+    fi
     # The criterion a survivor belongs to, by exact path: the frozen test records say which test file
     # belongs to which criterion, and the frozen orders say which source file belongs to which order
     # and what that order serves. A survivor no path attaches is still recorded, because the
@@ -1094,18 +1101,26 @@ rw_run_mutation() {
     # coverage half and the score with its survived count were read, and only the list was not
     # (references/checks.md, "A check answers unknown only when nothing it reads could be read").
     [ "$tool" != "mutmut" ] || survivors='[]'
+    [ -z "$stopped" ] || survivors='[]'
     if [ "$(printf '%s' "$survivors" | jq 'length')" -gt 0 ]; then
       combined="$(rw_worse "$combined" "unmet")"
       detail="$detail $fw: the mutation command reported $(printf '%s' "$survivors" | jq 'length') line(s) naming a changed file, and a surviving mutant is a test nothing can fail."
     elif [ "$rc" = "0" ] && [ "$tool" = "mutmut" ]; then
       combined="$(rw_worse "$combined" "met")"
       detail="$detail $fw: mutmut run exited 0 and prints no survivor by file. The survivors come from mutmut results as dotted mutant names, which nothing here maps to a path, so they are recorded as not readable. The outcome counts are in the score."
+    elif [ "$rc" = "0" ] && [ -n "$stopped" ]; then
+      combined="$(rw_worse "$combined" "met")"
+      detail="$detail $fw: the mutation command exited 0 and printed no score line, so no mutant ran over this change.$stopped"
     elif [ "$rc" = "0" ]; then
       combined="$(rw_worse "$combined" "met")"
       detail="$detail $fw: the mutation command exited 0 and named no changed file, so it reported no survivor in this change."
     else
       combined="$(rw_worse "$combined" "unknown")"
-      detail="$detail $fw: the mutation command exited $rc and named no changed file, so nothing here can tell a failed run from a clean one."
+      if [ -n "$stopped" ]; then
+        detail="$detail $fw: the mutation command exited $rc and printed no score line, so no mutant ran and no survivor was counted.$stopped"
+      else
+        detail="$detail $fw: the mutation command exited $rc and named no changed file, so nothing here can tell a failed run from a clean one."
+      fi
       rw_catalog_note "the mutation command the recipe declares exited $rc" "the test-execution recipe for $fw"
     fi
     rw_run_done

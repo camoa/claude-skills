@@ -101,7 +101,9 @@ a framework the baseline recorded unmet subtracts the same way. When the suite r
 
 **Check 4 records the score and every survivor, as the record holds them.** No mutation row reads
 undeclared, never met. The survivors go to the reviewer at the next step, as one more lens. The score
-is the line the tool's own recipe names, chosen by the tool in the row. A mutmut run prints no
+is the line the tool's own recipe names, chosen by the tool in the row. An Infection run with no
+score line ran no mutant, so its lines are never survivors. It reads met on exit 0, and unknown
+with a note on the recipe on any other exit. A mutmut run prints no
 survivor by file, so its survivors are recorded as not readable and named as unread in the detail.
 The row still reads met on exit 0, because the coverage half and the score were read. The outcome
 counts are in the score, and `mutmut results` lists the survivors by mutant name.
