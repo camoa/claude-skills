@@ -389,10 +389,11 @@ Pass `--value <name>=<value>` for a placeholder a command carries, the same as
   an order that owns no file, such a line does not apply, and it never passes the order alone.
 
 A name with no `--value` is read from the tokens preconditions recorded. It is then read from
-the keys of the task's environment record, such as `project`. A `{a.b}` placeholder with no value
-reads unknown. A `## Configuration gate` line of a `gate` order is the exception. A token there
-with no value refuses at 3 before any check runs, and no attempt is spent. The message names the
-token. Supply the value, then run the same step again.
+the keys of the task's environment record, such as `project`. A check that reads unknown for a
+placeholder with no value refuses at 3. `build-record`, `build-recheck` and `fix-record` then
+write nothing, and no attempt or round is spent. A `## Configuration gate` line of a `gate` order
+refuses at 3 before any check runs. The message names the token. Supply the value, then run the
+same step again.
 
 Before the verify lines run, the script writes the `## Files` blocks of the recipe they cite into
 the worktree. A line can run a script the recipe ships. After the lines, it removes those
@@ -463,8 +464,7 @@ retry, and the route is `build`. Or no check stopped the attempt, so it passed a
 past the build. Or a path the interface check named does not exist at the recorded commit, so
 no amended record can answer it. A halted order refuses (exit 49), and `references/finish.md`
 names the grant. The clean-tree rule applies (exit 61). A missing interface record refuses as at `build-record`
-(exit 44). A check that reads unknown for a placeholder with no value refuses (exit 3), and
-the record stays unchanged. Run the same re-check again with that `--value`.
+(exit 44).
 
 It rewrites the record with the new checks and the interface record's text. When that text
 changed, the attempt's own text stays under `interfaceRecordBefore`. It keeps the attempt, its

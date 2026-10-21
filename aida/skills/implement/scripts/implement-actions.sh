@@ -7124,7 +7124,7 @@ br_tool_check() {
     payload="$(printf '%s' "$result" | cut -f2-)"
     if [ "$kind" = "UNRESOLVED" ]; then
       verdict="unknown"
-      detail="the token {$payload} in the $label command has no supplied value; pass --value $payload=<value>."
+      detail="the token {$payload} in the $label command $BR_NO_VALUE; pass --value $payload=<value>."
     elif [ "$kind" = "EMPTY" ]; then
       verdict="unknown"
       detail="the $label command came out with no token at all, so nothing ran and nothing was decided."
@@ -7314,7 +7314,7 @@ br_test_check() {
       payload="$(printf '%s' "$result" | cut -f2-)"
       if [ "$kind" = "UNRESOLVED" ]; then
         verdict="unknown"
-        detail="the token {$payload} in the $label command has no supplied value; pass --value $payload=<value>."
+        detail="the token {$payload} in the $label command $BR_NO_VALUE; pass --value $payload=<value>."
       elif [ "$kind" = "EMPTY" ]; then
         verdict="unknown"
         detail="the $label command came out with no token at all, so nothing ran and nothing was decided."
@@ -7644,7 +7644,7 @@ $BRC_VALUES"
       cat "$run_out" "$run_err" >>"$outfile"; : >"$run_err"
       if [ "$kind" = "UNRESOLVED" ]; then
         BRL_VERDICT="unknown"; BRL_RC=""
-        BRL_WHY="the token {$payload} in gate line $i ($shown) has no supplied value; pass --value $payload=<value>."
+        BRL_WHY="the token {$payload} in gate line $i ($shown) $BR_NO_VALUE; pass --value $payload=<value>."
         break
       fi
       BRL_RC="$payload"
@@ -8438,6 +8438,21 @@ br_round_allowed() {
 # `executed: 5 of 8` over seven checks (nyc defects 9 and 12). Sets BR_CHECKS_JSON, the same eight,
 # and BR_EXECUTED, how many of them ran a command, a diff or a hash.
 BR_CHECKS_FILE=""; BR_CHECKS_JSON=""; BR_EXECUTED=0
+
+# The words a check's detail carries when a token in its command had no value. The refusal below
+# finds that check by them.
+BR_NO_VALUE="has no supplied value"
+
+# Refuses at 3, before anything is written, when a check in the file $1 reads unknown for a token
+# with no value. Recorded, that stop would hold an unmoved commit: no re-check answers it, and
+# build-record refuses the same head (gap row 396). Removes $1 on refusal. Reads BRC_WHO.
+br_require_supplied_values() {
+  local unfilled
+  unfilled="$(jq -r --arg t "$BR_NO_VALUE" '[ .[] | select(.verdict == "unknown" and ((.detail // "") | contains($t)))
+    | .id + ": " + .detail ] | join(" ")' "$1")"
+  [ -z "$unfilled" ] \
+    || { rm -f "$1"; die 3 "$BRC_WHO: $unfilled Nothing was written, and no attempt or round was spent. Run the same step again with the value."; }
+}
 br_eight_checks() {
   local declared="$1" record_text="$2" want="${3:-8}"
   local unit_id seven_file interface_check_json="null"
@@ -8465,6 +8480,7 @@ br_eight_checks() {
   rm -f "$seven_file"
   br_require_check_count "$BRC_WHO" "$BR_CHECKS_FILE" "$want"
   BR_CHECKS_JSON="$(cat "$BR_CHECKS_FILE" 2>/dev/null)"
+  br_require_supplied_values "$BR_CHECKS_FILE"
   BR_EXECUTED="$(br_executed_count "$BR_CHECKS_JSON")"
   case "$BR_EXECUTED" in ''|*[!0-9]*) BR_EXECUTED=0 ;; esac
 }
@@ -9403,14 +9419,6 @@ EOF_PATHS
   # The observed record the build step accepted, at the path it names (live-run row 104).
   BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
   br_eight_checks "$unit_interface_declared" "$BR_INTERFACE_TEXT" "$checks_total"
-
-  # A token with no value reads unknown. Written, that stop holds the same commit, so no re-check
-  # answers it and build-record refuses the unmoved head (gap row 396). Nothing is written instead.
-  local unfilled
-  unfilled="$(printf '%s' "$BR_CHECKS_JSON" | jq -r '[ .[] | select(.verdict == "unknown" and ((.detail // "") | contains("has no supplied value")))
-    | .id + ": " + .detail ] | join(" ")')"
-  [ -z "$unfilled" ] \
-    || { rm -f "$BR_CHECKS_FILE"; die 3 "build-recheck: $unfilled Nothing was written, and $record_file is unchanged. Run the same re-check again with the value."; }
 
   # The record keeps the attempt, its range and its date, and takes the new checks and the interface
   # record's text as read now. When that text changed, the attempt's own text stays under
@@ -11285,6 +11293,7 @@ RV_AC
   [ -s "$seven_file" ] \
     || { rm -f "$seven_file"; die 3 "fix-record: the seven computable checks produced nothing for $unit_id."; }
   br_require_check_count "fix-record" "$seven_file" 7
+  br_require_supplied_values "$seven_file"
   checks_json="$(cat "$seven_file" 2>/dev/null)"
 
   local diff_path fix_others="" fix_paths p
