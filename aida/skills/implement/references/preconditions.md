@@ -179,10 +179,12 @@ record; name the path rather than reading it here.
 condition or smoke row that stopped the run, and the command that row ran. The `failedOutput:` line
 holds the first line that command printed. The `nextAdvice:` line says to run the tool skill's
 install when a condition's tool is absent. When a `## Tokens` block printed nothing on a worktree
-that records no site, it names `task environment up` and a project recipe folder instead. Both read
-`none` when they do not apply. Read all three to the person. Each is a line of its own, so the
-240-character cut of a long command never takes the cause. A token's reason ends in what its block
-printed, so the cut never takes its `--value` instruction.
+that records no site, it names `task environment up` and a project recipe folder instead. When
+`next:` names a condition that its `expect:` string decided unmet, it names that string and what the
+condition asks for. One example is a test marker the project must register. It reads `none` when
+none applies. Read all three to the person. Each is a line of its own, so the 240-character cut of
+a long command never takes the cause. A token's reason ends in what its block printed, so the cut
+never takes its `--value` instruction.
 
 ## Supply a value where a command needs one
 

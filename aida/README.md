@@ -1,4 +1,25 @@
+<div align="center">
+
 # AIDA, the AI Dev Assistant
+
+**Six stages, script checks, and stack recipes for AI coding work.**
+
+**[Documentation](docs/README.md) · [Installing](#installing-it) · [Changelog](CHANGELOG.md)**
+
+[![Version](https://img.shields.io/github/package-json/v/camoa/claude-skills?filename=aida%2F.claude-plugin%2Fplugin.json&label=version)](#status)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
+
+[![Tested: bash](https://img.shields.io/badge/tested-bash-blue.svg)](#status)
+[![Tested: zsh](https://img.shields.io/badge/tested-zsh-blue.svg)](#status)
+
+[![Claude Code](https://img.shields.io/badge/Claude_Code-supported-blueviolet.svg)](#installing-it)
+[![Copilot CLI](https://img.shields.io/badge/Copilot_CLI-unsupported-lightgrey.svg)](#status)
+[![Codex](https://img.shields.io/badge/Codex-unsupported-lightgrey.svg)](#status)
+[![Cursor](https://img.shields.io/badge/Cursor-unsupported-lightgrey.svg)](#status)
+[![OpenCode](https://img.shields.io/badge/OpenCode-unsupported-lightgrey.svg)](#status)
+[![Antigravity](https://img.shields.io/badge/Antigravity-unsupported-lightgrey.svg)](#status)
+
+</div>
 
 A Claude Code plugin. AIDA keeps AI coding work inside a process that produces better code for
 your project.
@@ -37,9 +58,10 @@ make a decision once.
 
 ## Status
 
-Version 6.0.0. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. Every stage
-is built and proved against fixtures under bash and zsh. Live tasks on real projects ran through
-the betas, and the defects they found are fixed.
+Version 6. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. Every stage
+is built and proved against fixtures under bash and zsh. Live tasks on real projects have run since
+the betas, and each release fixes the defects they found. Copilot CLI, Codex, Cursor, OpenCode and
+Antigravity are not supported yet. A task to support them is open.
 
 ## Installing it
 

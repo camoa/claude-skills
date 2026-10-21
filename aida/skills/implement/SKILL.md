@@ -74,7 +74,7 @@ derivation, kept here so a person can check the line against the state the other
 | An `order(...)` line at `reviewed` or `fixed`, with `review: open=0` | Close the order | `review` |
 | An `order(...)` line at `closed` | Nothing left to do on it. Take the next ready order | |
 | Every order `closed`, `finished: none` | Finish the task | `finish` |
-| `finished: recorded` | The review stage is next. After a failed review, fix what it found and take `finish` again | `finish` |
+| `finished: recorded` | The review stage is next. After a failed review, `next:` names `reopen`, which sends its findings back to their orders | `finish` |
 | An `order(...)` line whose halt says `the design removed` it, and an order `not started` that could move | Offer the restart before those tests are written: the removed order's frozen record still guards its test files | `finish` |
 | An `order(...)` line whose only drift segments begin `design drift: the builder declared a departure` or `design drift: the reviewer answered`, a person present | Offer `review-record --accept-deviation` to keep the departure, or the restart once design amends the order | `review` |
 | An `order(...)` line whose halt holds any other `design drift...` segment, a person present | Offer the restart. A segment about the order's own design file also clears when the design is put back and `start` runs again | `finish` |
@@ -212,7 +212,8 @@ The answer can change the brief, and the open record then blocks the record step
 role was never dispatched closes with `dispatch-close "<task_folder>" --not-sent`. That close
 spends no resume. It refuses when one of these shows that a role may have run. A fixer's or test
 author's report exists. Another role's file is newer than the record. A commit is newer than the
-record, in the code path or in a record order's files. A fresh `dispatch-open` refuses while a fixer's finished
+record, in the code path or in a record order's files. A brief action that writes the role's brief again
+removes a record that shows none of these, and counts nothing. A fresh `dispatch-open` refuses while a fixer's finished
 report waits for `fix-record`. Run `fix-record` first, or `fix-brief` again for a changed round.
 
 **A role the runtime stops at its turn limit is resumed once.** This holds for every role this

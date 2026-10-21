@@ -203,7 +203,7 @@
         "closedRanges": {
           "type": "array",
           "items": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$"},
-          "description": "The commitRange this order held each time a dependent order's repair reopened it, oldest first. Present only when one did. commitRange then covers the last close alone, the repair's own commits, so the order's whole work is these ranges and that one (gap row 286)."
+          "description": "The commitRange this order held each time a dependent order's repair or a failed task review reopened it, oldest first. Present only when one did. commitRange then covers the last close alone, the repair's own commits, so the order's whole work is these ranges and that one (gap row 286)."
         }
       }
     },

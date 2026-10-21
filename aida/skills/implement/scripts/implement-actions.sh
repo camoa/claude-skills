@@ -88,6 +88,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh close <task_folder> <unit_id>
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]... \
 #                            [--accept-warnings <the person's reason>]
+#   implement-actions.sh reopen <task_folder>
 #   implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
 #   implement-actions.sh restart <task_folder> --reason <text> [--split <commit>]...
 #   implement-actions.sh unattributed <task_folder>
@@ -133,6 +134,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # resume. It refuses when a fixer's or test author's report exists, when another role's file was
 # written after the record opened, or when the record counts a resume. It also refuses on a commit
 # after the record opened, in the code path or in a record order's files (gap row 343).
+# tests-brief, build-brief, review-brief, fix-brief and verify-brief write a brief again for one
+# role. Each removes that role's open record for the order when it shows none of these signs, and
+# counts nothing (gap row 389).
 #   implement-actions.sh step <name>
 #
 # `step` prints one of this skill's own step files, from
@@ -862,6 +866,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      order's deliverable: its author edits it until each test passes, and freezes each with a
 #      --locks-in reason (live-run row 369). The message names the tests. Nothing is frozen.
 #
+# 119  `reopen` found no failed task review of this finish, or no finding of it that fails a
+#      criterion in a file a closed order owns (gap row 390). Nothing is written.
+#
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
 # Linux and `shasum -a 256` on macOS; scripts/lib/records-hash.sh tries both. An id's own shape,
@@ -1111,6 +1118,7 @@ usage: implement-actions.sh read  <task_folder>
                             --started-at <commit the attempt began from>
                             [--test-recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
+                            [--implement-recipe <framework>=<path>]...
                             [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
                             [--accept-deviation <the person's reason>]
@@ -1130,6 +1138,7 @@ usage: implement-actions.sh read  <task_folder>
                             --started-at <commit the round began from>
                             [--test-recipe <framework>=<path>]...
                             [--check-recipe <framework>=<path>]...
+                            [--implement-recipe <framework>=<path>]...
                             [--value <name>=<value>]...
                             [--nothing-ran <literal substring>]
                             [--scope-insufficient <finding id>=<reason>]...
@@ -1142,6 +1151,7 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh close <task_folder> <unit_id>
        implement-actions.sh finish <task_folder> [--value <name>=<value>]...
                             [--accept-warnings <the person's reason>]
+       implement-actions.sh reopen <task_folder>
        implement-actions.sh grant-attempt <task_folder> <unit_id> --reason <text>
        implement-actions.sh restart <task_folder> --reason <text> [--split <commit>]...
        implement-actions.sh unattributed <task_folder>
@@ -1537,7 +1547,13 @@ im_next_step() {
     return 0
   fi
   if [ "$finished" = "true" ]; then
-    printf 'none: implementation is finished, the review stage is next, and a failed review takes a fix and a second finish'
+    # A failed task review of this finish sends its findings back into the orders (gap row 390).
+    if [ "$(jq -r --arg r "$(jq -r '.commitRange // ""' "$impl/finished.json" 2>/dev/null)" \
+      '.verdict == "failed" and .reviewedRange == $r' "$impl/../review/review.json" 2>/dev/null)" = "true" ]; then
+      printf 'finish: reopen, the task review of this finish failed, and its findings go back to the orders that own their files'
+    else
+      printf 'none: implementation is finished, the review stage is next, and a failed review takes a fix and a second finish'
+    fi
     return 0
   fi
   # How many actionable findings each reviewed order still has open, read once per order here so
@@ -4141,6 +4157,9 @@ PC_TOOL_ROWS
         [ .frameworks[] | . as $f
           | ( (.entries[] | select(.verdict | bad)
                | if .check then {next: ("The \($f.framework) condition \(.id)" + how + ". " + ran(.check)), output: said}
+                   + (if .verdict == "unmet" and .exitCode == 0 and (.expect // "") != ""
+                      then {advice: "The \($f.framework) condition \(.id) printed no \(.expect), so it reads unmet. It asks for \(.what)."}
+                      else {} end)
                  else {next: ("The \($f.framework) condition \(.id)" + how), output: (.firstLine // "none")} end),
               (.smoke | select(.verdict | bad)
                | if .exitCode == null then {next: "The \($f.framework) smoke row read \(.verdict): \(.reason // "")", output: "none"}
@@ -4150,6 +4169,10 @@ PC_TOOL_ROWS
         | .[0] // {next: "Read the record", output: "none"}')"
       pc_next="none: the build does not go on. $(printf '%s' "$pc_cause" | jq -r '.next')"
       pc_failed="$(printf '%s' "$pc_cause" | jq -r '.output')"
+      # A condition that its `expect:` string decided exits 0, and its first line is beside the
+      # point. So when `next:` names one, the advice names the string and what the condition asks
+      # for, such as a test marker the project must register before any red run (gap row 393).
+      pc_advice="$(printf '%s' "$pc_cause" | jq -r '.advice // "none"')"
       printf '%s' "$record_json" | jq -e '[ .frameworks[].entries[] | select(.reason == "check-command-not-found") ] | length > 0' >/dev/null \
         && pc_advice="A condition's tool is absent. Run the tool skill's install from the worktree, which holds tracked files only: $codepath"
       # A ## Tokens block reads the tree, and a worktree with no site can lack what it looks for.
@@ -4815,10 +4838,23 @@ TB_OWNED
 
   # Another key, only while a row rejected at the checkpoint stands: `tests-freeze` recorded it on
   # the ledger with the checker's note, and the person's words when a person rejected it (gap rows
-  # 218 and 373).
-  local rows_rejected_json
-  rows_rejected_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" '
+  # 218 and 373). A second rejection halts the order and leaves the ledger's note from the round
+  # before. A fresh author would then repair what the tests already meet (gap row 395). So each
+  # row takes its note from the verdict file when that file holds the row. A row that file confirms
+  # is dropped, unless a person rejected it.
+  local rows_rejected_json check_file="$IMPL_DIR/row-check-$unit_id.json" check_doc='{}'
+  if [ -f "$check_file" ] && printf '%s' "$ledger_doc" | jq -e --arg id "$unit_id" \
+       '[ (.orders // [])[] | select(.id == $id) | has("rowsRejected") ][0] // false' >/dev/null; then
+    check_doc="$(jq -c 'if (.rows | type) == "array" then . else error end' "$check_file" 2>/dev/null)"
+    [ -n "$check_doc" ] \
+      || die 3 "tests-brief: $check_file is not in the checker's shape, {\"rows\": [{\"criterion\", \"verdict\", \"note\"}]}. The rejected rows take the checker's note from it. Repair or remove it by hand before running this again."
+  fi
+  rows_rejected_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --argjson check "$check_doc" '
     ([ (.orders // [])[] | select(.id == $id) ][0].rowsRejected // [])
+    | map(.criterion as $c
+        | ([ ($check.rows // [])[] | select(type == "object" and .criterion == $c) ][0]) as $v
+        | select(has("personWords") or ($v.verdict // "") != "confirmed")
+        | if $v.note == null then . else .checkerNote = $v.note end)
     | if length == 0 then null
       else ([ .[] | (.redAgain // [])[] ] | unique) as $again
         | {rows: ., redAgain: $again,
@@ -4863,6 +4899,7 @@ TB_OWNED
      | if $deliverableIsTests == null then . else .deliverableIsTests = $deliverableIsTests end
      | .worktree = $worktree')"
   [ -n "$brief_json" ] || die 3 "tests-brief: could not assemble the brief for $unit_id."
+  im_void_unsent_dispatch test-author "$unit_id"
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "tests-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
     {order: .unit.id,
@@ -6841,6 +6878,7 @@ do_build_brief() {
     printf '%s\n' "$(printf '%s' "$BB_UNIT_JSON" | jq -r '.interface // ""')" >"$IMPL_DIR/interface-$unit_id.md" \
       || die 3 "build-brief: could not write the interface record for $unit_id."
   fi
+  im_void_unsent_dispatch implementer "$unit_id"
   write_atomic "$brief_file" "$brief_json"
   # headNow is printed because the caller passes it back as --started-at, and the report path
   # because the dispatch names it. Everything else the implementer reads from the file. The
@@ -7955,6 +7993,52 @@ br_require_gate_tokens() {
     || die 3 "$BRC_WHO: the token {${found%%	*}} in the lines from ${found#*	} has no value, so no check ran and no attempt was spent. A value comes from --value ${found%%	*}=<value>, from the tokens preconditions recorded, or from the task's environment record, which task environment <task-id> up writes."
 }
 
+# The implement recipe a gate order's configuration gate reads, taken from preconditions.json when
+# no --implement-recipe was passed (gap rows 349 and 391). A gate left unknown for a missing flag
+# spends an attempt that no later step can read again. The recipe taken is the one recorded
+# recipe whose file carries the block br_gate_check reads. Two such recipes are two answers to one
+# question, so the person names one. Given implement flags are compared and nothing is added to
+# them, since a second recipe carrying the block refuses at 72. An order with no verify lines of
+# its own refuses at 3 when no recorded implement recipe carries the block, because its gate could
+# only read unknown. $1 the action, $2 the order's JSON, $3 the given list, $4 the sentence that says what a
+# disagreement costs, $5 the sentence a refusal ends on. build-record and fix-record pass no list,
+# so a flag given there runs as given. Sets RF_LIST and RF_FILLED as rf_fill_from_record does.
+br_fill_gate_recipes() {
+  local who="$1" given="$3" pre_file="$IMPL_DIR/preconditions.json" unit_id kept
+  local gate_all gate_recorded="" gate_given="" gate_line
+  RF_LIST="$given"; RF_FILLED=""
+  br_order_facts "$2"
+  [ "$BR_ORDER_SLOT" = "configuration-gate" ] || return 0
+  unit_id="$(printf '%s' "$2" | jq -r '.id')"
+  gate_all="$(jq -r '[ (.frameworks // [])[] | select((.implementRecipePath // "") != "")
+                       | .framework + "\t" + .implementRecipePath ] | join("\n")' "$pre_file" 2>/dev/null)"
+  while IFS= read -r gate_line; do
+    [ -n "$gate_line" ] || continue
+    if [ -n "$(cr_lookup "$given" "${gate_line%%	*}")" ]; then
+      gate_given="$gate_given$gate_line
+"
+    elif [ ! -f "${gate_line#*	}" ] || [ -n "$(sh_blocks_under "${gate_line#*	}" "Configuration gate" 1 | grep '[^[:space:]]')" ]; then
+      gate_recorded="$gate_recorded$gate_line
+"
+    fi
+  done <<BR_FILL_GATE
+$gate_all
+BR_FILL_GATE
+  if [ -n "$given" ]; then
+    gate_recorded="$gate_given"
+  else
+    kept="$(brv_kept "$2")" || exit $?
+    if [ -z "$gate_recorded" ] && [ "$(printf '%s' "$kept" | jq 'length')" -eq 0 ]; then
+      [ -n "$gate_all" ] \
+        || die 3 "$who: $unit_id is proved by its configuration gate, no --implement-recipe was passed, and $pre_file records no implement recipe. $5 Pass --implement-recipe <framework>=<path>."
+      die 3 "$who: $unit_id is proved by its configuration gate, no --implement-recipe was passed, and no implement recipe $pre_file records carries a ## Configuration gate: $(printf '%s' "$gate_all" | tr '\t\n' '= ' | sed 's/ $//'). $5 Pass --implement-recipe <framework>=<path> for a recipe that carries the block."
+    fi
+    [ "$(printf '%s' "$gate_recorded" | grep -c .)" -le 1 ] \
+      || die 3 "$who: $pre_file records more than one implement recipe that carries a ## Configuration gate: $(printf '%s' "$gate_recorded" | tr '\t\n' '= ' | sed 's/ $//'). Nothing here may choose between two answers to one question. $5 Pass the one --implement-recipe the attempt took."
+  fi
+  rf_fill_from_record "$who" "--implement-recipe" "$given" "$gate_recorded" "$pre_file" 91 "$4" ""
+}
+
 # Refuses at 103, before any check runs, when the task's site is down (gap row 212). A site
 # command such as `ddev drush` starts a stopped site and prints its start-up text. So every
 # `stdout empty` line would fail for a reason that is not the check. The test runs when the task
@@ -8525,6 +8609,34 @@ BR_DEVIATION_PREFIX="the builder declared a deviation:"
 # message quotes the row from the snapshot, never from the builder's text.
 BR_ROW_KIND="row-wrong"
 
+# The orders other than $3 whose ownedFiles match a file, one "<id><tab><glob>" line each, in the
+# snapshot's order. $1 the file's absolute path, $2 the same path relative to the code path.
+im_file_owners() {
+  local one g
+  while IFS='	' read -r one g; do
+    [ -n "$g" ] || continue
+    case "$g" in
+      /*) tf_path_matches_catalog_glob "$1" "$g" || continue ;;
+      *) tf_path_matches_catalog_glob "$2" "$g" || continue ;;
+    esac
+    printf '%s\t%s\n' "$one" "$g"
+  done <<IFO_OWNED
+$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "${3:-}" '.workOrders[] | select(.id != $u) | .id as $i | (.ownedFiles // [])[] | $i + "\t" + .')
+IFO_OWNED
+}
+
+# The ledger document $1 with the closed order $2 reopened by the repair entry $3: the entry joins
+# its repairs with the range the order closed at, and the order goes back to the step its fix
+# rounds follow. close writes the range again, so the entry keeps the first one (gap row 286).
+im_reopen_in() {
+  printf '%s' "$1" | jq -c --arg id "$2" --argjson e "$3" '
+    .orders = (.orders | map(if .id == $id then
+      (.repairs = ((.repairs // []) + [$e + (if .commitRange then {closedRange: .commitRange} else {} end)])
+       | .lastStep = (if (.roundsUsed // 0) > 0 then "fixed" else "reviewed" end)
+       | del(.commitRange))
+      else . end))'
+}
+
 # Gap row 286. A builder that meets a defect in a file a closed order owns stops with
 # `Stop: closed-order-defect: <file>: <what fails>`. A closed order cannot be reopened, two orders
 # may not own one file, and the live fix was a hand commit no reviewer read. So the stop reopens
@@ -8563,16 +8675,9 @@ br_open_repair() {
     BR_REPAIR_NOTE=" No repair opened: $unit_id owns $file itself, so the fix is its own."
     return 1
   fi
-  while IFS='	' read -r one g; do
-    [ -n "$g" ] && [ -z "$owner" ] || continue
-    case "$g" in
-      /*) tf_path_matches_catalog_glob "$abs" "$g" || continue ;;
-      *) tf_path_matches_catalog_glob "$rel" "$g" || continue ;;
-    esac
-    owner="$one"; owner_glob="$g"
-  done <<BR_OWNED
-$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '.workOrders[] | select(.id != $u) | .id as $i | (.ownedFiles // [])[] | $i + "\t" + .')
-BR_OWNED
+  IFS='	' read -r owner owner_glob <<BR_OWNER
+$(im_file_owners "$abs" "$rel" "$unit_id" | head -n 1)
+BR_OWNER
   owner_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$owner" '[ (.orders // [])[] | select(.id == $id) ][0] // null')"
   if [ -z "$owner" ] || [ "$(printf '%s' "$owner_entry" | jq -r '.lastStep // ""')" != "closed" ]; then
     BR_REPAIR_NOTE=" No repair opened: no closed order owns $file."
@@ -8614,16 +8719,9 @@ BR_EARLIER
   built="$(printf '%s' "$built" | jq -c '.actionableBecause += "; the repair took the owner'"'"'s first criterion by position, and nobody judged the link"')"
   review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
   [ -n "$review_doc" ] || die 3 "build-record: the repair finding on $owner could not be written."
-  # Back to the step its fix rounds follow. The range close wrote stays on the repair entry, and
-  # close writes the order's range again.
-  new_ledger="$(printf '%s' "$ledger_doc" | jq -c --arg id "$owner" --arg u "$unit_id" --argjson a "$attempt" \
-    --arg f "$new_id" --arg report "$report" --arg at "$(date -u +%Y-%m-%d)" '
-    .orders = (.orders | map(if .id == $id then
-      (.repairs = ((.repairs // []) + [{by: $u, attempt: $a, finding: $f, report: $report, at: $at}
-                                       + (if .commitRange then {closedRange: .commitRange} else {} end)])
-       | .lastStep = (if (.roundsUsed // 0) > 0 then "fixed" else "reviewed" end)
-       | del(.commitRange))
-      else . end))')"
+  new_ledger="$(im_reopen_in "$ledger_doc" "$owner" "$(jq -cn --arg u "$unit_id" --argjson a "$attempt" \
+    --arg f "$new_id" --arg report "$report" --arg at "$(date -u +%Y-%m-%d)" \
+    '{by: $u, attempt: $a, finding: $f, report: $report, at: $at}')")"
   [ -n "$new_ledger" ] || die 3 "build-record: the repair on $owner could not be written to the ledger."
   if [ -n "$commits" ]; then
     commit_count="$(printf '%s' "$commits" | wc -w | tr -d ' ')"
@@ -8953,6 +9051,10 @@ do_build_record() {
     br_require_observed "build-record" "$unit_id" "$observed_path"
     criteria_judged_json="$(jq -c '[ .rows[] | .criterion // empty ] | unique | if length == 0 then null else . end' "$observed_path")"
   fi
+  if [ -z "$gate_recipes" ]; then
+    br_fill_gate_recipes "build-record" "$UNIT_JSON" "" "" "No check ran and no attempt was spent."
+    gate_recipes="$RF_LIST"
+  fi
 
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc" "$RV_RANGE_PATHS"
 
@@ -9258,12 +9360,8 @@ EOF_PATHS
   # --- the recipe flags, taken from the records that produced them (gap row 349). A flag left out
   # would make its check read unknown or undeclared over the stop this re-check is meant to clear,
   # and an unknown configuration gate then refuses the next re-check. A flag naming another path
-  # than its record refuses at 91. On a gate order the implement recipe taken is the gate's own:
-  # the one recorded recipe whose file carries the block br_gate_check reads. Two such recipes are
-  # two answers to one question, so the person names one. Given implement flags are compared and
-  # nothing is added to them, since a second recipe carrying the block refuses at 72 -------------
+  # than its record refuses at 91. A gate order's implement recipe comes from br_fill_gate_recipes -
   local pre_file="$IMPL_DIR/preconditions.json" base_file="$IMPL_DIR/baseline.json" filled=""
-  local gate_all gate_recorded="" gate_given="" gate_line
   local rf_cost="The re-check would read one recipe and the task's records the other. Nothing ran, and $record_file is unchanged."
   rf_fill_from_record "build-recheck" "--test-recipe" "$test_recipes" "$(pre_test_recipes "$pre_file")" "$pre_file" 91 "$rf_cost" "--recipe"
   test_recipes="$RF_LIST"; filled="$RF_FILLED"
@@ -9271,33 +9369,8 @@ EOF_PATHS
     "$(jq -r '[ (.checkRecipes // [])[] | .framework + "\t" + .path ] | join("\n")' "$base_file" 2>/dev/null)" \
     "$base_file" 91 "$rf_cost" "--check-recipe"
   check_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
-  br_order_facts "$RV_UNIT_JSON"
-  if [ "$BR_ORDER_SLOT" = "configuration-gate" ]; then
-    gate_all="$(jq -r '[ (.frameworks // [])[] | select((.implementRecipePath // "") != "")
-                         | .framework + "\t" + .implementRecipePath ] | join("\n")' "$pre_file" 2>/dev/null)"
-    while IFS= read -r gate_line; do
-      [ -n "$gate_line" ] || continue
-      if [ -n "$(cr_lookup "$gate_recipes" "${gate_line%%	*}")" ]; then
-        gate_given="$gate_given$gate_line
-"
-      elif [ ! -f "${gate_line#*	}" ] || [ -n "$(sh_blocks_under "${gate_line#*	}" "Configuration gate" 1 | grep '[^[:space:]]')" ]; then
-        gate_recorded="$gate_recorded$gate_line
-"
-      fi
-    done <<RC_GATE
-$gate_all
-RC_GATE
-    if [ -n "$gate_recipes" ]; then
-      gate_recorded="$gate_given"
-    else
-      [ -n "$gate_all" ] \
-        || die 3 "build-recheck: $unit_id is proved by its configuration gate, no --implement-recipe was passed, and $pre_file records no implement recipe. Nothing ran, and $record_file is unchanged. Pass --implement-recipe <framework>=<path>."
-      [ "$(printf '%s' "$gate_recorded" | grep -c .)" -le 1 ] \
-        || die 3 "build-recheck: $pre_file records more than one implement recipe that carries a ## Configuration gate: $(printf '%s' "$gate_recorded" | tr '\t\n' '= ' | sed 's/ $//'). Nothing here may choose between two answers to one question. Nothing ran, and $record_file is unchanged. Pass the one --implement-recipe the attempt took."
-    fi
-    rf_fill_from_record "build-recheck" "--implement-recipe" "$gate_recipes" "$gate_recorded" "$pre_file" 91 "$rf_cost" ""
-    gate_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
-  fi
+  br_fill_gate_recipes "build-recheck" "$RV_UNIT_JSON" "$gate_recipes" "$rf_cost" "Nothing ran, and $record_file is unchanged."
+  gate_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
 
   br_require_clean_tree "build-recheck" "$codepath" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 
@@ -10175,6 +10248,7 @@ RB_COMMITS
     + (if $recipes == "" then {} else
        {recipeAnswer: "One answer per recipe: ref, verdict, evidence. A departed answer that a fix inside the order cures adds finding: the id of a finding with a fixScope, on a file the evidence names."} end)')"
   [ -n "$brief_json" ] || die 3 "review-brief: could not assemble the brief for $unit_id."
+  im_void_unsent_dispatch reviewer "$unit_id"
   write_atomic "$brief_file" "$brief_json"
   # The check verdicts are printed one per line because review.md routes on interface-record's;
   # the detail and the tool output stay in the brief and the build record.
@@ -10813,8 +10887,9 @@ FB_ALLOW
   # Gap row 381. An order a closed-order-defect reopened made no commit after the record it closed
   # at. So its first round after the reopen begins at HEAD when each later commit is read
   # elsewhere: inside another order's build or fix record, or wholly on files of the stopped
-  # order, whose next attempt holds it. Any other commit stays in the round, as before.
-  fb_reopen="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '[ (.repairs // [])[] | select(.by) ] | last // {}')"
+  # order, whose next attempt holds it. Any other commit stays in the round, as before. A task
+  # review's reopen has no stopped order, so only the records count (gap row 390).
+  fb_reopen="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '[ (.repairs // [])[] | select(.by or .review) ] | last // {}')"
   if [ -n "$fb_last" ] && [ "$fb_last" = "$(printf '%s' "$fb_reopen" | jq -r '.closedRange // "" | split("..") | .[1] // ""')" ]; then
     fb_by="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$(printf '%s' "$fb_reopen" | jq -r '.by')" '[ .workOrders[] | select(.id == $id) ][0] // {}')"
     fb_taken="$(im_taken_commits "$RV_RANGE_REPO" "$unit_id")"
@@ -10867,6 +10942,7 @@ FB_ALLOW
       playbooksPath: $playbooksPath
     }')"
   [ -n "$brief_json" ] || die 3 "fix-brief: could not assemble the brief for $unit_id."
+  im_void_unsent_dispatch fixer "$unit_id"
   write_atomic "$brief_file" "$brief_json"
   # A finding is named by id, severity and the id it cites. Its evidence stays in the brief.
   im_print_summary "fix-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
@@ -11154,6 +11230,10 @@ RV_AC
   tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
   [ -n "$tests_doc" ] \
     || die 3 "fix-record: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  if [ -z "$gate_recipes" ]; then
+    br_fill_gate_recipes "fix-record" "$RV_UNIT_JSON" "" "" "No check ran and no round was spent."
+    gate_recipes="$RF_LIST"
+  fi
 
   br_require_clean_tree "fix-record" "$RV_RANGE_REPO" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 
@@ -11423,6 +11503,7 @@ do_verify_brief() {
      fixRecord: $fixRecord,
      verdictsPath: $verdictsPath}')"
   [ -n "$brief_json" ] || die 3 "verify-brief: could not assemble the brief for $unit_id."
+  im_void_unsent_dispatch reviewer "$unit_id"
   write_atomic "$brief_file" "$brief_json"
   im_print_summary "verify-brief" "$(printf '%s' "$brief_json" | jq -c --arg brief "$brief_file" '
     {order: .unit,
@@ -12429,7 +12510,7 @@ FN_RECIPES
       commitRange: $range,
       suite: $suite,
       orders: [ ($ledger.orders // [])[] | {id: .id, commitRange: (.commitRange // ""), roundsUsed: (.roundsUsed // 0)}
-                + (if ([ (.repairs // [])[] | select(has("by")) ] | length) > 0 then {closedRanges: [ .repairs[] | .closedRange // empty ]} else {} end) ],
+                + (if ([ (.repairs // [])[] | select(has("by") or has("review")) ] | length) > 0 then {closedRanges: [ .repairs[] | .closedRange // empty ]} else {} end) ],
       criteria: [ ($ledger.criteria // [])[] | . as $c
                   | {id: $c.id,
                      verifiedBy: (([ $kinds[] | select(.id == $c.id) ][0].verifiedBy) // ""),
@@ -12463,6 +12544,114 @@ FN_RECIPES
      record: $record,
      next: "none: implementation is finished, and the review stage reads the record"}')"
   echo "FINISH: implementation is finished for this task; the review stage reads $record_file" >&2
+  exit 0
+}
+
+# reopen: a failed task review's findings go back into the orders that own their files (gap row
+# 390). Each finding the review records as failing a criterion reopens the closed order that owns
+# its file and owns that criterion, then one that serves it, then the one order that owns the file. So the order's own
+# fixer, dispatch record, owned files and verifier bound the repair, as for a closed-order defect.
+# One repair entry per order, so one fix round is added however many findings it takes. A finding
+# no order takes is named and left. finished.json goes, because finish's condition no longer
+# holds and every field in it is derived. Exit 119 when the review over this finish did not fail,
+# or nothing in it can be routed.
+do_reopen() {
+  [ "$#" -eq 1 ] || die 3 "reopen: one task folder is required"
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$1" "reopen")"
+  resolve_rc=$?
+  [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
+  IMPL_DIR="$TASK_PATH/implementation"
+  fn_load_task_state "reopen"
+  rv_load_codepath "reopen"
+  local review_file="$TASK_PATH/review/review.json" finished_range reviewed verdict
+  finished_range="$(jq -r '.commitRange // ""' "$IMPL_DIR/finished.json" 2>/dev/null)"
+  [ -n "$finished_range" ] \
+    || die 66 "reopen: $IMPL_DIR/finished.json is absent or holds no commitRange, so no task review judged a finished build."
+  verdict="$(jq -r '.verdict // "none"' "$review_file" 2>/dev/null)"
+  reviewed="$(jq -r '.reviewedRange // ""' "$review_file" 2>/dev/null)"
+  [ "$verdict" = "failed" ] && [ "$reviewed" = "$finished_range" ] \
+    || die 119 "reopen: the task review over $finished_range did not fail: $review_file reads verdict ${verdict:-none} over ${reviewed:-no range}. Only a failed review of this finish reopens an order."
+
+  local alignment findings count i one fid file crit abs rel owners owner owner_glob entry
+  local review_doc new_id raw built routed='{}' not_routed="" reopened='[]' ledger_doc order rf
+  alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
+  findings="$(jq -c '[ (.findings // [])[] | select(.disposition == "criterion" and (.ruling // "") != "wrong") ]' "$review_file")"
+  count="$(printf '%s' "$findings" | jq 'length')"
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    one="$(printf '%s' "$findings" | jq -c --argjson i "$i" '.[$i]')"
+    i=$((i + 1))
+    fid="$(printf '%s' "$one" | jq -r '.id')"
+    file="$(printf '%s' "$one" | jq -r '.file // ""')"
+    crit="$(printf '%s' "$one" | jq -r '.linkedTo // ""')"
+    if [ -z "$file" ]; then not_routed="$not_routed $fid (it names no file);"; continue; fi
+    abs="$(normalize_abs "$(resolve_against "$file" "$RV_CODEPATH")")"
+    rel="${abs#"$RV_CODEPATH"/}"
+    owners="$(im_file_owners "$abs" "$rel" "")"
+    # The order that owns the criterion comes before one that only serves it.
+    owner=""; owner_glob=""
+    for rf in criteriaOwned criteriaServed; do
+      while IFS='	' read -r order entry; do
+        [ -n "$order" ] && [ -z "$owner" ] || continue
+        printf '%s' "$SNAPSHOT_DOC" | jq -e --arg id "$order" --arg c "$crit" --arg k "$rf" \
+          '.workOrders[] | select(.id == $id) | (.[$k] // []) | index($c) != null' >/dev/null \
+          && { owner="$order"; owner_glob="$entry"; }
+      done <<RO_OWNERS
+$owners
+RO_OWNERS
+    done
+    if [ -z "$owner" ] && [ "$(printf '%s' "$owners" | cut -f1 | sort -u | grep -c .)" = "1" ]; then
+      IFS='	' read -r owner owner_glob <<RO_ONE
+$owners
+RO_ONE
+    fi
+    if [ -z "$owner" ]; then
+      if [ -z "$owners" ]; then not_routed="$not_routed $fid (no order owns $file);"
+      else not_routed="$not_routed $fid ($(printf '%s' "$owners" | cut -f1 | sort -u | paste -sd, -) own $file, and none serves $crit);"; fi
+      continue
+    fi
+    [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$owner" '.orders[] | select(.id == $id) | .lastStep // ""')" = "closed" ] \
+      || { not_routed="$not_routed $fid ($owner owns $file and is not closed);"; continue; }
+    case "$owner_glob" in /*) rel="$abs" ;; esac
+    review_doc="$(printf '%s' "$routed" | jq -c --arg o "$owner" '.[$o].doc // empty')"
+    [ -n "$review_doc" ] || review_doc="$(jq -c '.' "$IMPL_DIR/review-$owner.json" 2>/dev/null)"
+    [ -n "$review_doc" ] \
+      || die 3 "reopen: $IMPL_DIR/review-$owner.json is missing or not JSON, though the ledger records $owner as closed."
+    new_id="f$(printf '%s' "$review_doc" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
+    raw="$(printf '%s' "$one" | jq -c --arg id "$new_id" --arg file "$rel" --arg range "$reviewed" '
+      {id: $id, severity, file: $file, lines: (.lines // ""), linkedTo,
+       evidence: ("The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence),
+       fixScope: [$file]}')"
+    built="$(rv_finding_record "$raw" "$alignment" repair)"
+    review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
+    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg rf "$fid" --arg f "$new_id" --argjson doc "$review_doc" '
+      .[$o] = {doc: $doc, reviewFindings: ((.[$o].reviewFindings // []) + [$rf]), findings: ((.[$o].findings // []) + [$f])}')"
+    reopened="$(printf '%s' "$reopened" | jq -c --arg o "$owner" --arg f "$new_id" --arg rf "$fid" --arg c "$crit" --arg file "$rel" \
+      '. + [{order: $o, finding: $f, from: ("task review " + $rf), cites: ("cites " + $c), file: $file}]')"
+  done
+  [ "$routed" != "{}" ] \
+    || die 119 "reopen: no finding of the failed review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns. A person fixes on the task branch, then runs finish again."
+
+  ledger_doc="$FN_LEDGER_DOC"
+  for order in $(printf '%s' "$routed" | jq -r 'keys[]'); do
+    rf="$(printf '%s' "$routed" | jq -c --arg o "$order" --arg range "$reviewed" --arg at "$(date -u +%Y-%m-%d)" \
+      '{review: $range, reviewFindings: .[$o].reviewFindings, findings: .[$o].findings, at: $at}')"
+    ledger_doc="$(im_reopen_in "$ledger_doc" "$order" "$rf")"
+    [ -n "$ledger_doc" ] || die 3 "reopen: the repair on $order could not be written to the ledger."
+  done
+  for order in $(printf '%s' "$routed" | jq -r 'keys[]'); do
+    write_atomic "$IMPL_DIR/review-$order.json" "$(printf '%s' "$routed" | jq -c --arg o "$order" '.[$o].doc')"
+  done
+  write_atomic "$FN_LEDGER_FILE" "$ledger_doc"
+  rm -f -- "$IMPL_DIR/finished.json" || die 3 "reopen: could not remove $IMPL_DIR/finished.json"
+  im_print_summary "reopen" "$(jq -cn --argjson reopened "$reopened" --arg left "${not_routed%;}" --arg review "$review_file" \
+    --arg next "$(im_next_step "$ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+    {reopened: $reopened,
+     notRouted: (if $left == "" then "none" else ($left | ltrimstr(" ")) + ". Each waits for a person: a fix on the task branch before finish, or a ruling at the next review" end),
+     finished: "implementation/finished.json removed, so finish runs again once these orders close",
+     review: $review,
+     next: $next}')"
   exit 0
 }
 
@@ -13544,6 +13733,76 @@ im_refuse_open_dispatch() {
     || die 37 "$1: the $od_role record for $2 is still open in $IMPL_DIR/dispatch.json, so the $od_role has not finished. Run dispatch-close. If it keeps the record open, resume the role as it says, then run dispatch-close again. Then run $1. Nothing is written."
 }
 
+# The facts a close reads from an open dispatch record $1, as DF_PATH (the role's report),
+# DF_LINE (its completion line), DF_OPENED and DF_WRITTEN (epoch seconds), DF_UNIT (the order from
+# the snapshot), DF_PROJECT and DF_OWNED. A record order's range lives in the project folder, so its
+# owned files there are read, never the whole folder, where other tasks' records change (gap row
+# 312). An unreadable snapshot reads as a code order, so this adds no refusal. TASK_PATH is set.
+im_dispatch_facts() {
+  DF_PATH="$(jq -r '.reportPath // ""' "$1" 2>/dev/null)"
+  DF_LINE="$(jq -r '.completionLine // ""' "$1" 2>/dev/null)"
+  DF_OPENED="$(jq -r '(.openedAt // "") | fromdateiso8601? // ""' "$1" 2>/dev/null)"
+  [ -n "$DF_OPENED" ] || DF_OPENED="$(im_mtime "$1")"
+  DF_WRITTEN="$(im_mtime "$DF_PATH" 2>/dev/null)"
+  DF_UNIT="$(jq -c --arg u "$(jq -r '.unit // ""' "$1")" \
+    '[ .workOrders[]? | select(.id == $u) ][0] // {}' "$TASK_PATH/implementation/snapshot.json" 2>/dev/null)"
+  br_order_facts "$DF_UNIT"
+  DF_PROJECT=""; DF_OWNED=""
+  if [ "$BR_ORDER_RANGE" = "project" ] && DF_PROJECT="$(resolve_project_folder "$TASK_PATH")"; then
+    DF_OWNED="$(printf '%s' "$DF_UNIT" | jq -r '(.ownedFiles // [])[]')"
+  else
+    DF_PROJECT=""
+  fi
+}
+
+# A record opened and never sent has no file its role wrote and no commit after it opened (gap row
+# 343). A record that counts a resume had a role return. dispatch-open removes a fixer's or test
+# author's report, so one there was written since. A record reopened with --resume keeps the
+# report, and is read by time like the other roles. Prints why the open record $1 may have had a
+# role run, or nothing when it shows none. TASK_PATH is set.
+im_unsent_fault() {
+  local ns_head ns_proj="" ns_t ns_f ns_why=""
+  im_dispatch_facts "$1"
+  ns_head="$(git -C "$(jq -r '.codePath // ""' "$1")" log -1 --format=%ct 2>/dev/null)"
+  while IFS= read -r ns_f; do
+    [ -n "$ns_f" ] || continue
+    ns_t="$(git -C "$DF_PROJECT" log -1 --format=%ct -- "$ns_f" 2>/dev/null)"
+    if [ -n "$ns_t" ] && [ "$ns_t" -gt "${ns_proj:-0}" ]; then ns_proj="$ns_t"; fi
+  done <<NS_OWNED
+$DF_OWNED
+NS_OWNED
+  if [ -z "$DF_PATH" ]; then
+    ns_why="it names no file its role writes, so nothing shows that no role ran"
+  elif [ -f "$DF_PATH" ] && [ -n "$DF_LINE" ] && [ "$(jq -r 'has("resumedAt")' "$1")" = "false" ]; then
+    ns_why="$DF_PATH exists, and dispatch-open removed it, so its role wrote it"
+  elif [ -f "$DF_PATH" ] && [ "$DF_WRITTEN" -ge "$DF_OPENED" ]; then
+    ns_why="$DF_PATH was written after it opened"
+  elif [ "$(jq -r 'has("resumes")' "$1")" = "true" ]; then
+    ns_why="it counts a resume, so its role has returned"
+  elif [ -z "$ns_head" ]; then
+    ns_why="git could not read the last commit in its code path"
+  elif [ "$ns_head" -gt "$DF_OPENED" ]; then
+    ns_why="its code path has a commit at $(im_iso_of "$ns_head"), after it opened at $(im_iso_of "$DF_OPENED")"
+  elif [ -n "$ns_proj" ] && [ "$ns_proj" -gt "$DF_OPENED" ]; then
+    ns_why="the order's files in the project folder have a commit at $(im_iso_of "$ns_proj"), after it opened at $(im_iso_of "$DF_OPENED")"
+  fi
+  printf '%s' "$ns_why"
+}
+
+# A brief action that writes the brief again for role $1 on order $2 removes that role's open
+# record when it shows no role ran, and counts nothing (gap row 389). No role was sent with the old
+# brief, and dispatch-open derives the record from the brief, such as a fixer's allowed files. A
+# record that shows a role may have run stays open, and dispatch-close judges it. IMPL_DIR and
+# TASK_PATH are set.
+im_void_unsent_dispatch() {
+  local vd_file="$IMPL_DIR/dispatch.json"
+  [ "$(jq -r --arg u "$2" 'select(.unit == $u) | .role // "" | split(":") | last' "$vd_file" 2>/dev/null)" = "$1" ] \
+    || return 0
+  [ -z "$(im_unsent_fault "$vd_file")" ] || return 0
+  rm -f "$vd_file" || die 3 "could not remove $vd_file"
+  echo "dispatch: removed $vd_file, the $1 record for $2. No role ran with it, and the brief it was opened on is written again. Nothing was counted."
+}
+
 # Gap row 361. The checker's verdict on a record order's done-when line drifts from pass to pass,
 # so a line it confirmed is carried while its carry key is unchanged. The key is the line's text,
 # the order's owned files and the hash of the checker's own rule file, so a changed document target
@@ -14241,52 +14500,12 @@ do_dispatch_close() {
   # nothing is checked.
   local cut_off="" rp_path="" rp_line="" rp_cause="" rp_dirty rp_written rp_opened rp_unit rp_where rp_project rp_owned
   if [ -f "$dispatch_file" ]; then
-    rp_path="$(jq -r '.reportPath // ""' "$dispatch_file" 2>/dev/null)"
-    rp_line="$(jq -r '.completionLine // ""' "$dispatch_file" 2>/dev/null)"
-    rp_opened="$(jq -r '(.openedAt // "") | fromdateiso8601? // ""' "$dispatch_file" 2>/dev/null)"
-    [ -n "$rp_opened" ] || rp_opened="$(im_mtime "$dispatch_file")"
-    rp_written="$(im_mtime "$rp_path" 2>/dev/null)"
-    # A record order's range lives in the project folder, so its owned files there are read, never
-    # the whole folder, where other tasks' records change (gap row 312). An unreadable snapshot
-    # reads as a code order, so this adds no refusal.
-    rp_unit="$(jq -c --arg u "$(jq -r '.unit // ""' "$dispatch_file")" \
-      '[ .workOrders[]? | select(.id == $u) ][0] // {}' "$TASK_PATH/implementation/snapshot.json" 2>/dev/null)"
-    br_order_facts "$rp_unit"
-    rp_project=""; rp_owned=""
-    if [ "$BR_ORDER_RANGE" = "project" ] && rp_project="$(resolve_project_folder "$TASK_PATH")"; then
-      rp_owned="$(printf '%s' "$rp_unit" | jq -r '(.ownedFiles // [])[]')"
-    else
-      rp_project=""
-    fi
-    # A record opened and never sent has no file its role wrote and no commit after it opened. It
-    # is removed and spends no resume (gap row 343). A record that counts a resume had a role return.
-    # dispatch-open removes a fixer's or test author's report, so one there was written since. A
-    # record reopened with --resume keeps the report, and is read by time like the other roles.
+    im_dispatch_facts "$dispatch_file"
+    rp_path="$DF_PATH"; rp_line="$DF_LINE"; rp_opened="$DF_OPENED"; rp_written="$DF_WRITTEN"
+    rp_unit="$DF_UNIT"; rp_project="$DF_PROJECT"; rp_owned="$DF_OWNED"
     if [ "$not_sent" = true ]; then
-      local ns_head ns_proj="" ns_t ns_f ns_why=""
-      ns_head="$(git -C "$(jq -r '.codePath // ""' "$dispatch_file")" log -1 --format=%ct 2>/dev/null)"
-      while IFS= read -r ns_f; do
-        [ -n "$ns_f" ] || continue
-        ns_t="$(git -C "$rp_project" log -1 --format=%ct -- "$ns_f" 2>/dev/null)"
-        if [ -n "$ns_t" ] && [ "$ns_t" -gt "${ns_proj:-0}" ]; then ns_proj="$ns_t"; fi
-      done <<NS_OWNED
-$rp_owned
-NS_OWNED
-      if [ -z "$rp_path" ]; then
-        ns_why="it names no file its role writes, so nothing shows that no role ran"
-      elif [ -f "$rp_path" ] && [ -n "$rp_line" ] && [ "$(jq -r 'has("resumedAt")' "$dispatch_file")" = "false" ]; then
-        ns_why="$rp_path exists, and dispatch-open removed it, so its role wrote it"
-      elif [ -f "$rp_path" ] && [ "$rp_written" -ge "$rp_opened" ]; then
-        ns_why="$rp_path was written after it opened"
-      elif [ "$(jq -r 'has("resumes")' "$dispatch_file")" = "true" ]; then
-        ns_why="it counts a resume, so its role has returned"
-      elif [ -z "$ns_head" ]; then
-        ns_why="git could not read the last commit in its code path"
-      elif [ "$ns_head" -gt "$rp_opened" ]; then
-        ns_why="its code path has a commit at $(im_iso_of "$ns_head"), after it opened at $(im_iso_of "$rp_opened")"
-      elif [ -n "$ns_proj" ] && [ "$ns_proj" -gt "$rp_opened" ]; then
-        ns_why="the order's files in the project folder have a commit at $(im_iso_of "$ns_proj"), after it opened at $(im_iso_of "$rp_opened")"
-      fi
+      local ns_why
+      ns_why="$(im_unsent_fault "$dispatch_file")"
       [ -z "$ns_why" ] \
         || die 3 "dispatch-close: --not-sent refused, because $ns_why. A role may have run, so close the record as a returned role: run dispatch-close without --not-sent. The record stays open."
       rm -f "$dispatch_file" || die 3 "dispatch-close: could not remove $dispatch_file"
@@ -14442,6 +14661,7 @@ case "$ACTION" in
   verify-record)  do_verify_record  "$@" ;;
   close)          do_close          "$@" ;;
   finish)         do_finish         "$@" ;;
+  reopen)         do_reopen         "$@" ;;
   grant-attempt)  do_grant_attempt  "$@" ;;
   restart)        do_restart        "$@" ;;
   unattributed)   do_unattributed   "$@" ;;

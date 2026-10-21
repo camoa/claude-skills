@@ -279,7 +279,8 @@ Run:
 ```
 `--test-recipe` and `--check-recipe` are the two paths resolved above, one pair per framework. The
 script parses both itself, the same way `build-record` does. `--implement-recipe` is the path
-build.md names, and an order whose proof is `gate` needs it here for the same reason. It refuses (exit 72) when two
+build.md names, and an order whose proof is `gate` reads it here for the same reason. Left out, it is
+taken from `preconditions.json`, the same as at the build step. It refuses (exit 72) when two
 frameworks command one tool. It refuses (exit 73) when the check recipe it resolves is not the one
 the baseline read. `--value` and `--nothing-ran` work the same way they do at the build step.
 `--scope-insufficient` is repeatable, one per finding the fixer's report names as needing more
