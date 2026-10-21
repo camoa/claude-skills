@@ -4157,6 +4157,9 @@ PC_TOOL_ROWS
         [ .frameworks[] | . as $f
           | ( (.entries[] | select(.verdict | bad)
                | if .check then {next: ("The \($f.framework) condition \(.id)" + how + ". " + ran(.check)), output: said}
+                   + (if .verdict == "unmet" and .exitCode == 0 and (.expect // "") != ""
+                      then {advice: "The \($f.framework) condition \(.id) printed no \(.expect), so it reads unmet. It asks for \(.what)."}
+                      else {} end)
                  else {next: ("The \($f.framework) condition \(.id)" + how), output: (.firstLine // "none")} end),
               (.smoke | select(.verdict | bad)
                | if .exitCode == null then {next: "The \($f.framework) smoke row read \(.verdict): \(.reason // "")", output: "none"}
@@ -4166,6 +4169,10 @@ PC_TOOL_ROWS
         | .[0] // {next: "Read the record", output: "none"}')"
       pc_next="none: the build does not go on. $(printf '%s' "$pc_cause" | jq -r '.next')"
       pc_failed="$(printf '%s' "$pc_cause" | jq -r '.output')"
+      # A condition that its `expect:` string decided exits 0, and its first line is beside the
+      # point. So when `next:` names one, the advice names the string and what the condition asks
+      # for, such as a test marker the project must register before any red run (gap row 393).
+      pc_advice="$(printf '%s' "$pc_cause" | jq -r '.advice // "none"')"
       printf '%s' "$record_json" | jq -e '[ .frameworks[].entries[] | select(.reason == "check-command-not-found") ] | length > 0' >/dev/null \
         && pc_advice="A condition's tool is absent. Run the tool skill's install from the worktree, which holds tracked files only: $codepath"
       # A ## Tokens block reads the tree, and a worktree with no site can lack what it looks for.
