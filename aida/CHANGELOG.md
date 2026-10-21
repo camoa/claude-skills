@@ -90,6 +90,11 @@ the cited files. Each order's own fixer then makes the repair.
   On exit 0 the row reads met, which covers a change with nothing to
   mutate. On any other exit the row reads unknown, with a note on the
   test-execution recipe. Other mutation tools are unchanged.
+- After the row checker rejected a test row a second time, `tests-brief`
+  gave the test author the first round's note. A fresh author then found
+  nothing to repair. Each rejected row now takes its note from the
+  latest `row-check` verdict. A row that the latest verdict confirms
+  leaves the brief, unless a person rejected it.
 
 ## [6.0.17] - 2026-10-20
 
