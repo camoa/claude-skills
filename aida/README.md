@@ -4,6 +4,8 @@
 
 **Six stages, script checks, and stack recipes for AI coding work.**
 
+**[Documentation](docs/README.md) · [Installing](#installing-it) · [Changelog](CHANGELOG.md)**
+
 [![Version](https://img.shields.io/github/package-json/v/camoa/claude-skills?filename=aida%2F.claude-plugin%2Fplugin.json&label=version)](#status)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
 
