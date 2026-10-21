@@ -1,4 +1,18 @@
+<div align="center">
+
 # AIDA, the AI Dev Assistant
+
+**A process for AI coding work that produces better code for your project.**
+
+[![Version](https://img.shields.io/badge/version-6.0.18-blue.svg)](#status)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
+
+[![Tested: bash](https://img.shields.io/badge/tested-bash-blue.svg)](#status)
+[![Tested: zsh](https://img.shields.io/badge/tested-zsh-blue.svg)](#status)
+
+[![Claude Code](https://img.shields.io/badge/Claude_Code-supported-blueviolet.svg)](#installing-it)
+
+</div>
 
 A Claude Code plugin. AIDA keeps AI coding work inside a process that produces better code for
 your project.
