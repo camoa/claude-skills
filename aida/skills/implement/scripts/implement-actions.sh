@@ -4838,9 +4838,10 @@ TB_OWNED
 
   # Another key, only while a row rejected at the checkpoint stands: `tests-freeze` recorded it on
   # the ledger with the checker's note, and the person's words when a person rejected it (gap rows
-  # 218 and 373). A row's note comes from the verdict file when that file holds the row. A second
-  # rejection halts the order and leaves the ledger's note from the round before, so a fresh author
-  # would repair what the tests already meet (gap row 395).
+  # 218 and 373). A second rejection halts the order and leaves the ledger's note from the round
+  # before. A fresh author would then repair what the tests already meet (gap row 395). So each
+  # row takes its note from the verdict file when that file holds the row. A row that file confirms
+  # is dropped, unless a person rejected it.
   local rows_rejected_json check_file="$IMPL_DIR/row-check-$unit_id.json" check_doc='{}'
   if [ -f "$check_file" ] && printf '%s' "$ledger_doc" | jq -e --arg id "$unit_id" \
        '[ (.orders // [])[] | select(.id == $id) | has("rowsRejected") ][0] // false' >/dev/null; then
@@ -4851,8 +4852,9 @@ TB_OWNED
   rows_rejected_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --argjson check "$check_doc" '
     ([ (.orders // [])[] | select(.id == $id) ][0].rowsRejected // [])
     | map(.criterion as $c
-        | ([ ($check.rows // [])[] | select(type == "object" and .criterion == $c) | .note ][0]) as $latest
-        | if $latest == null then . else .checkerNote = $latest end)
+        | ([ ($check.rows // [])[] | select(type == "object" and .criterion == $c) ][0]) as $v
+        | select(has("personWords") or ($v.verdict // "") != "confirmed")
+        | if $v.note == null then . else .checkerNote = $v.note end)
     | if length == 0 then null
       else ([ .[] | (.redAgain // [])[] ] | unique) as $again
         | {rows: ., redAgain: $again,
