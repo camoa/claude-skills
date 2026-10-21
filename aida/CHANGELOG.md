@@ -4,6 +4,93 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.18] - 2026-10-21
+
+Changes from three live runs: the periplus run, the dev-guides site
+run, and the contrib-module run on drupal_ai_anthropic_provider. A
+failed task review now sends its findings back to the orders that own
+the cited files. Each order's own fixer then makes the repair.
+
+### Added
+
+- `implement-actions.sh reopen` takes a failed task review back into
+  the build. It runs after review closes with a `failed` verdict over
+  the range that `finish` recorded. Each medium or high finding that
+  cites a criterion, and that the person did not rule wrong, becomes a
+  repair finding in one order. That order owns the cited file and owns
+  the criterion. Failing that, it owns the file and serves the
+  criterion. Failing that, it is the one order that owns the file.
+  `reopen` leaves a finding whose order is not closed. Each order takes
+  one repair entry and one more fix round, however many findings it
+  takes. The order's own fixer, dispatch record, owned-files check and
+  verifier then bound the repair. `reopen` removes
+  `implementation/finished.json`, because `finish` must run again.
+  After a failed review, the `next:` line of `read` names `reopen`.
+- The `reopen` summary names each finding that no order takes, with its
+  reason. That finding keeps the hand route. Exit 119 means no failed
+  review of this finish exists, or no finding can go to an order. Exit
+  66 means `finished.json` is absent or holds no range.
+- `reopen` reads only the review's findings. A failed check that cites
+  no finding still needs a hand fix commit. So does a `decision-` row
+  that the person ruled load-bearing, test-wrong or rebuild.
+- `reopen` writes the order review records before the ledger. So if the
+  ledger write fails, a second run adds the repair findings again.
+
+### Changed
+
+- When `tests-brief`, `build-brief`, `review-brief`, `verify-brief` or
+  `fix-brief` writes a role's brief again, it removes that role's open
+  dispatch record for the order. It does this only when the record
+  shows no sign that a role ran. The signs are a report, a resume, or a
+  commit after the record opened. It prints one `dispatch:` line and
+  counts nothing. A record that shows a sign stays open, and
+  `dispatch-close` judges it as before. A plain `dispatch-close` still
+  counts a missing report as a stop. A later `dispatch-close` then finds
+  no open record, and says so.
+- The rewrite also removes the record of a role that ran and left no
+  trace. `--not-sent` has the same bound. `review-brief` and
+  `verify-brief` share the reviewer role, so each removes the other's
+  unsent record.
+- `build-record` and `fix-record` on a `gate` order take the implement
+  recipe from `preconditions.json` when the call gives no
+  `--implement-recipe`. They take the one recorded recipe that holds a
+  `## Configuration gate` block. They refuse at exit 3 when no recorded
+  recipe holds the block and the order has no verify lines. They also
+  refuse when two recipes hold it. Neither refusal spends an attempt or
+  a fix round. `build-recheck` uses the same code. It now also passes
+  when nothing records a recipe but the order has verify lines of its
+  own. The usage text lists the flag on both actions. A recorded recipe
+  whose file is gone still counts as one that holds the block.
+- When a precondition's `expect:` string decided it unmet, the
+  preconditions summary now names that string in `nextAdvice`. It also
+  names the condition, its framework and what the condition asks for.
+  The advice comes from the same condition that the `next:` line names,
+  and only when that condition exited 0. Other advice replaces it when
+  a condition's tool is absent, a `## Tokens` block has no site to
+  read, or a tool has no recipe. A python-cli project still needs the
+  catalog to add the condition that checks the `criterion` marker.
+- The README opens with a header of quick links and badges. The badges
+  show the version from the plugin manifest, the license, the two tested
+  shells, and Claude Code as the supported client. Copilot CLI, Codex,
+  Cursor, OpenCode and Antigravity show as unsupported, and a task to
+  support them is open. The Status section now says "Version 6".
+
+### Fixed
+
+- A dispatch record opened before its brief had to be written again
+  read as the role stopping at its turn limit. Two such closes halted
+  the order at the turn cap, with no role run. The brief rewrite above
+  removes that record.
+- A gate order's attempt spent without `--implement-recipe` read the
+  gate as unknown. `build-recheck` refused, and a second `build-record`
+  refused the unmoved head. So the order stayed stuck.
+- Review counted Infection's error lines as surviving mutants when the
+  initial test run failed and no mutant ran. An Infection run that
+  prints no score line now counts no survivor and quotes its last line.
+  On exit 0 the row reads met, which covers a change with nothing to
+  mutate. On any other exit the row reads unknown, with a note on the
+  test-execution recipe. Other mutation tools are unchanged.
+
 ## [6.0.17] - 2026-10-20
 
 Changes from four live runs and from owner requests. The runs are
