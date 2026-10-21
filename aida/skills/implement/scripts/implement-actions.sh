@@ -9404,6 +9404,14 @@ EOF_PATHS
   BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
   br_eight_checks "$unit_interface_declared" "$BR_INTERFACE_TEXT" "$checks_total"
 
+  # A token with no value reads unknown. Written, that stop holds the same commit, so no re-check
+  # answers it and build-record refuses the unmoved head (gap row 396). Nothing is written instead.
+  local unfilled
+  unfilled="$(printf '%s' "$BR_CHECKS_JSON" | jq -r '[ .[] | select(.verdict == "unknown" and ((.detail // "") | contains("has no supplied value")))
+    | .id + ": " + .detail ] | join(" ")')"
+  [ -z "$unfilled" ] \
+    || { rm -f "$BR_CHECKS_FILE"; die 3 "build-recheck: $unfilled Nothing was written, and $record_file is unchanged. Run the same re-check again with the value."; }
+
   # The record keeps the attempt, its range and its date, and takes the new checks and the interface
   # record's text as read now. When that text changed, the attempt's own text stays under
   # interfaceRecordBefore, so review reads both. The checks it

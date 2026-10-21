@@ -463,7 +463,8 @@ retry, and the route is `build`. Or no check stopped the attempt, so it passed a
 past the build. Or a path the interface check named does not exist at the recorded commit, so
 no amended record can answer it. A halted order refuses (exit 49), and `references/finish.md`
 names the grant. The clean-tree rule applies (exit 61). A missing interface record refuses as at `build-record`
-(exit 44).
+(exit 44). A check that reads unknown for a placeholder with no value refuses (exit 3), and
+the record stays unchanged. Run the same re-check again with that `--value`.
 
 It rewrites the record with the new checks and the interface record's text. When that text
 changed, the attempt's own text stays under `interfaceRecordBefore`. It keeps the attempt, its
