@@ -9071,6 +9071,14 @@ do_build_record() {
     br_fill_gate_recipes "build-record" "$UNIT_JSON" "" "" "No check ran and no attempt was spent."
     gate_recipes="$RF_LIST"
   fi
+  # A left-out --test-recipe read order-tests undeclared and spent the attempt (gap row 397). Each
+  # framework the record resolved has one path, so taking it chooses nothing.
+  if [ -z "$test_recipes" ]; then
+    rf_fill_from_record "build-record" "--test-recipe" "" "$(pre_test_recipes "$IMPL_DIR/preconditions.json")" "$IMPL_DIR/preconditions.json" 91 "" "--recipe"
+    test_recipes="$RF_LIST"
+    [ -n "$test_recipes" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
+      || die 3 "build-record: $unit_id is proved by its own tests, no --test-recipe was passed, and $IMPL_DIR/preconditions.json records no resolved test-execution recipe. No check ran and no attempt was spent. Pass --test-recipe <framework>=<path>."
+  fi
 
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc" "$RV_RANGE_PATHS"
 
