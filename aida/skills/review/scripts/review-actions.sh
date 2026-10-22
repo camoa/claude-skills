@@ -1050,7 +1050,7 @@ rw_run_mutation() {
       fwi=$((fwi + 1))
       continue
     fi
-    if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ]; then
+    if [ "$RW_CHANGED_COUNT" -eq 0 ]; then
       if [ "$RW_COMMITS_IN_CODE" = "no" ]; then
         combined="$(rw_worse "$combined" "undeclared")"
         detail="$detail $fw: no order in this task commits in the code repository, so the mutation command has no changed file to run over and the row does not apply to it."

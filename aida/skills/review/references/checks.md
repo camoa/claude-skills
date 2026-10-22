@@ -108,7 +108,7 @@ survivor by file, so its survivors are recorded as not readable and named as unr
 The row still reads met on exit 0, because the coverage half and the score were read. The outcome
 counts are in the score, and `mutmut results` lists the survivors by mutant name. A mutation
 command with no path placeholder is never run, because it mutates the tool's whole default scope.
-It reads undeclared with a note on the recipe, so no review blocks until the recipe scopes it.
+It reads undeclared with a note on the recipe, so the review does not block on it.
 
 **A task that commits nothing in the code repository answers in its own word.** An order proved by
 its record commits its document in the project folder, so the range holds nothing. Check 3 reads
