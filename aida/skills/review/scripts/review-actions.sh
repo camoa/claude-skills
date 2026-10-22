@@ -1039,6 +1039,17 @@ rw_run_mutation() {
     # same question above, and this row answers it the same way.
     has_paths=false
     br_argv_takes_paths "$(printf '%s' "$row" | jq -c '.argv')" && has_paths=true
+    # A command with no path placeholder runs over the tool's own default scope on every review,
+    # whatever the change, and nothing here can tie that scope to the change. `mutmut run` mutated a
+    # whole package for three hours (gap row 400). So the row does not apply until the recipe states
+    # a scoped form. Undeclared, the word an absent row reads, so no review blocks on the recipe.
+    if [ "$has_paths" != "true" ]; then
+      combined="$(rw_worse "$combined" "undeclared")"
+      detail="$detail $fw: the mutation command of the test-execution recipe for $fw, \`$(printf '%s' "$row" | jq -r '.argv | join(" ")')\`, takes no changed-file path, so it would run over the tool's whole default scope and was not run. The row needs a scoped form."
+      rw_catalog_note "the mutation command the recipe declares takes no changed-file path, so it cannot be scoped to a change" "the test-execution recipe for $fw"
+      fwi=$((fwi + 1))
+      continue
+    fi
     if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ]; then
       if [ "$RW_COMMITS_IN_CODE" = "no" ]; then
         combined="$(rw_worse "$combined" "undeclared")"
