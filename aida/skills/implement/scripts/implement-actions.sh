@@ -5158,6 +5158,11 @@ pre_test_recipes() {
            | .framework + "\t" + .recipePath ] | join("\n")' "$1" 2>/dev/null
 }
 
+# The check recipe of each framework the baseline record $1 read, in the same line shape.
+base_check_recipes() {
+  jq -r '[ (.checkRecipes // [])[] | .framework + "\t" + .path ] | join("\n")' "$1" 2>/dev/null
+}
+
 # One kind of recipe flag, read against the record that produced its paths (live-run row 99, gap
 # row 349). A framework the record names and the flags leave out takes the record's path. A flag
 # that names another path refuses with $6. A framework the record names no path for keeps its flag
@@ -9079,6 +9084,12 @@ do_build_record() {
     [ -n "$test_recipes" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
       || die 3 "build-record: $unit_id is proved by its own tests, no --test-recipe was passed, and $IMPL_DIR/preconditions.json records no resolved test-execution recipe. No check ran and no attempt was spent. Pass --test-recipe <framework>=<path>."
   fi
+  # A left-out --check-recipe read every tool row undeclared (gap row 399). With none on record,
+  # undeclared is the true reading, so nothing refuses.
+  if [ -z "$check_recipes" ]; then
+    rf_fill_from_record "build-record" "--check-recipe" "" "$(base_check_recipes "$IMPL_DIR/baseline.json")" "$IMPL_DIR/baseline.json" 91 "" "--check-recipe"
+    check_recipes="$RF_LIST"
+  fi
 
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc" "$RV_RANGE_PATHS"
 
@@ -9389,8 +9400,7 @@ EOF_PATHS
   local rf_cost="The re-check would read one recipe and the task's records the other. Nothing ran, and $record_file is unchanged."
   rf_fill_from_record "build-recheck" "--test-recipe" "$test_recipes" "$(pre_test_recipes "$pre_file")" "$pre_file" 91 "$rf_cost" "--recipe"
   test_recipes="$RF_LIST"; filled="$RF_FILLED"
-  rf_fill_from_record "build-recheck" "--check-recipe" "$check_recipes" \
-    "$(jq -r '[ (.checkRecipes // [])[] | .framework + "\t" + .path ] | join("\n")' "$base_file" 2>/dev/null)" \
+  rf_fill_from_record "build-recheck" "--check-recipe" "$check_recipes" "$(base_check_recipes "$base_file")" \
     "$base_file" 91 "$rf_cost" "--check-recipe"
   check_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
   br_fill_gate_recipes "build-recheck" "$RV_UNIT_JSON" "$gate_recipes" "$rf_cost" "Nothing ran, and $record_file is unchanged."
@@ -11265,6 +11275,10 @@ RV_AC
     br_order_facts "$RV_UNIT_JSON"
     [ -n "$test_recipes" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
       || die 3 "fix-record: $unit_id is proved by its own tests, no --test-recipe was passed, and $IMPL_DIR/preconditions.json records no resolved test-execution recipe. No check ran and no round was spent. Pass --test-recipe <framework>=<path>."
+  fi
+  if [ -z "$check_recipes" ]; then
+    rf_fill_from_record "fix-record" "--check-recipe" "" "$(base_check_recipes "$IMPL_DIR/baseline.json")" "$IMPL_DIR/baseline.json" 91 "" "--check-recipe"
+    check_recipes="$RF_LIST"
   fi
 
   br_require_clean_tree "fix-record" "$RV_RANGE_REPO" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
