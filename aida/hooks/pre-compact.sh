@@ -11,9 +11,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # request it was recovering from. It leaves records/compacted.json instead, which
 # session-start.sh names once and removes.
 #
-# The active task is the one session-start.sh names: the one task in progress under the project
-# that owns cwd, read off next-actions.sh's report. With several in progress, the one whose
-# worktree holds cwd and whose branch is checked out there. No such task: silent, exit 0.
+# The active task is the one this session works, read off next-actions.sh's report:
+# scripts/lib/paths.sh, session_task, which session-start.sh asks too. No such task: silent, exit 0.
 #
 # "Unsaved" is the one test a hook can make on disk: a file under the task folder written in a
 # later second than the last save. `task save` stamps savedAt in task.json on every call, even
@@ -65,21 +64,15 @@ INPUT="$(cat 2>/dev/null)" || exit 0
 TRIGGER="$(jq -r '.trigger // empty' <<<"$INPUT" 2>/dev/null)"
 CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CWD" ] || CWD="$(pwd -P)"
+TRANSCRIPT="$(jq -r '.transcript_path // empty' <<<"$INPUT" 2>/dev/null)"
 NEXT_SCRIPT="${PLUGIN_ROOT}/skills/next/scripts/next-actions.sh"
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/paths.sh" 2>/dev/null || exit 0
 
 OPEN_TASKS="$(cd "$CWD" 2>/dev/null && "$NEXT_SCRIPT" report 2>/dev/null | sed -n '/^OPEN:$/,/^LEGACY_COMPLETE:$/p' \
   | grep '^{' | jq -c 'select(.state == "in_progress")' 2>/dev/null)"
 [ -n "$OPEN_TASKS" ] || exit 0
-# A chain made with --in-tree shares one tree, so the branch checked out in cwd names the task
-# among those whose tree holds cwd (gap row 302).
-BRANCH="$(git -C "$CWD" symbolic-ref -q --short HEAD 2>/dev/null)"
-TASK="$(printf '%s\n' "$OPEN_TASKS" \
-  | jq -c --arg cwd "$CWD/" '.worktree as $wt | select($wt != "none" and ($cwd | startswith($wt + "/")))' 2>/dev/null \
-  | while IFS= read -r line; do
-      [ -z "$BRANCH" ] || [ "$(jq -r '.worktree.branch // empty' "$(printf '%s' "$line" | jq -r '.path')/task.json" 2>/dev/null)" = "$BRANCH" ] \
-        && printf '%s\n' "$line"
-    done | head -1)"
-if [ -z "$TASK" ] && [ "$(printf '%s\n' "$OPEN_TASKS" | grep -c '^{')" -eq 1 ]; then TASK="$OPEN_TASKS"; fi
+TASK="$(session_task "$OPEN_TASKS" "$CWD" "$TRANSCRIPT")"
 [ -n "$TASK" ] || exit 0
 TASK_ID="$(printf '%s' "$TASK" | jq -r '.id')"
 TASK_PATH="$(printf '%s' "$TASK" | jq -r '.path')"

@@ -26,6 +26,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh (sourced, never executed)
 #   ${CLAUDE_PLUGIN_ROOT}/skills/next/scripts/next-actions.sh (executed, for the task lines)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-findings.sh (sourced, the check's own two findings)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/paths.sh (sourced, session_task names this session's task)
 #
 # What this script does not do: it does not clear a per-workspace session file the way
 # version 5's hook did. That file was a second, independent directory-to-project mapping
@@ -72,6 +73,10 @@ case "$(printf '%s' "${AIDA_UNATTENDED:-}" | tr '[:upper:]' '[:lower:]')" in
 esac
 
 CWD="$(pwd -P)"
+# The platform sends the hook input on stdin. A call from a terminal sends none.
+INPUT=""
+[ -t 0 ] || INPUT="$(cat 2>/dev/null)"
+TRANSCRIPT="$(jq -r '.transcript_path // empty' <<<"$INPUT" 2>/dev/null)"
 
 MATCH=""
 if MATCH="$(registry_resolve_by_directory "$CWD")"; then
@@ -149,13 +154,26 @@ if [ -n "$MATCH" ]; then
   OPEN_TASKS="$("$NEXT_SCRIPT" report 2>/dev/null | sed -n '/^OPEN:$/,/^LEGACY_COMPLETE:$/p' \
     | grep '^{' | jq -c 'select(.state == "in_progress")' 2>/dev/null)"
   IN_PROGRESS="$(printf '%s\n' "$OPEN_TASKS" | grep -c '^{')"
-  if [ "$IN_PROGRESS" -eq 1 ]; then
+  # The one task in progress is this session's only when session_task ties it (gap row 398).
+  # Otherwise another session may build it, and its run mode, notes and marker belong to that
+  # session. Its folder is not printed either, because that would tie this session at its next
+  # compaction.
+  TASK=""
+  # shellcheck source=/dev/null
+  if [ "$IN_PROGRESS" -eq 1 ] && source "${PLUGIN_ROOT}/scripts/lib/paths.sh" 2>/dev/null; then
+    TASK="$(session_task "$OPEN_TASKS" "$CWD" "$TRANSCRIPT")"
+  fi
+  if [ "$IN_PROGRESS" -eq 1 ] && [ -z "$TASK" ]; then
     TASK_ID="$(printf '%s' "$OPEN_TASKS" | jq -r '.id')"
-    TASK_PATH="$(printf '%s' "$OPEN_TASKS" | jq -r '.path')"
-    TASK_RUN_MODE="$(printf '%s' "$OPEN_TASKS" | jq -r '.runMode // empty')"
-    TASK_RUN_STAGES="$(printf '%s' "$OPEN_TASKS" | jq -r '(.runModeStages // []) | if length > 0 then " (" + join(", ") + ")" else "" end')"
-    TASK_NOTES="$(printf '%s' "$OPEN_TASKS" | jq -r '.notes // "none"')"
-    STAGE="$(printf '%s' "$OPEN_TASKS" | jq -r '.stage')"
+    echo "Task in progress in this project: ${TASK_ID}, at the $(printf '%s' "$OPEN_TASKS" | jq -r '.stage') stage. This session does not work on it yet; \`/aida:next ${TASK_ID}\` loads it."
+    echo ""
+  elif [ "$IN_PROGRESS" -eq 1 ]; then
+    TASK_ID="$(printf '%s' "$TASK" | jq -r '.id')"
+    TASK_PATH="$(printf '%s' "$TASK" | jq -r '.path')"
+    TASK_RUN_MODE="$(printf '%s' "$TASK" | jq -r '.runMode // empty')"
+    TASK_RUN_STAGES="$(printf '%s' "$TASK" | jq -r '(.runModeStages // []) | if length > 0 then " (" + join(", ") + ")" else "" end')"
+    TASK_NOTES="$(printf '%s' "$TASK" | jq -r '.notes // "none"')"
+    STAGE="$(printf '%s' "$TASK" | jq -r '.stage')"
     echo "Task in progress: ${TASK_ID}"
     echo "Stage: ${STAGE}"
     # The newest saved note, read off the same task line. The window reads it before its first

@@ -39,6 +39,10 @@
 #   git_tree_of <dir> <word after git>...
 #                               sets GIT_TREE to the tree a git command works in, and GIT_SUB_AT
 #                               to the place of its subcommand in the words after git
+#   session_task <task lines> <dir> [<transcript>]
+#                               prints the next report's line for the task in progress this
+#                               session works, or nothing. One of the functions here that read
+#                               the disk.
 
 # Normalizes an absolute path string: collapses "." segments, resolves ".." segments textually,
 # drops a trailing slash. Never touches the filesystem, so it works on a path that does not exist.
@@ -335,4 +339,37 @@ git_tree_of() {
   fi
   # shellcheck disable=SC2034 # read by the sourcing hook
   GIT_TREE="$dir"
+}
+
+# The task in progress that this session works, from the next report's in-progress lines $1, one
+# JSON object each, the session's directory $2 and its transcript $3 (gap row 398). Both the
+# PreCompact and the SessionStart hook ask here. First the task whose tree holds $2, with its branch
+# checked out there: a chain made with --in-tree shares one tree (gap row 302). Else the project's
+# only task in progress, when the transcript names that task's folder after its last compaction.
+# A stage call can run from outside the tree with a cd prefix, so the tree alone misses that
+# session. The only task with no further test ties every session in the project to it, while
+# another session may build it. A session that made or read the task days ago named the folder in
+# an earlier window. Unsaved stage work is in the current window, because a manual
+# compaction is refused until a save. At SessionStart after a compaction, the platform writes the
+# boundary after the hook runs, so the window read is the one that just closed. A transcript path
+# with no file is a session with no history, and it works no task. No path at all is a payload
+# without the field, and that only task is taken, as before.
+session_task() {
+  local branch tree from line
+  branch="$(git -C "$2" symbolic-ref -q --short HEAD 2>/dev/null)"
+  tree="$(printf '%s\n' "$1" \
+    | jq -c --arg cwd "$2/" '.worktree as $wt | select($wt != "none" and ($cwd | startswith($wt + "/")))' 2>/dev/null \
+    | while IFS= read -r line; do
+        [ -z "$branch" ] || [ "$(jq -r '.worktree.branch // empty' "$(printf '%s' "$line" | jq -r '.path')/task.json" 2>/dev/null)" = "$branch" ] \
+          && printf '%s\n' "$line"
+      done | head -1)"
+  if [ -n "$tree" ]; then printf '%s\n' "$tree"; return 0; fi
+  [ "$(printf '%s\n' "$1" | grep -c '^{')" -eq 1 ] || return 0
+  if [ -n "${3:-}" ]; then
+    [ -s "$3" ] || return 0
+    from="$(grep -n '"subtype":"compact_boundary"' "$3" | tail -1 | cut -d: -f1)"
+    # No -q: grep stopping early fails the pipe under a caller's pipefail.
+    tail -n +"${from:-1}" "$3" | grep -F -- "$(printf '%s' "$1" | jq -r '.path')" >/dev/null || return 0
+  fi
+  printf '%s\n' "$1"
 }
