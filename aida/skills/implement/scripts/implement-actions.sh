@@ -11258,6 +11258,14 @@ RV_AC
     br_fill_gate_recipes "fix-record" "$RV_UNIT_JSON" "" "" "No check ran and no round was spent."
     gate_recipes="$RF_LIST"
   fi
+  # The same fill as build-record's (gap row 397).
+  if [ -z "$test_recipes" ]; then
+    rf_fill_from_record "fix-record" "--test-recipe" "" "$(pre_test_recipes "$IMPL_DIR/preconditions.json")" "$IMPL_DIR/preconditions.json" 91 "" "--recipe"
+    test_recipes="$RF_LIST"
+    br_order_facts "$RV_UNIT_JSON"
+    [ -n "$test_recipes" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
+      || die 3 "fix-record: $unit_id is proved by its own tests, no --test-recipe was passed, and $IMPL_DIR/preconditions.json records no resolved test-execution recipe. No check ran and no round was spent. Pass --test-recipe <framework>=<path>."
+  fi
 
   br_require_clean_tree "fix-record" "$RV_RANGE_REPO" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 

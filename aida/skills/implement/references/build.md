@@ -353,7 +353,9 @@ aside even when a person wrote it. A file in a person's place is never set aside
 document there that the order does not own still reads unmet.
 
 `--test-recipe` and `--check-recipe` are paths only, one pair per framework, the same two files
-`references/preconditions.md` already resolved for the baseline. The script parses `## Test
+`references/preconditions.md` already resolved for the baseline. Left out, `--test-recipe` is taken
+from `preconditions.json`, here and at `fix-record`. An order proved by its own tests with no
+recipe on record refuses (exit 3), and no attempt or round is spent. The script parses `## Test
 commands` and `## Check commands` itself: the suite command, the command that runs this order's
 own frozen tests, and the three tool commands, each with its own argv, `{paths}` placeholder,
 `signal` and `extensions` keys, and which rows a framework declares absent. Nothing here retypes a
