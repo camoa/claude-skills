@@ -1039,7 +1039,18 @@ rw_run_mutation() {
     # same question above, and this row answers it the same way.
     has_paths=false
     br_argv_takes_paths "$(printf '%s' "$row" | jq -c '.argv')" && has_paths=true
-    if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ]; then
+    # A command with no path placeholder runs over the tool's own default scope on every review,
+    # whatever the change, and nothing here can tie that scope to the change. `mutmut run` mutated a
+    # whole package for three hours (gap row 400). So the row does not apply until the recipe states
+    # a scoped form. Undeclared, the word an absent row reads, so no review blocks on the recipe.
+    if [ "$has_paths" != "true" ]; then
+      combined="$(rw_worse "$combined" "undeclared")"
+      detail="$detail $fw: the mutation command of the test-execution recipe for $fw, \`$(printf '%s' "$row" | jq -r '.argv | join(" ")')\`, takes no changed-file path, so it would run over the tool's whole default scope and was not run. The row needs a scoped form."
+      rw_catalog_note "the mutation command the recipe declares takes no changed-file path, so it cannot be scoped to a change" "the test-execution recipe for $fw"
+      fwi=$((fwi + 1))
+      continue
+    fi
+    if [ "$RW_CHANGED_COUNT" -eq 0 ]; then
       if [ "$RW_COMMITS_IN_CODE" = "no" ]; then
         combined="$(rw_worse "$combined" "undeclared")"
         detail="$detail $fw: no order in this task commits in the code repository, so the mutation command has no changed file to run over and the row does not apply to it."
@@ -1081,7 +1092,7 @@ rw_run_mutation() {
     # belongs to which criterion, and the frozen orders say which source file belongs to which order
     # and what that order serves. A survivor no path attaches is still recorded, because the
     # reviewer reads the whole list and a survivor nobody can attach is a fact rather than a finding.
-    survivors="$(jq -Rn --argjson changed "$RW_CHANGED_JSON" --argjson rows "$RW_TEST_ROWS" \
+    survivors="$(jq_files -Rn --argjson changed "$RW_CHANGED_JSON" --argjson rows "$RW_TEST_ROWS" \
       --argjson orders "$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -c '.workOrders // []')" \
       --rawfile out "$outfile" '
       [ ($out | split("\n"))[]
@@ -1731,7 +1742,7 @@ do_brief() {
     doc="$(jq -c '.' "$one" 2>/dev/null)"
     [ -n "$doc" ] \
       || die 3 "brief: $one exists but could not be read as JSON. Repair or remove it by hand before running this again."
-    research_json="$(jq -nc --argjson have "$research_json" --argjson doc "$doc" --arg file "$one" '
+    research_json="$(jq_files -nc --argjson have "$research_json" --argjson doc "$doc" --arg file "$one" '
       $have + [{file: $file, search: ($doc.search // ""), searchedFor: ($doc.searchedFor // ""),
                 findings: [ ($doc.findings // [])[]
                   | {text, source, lookedAt, criteriaServed: (.criteriaServed // [])} ]}]')"
@@ -1793,7 +1804,7 @@ $(jq -r '(.guides // [])[] | (.path // empty)' "$TASK_PATH/design-guides-read.js
 RW_GUIDES
   fi
 
-  brief_json="$(jq -n --arg task "$RW_TASK_ID" --arg diff "$DIFF_FILE" \
+  brief_json="$(jq_files -n --arg task "$RW_TASK_ID" --arg diff "$DIFF_FILE" \
     --arg findings "$FINDINGS_TARGET" --arg codePath "$RV_CODEPATH" \
     --argjson alignment "$(rw_alignment)" --argjson snap "$RW_SNAPSHOT_DOC" \
     --slurpfile record "$RECORD_FILE" --argjson research "$research_json" \
@@ -2029,7 +2040,7 @@ do_findings() {
     built="$(printf '%s' "$one" | jq -c --arg disposition "$disposition" '
       {id, lens, severity, file: (.file // ""), lines: (.lines // ""),
        linkedTo: (.linkedTo // ""), evidence, disposition: $disposition}')"
-    findings_json="$(jq -nc --argjson have "$findings_json" --argjson one "$built" '$have + [$one]')"
+    findings_json="$(jq_files -nc --argjson have "$findings_json" --argjson one "$built" '$have + [$one]')"
     i=$((i + 1))
   done
 
@@ -2244,11 +2255,11 @@ RW_RESEARCH_FILES
   [ -n "$reviewer_notes" ] || reviewer_notes='[]'
   # The checks step's frozen-test findings stay, numbered after the reviewer's own. No lens check reads
   # the frozen-tests lens, so they block nothing.
-  findings_json="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson mine "$findings_json" '
+  findings_json="$(printf '%s' "$RW_RECORD_DOC" | jq_files -c --argjson mine "$findings_json" '
     ([ $mine[] | .id[1:] | tonumber ] | max // 0) as $top
     | $mine + ([ (.findings // [])[] | select(.lens == "frozen-tests") ]
                | to_entries | map(.value + {id: ("f" + (($top + .key + 1) | tostring))}))')"
-  updated="$(jq -s -c --slurpfile record "$RECORD_FILE" --argjson findings "$findings_json" \
+  updated="$(jq_files -s -c --slurpfile record "$RECORD_FILE" --argjson findings "$findings_json" \
     --argjson notes "$reviewer_notes" --argjson absences "$absence_rows" --arg skip "$skip_reason" '
     . as $rows
     | $record[0]

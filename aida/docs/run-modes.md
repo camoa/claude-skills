@@ -260,13 +260,15 @@ because you set it.
 
 ## Coming back to an autonomous run
 
-Read the session start line first. With exactly one task in progress it names the task, its
-stage, and `Run mode: autonomous` when that is what it is. The stages the mode covers follow in
-brackets when it covers fewer than all. Otherwise it points you at
-`/aida:next`. Run `/aida:next <task-id>`: it says where the task stands and names the stage
-command to run. Every stage begins by printing a summary of its own records before it does
-anything else. Implementation's summary is the one that names halted orders and the reason each
-halt holds.
+Read the session start line first. With exactly one task in progress it names the task and its
+stage. In the session that works the task, it also says `Run mode: autonomous` when that is what
+it is. The stages the mode covers follow in brackets when it covers fewer than all. That session
+stands in the task's worktree, or made a tool call that names the task's folder since its last
+compaction. Any other session sees the task as the project's, because another session may be
+building it. With more than one, it points you at `/aida:next`. Run `/aida:next <task-id>`: it
+says where the task stands and names the stage command to run. Every stage begins by printing a
+summary of its own records before it does anything else. Implementation's summary is the one that
+names halted orders and the reason each halt holds.
 
 Then look for the decisions that were made for you. Each stage leaves them in its own record,
 marked as taken without a person:

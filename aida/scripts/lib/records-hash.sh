@@ -99,10 +99,11 @@ records_hash_for() {
     return 1
   fi
 
-  # Every design/*.json, each read once, in an arbitrary but stable order (find | sort, on
+  # Every design/*.json, each checked once, in an arbitrary but stable order (find | sort, on
   # filename); the numeric work-order-id sort that actually matters happens once, below, over the
   # whole collected array, the same two-step shape gather_workorders_json uses.
-  local entries='[]' f doc
+  local f doc
+  local design_files=()
   if [ -d "$design_dir" ]; then
     while IFS= read -r f; do
       [ -n "$f" ] || continue
@@ -115,23 +116,22 @@ records_hash_for() {
         printf 'records-hash: %s is under design/ but is not valid JSON\n' "$f" >&2
         return 1
       fi
-      entries="$(printf '%s' "$entries" | jq --argjson d "$doc" '. + [$d]')"
+      design_files+=("$f")
     done < <(find "$design_dir" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort)
   fi
 
-  local workorders_json
-  workorders_json="$(printf '%s' "$entries" | jq -c '
-      sort_by(
-        (.id // "wo0")
-        | if test("^wo[1-9][0-9]*$") then (ltrimstr("wo") | tonumber) else 0 end
-      )
-    ')"
-  [ -n "$workorders_json" ] \
-    || { printf 'records-hash: could not order the work orders under %s\n' "$design_dir" >&2; return 1; }
-
+  # jq reads the records from their files. Linux caps one argument at 128 KiB, and a task's work
+  # orders together pass that, so no record goes to jq as an argument.
   local combined hash
-  combined="$(jq -cS -n --argjson alignment "$alignment_json" --argjson workOrders "$workorders_json" \
-    '{alignment: $alignment, workOrders: $workOrders}')"
+  combined="$(jq -cS -n --slurpfile alignment "$alignment_file" '
+      {
+        alignment: $alignment[0],
+        workOrders: ([inputs] | sort_by(
+          (.id // "wo0")
+          | if test("^wo[1-9][0-9]*$") then (ltrimstr("wo") | tonumber) else 0 end
+        ))
+      }
+    ' ${design_files[@]+"${design_files[@]}"} </dev/null)"
   [ -n "$combined" ] \
     || { printf 'records-hash: could not build the canonical form to hash for %s\n' "$task_folder" >&2; return 1; }
 

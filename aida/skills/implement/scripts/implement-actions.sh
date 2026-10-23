@@ -318,7 +318,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  21  `preconditions` found <task_folder>/implementation/baseline.json already recorded at a
 #      commit other than the one this run's own ledger started from. A baseline is taken once, at
 #      the commit the build started from, and this refuses rather than overwrite a different one.
-#      The message names both commits.
+#      The message names both commits. `build-record`, `build-recheck`, `fix-record` and `finish`
+#      refuse at 21 too, before they subtract a baseline taken at a commit other than startedFrom.
+#      After `start --rebased-onto`, that baseline would read the new start's failures as the
+#      build's (gap row 401).
 #  22  `tests-brief`, `tests-freeze` or `build-record` was given a unit id that is not in the frozen
 #      snapshot. `build-brief` names the same fact as exit 38 instead; see that entry for why.
 #  23  `tests-brief` found a unit in the given unit's dependsOn with no completion record in the
@@ -614,8 +617,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      The message names `start --rebased-onto <commit>`. That sets startedFrom to the commit the
 #      branch now builds on and keeps the old value under startedFromBefore with the date. The
 #      flag is an argument error, exit 3, in four cases. Its value is not a commit, not an
-#      ancestor of HEAD, or the value already held. HEAD still descends from startedFrom, so
-#      nothing was rewritten. The run has no ledger to rewrite.
+#      ancestor of HEAD, or the value already held. HEAD still descends from startedFrom, and
+#      the value does not, or a commit between the two is on no other branch, or an order has
+#      committed (gap row 401). The run has no ledger.
 #  83  a resumed `start` found baseline.json outside the shape this version writes. That is a
 #      required field missing or of the wrong type against baseline-schema.json. Or it is a suite
 #      or tool entry that ran (it carries exitCode) with no outputFile. `build-record` subtracts from
@@ -1372,13 +1376,13 @@ snapshot_self_hash() {
 # live copy is appended (gap row 335).
 snapshot_with_live_orders() {
   local doc="$1" ids="$2" live="$3" alignment="$4" orders hash
-  orders="$(printf '%s' "$doc" | jq -c --argjson ids "$ids" --argjson live "$live" '
+  orders="$(printf '%s' "$doc" | jq_files -c --argjson ids "$ids" --argjson live "$live" '
       ($live | map({(.id): .}) | add // {}) as $lm
       | (.workOrders | map(.id)) as $have
       | (.workOrders | map(. as $o | if (($ids | index($o.id)) != null) then $lm[$o.id] else $o end))
         + [ $ids[] | . as $i | select(($have | index($i)) == null) | $lm[$i] | select(. != null) ]')"
   hash="$(snapshot_self_hash "$alignment" "$orders")" || return 1
-  printf '%s' "$doc" | jq -c --arg hash "$hash" --argjson orders "$orders" --argjson alignment "$alignment" \
+  printf '%s' "$doc" | jq_files -c --arg hash "$hash" --argjson orders "$orders" --argjson alignment "$alignment" \
     '.hash = $hash | .alignment = $alignment | .workOrders = $orders'
 }
 
@@ -1628,7 +1632,7 @@ im_next_step() {
     retake_pending="$(printf '%s' "$retake_pending" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
     i=$((i + 1))
   done
-  printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson recheck_route "$recheck_route" --argjson snap "$snapshot" \
+  printf '%s' "$ledger" | jq_files -r --argjson opens "$opens" --argjson recheck_route "$recheck_route" --argjson snap "$snapshot" \
     --argjson retake_pending "$retake_pending" --argjson departure_prefixes "$RR_DEPARTURE_PREFIXES" \
     --argjson allowed "$BUILD_ATTEMPTS_ALLOWED" --argjson precon "$precon" '
     (.orders // []) as $orders
@@ -2149,7 +2153,7 @@ do_start() {
 
     local taken_at snapshot_json
     taken_at="$(date -u +%Y-%m-%d)"
-    snapshot_json="$(jq -n \
+    snapshot_json="$(jq_files -n \
       --arg takenAt "$taken_at" --arg hash "$live_hash" \
       --argjson alignment "$live_alignment_json" --argjson workOrders "$live_workorders_json" \
       '{schemaVersion: 1, takenAt: $takenAt, hash: $hash, alignment: $alignment, workOrders: $workOrders}')"
@@ -2180,14 +2184,14 @@ do_start() {
       # No test was written from it, so it is not a contract change (gap row 319). Its author is
       # who approved it, and scope's approve turns every designer into owner. No test was written
       # from that either, so a relabel alone halts no order (gap row 355).
-      contract_changed="$(jq -n --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" \
+      contract_changed="$(jq_files -n --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" \
         'def nv: .criteria = [ (.criteria // [])[] | del(.verdict, .author) ];
          if ($a | nv) == ($b | nv) then false else true end')"
       # Every drift halt reason begins with "design drift: ", which is what `restart` reads to tell
       # an order halted by a design change from one halted for a spent attempt counter or a
       # load-bearing finding. A prefix rather than a field of its own, the same way the attempt cap
       # already writes "attempts spent" and `grant-attempt` already reads it.
-      drifted_orders_json="$(jq -n --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" '
+      drifted_orders_json="$(jq_files -n --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
           | [ $snap[] | . as $s
               | ($liveMap[$s.id]) as $l
@@ -2208,7 +2212,7 @@ do_start() {
       # clearing below removes the segment about the design file alone. So one reopen that changed
       # the file and the criterion keeps the order halted when only the file goes back.
       if [ "$contract_changed" = "true" ]; then
-        changed_criteria_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
+        changed_criteria_json="$(jq_files -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
             (($b.criteria // []) | map({(.id): del(.verdict, .author)}) | add // {}) as $liveMap
             | [ ($a.criteria // [])[] | del(.verdict, .author) | select($liveMap[.id] != .) | .id ]')"
         # A criterion whose verify clause alone changed spares each order whose frozen test record
@@ -2218,12 +2222,12 @@ do_start() {
         # with a recorded reason: one more decidedWithoutAPerson entry on that criterion than the
         # snapshot's contract holds, because scoping unattended already wrote one per criterion.
         local clause_only_json o_id clause_records
-        clause_only_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" --argjson changed "$changed_criteria_json" '
+        clause_only_json="$(jq_files -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" --argjson changed "$changed_criteria_json" '
             (($b.criteria // []) | map({(.id): del(.verdict, .author, .verification)}) | add // {}) as $liveMap
             | [ ($a.criteria // [])[] | del(.verdict, .author, .verification) | .id as $i
                 | select($liveMap[$i] == . and ($changed | index($i)) != null) | $i ]')"
         if [ "$(task_run_mode "$TASK_PATH" scope)" = "autonomous" ]; then
-          clause_only_json="$(jq -cn --argjson ids "$clause_only_json" --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
+          clause_only_json="$(jq_files -cn --argjson ids "$clause_only_json" --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
               def entries($doc; $c): [ ($doc.decidedWithoutAPerson // [])[] | objects | select(.field == $c) ] | length;
               [ $ids[] | . as $c | select(entries($b; $c) > entries($a; $c)) ]')"
         fi
@@ -2243,7 +2247,7 @@ do_start() {
 $(printf '%s' "$snapshot_workorders_json" | jq -r '.[].id')
 CLAUSE_ORDERS
         fi
-        drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" "$HALT_MERGE_JQ"'
+        drifted_orders_json="$(jq_files -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" "$HALT_MERGE_JQ"'
             [ $snap[] | . as $s
               | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null)
                    | select((($spared[$s.id] // []) | index($c)) == null) ]) as $hits
@@ -2268,10 +2272,10 @@ CLAUSE_ORDERS
       # design.
       local started_ids_json
       started_ids_json="$(started_orders_json "$TASK_PATH")"
-      resnapshot_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
+      resnapshot_ids_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) != null) | $d ]')"
-      removed_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
+      removed_ids_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) == null) | $d ]')"
       # A started order whose live copy differs from the frozen one only by added owned files is
@@ -2301,13 +2305,13 @@ CLAUSE_ORDERS
         esac
         phantom_json="$(printf '%s' "$phantom_json" | jq -c --arg p "$removed_path" '. + [$p]')"
       done <<REMOVED_PATHS
-$(jq -rn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" '
+$(jq_files -rn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" '
     ($live | map({(.id): .}) | add // {}) as $liveMap
     | [ $snap[] | ($liveMap[.id]) as $l | select($l != null)
         | ((.ownedFiles // []) - ($l.ownedFiles // [])), ((.sharedFiles // []) - ($l.sharedFiles // [])) | .[] ]
     | unique | .[]')
 REMOVED_PATHS
-      widened_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson phantom "$phantom_json" \
+      widened_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson phantom "$phantom_json" \
           --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
           | ($snap | map({(.id): .}) | add // {}) as $snapMap
@@ -2347,7 +2351,7 @@ REMOVED_PATHS
       # An order design added after the snapshot was taken has not started either, so it is taken
       # in from the live design the same way (gap row 335). Left out, its criterion entered the
       # snapshot with no order to build it, and the run read every order closed.
-      added_ids_json="$(jq -cn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" \
+      added_ids_json="$(jq_files -cn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" \
         '[ $live[].id ] - [ $snap[].id ]')"
       if [ "$(printf '%s' "$added_ids_json" | jq 'length')" -gt 0 ]; then
         [ -z "$drift_what" ] || drift_what="$drift_what; and "
@@ -2376,7 +2380,7 @@ REMOVED_PATHS
       # its records aside. It will never build again, so its owned files take no part in the build
       # order derived below: the live survivor that absorbed them would otherwise refuse a
       # conflict with a copy nothing will build.
-      halted_removed_ids_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson live "$live_workorders_json" '
+      halted_removed_ids_json="$(jq_files -cn --argjson drifted "$drifted_orders_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id | . as $d | select(($liveIds | index($d)) == null) ]')"
       # An order that depends on a drifted one, directly or through another order, is halted too.
@@ -2385,7 +2389,7 @@ REMOVED_PATHS
       # table: "Halt every order the change touches"). The reason names the drifted orders it
       # reaches, so a person reads what to look at without walking the graph themselves. An order
       # that drifted itself keeps its own reason and never takes this one.
-      dependent_halts_json="$(jq -n --argjson orders "$snapshot_workorders_json" --argjson drifted "$drifted_orders_json" '
+      dependent_halts_json="$(jq_files -n --argjson orders "$snapshot_workorders_json" --argjson drifted "$drifted_orders_json" '
           def reach($adj; $start):
             def go($frontier; $visited):
               if ($frontier | length) == 0 then $visited
@@ -2418,9 +2422,9 @@ REMOVED_PATHS
 
   # --- step 10: derive the build order; refuse on a cycle or an owned-file overlap ----------------
   local build_orders_json cycles_json overlap_json
-  build_orders_json="$(jq -cn --argjson orders "$snapshot_workorders_json" --argjson gone "$halted_removed_ids_json" \
+  build_orders_json="$(jq_files -cn --argjson orders "$snapshot_workorders_json" --argjson gone "$halted_removed_ids_json" \
     '[ $orders[] | . as $o | select(($gone | index($o.id)) == null) ]')"
-  cycles_json="$(jq -c -n --argjson orders "$build_orders_json" '
+  cycles_json="$(jq_files -c -n --argjson orders "$build_orders_json" '
       def reach($adj; $start):
         def go($frontier; $visited):
           if ($frontier | length) == 0 then $visited
@@ -2508,10 +2512,25 @@ REMOVED_PATHS
         || die 3 "start: --rebased-onto ($rebased_onto) is not a commit in the code repository at $code_path."
       [ "$rebased_full" != "$ledger_started_from" ] \
         || die 3 "start: --rebased-onto ($rebased_onto) is the commit $LEDGER_FILE already holds as startedFrom. Nothing to rewrite."
-      # The flag answers exit 82 alone. On a branch that still descends from startedFrom it would
-      # move the start past the build's own commits, so a wrong rewrite is undone by hand instead.
+      # The flag answers exit 82. On a branch that still descends from startedFrom it would move
+      # the start past the build's own commits, so a wrong rewrite is undone by hand instead. One
+      # case is safe: the branch moved forward onto a later commit that another branch holds,
+      # before any order committed (gap row 401). Git decides the commits between the two starts:
+      # each must be on a ref other than this branch and its remote copies, so a person's commit
+      # or an environment commit is never dropped. The records decide the orders: no order has a
+      # lastStep and no tests, build or fix record exists, because another ref, such as a branch
+      # cut from this one, can hold an order's commits.
       if git -C "$code_path" merge-base --is-ancestor "$ledger_started_from" "$started_from" >/dev/null 2>&1; then
-        die 3 "start: --rebased-onto was given, but HEAD ($started_from) still descends from startedFrom ($ledger_started_from). The branch was not rewritten, so there is nothing to repair. A wrong earlier rewrite is corrected by editing startedFrom in $LEDGER_FILE by hand."
+        local own_ref
+        own_ref="$(git -C "$code_path" symbolic-ref -q HEAD 2>/dev/null)"
+        { git -C "$code_path" merge-base --is-ancestor "$ledger_started_from" "$rebased_full" >/dev/null 2>&1 \
+          && [ -z "$( { printf '%s..%s\n' "$ledger_started_from" "$rebased_full"
+                       git -C "$code_path" for-each-ref --format='%(refname) %(refname:lstrip=3)' \
+                         | awk -v o="$own_ref" -v b="${own_ref#refs/heads/}" '$1 != o && !($1 ~ /^refs\/remotes\// && $2 == b) { print "^" $1 }'
+                     } | git -C "$code_path" rev-list --stdin 2>/dev/null)" ] \
+          && [ "$(printf '%s' "$ledger_doc" | jq '[.orders[] | select(.lastStep != null)] | length')" = "0" ] \
+          && [ -z "$(find "$TASK_PATH" -mindepth 2 -maxdepth 3 -type f \( -name 'tests-wo*.json' -o -name 'build-wo*.json' -o -name 'fix-wo*-*.json' \) 2>/dev/null)" ]; } \
+          || die 3 "start: --rebased-onto was given, but HEAD ($started_from) still descends from startedFrom ($ledger_started_from). The flag refuses to move the start forward on such a branch unless three things hold. The new start descends from startedFrom. Another branch holds every commit between the two. No order has committed. Otherwise the range would drop the build's own commits. A wrong earlier rewrite is corrected by editing startedFrom in $LEDGER_FILE by hand."
       fi
       git -C "$code_path" merge-base --is-ancestor "$rebased_full" "$started_from" >/dev/null 2>&1 \
         || die 3 "start: --rebased-onto ($rebased_full) is not an ancestor of HEAD ($started_from) in $code_path. The build's own commits must follow it."
@@ -2663,7 +2682,7 @@ DEP_SEGMENTS
     base_orders_json="$(printf '%s' "$snapshot_workorders_json" | jq -c '[ .[] | {id: .id, lastStep: null, attemptsUsed: 0, roundsUsed: 0} ]')"
     # A ledger opened here carries no halt yet, so there is nothing to keep. The same expression is
     # written anyway, so the two paths cannot drift into halting two different ways.
-    final_orders_json="$(jq -n --argjson orders "$base_orders_json" --argjson drifted "$drift_halts_json" "$HALT_MERGE_JQ"'
+    final_orders_json="$(jq_files -n --argjson orders "$base_orders_json" --argjson drifted "$drift_halts_json" "$HALT_MERGE_JQ"'
         $orders | map(
           . as $o
           | (([ $drifted[] | select(.id == $o.id) | .reason ])[0]) as $r
@@ -2715,7 +2734,7 @@ LO_MOVE
 
   mkdir -p "$IMPL_DIR" || die 3 "start: could not create $IMPL_DIR"
   local ledger_json_out
-  ledger_json_out="$(jq -n \
+  ledger_json_out="$(jq_files -n \
     --arg startedFrom "$ledger_started_from" --arg runMode "$ledger_run_mode" \
     --arg snapshotHash "$snapshot_hash_on_disk" --arg startedAt "$ledger_started_at" \
     --argjson orders "$final_orders_json" --argjson criteria "$final_criteria_json" \
@@ -2754,7 +2773,7 @@ LO_MOVE
 
   # --- step 13: the report --------------------------------------------------------------------------
   local ready_ids_json halted_json in_flight_json
-  ready_ids_json="$(jq -n --argjson orders "$snapshot_workorders_json" --argjson ledgerOrders "$final_orders_json" '
+  ready_ids_json="$(jq_files -n --argjson orders "$snapshot_workorders_json" --argjson ledgerOrders "$final_orders_json" '
       ($ledgerOrders | map({(.id): .}) | add // {}) as $lm
       | [ $orders[] | . as $o
           | ($lm[$o.id]) as $le
@@ -2825,7 +2844,7 @@ LO_MOVE
   [ -f "$IMPL_DIR/preconditions.json" ] && jq empty "$IMPL_DIR/preconditions.json" 2>/dev/null && st_precon=true
   [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
   st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
-  st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" --arg h "$snapshot_hash_on_disk" '{workOrders: $w, hash: $h}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
+  st_next="$(im_next_step "$st_ledger_now" "$(jq_files -nc --argjson w "$snapshot_workorders_json" --arg h "$snapshot_hash_on_disk" '{workOrders: $w, hash: $h}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
   # After a retake, or a restart from before restart reverted (gap row 252), the order's own build
   # and fix commits may still be on the branch; one line per order names them while they are. Not
   # a refusal: a retake keeps them on purpose (live-run row 94). The line is dropped when there is
@@ -3111,6 +3130,18 @@ bl_state() {
 # The commit recorded in baseline.json. Call only after bl_state prints "ok".
 bl_commit_of() {
   jq -r '.commit' "$BASELINE_FILE" 2>/dev/null
+}
+
+# Points BRC_BASELINE_FILE at the task's baseline for the step named $1. Refuses at 21 when the
+# baseline was taken at a commit other than the ledger's startedFrom (gap row 401).
+brc_use_baseline() {
+  local BASELINE_FILE="$IMPL_DIR/baseline.json" at from
+  BRC_BASELINE_FILE="$BASELINE_FILE"
+  [ "$(bl_state)" = "ok" ] || return 0
+  at="$(bl_commit_of)"
+  from="$(jq -r '.startedFrom // ""' "$IMPL_DIR/ledger.json" 2>/dev/null)"
+  [ -z "$from" ] || [ "$at" = "$from" ] \
+    || die 21 "$1: $BASELINE_FILE was taken at commit $at, but the ledger starts from $from, as after start --rebased-onto. Subtracting it would read the new start's own failures as the build's. Move $BASELINE_FILE and $IMPL_DIR/baseline-output aside, then run preconditions to retake it."
 }
 
 # Runs the `suite` test-command row for every framework in the preconditions record $1 (the same
@@ -5158,6 +5189,11 @@ pre_test_recipes() {
            | .framework + "\t" + .recipePath ] | join("\n")' "$1" 2>/dev/null
 }
 
+# The check recipe of each framework the baseline record $1 read, in the same line shape.
+base_check_recipes() {
+  jq -r '[ (.checkRecipes // [])[] | .framework + "\t" + .path ] | join("\n")' "$1" 2>/dev/null
+}
+
 # One kind of recipe flag, read against the record that produced its paths (live-run row 99, gap
 # row 349). A framework the record names and the flags leave out takes the record's path. A flag
 # that names another path refuses with $6. A framework the record names no path for keeps its flag
@@ -5890,7 +5926,7 @@ TF_RECORDED
     # once already, or the order has no test author. Each of those needs a person or design.
     if [ -n "$rejected_by_model" ] && [ "$tf_run_mode" = "autonomous" ] && [ -n "$tf_ledger_doc" ]; then
       local tf_why tf_halted_doc tf_model_rows
-      tf_model_rows="$(jq -nc --argjson rows "$rows_meta_json" --argjson check "$tf_check_doc" \
+      tf_model_rows="$(jq_files -nc --argjson rows "$rows_meta_json" --argjson check "$tf_check_doc" \
           --argjson author "$tf_has_author" --arg id "$unit_id" --argjson ledger "$tf_ledger_doc" '
           ([ ($ledger.orders // [])[] | select(.id == $id) ][0].rowsSentBack // []) as $sent
           | [ $rows[] | select(.verdict == "rejected" and .judgedBy == "model") | .criterion as $c
@@ -7124,7 +7160,7 @@ br_tool_check() {
     payload="$(printf '%s' "$result" | cut -f2-)"
     if [ "$kind" = "UNRESOLVED" ]; then
       verdict="unknown"
-      detail="the token {$payload} in the $label command has no supplied value; pass --value $payload=<value>."
+      detail="the token {$payload} in the $label command $BR_NO_VALUE; pass --value $payload=<value>."
     elif [ "$kind" = "EMPTY" ]; then
       verdict="unknown"
       detail="the $label command came out with no token at all, so nothing ran and nothing was decided."
@@ -7314,7 +7350,7 @@ br_test_check() {
       payload="$(printf '%s' "$result" | cut -f2-)"
       if [ "$kind" = "UNRESOLVED" ]; then
         verdict="unknown"
-        detail="the token {$payload} in the $label command has no supplied value; pass --value $payload=<value>."
+        detail="the token {$payload} in the $label command $BR_NO_VALUE; pass --value $payload=<value>."
       elif [ "$kind" = "EMPTY" ]; then
         verdict="unknown"
         detail="the $label command came out with no token at all, so nothing ran and nothing was decided."
@@ -7644,7 +7680,7 @@ $BRC_VALUES"
       cat "$run_out" "$run_err" >>"$outfile"; : >"$run_err"
       if [ "$kind" = "UNRESOLVED" ]; then
         BRL_VERDICT="unknown"; BRL_RC=""
-        BRL_WHY="the token {$payload} in gate line $i ($shown) has no supplied value; pass --value $payload=<value>."
+        BRL_WHY="the token {$payload} in gate line $i ($shown) $BR_NO_VALUE; pass --value $payload=<value>."
         break
       fi
       BRL_RC="$payload"
@@ -8438,6 +8474,21 @@ br_round_allowed() {
 # `executed: 5 of 8` over seven checks (nyc defects 9 and 12). Sets BR_CHECKS_JSON, the same eight,
 # and BR_EXECUTED, how many of them ran a command, a diff or a hash.
 BR_CHECKS_FILE=""; BR_CHECKS_JSON=""; BR_EXECUTED=0
+
+# The words a check's detail carries when a token in its command had no value. The refusal below
+# finds that check by them.
+BR_NO_VALUE="has no supplied value"
+
+# Refuses at 3, before anything is written, when a check in the file $1 reads unknown for a token
+# with no value. Recorded, that stop would hold an unmoved commit: no re-check answers it, and
+# build-record refuses the same head (gap row 396). Removes $1 on refusal. Reads BRC_WHO.
+br_require_supplied_values() {
+  local unfilled
+  unfilled="$(jq -r --arg t "$BR_NO_VALUE" '[ .[] | select(.verdict == "unknown" and ((.detail // "") | contains($t)))
+    | .id + ": " + .detail ] | join(" ")' "$1")"
+  [ -z "$unfilled" ] \
+    || { rm -f "$1"; die 3 "$BRC_WHO: $unfilled Nothing was written, and no attempt or round was spent. Run the same step again with the value."; }
+}
 br_eight_checks() {
   local declared="$1" record_text="$2" want="${3:-8}"
   local unit_id seven_file interface_check_json="null"
@@ -8465,6 +8516,7 @@ br_eight_checks() {
   rm -f "$seven_file"
   br_require_check_count "$BRC_WHO" "$BR_CHECKS_FILE" "$want"
   BR_CHECKS_JSON="$(cat "$BR_CHECKS_FILE" 2>/dev/null)"
+  br_require_supplied_values "$BR_CHECKS_FILE"
   BR_EXECUTED="$(br_executed_count "$BR_CHECKS_JSON")"
   case "$BR_EXECUTED" in ''|*[!0-9]*) BR_EXECUTED=0 ;; esac
 }
@@ -9055,6 +9107,20 @@ do_build_record() {
     br_fill_gate_recipes "build-record" "$UNIT_JSON" "" "" "No check ran and no attempt was spent."
     gate_recipes="$RF_LIST"
   fi
+  # A left-out --test-recipe read order-tests undeclared and spent the attempt (gap row 397). Each
+  # framework the record resolved has one path, so taking it chooses nothing.
+  if [ -z "$test_recipes" ]; then
+    rf_fill_from_record "build-record" "--test-recipe" "" "$(pre_test_recipes "$IMPL_DIR/preconditions.json")" "$IMPL_DIR/preconditions.json" 91 "" "--recipe"
+    test_recipes="$RF_LIST"
+    [ -n "$test_recipes" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
+      || die 3 "build-record: $unit_id is proved by its own tests, no --test-recipe was passed, and $IMPL_DIR/preconditions.json records no resolved test-execution recipe. No check ran and no attempt was spent. Pass --test-recipe <framework>=<path>."
+  fi
+  # A left-out --check-recipe read every tool row undeclared (gap row 399). With none on record,
+  # undeclared is the true reading, so nothing refuses.
+  if [ -z "$check_recipes" ]; then
+    rf_fill_from_record "build-record" "--check-recipe" "" "$(base_check_recipes "$IMPL_DIR/baseline.json")" "$IMPL_DIR/baseline.json" 91 "" "--check-recipe"
+    check_recipes="$RF_LIST"
+  fi
 
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc" "$RV_RANGE_PATHS"
 
@@ -9069,7 +9135,7 @@ do_build_record() {
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
-  BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  brc_use_baseline "$BRC_WHO"
   CR_TEST_RECIPES="$test_recipes"
   CR_CHECK_RECIPES="$check_recipes"
   BRC_VALUES="$values"
@@ -9365,8 +9431,7 @@ EOF_PATHS
   local rf_cost="The re-check would read one recipe and the task's records the other. Nothing ran, and $record_file is unchanged."
   rf_fill_from_record "build-recheck" "--test-recipe" "$test_recipes" "$(pre_test_recipes "$pre_file")" "$pre_file" 91 "$rf_cost" "--recipe"
   test_recipes="$RF_LIST"; filled="$RF_FILLED"
-  rf_fill_from_record "build-recheck" "--check-recipe" "$check_recipes" \
-    "$(jq -r '[ (.checkRecipes // [])[] | .framework + "\t" + .path ] | join("\n")' "$base_file" 2>/dev/null)" \
+  rf_fill_from_record "build-recheck" "--check-recipe" "$check_recipes" "$(base_check_recipes "$base_file")" \
     "$base_file" 91 "$rf_cost" "--check-recipe"
   check_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
   br_fill_gate_recipes "build-recheck" "$RV_UNIT_JSON" "$gate_recipes" "$rf_cost" "Nothing ran, and $record_file is unchanged."
@@ -9393,7 +9458,7 @@ EOF_PATHS
   BRC_CURRENT="$record_commit"
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
-  BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  brc_use_baseline "$BRC_WHO"
   CR_TEST_RECIPES="$test_recipes"
   CR_CHECK_RECIPES="$check_recipes"
   BRC_VALUES="$values"
@@ -11234,6 +11299,18 @@ RV_AC
     br_fill_gate_recipes "fix-record" "$RV_UNIT_JSON" "" "" "No check ran and no round was spent."
     gate_recipes="$RF_LIST"
   fi
+  # The same fill as build-record's (gap row 397).
+  if [ -z "$test_recipes" ]; then
+    rf_fill_from_record "fix-record" "--test-recipe" "" "$(pre_test_recipes "$IMPL_DIR/preconditions.json")" "$IMPL_DIR/preconditions.json" 91 "" "--recipe"
+    test_recipes="$RF_LIST"
+    br_order_facts "$RV_UNIT_JSON"
+    [ -n "$test_recipes" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
+      || die 3 "fix-record: $unit_id is proved by its own tests, no --test-recipe was passed, and $IMPL_DIR/preconditions.json records no resolved test-execution recipe. No check ran and no round was spent. Pass --test-recipe <framework>=<path>."
+  fi
+  if [ -z "$check_recipes" ]; then
+    rf_fill_from_record "fix-record" "--check-recipe" "" "$(base_check_recipes "$IMPL_DIR/baseline.json")" "$IMPL_DIR/baseline.json" 91 "" "--check-recipe"
+    check_recipes="$RF_LIST"
+  fi
 
   br_require_clean_tree "fix-record" "$RV_RANGE_REPO" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
 
@@ -11244,7 +11321,7 @@ RV_AC
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
-  BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  brc_use_baseline "$BRC_WHO"
   # The owned-files check reads the paths allowed for this round beside the order's own, so an
   # allowed change passes (live-run row 116).
   br_round_allowed "$unit_id" "$round_number"
@@ -11277,6 +11354,7 @@ RV_AC
   [ -s "$seven_file" ] \
     || { rm -f "$seven_file"; die 3 "fix-record: the seven computable checks produced nothing for $unit_id."; }
   br_require_check_count "fix-record" "$seven_file" 7
+  br_require_supplied_values "$seven_file"
   checks_json="$(cat "$seven_file" 2>/dev/null)"
 
   local diff_path fix_others="" fix_paths p
@@ -12302,7 +12380,7 @@ do_finish() {
   # nothing to do next and no way to learn what. A criterion an order proved by confirm puts to the
   # person, confirmCriteria in scripts/lib/proof.sh, is not asked here: its task has no automated
   # tests, and the person answers it at review from the checklist rows below (gap row 196).
-  unconfirmed="$(jq -nr --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" "$BR_ORDER_FACTS_JQ"'
+  unconfirmed="$(jq_files -nr --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" "$BR_ORDER_FACTS_JQ"'
       ([ ($snap.workOrders // [])[] | confirmCriteria[] ]) as $confirmed
       | ([ ($snap.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id
            | select(. as $i | $confirmed | index($i) | not) ]) as $machine
@@ -12367,7 +12445,7 @@ FN_RECIPES
   BRC_WHO="finish"
   BRC_CODEPATH="$RV_CODEPATH"
   BRC_RECIPES="$CR_DOC"
-  BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  brc_use_baseline "$BRC_WHO"
   BRC_VALUES="$values"
   BRC_END_OF_TASK=true
   suite_file="$(mktemp)" || die 3 "finish: could not create a temporary file"
@@ -12496,7 +12574,7 @@ FN_RECIPES
   [ -n "$task_id" ] || die 3 "finish: $TASK_PATH/task.json has no usable id field"
   today="$(date -u +%Y-%m-%d)"
   record_file="$IMPL_DIR/finished.json"
-  record_json="$(jq -n --arg takenAt "$today" --arg task "$task_id" \
+  record_json="$(jq_files -n --arg takenAt "$today" --arg task "$task_id" \
     --arg range "$started_from..$head_now" \
     --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" \
     --argjson checklists "$checklists_json" --argjson deferred "$deferred_json" \
@@ -13339,7 +13417,7 @@ RS_SPLIT
     || die 3 "restart: could not compute a hash over the live alignment.json and design/*.json."
   [ "$(design_closed_state)" = "ok" ] && [ "$(design_closed_hash)" = "$live_hash" ] \
     || die 13 "restart: the halted orders would be taken fresh from the live design, but $CLOSED_FILE does not record a close over the live alignment.json and design/*.json. Close design again, then run restart."
-  removed_ids_json="$(jq -nc --argjson ids "$drifted_ids_json" --argjson live "$live_workorders_json" \
+  removed_ids_json="$(jq_files -nc --argjson ids "$drifted_ids_json" --argjson live "$live_workorders_json" \
     '($live | map(.id)) as $l | [ $ids[] | . as $d | select(($l | index($d)) == null) ]')"
   retaken_ids_json="$(jq -nc --argjson ids "$drifted_ids_json" --argjson gone "$removed_ids_json" \
     '[ $ids[] | . as $d | select(($gone | index($d)) == null) ]')"
@@ -13481,7 +13559,7 @@ RS_MINE
   # A halted order's entry goes back to what start opens it as, or leaves the list when the design
   # removed it. The judgements its freeze wrote go too, and every criterion it serves goes back to
   # not judged, since close confirms a row only once every serving order is closed.
-  new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --argjson ids "$drifted_ids_json" --argjson snap "$SNAPSHOT_DOC" \
+  new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq_files -c --argjson ids "$drifted_ids_json" --argjson snap "$SNAPSHOT_DOC" \
     --argjson retaken "$retaken_ids_json" --argjson gone "$removed_ids_json" \
     --arg from "$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.snapshotHash')" --arg to "$new_hash" --arg at "$today" '
     ([ ($snap.workOrders // [])[] | . as $o | select(($ids | index($o.id)) != null)

@@ -19,6 +19,7 @@
 #                                         sets FINDING_REF_SEARCH and FINDING_REF_N from
 #                                         <search>#<n>, counted from 1; 1 when no such search
 #   write_atomic <target> <content>       writes through a temporary file beside the target
+#   jq_files <jq arguments>               jq, with each --arg and --argjson value passed in a file
 #   plugin_version                        prints the version from the plugin's own plugin.json,
 #                                         or unknown when that file cannot be read
 #   version_at_least <have> <want>        true when <have> is <want> or later
@@ -311,6 +312,37 @@ write_atomic() {
     || die3 "could not create a temporary file in $dir"
   printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; die3 "could not write $tmp"; }
   mv -f "$tmp" "$target" || { rm -f "$tmp"; die3 "could not write $target"; }
+}
+
+# jq, with each `--arg` and `--argjson NAME VALUE` handed over in a temporary file, never as an
+# argument. Linux caps one argument at 128 KiB, and a snapshot, a ledger or a task's work orders
+# grow past it (live-run row 402). $NAME is bound to the value as --arg or --argjson binds it, and
+# an --argjson value that is not one JSON text fails the call. It takes single-letter flags,
+# --arg, --argjson, --slurpfile and --rawfile, then the filter, then input files.
+jq_files() {
+  local args=() tmps=() bind='' tmp rc
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --arg|--argjson)
+        tmp="$(mktemp)" || { [ "${#tmps[@]}" -eq 0 ] || rm -f "${tmps[@]}"; return 2; }
+        tmps+=("$tmp")
+        printf '%s' "$3" > "$tmp" || { rm -f "${tmps[@]}"; return 2; }
+        if [ "$1" = "--arg" ]; then
+          args+=(--rawfile "$2" "$tmp")
+        else
+          args+=(--slurpfile "$2" "$tmp")
+          bind="${bind}(\$${2} | if length == 1 then .[0] else error(\"--argjson ${2}: not one JSON text\") end) as \$${2} | "
+        fi
+        shift 3 ;;
+      --slurpfile|--rawfile) args+=("$1" "$2" "$3"); shift 3 ;;
+      -*) args+=("$1"); shift ;;
+      *) args+=("$bind$1"); shift; break ;;
+    esac
+  done
+  jq "${args[@]}" "$@"
+  rc=$?
+  [ "${#tmps[@]}" -eq 0 ] || rm -f "${tmps[@]}"
+  return "$rc"
 }
 
 # The plugin version, from .claude-plugin/plugin.json under the caller's PLUGIN_ROOT. Every stage

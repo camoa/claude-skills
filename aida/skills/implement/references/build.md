@@ -353,7 +353,11 @@ aside even when a person wrote it. A file in a person's place is never set aside
 document there that the order does not own still reads unmet.
 
 `--test-recipe` and `--check-recipe` are paths only, one pair per framework, the same two files
-`references/preconditions.md` already resolved for the baseline. The script parses `## Test
+`references/preconditions.md` already resolved for the baseline. Left out, `--test-recipe` is taken
+from `preconditions.json` and `--check-recipe` from `baseline.json`, here and at `fix-record`. An
+order proved by its own tests with no test recipe on record refuses (exit 3), and no attempt or
+round is spent. With no check recipe on record, the tool rows read undeclared, because no recipe
+names a tool for this task. The script parses `## Test
 commands` and `## Check commands` itself: the suite command, the command that runs this order's
 own frozen tests, and the three tool commands, each with its own argv, `{paths}` placeholder,
 `signal` and `extensions` keys, and which rows a framework declares absent. Nothing here retypes a
@@ -389,10 +393,11 @@ Pass `--value <name>=<value>` for a placeholder a command carries, the same as
   an order that owns no file, such a line does not apply, and it never passes the order alone.
 
 A name with no `--value` is read from the tokens preconditions recorded. It is then read from
-the keys of the task's environment record, such as `project`. A `{a.b}` placeholder with no value
-reads unknown. A `## Configuration gate` line of a `gate` order is the exception. A token there
-with no value refuses at 3 before any check runs, and no attempt is spent. The message names the
-token. Supply the value, then run the same step again.
+the keys of the task's environment record, such as `project`. A check that reads unknown for a
+placeholder with no value refuses at 3. `build-record`, `build-recheck` and `fix-record` then
+write nothing, and no attempt or round is spent. A `## Configuration gate` line of a `gate` order
+refuses at 3 before any check runs. The message names the token. Supply the value, then run the
+same step again.
 
 Before the verify lines run, the script writes the `## Files` blocks of the recipe they cite into
 the worktree. A line can run a script the recipe ships. After the lines, it removes those

@@ -23,7 +23,7 @@
     "startedFrom": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The commit the build started from, captured by the first step before anything is written. Rollback is a reset to it, which is what replaces the isolated working copy version 6 decided against. Version 5 captures nothing of the kind and its own ledger needs one. Rewritten by one thing only, `start --rebased-onto <commit>`, after a rebase or an amend left this commit on no branch; the value it replaced is kept under startedFromBefore."
+      "description": "The commit the build started from, captured by the first step before anything is written. Rollback is a reset to it, which is what replaces the isolated working copy version 6 decided against. Version 5 captures nothing of the kind and its own ledger needs one. Rewritten by one thing only, `start --rebased-onto <commit>`, after a rebase or an amend left this commit on no branch, or after the branch moved forward onto a later commit before any order committed; the value it replaced is kept under startedFromBefore."
     },
     "startedAt": {
       "type": "string",
