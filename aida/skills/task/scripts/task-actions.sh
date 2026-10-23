@@ -1774,7 +1774,7 @@ TA_TOKEN_LIST
   # in the caller's directory, which is any tree at all.
   [ -n "$wt" ] || die3 "environment: the worktree of $id could not be resolved. Nothing was brought up"
   # up commits the recipe's files on the branch checked out there, so only that branch's task runs it.
-  task_tree_turn "$task_dir" "$wt" "environment"
+  task_tree_turn "$(jq -r '.worktree.branch // empty' "$task_dir/task.json" 2>/dev/null)" "$wt" "environment"
   mkdir -p "$task_dir/records" || die3 "environment: could not create $task_dir/records"
   cd "$wt" || die3 "environment: could not enter $wt"
   # After the restore, committed or not, a site brought up here takes the name the restore put

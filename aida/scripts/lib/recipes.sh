@@ -223,7 +223,14 @@ is_git_repo() {
 }
 
 
-pc_trim() { printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
+# Trims leading and trailing whitespace. sed trims each line of a value that holds a newline, so
+# that value keeps the sed. Any other value is trimmed in bash, with no process (gap row 403).
+pc_trim() {
+  local v="$1"
+  case "$v" in *$'\n'*) printf '%s' "$v" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; return ;; esac
+  v="${v#"${v%%[![:space:]]*}"}"
+  printf '%s' "${v%"${v##*[![:space:]]}"}"
+}
 
 
 # True when the file at $1 holds the literal string $2 anywhere in it. The needle is quoted inside

@@ -19,7 +19,7 @@
 #                                         sets FINDING_REF_SEARCH and FINDING_REF_N from
 #                                         <search>#<n>, counted from 1; 1 when no such search
 #   write_atomic <target> <content>       writes through a temporary file beside the target
-#   jq_files <jq arguments>               jq, with each --arg and --argjson value passed in a file
+#   jq_files <jq arguments>               jq, with each long --arg and --argjson value passed in a file
 #   plugin_version                        prints the version from the plugin's own plugin.json,
 #                                         or unknown when that file cannot be read
 #   version_at_least <have> <want>        true when <have> is <want> or later
@@ -60,7 +60,7 @@
 #   distill_deferred <stage>              prints the line a light task's scope or research distill shows
 #   distill_stamp <folder> <stage>        writes the stage's stamp: the sidecar and records hashes
 #   sidecar_set_aside <path>              moves a malformed sidecar aside, dated, and says where
-#   task_tree_from_git <folder> <code> <action>
+#   task_tree_from_git <folder> <code> <action> <branch> <path>
 #                                         prints the registered worktree carrying the task's
 #                                         branch, and repairs worktree.path when git disagrees
 #   task_worktree_group <project> <codePath> <action>
@@ -147,15 +147,15 @@ IFACE_PATH_JQ='
     | select(test("/") and (startswith("/") | not));'
 
 # Where git lists this task's tree, and the record repaired when git disagrees. $1 the canonical
-# task folder, $2 the resolved code path, $3 the action's own name. Prints the registered worktree
+# task folder, $2 the resolved code path, $3 the action's own name. $4 and $5 are worktree.branch
+# and worktree.path as the caller read them from task.json, before any write. Prints the registered worktree
 # that carries the task's branch and is on disk, and nothing when git lists no such tree. The main
 # checkout is skipped: a branch checked out there is not this task's tree. One reader answers
 # "where is this task's tree", and the refusal below and the producer both ask it, so they never
 # disagree. worktree.path has one producer, so git's answer is written to that one field again,
 # and one line says so. Calls no die function.
 task_tree_from_git() {
-  local folder="$1" code="$2" who="$3" branch wt found cand line
-  branch="$(jq -r '.worktree.branch // empty' "$folder/task.json" 2>/dev/null)"
+  local folder="$1" code="$2" who="$3" branch="$4" wt="$5" found cand line
   [ -n "$branch" ] || return 0
   found=""
   cand=""
@@ -167,7 +167,6 @@ $(git -C "$code" worktree list --porcelain 2>/dev/null)
 GIT_WORKTREES
   # A path git still registers and disk no longer holds is not where the tree is.
   [ -n "$found" ] && [ -d "$found" ] || return 0
-  wt="$(jq -r '.worktree.path // empty' "$folder/task.json" 2>/dev/null)"
   if [ "$found" != "$wt" ]; then
     write_atomic "$folder/task.json" "$(jq --arg wp "$found" '.worktree.path = $wp' "$folder/task.json")"
     printf '%s: git lists this task tree at %s, and task.json recorded %s. The record now says %s.\n' \
@@ -180,7 +179,7 @@ GIT_WORKTREES
 # against a task that already exists": a stage finds a task or says it cannot, it never scaffolds
 # one). Prints the canonical path on success.
 resolve_task_folder() {
-  local arg="$1" who="$2" p wt project code here top found
+  local arg="$1" who="$2" p wt branch project code here top found
   [ -n "$arg" ] || die3 "$who: a task folder is required"
   p="$(cd "$arg" 2>/dev/null && pwd -P)" || die1 "$who: task folder not found: $arg"
   [ -f "$p/task.json" ] || die1 "$who: $p has no task.json; this is not a task folder"
@@ -188,7 +187,11 @@ resolve_task_folder() {
   # (ideal/task.md, "Two windows"). A task with no field yet is not refused here: the action that
   # makes the tree names it, and the next action refuses.
   [ "$who" != "read" ] || { printf '%s' "$p"; return 0; }
-  wt="$(jq -r '.worktree.path // empty' "$p/task.json" 2>/dev/null)"
+  # One read of both fields serves every helper below. Nothing writes task.json before they use
+  # them, and task_tree_from_git returns the path it writes.
+  { IFS= read -r wt; IFS= read -r branch; } <<TASK_TREE
+$(jq -r '(.worktree.path // ""), (.worktree.branch // "")' "$p/task.json" 2>/dev/null)
+TASK_TREE
   [ -n "$wt" ] || { printf '%s' "$p"; return 0; }
   # Git says where this window is, not a string prefix on the recorded path. A tree moved with
   # `git worktree move` is still this task's tree, and a folder git no longer registers is not.
@@ -214,10 +217,10 @@ resolve_task_folder() {
   top="$(active_tree_for "$code" "${here%/}")"
   # Which registered tree carries this task's branch. active_tree_for answers about the current
   # directory alone, and a tree moved while the window stands elsewhere is invisible to it.
-  found="$(task_tree_from_git "$p" "$code" "$who")"
+  found="$(task_tree_from_git "$p" "$code" "$who" "$branch" "$wt")"
   [ -z "$found" ] || wt="$found"
   if [ "$top" = "$wt" ]; then
-    task_tree_turn "$p" "$wt" "$who"
+    task_tree_turn "$branch" "$wt" "$who"
     printf '%s' "$p"; return 0
   fi
   # A recorded tree gone from disk, that git places nowhere else, is not refused: the action that
@@ -305,33 +308,43 @@ parse_finding_ref() {
 # lives here, once, rather than at each call site, so a caller added later cannot reproduce the
 # defect by hand (live-run row 173).
 write_atomic() {
-  local target="$1" content="$2" dir tmp
+  local target="$1" content="$2" dir base tmp
   is_blank "$content" && die3 "refused to write $target: the content had nothing in it. Nothing was written"
-  dir="$(dirname -- "$target")"
-  tmp="$(mktemp "${dir}/.$(basename -- "$target").XXXXXX")" \
+  # The expansion gives what dirname and basename give when the last slash has a name after it and
+  # no slash before it. Any other target asks the two programs (gap row 403).
+  dir="${target%/*}"; base="${target##*/}"
+  if [ "$dir" = "$target" ] || [ -z "$dir" ] || [ -z "$base" ] || [ "${dir%/}" != "$dir" ]; then
+    dir="$(dirname -- "$target")"; base="$(basename -- "$target")"
+  fi
+  tmp="$(mktemp "${dir}/.${base}.XXXXXX")" \
     || die3 "could not create a temporary file in $dir"
   printf '%s\n' "$content" > "$tmp" || { rm -f "$tmp"; die3 "could not write $tmp"; }
   mv -f "$tmp" "$target" || { rm -f "$tmp"; die3 "could not write $target"; }
 }
 
-# jq, with each `--arg` and `--argjson NAME VALUE` handed over in a temporary file, never as an
+# jq, with each long `--arg` and `--argjson NAME VALUE` handed over in a temporary file, never as an
 # argument. Linux caps one argument at 128 KiB, and a snapshot, a ledger or a task's work orders
-# grow past it (live-run row 402). $NAME is bound to the value as --arg or --argjson binds it, and
-# an --argjson value that is not one JSON text fails the call. It takes single-letter flags,
+# grow past it (live-run row 402). A value of 32,000 characters or fewer is at most 128,000 bytes,
+# so it stays an argument and costs no file (gap row 403). $NAME is bound to the value as --arg or
+# --argjson binds it, and an --argjson value that is not one JSON text fails the call. It takes single-letter flags,
 # --arg, --argjson, --slurpfile and --rawfile, then the filter, then input files.
 jq_files() {
   local args=() tmps=() bind='' tmp rc
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --arg|--argjson)
-        tmp="$(mktemp)" || { [ "${#tmps[@]}" -eq 0 ] || rm -f "${tmps[@]}"; return 2; }
-        tmps+=("$tmp")
-        printf '%s' "$3" > "$tmp" || { rm -f "${tmps[@]}"; return 2; }
-        if [ "$1" = "--arg" ]; then
-          args+=(--rawfile "$2" "$tmp")
+        if [ "${#3}" -le 32000 ]; then
+          args+=("$1" "$2" "$3")
         else
-          args+=(--slurpfile "$2" "$tmp")
-          bind="${bind}(\$${2} | if length == 1 then .[0] else error(\"--argjson ${2}: not one JSON text\") end) as \$${2} | "
+          tmp="$(mktemp)" || { [ "${#tmps[@]}" -eq 0 ] || rm -f "${tmps[@]}"; return 2; }
+          tmps+=("$tmp")
+          printf '%s' "$3" > "$tmp" || { rm -f "${tmps[@]}"; return 2; }
+          if [ "$1" = "--arg" ]; then
+            args+=(--rawfile "$2" "$tmp")
+          else
+            args+=(--slurpfile "$2" "$tmp")
+            bind="${bind}(\$${2} | if length == 1 then .[0] else error(\"--argjson ${2}: not one JSON text\") end) as \$${2} | "
+          fi
         fi
         shift 3 ;;
       --slurpfile|--rawfile) args+=("$1" "$2" "$3"); shift 3 ;;
@@ -934,12 +947,11 @@ task_review_outdated() {
 
 # A chain made with --in-tree shares one tree, and the branch checked out there says which task
 # builds in it now (gap row 302). Refuses through die3 when the tree $2 holds a branch other than
-# the one the task folder $1 records. A detached HEAD names no task, so it is not refused. $3 the
-# action's own name.
+# $1, the worktree.branch the task records. A detached HEAD names no task, so it is not refused. $3
+# the action's own name.
 task_tree_turn() {
-  local held branch
+  local held branch="$1"
   held="$(git -C "$2" symbolic-ref -q --short HEAD 2>/dev/null)"
-  branch="$(jq -r '.worktree.branch // empty' "$1/task.json" 2>/dev/null)"
   [ -z "$held" ] || [ -z "$branch" ] || [ "$held" = "$branch" ] \
     || die3 "$3: the worktree $2 holds the branch $held, and this task builds on $branch. Another task of its chain builds in this tree now. Nothing was written. Commit the work there, then run: git -C $2 switch $branch"
 }
@@ -1103,7 +1115,8 @@ task_worktree() {
   if [ -n "$after_branch" ] && [ "$(jq -r '.inTree // false' "$task_json" 2>/dev/null)" = true ]; then
     found=""
     if task_after_reviewed "$task_folder"; then
-      found="$(task_tree_from_git "$(dirname -- "$pred")" "$code" "$who")"
+      found="$(task_tree_from_git "$(dirname -- "$pred")" "$code" "$who" "$after_branch" \
+        "$(jq -r '.worktree.path // empty' "$pred" 2>/dev/null)")"
     else
       printf '%s: the tree of task %s is not shared, because its review has not closed and runs in that tree. A new tree is cut from %s\n' "$who" "${after% *}" "$after_branch" >&2
     fi
@@ -1123,7 +1136,7 @@ task_worktree() {
   fi
   if [ -n "$wt" ]; then
     # The tree may have moved rather than gone. git answers that, through the one reader.
-    found="$(task_tree_from_git "$task_folder" "$code" "$who")"
+    found="$(task_tree_from_git "$task_folder" "$code" "$who" "$branch" "$wt")"
     if [ -n "$found" ]; then printf '%s' "$found"; return 0; fi
     # A recorded path gone from disk is not kept. It may be another machine's home, or a folder
     # named from an id before the slug (gap row 251). The producer runs again: the path is
@@ -1185,11 +1198,17 @@ task_worktree() {
 # lands there. Prints $1 otherwise, including when $2 is not in a git work tree at all. Calls no
 # die function.
 active_tree_for() {
-  local code="$1" dir="$2" top common
+  local code="$1" dir="$2" top common out
   code="$(cd "$code" && pwd -P)"
-  top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || { printf '%s' "$code"; return 0; }
+  out="$(git -C "$dir" rev-parse --show-toplevel --git-common-dir 2>/dev/null)" || { printf '%s' "$code"; return 0; }
+  # git prints the common dir relative to $dir, or absolute.
+  { IFS= read -r top; IFS= read -r common; } <<TOP_COMMON
+$out
+TOP_COMMON
   top="$(cd "$top" && pwd -P)"
-  common="$(cd "$top" && cd "$(git rev-parse --git-common-dir)" && pwd -P)"
+  # The code path itself needs no common dir: either answer prints it.
+  [ "$top" != "$code" ] || { printf '%s' "$code"; return 0; }
+  common="$(cd "$dir" && cd "$common" && pwd -P)"
   if [ "$common" = "$(cd "$code" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" ]; then
     printf '%s' "$top"
   else
