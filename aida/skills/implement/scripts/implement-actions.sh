@@ -361,7 +361,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      commit other than the one this run is at. The message names both commits. The one freeze
 #      exempt is the first after `retake-tests`: HEAD holds the attempt the record was frozen
 #      before, so the ledger's last retake names the record's commit and the freeze overwrites it
-#      with `retakenFrom` instead (live-run row 110).
+#      with `retakenFrom` instead (live-run row 110). The second is the freeze after a builder's
+#      `Stop: test-wrong`, which no `retake-tests` follows: the order is at tests-frozen and not
+#      halted, and the report its build brief names holds that one stop line and is newer than the
+#      record (live-run row 406).
 #  36  `tests-freeze` was given a --test whose path, once resolved against codePath, names
 #      something outside codePath altogether. The message names the path and the code root. Every
 #      path this step records is relative to codePath (baseline.json's own `scope` field is
@@ -4978,6 +4981,16 @@ tf_freeze_commits() {
          else [] end' "$1" 2>/dev/null || printf '[]'
 }
 
+# Returns 0 when order $1's build brief names a report holding one stop line, `Stop: test-wrong`,
+# and that report is newer than freeze record $2.
+tf_stopped_test_wrong() {
+  local report
+  report="$(jq -r '.reportPath // ""' "$IMPL_DIR/brief-$1-build.json" 2>/dev/null)"
+  [ -n "$report" ] && [ "$report" -nt "$2" ] || return 1
+  [ "$(br_marked_lines "$report" stop | grep -c '.')" = "1" ] || return 1
+  br_marked_lines "$report" stop | grep -q -i '^stop:[[:space:]]*test-wrong'
+}
+
 # Parses --test values, one per line of $1 (`<path>::<test name>=<criterion id>[,<criterion
 # id>...]`), appending one `{path, name, criteria}` JSON object per line to file $2. `criteria` is
 # always a JSON array, however many ids the line named.
@@ -5414,7 +5427,7 @@ do_tests_freeze() {
   # The commit the record was frozen at when `retake-tests` last sent this order back, read here
   # with the step: the freeze after a retake finds HEAD past that commit, and 35 below lets it
   # through on this value alone (live-run row 110).
-  local tf_prior_step tf_prior_ledger tf_retake_commit=""
+  local tf_prior_step tf_prior_ledger tf_retake_commit="" tf_prior_halt=""
   if [ -f "$IMPL_DIR/ledger.json" ]; then
     tf_prior_ledger="$(jq -c '.' "$IMPL_DIR/ledger.json" 2>/dev/null)"
     if [ -n "$tf_prior_ledger" ]; then
@@ -5426,6 +5439,8 @@ do_tests_freeze() {
       esac
       tf_retake_commit="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" \
         '([ (.orders // [])[] | select(.id == $id) ][0].retakes // []) | last // {} | .freezeCommit // ""')"
+      tf_prior_halt="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" \
+        '[ (.orders // [])[] | select(.id == $id) ][0].haltedBecause // ""')"
     fi
   fi
 
@@ -6435,9 +6450,14 @@ TF_OWN_COMMITS
     local existing_rows new_rows
     existing_rows="$(jq -cS '{unit, testGlobs, rows, support: (.support // [])}' "$record_file" 2>/dev/null)"
     new_rows="$(jq -cS -n --arg unit "$unit_id" --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --argjson support "$support_json" '{unit: $unit, testGlobs: $testGlobs, rows: $rows, support: $support}')"
-    [ "$existing_rows" = "$new_rows" ] \
-      || die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding."
-    tf_unchanged_at="$existing_commit"
+    if [ "$existing_rows" = "$new_rows" ]; then
+      tf_unchanged_at="$existing_commit"
+    # The builder's stop is the route build.md gives a wrong test before any attempt, and other
+    # orders commit while a person rules on it (live-run row 406). No halt means a person cleared
+    # the stop. A report older than the record stopped before an earlier retake.
+    elif [ "$tf_prior_step" != "tests-frozen" ] || [ -n "$tf_prior_halt" ] || ! tf_stopped_test_wrong "$unit_id" "$record_file"; then
+      die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding. A wrong test is retaken after retake-tests, or after a builder's Stop: test-wrong once its halt is cleared."
+    fi
   fi
 
   # --- 121: each verify line that proves a criterion passes now, over the files about to freeze ----
