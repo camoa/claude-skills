@@ -318,7 +318,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  21  `preconditions` found <task_folder>/implementation/baseline.json already recorded at a
 #      commit other than the one this run's own ledger started from. A baseline is taken once, at
 #      the commit the build started from, and this refuses rather than overwrite a different one.
-#      The message names both commits.
+#      The message names both commits. `build-record`, `build-recheck`, `fix-record` and `finish`
+#      refuse at 21 too, before they subtract a baseline taken at a commit other than startedFrom.
+#      After `start --rebased-onto`, that baseline would read the new start's failures as the
+#      build's (gap row 401).
 #  22  `tests-brief`, `tests-freeze` or `build-record` was given a unit id that is not in the frozen
 #      snapshot. `build-brief` names the same fact as exit 38 instead; see that entry for why.
 #  23  `tests-brief` found a unit in the given unit's dependsOn with no completion record in the
@@ -615,7 +618,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      branch now builds on and keeps the old value under startedFromBefore with the date. The
 #      flag is an argument error, exit 3, in four cases. Its value is not a commit, not an
 #      ancestor of HEAD, or the value already held. HEAD still descends from startedFrom, and
-#      the value does not, or an order has committed (gap row 401). The run has no ledger.
+#      the value does not, or a commit between the two is on no other branch, or an order has
+#      committed (gap row 401). The run has no ledger.
 #  83  a resumed `start` found baseline.json outside the shape this version writes. That is a
 #      required field missing or of the wrong type against baseline-schema.json. Or it is a suite
 #      or tool entry that ran (it carries exitCode) with no outputFile. `build-record` subtracts from
@@ -2510,14 +2514,23 @@ REMOVED_PATHS
         || die 3 "start: --rebased-onto ($rebased_onto) is the commit $LEDGER_FILE already holds as startedFrom. Nothing to rewrite."
       # The flag answers exit 82. On a branch that still descends from startedFrom it would move
       # the start past the build's own commits, so a wrong rewrite is undone by hand instead. One
-      # case is safe: the branch moved forward onto a later commit before any order committed.
-      # No order has a lastStep and no tests, build or fix record exists in any folder, so no
-      # commit between the two starts is the build's (gap row 401).
+      # case is safe: the branch moved forward onto a later commit that another branch holds,
+      # before any order committed (gap row 401). Git decides the commits between the two starts:
+      # each must be on a ref other than this branch and its remote copies, so a person's commit
+      # or an environment commit is never dropped. The records decide the orders: no order has a
+      # lastStep and no tests, build or fix record exists, because another ref, such as a branch
+      # cut from this one, can hold an order's commits.
       if git -C "$code_path" merge-base --is-ancestor "$ledger_started_from" "$started_from" >/dev/null 2>&1; then
+        local own_ref
+        own_ref="$(git -C "$code_path" symbolic-ref -q HEAD 2>/dev/null)"
         { git -C "$code_path" merge-base --is-ancestor "$ledger_started_from" "$rebased_full" >/dev/null 2>&1 \
+          && [ -z "$( { printf '%s..%s\n' "$ledger_started_from" "$rebased_full"
+                       git -C "$code_path" for-each-ref --format='%(refname) %(refname:lstrip=3)' \
+                         | awk -v o="$own_ref" -v b="${own_ref#refs/heads/}" '$1 != o && !($1 ~ /^refs\/remotes\// && $2 == b) { print "^" $1 }'
+                     } | git -C "$code_path" rev-list --stdin 2>/dev/null)" ] \
           && [ "$(printf '%s' "$ledger_doc" | jq '[.orders[] | select(.lastStep != null)] | length')" = "0" ] \
           && [ -z "$(find "$TASK_PATH" -mindepth 2 -maxdepth 3 -type f \( -name 'tests-wo*.json' -o -name 'build-wo*.json' -o -name 'fix-wo*-*.json' \) 2>/dev/null)" ]; } \
-          || die 3 "start: --rebased-onto was given, but HEAD ($started_from) still descends from startedFrom ($ledger_started_from). The flag moves the start forward on such a branch only to a descendant of startedFrom, and only before any order has committed. Otherwise the range would drop the build's own commits. A wrong earlier rewrite is corrected by editing startedFrom in $LEDGER_FILE by hand."
+          || die 3 "start: --rebased-onto was given, but HEAD ($started_from) still descends from startedFrom ($ledger_started_from). The flag refuses to move the start forward on such a branch unless three things hold. The new start descends from startedFrom. Another branch holds every commit between the two. No order has committed. Otherwise the range would drop the build's own commits. A wrong earlier rewrite is corrected by editing startedFrom in $LEDGER_FILE by hand."
       fi
       git -C "$code_path" merge-base --is-ancestor "$rebased_full" "$started_from" >/dev/null 2>&1 \
         || die 3 "start: --rebased-onto ($rebased_full) is not an ancestor of HEAD ($started_from) in $code_path. The build's own commits must follow it."
@@ -3117,6 +3130,18 @@ bl_state() {
 # The commit recorded in baseline.json. Call only after bl_state prints "ok".
 bl_commit_of() {
   jq -r '.commit' "$BASELINE_FILE" 2>/dev/null
+}
+
+# Points BRC_BASELINE_FILE at the task's baseline for the step named $1. Refuses at 21 when the
+# baseline was taken at a commit other than the ledger's startedFrom (gap row 401).
+brc_use_baseline() {
+  local BASELINE_FILE="$IMPL_DIR/baseline.json" at from
+  BRC_BASELINE_FILE="$BASELINE_FILE"
+  [ "$(bl_state)" = "ok" ] || return 0
+  at="$(bl_commit_of)"
+  from="$(jq -r '.startedFrom // ""' "$IMPL_DIR/ledger.json" 2>/dev/null)"
+  [ -z "$from" ] || [ "$at" = "$from" ] \
+    || die 21 "$1: $BASELINE_FILE was taken at commit $at, but the ledger starts from $from, as after start --rebased-onto. Subtracting it would read the new start's own failures as the build's. Move $BASELINE_FILE and $IMPL_DIR/baseline-output aside, then run preconditions to retake it."
 }
 
 # Runs the `suite` test-command row for every framework in the preconditions record $1 (the same
@@ -9110,7 +9135,7 @@ do_build_record() {
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
-  BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  brc_use_baseline "$BRC_WHO"
   CR_TEST_RECIPES="$test_recipes"
   CR_CHECK_RECIPES="$check_recipes"
   BRC_VALUES="$values"
@@ -9433,7 +9458,7 @@ EOF_PATHS
   BRC_CURRENT="$record_commit"
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
-  BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  brc_use_baseline "$BRC_WHO"
   CR_TEST_RECIPES="$test_recipes"
   CR_CHECK_RECIPES="$check_recipes"
   BRC_VALUES="$values"
@@ -11296,7 +11321,7 @@ RV_AC
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
-  BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  brc_use_baseline "$BRC_WHO"
   # The owned-files check reads the paths allowed for this round beside the order's own, so an
   # allowed change passes (live-run row 116).
   br_round_allowed "$unit_id" "$round_number"
@@ -12420,7 +12445,7 @@ FN_RECIPES
   BRC_WHO="finish"
   BRC_CODEPATH="$RV_CODEPATH"
   BRC_RECIPES="$CR_DOC"
-  BRC_BASELINE_FILE="$IMPL_DIR/baseline.json"
+  brc_use_baseline "$BRC_WHO"
   BRC_VALUES="$values"
   BRC_END_OF_TASK=true
   suite_file="$(mktemp)" || die 3 "finish: could not create a temporary file"

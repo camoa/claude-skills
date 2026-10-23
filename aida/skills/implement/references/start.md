@@ -140,9 +140,10 @@ commit the ledger started from. The branch was rewritten under the build, by a r
 amend. Run `start "<task_folder>" --rebased-onto <commit>`, naming the commit the branch now
 builds on. It rewrites `startedFrom` and keeps the old value in the ledger with the date. The
 `startedFrom:` line then says the baseline must be retaken: move `baseline.json` and
-`baseline-output` aside, then run `preconditions`. The same flag takes a branch moved forward onto a
-later commit, such as a trunk fix, before any order has committed. Then no order has a last step and
-no tests, build or fix record exists. Exit 83: `baseline.json` was written by an
+`baseline-output` aside, then run `preconditions`. Until then, `build-record`, `build-recheck`,
+`fix-record` and `finish` refuse with exit 21. The same flag takes a branch moved forward onto a
+later commit, such as a trunk fix. The flag refuses if a commit between the two starts is on no
+other branch, or if an order has committed. Exit 83: `baseline.json` was written by an
 earlier version, in a shape this one cannot subtract from. The message names the same retake.
 Neither refusal spends an attempt. The `startedFrom:` line always prints what the ledger holds,
 never the current HEAD.
