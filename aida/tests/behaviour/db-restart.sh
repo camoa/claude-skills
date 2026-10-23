@@ -3,7 +3,7 @@
 # tests-brief then say nothing of them (live-run row 94, gap row 252).
 # Builds a project and two tasks, each with two work orders (wo1 proved by tests and owning
 # a.php, wo2 a gate order owning b.php), freezes and builds wo1, changes wo1's design, halts it,
-# and restarts. Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup
+# and restarts. Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup
 # lives in functions, copied from run-cy-fixture.sh and run-cs-fixture.sh.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
@@ -35,7 +35,7 @@ TASK=""
 WT=""
 
 # Every stage action runs from the task's worktree (exit 79 otherwise), under the shell this
-# runner runs under, so the zsh run proves the plugin script under zsh. Output goes to the log.
+# runner runs under. Output goes to the log.
 SH=bash; [ -n "${ZSH_VERSION:-}" ] && SH=zsh
 in_wt() { (cd "$WT" && env -u CLAUDE_PLUGIN_ROOT "$SH" "$@") >>"$LOG" 2>&1; }
 must() { in_wt "$@" || { printf 'setup failed: %s\n' "$*"; tail -5 "$LOG"; exit 1; }; }

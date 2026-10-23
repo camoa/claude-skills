@@ -14,7 +14,7 @@
 #   commit    --not-sent after a commit in the code path refuses (3).
 #   record    --not-sent after a commit to a record order's owned file in the project folder
 #             refuses (3).
-# Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
 # run-iz-fixture.sh.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
@@ -48,7 +48,7 @@ TEST_RECIPE_FLAG="fake=$RECIPES/test-execution.md"
 CHECK_RECIPE_FLAG="fake=$RECIPES/checks.md"
 
 # Every stage action runs from the task's worktree (exit 79 otherwise), under the shell this
-# runner runs under, so the zsh run proves the plugin script under zsh. Output goes to the log.
+# runner runs under. Output goes to the log.
 SH=bash; [ -n "${ZSH_VERSION:-}" ] && SH=zsh
 in_wt() { (cd "$WT" && env -u CLAUDE_PLUGIN_ROOT "$SH" "$@") >>"$LOG" 2>&1; }
 must() { in_wt "$@" || { printf 'setup failed: %s\n' "$*"; tail -5 "$LOG"; exit 1; }; }

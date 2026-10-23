@@ -10,7 +10,7 @@
 #            is taken in, and the snapshot takes the owner labels.
 #   text     the same relabel with c1's text changed too: wo1 still halts for c1, and wo2 as its
 #            dependent.
-# Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
 # run-jj-fixture.sh.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u

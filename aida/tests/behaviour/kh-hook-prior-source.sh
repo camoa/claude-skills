@@ -14,7 +14,7 @@
 #            the read hook refuses wo4's record and wo3's folder, and allows wo1's record.
 #   chain    wo3 depends on wo1 through wo2: its brief names wo1's record and has no deniedReads,
 #            next says dispatch, and its dispatch denies wo2's code and wo4's record, not wo1's.
-# Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
 # run-kq-fixture.sh.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u

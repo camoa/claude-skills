@@ -27,11 +27,24 @@ export GIT_AUTHOR_NAME=aida-ci GIT_AUTHOR_EMAIL=aida-ci@example.invalid
 export GIT_COMMITTER_NAME=aida-ci GIT_COMMITTER_EMAIL=aida-ci@example.invalid
 unset AIDA_SESSION_PLUGIN_VERSION AIDA_SESSION_CHECKED CLAUDE_PLUGIN_ROOT
 
-if [ "$#" -gt 0 ]; then FIXTURES=("$@"); else FIXTURES=("$HERE"/behaviour/*.sh); fi
+# The slowest fixtures start first, so the last job ends near the total over JOBS. The order
+# is from measured runs; a fixture not named here runs after these.
+SLOWEST="im-light-mode eh-whole-chain db-restart kg-implement-dispatch mm-records-hash
+  gj-hook-frozen-tests kh-hook-prior-source ks-snapshot-drift mk-review-tool-rows es-design-close"
+if [ "$#" -gt 0 ]; then
+  FIXTURES=("$@")
+else
+  FIXTURES=()
+  for n in $SLOWEST; do [ -f "$HERE/behaviour/$n.sh" ] && FIXTURES+=("$HERE/behaviour/$n.sh"); done
+  for f in "$HERE"/behaviour/*.sh; do
+    case " $(printf '%s ' $SLOWEST)" in *" $(basename "$f" .sh) "*) ;; *) FIXTURES+=("$f") ;; esac
+  done
+fi
 start="$(date +%s)"
 printf '%s\n' "${FIXTURES[@]}" | xargs -P "${JOBS:-4}" -I{} bash "$0" --one "$OUT" {}
 
 failed=0
+summary=""
 for f in "${FIXTURES[@]}"; do
   name="$(basename "$f" .sh)"
   read -r rc secs <"$OUT/$name.rc" 2>/dev/null || { rc=1; secs='?'; }
@@ -46,7 +59,11 @@ for f in "${FIXTURES[@]}"; do
     else
       tail -10 "$OUT/$name.log" 2>/dev/null
     fi | sed 's/^/        /'
+    summary="$summary$name: $(grep -c '^BAD' "$OUT/$name.log" 2>/dev/null) BAD"$'\n'
+    summary="$summary$(grep '^BAD' "$OUT/$name.log" 2>/dev/null | sed 's/^/  /')"$'\n'
   fi
 done
+# run-tests.sh shows the last lines of a failed spec, so the BAD lines of every failure end it.
+[ -z "$summary" ] || printf 'failed fixtures:\n%s' "$summary" | sed '/^$/d'
 printf 'fixtures: %s run, %s failed, %ss wall\n' "${#FIXTURES[@]}" "$failed" "$(($(date +%s) - start))"
 [ "$failed" -eq 0 ]

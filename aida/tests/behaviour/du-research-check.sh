@@ -5,7 +5,7 @@
 # recipe is written to task.json by `task decline-recipe`, read back by `research read`, and
 # refused when the framework is not declared, when it is repeated, and when the task does not
 # exist (row 123). `read` lists inputs/ three levels deep, so an extracted prior-art tree is
-# listed on a resumed run (row 125, fix round). Row 124 is prose in the agent and the skill. Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup lives in
+# listed on a resumed run (row 125, fix round). Row 124 is prose in the agent and the skill. Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup lives in
 # functions, copied from run-dn-fixture.sh.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
@@ -34,7 +34,7 @@ CHECK_TASK="$PLUGIN/scripts/check-task.sh"
 LOG="$ROOT/log.txt"
 
 # Every stage action runs from the task's worktree (exit 79 otherwise), under the shell this
-# runner runs under, so the zsh run proves the plugin script under zsh. Output goes to the log.
+# runner runs under. Output goes to the log.
 SH=bash; [ -n "${ZSH_VERSION:-}" ] && SH=zsh
 in_wt() { (cd "$WT" && env -u CLAUDE_PLUGIN_ROOT "$SH" "$@") >>"$LOG" 2>&1; }
 must() { in_wt "$@" || { printf 'setup failed: %s\n' "$*"; tail -5 "$LOG"; exit 1; }; }

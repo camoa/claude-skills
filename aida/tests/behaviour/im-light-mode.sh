@@ -15,7 +15,7 @@
 #             waits for a person.
 #   high      light, a high finding still open after the one round halts (56). The person sets the
 #             task interactive, clears the halt and rules at once, and close logs the skipped rounds.
-# Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
 # run-fe-fixture.sh.
 # fix_report <unit>: the report the newest fix brief of that unit pins, the one path fix-record
 # takes (gap row 250), or a file under $ROOT when no brief pins one.

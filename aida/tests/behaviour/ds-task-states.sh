@@ -9,7 +9,7 @@
 # child too, with parent and children set, and a child it left behind is repaired from where it
 # sits; `repair` reads `## Problem` and refuses neither heading naming both. From the fix round:
 # `split` commits its children, and the stage stays scope until records/scope-distill.json
-# exists. Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
+# exists. Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
 

@@ -25,7 +25,7 @@
 #            never the base itself.
 #   default  set-worktree-base with no folder records the default again, and a new tree goes
 #            beside the code path.
-# Runs under bash and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
 

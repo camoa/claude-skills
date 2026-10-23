@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fixture recipe-fill: build-record and fix-record take a left-out recipe flag from the records
-# (gap rows 349, 391, 396, 397, 399). preconditions.json holds the test recipe and baseline.json
+# (gap rows 397 and 399). preconditions.json holds the test recipe and baseline.json
 # the check recipe, so neither step needs --test-recipe or --check-recipe. One task, one order,
 # a stub runner (`true`) for the tests and the coding-standards tool. The rows:
 #   build    build-record with no recipe flag: exit 0, order-tests and coding-standards read met.
@@ -8,6 +8,7 @@
 #   none     the same round with no check recipe in baseline.json: coding-standards reads
 #            undeclared. With no test recipe in preconditions.json, build-record refuses at 3
 #            and spends no attempt.
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
 

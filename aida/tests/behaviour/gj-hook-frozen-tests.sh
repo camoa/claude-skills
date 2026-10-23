@@ -9,7 +9,7 @@
 # --work-tree, git show <rev>:<path>, git cat-file, git diff and git log -p, and cp, rsync,
 # install, mv and tar out of it or into it. Each is refused in the main checkout and passes in
 # the worktree, whose path starts with the main checkout's. git show <rev>:<denied>, git
-# cat-file and git grep are refused in the worktree too, as a direct read there is. Runs under bash 3.2 and zsh,
+# cat-file and git grep are refused in the worktree too, as a direct read there is. Runs under bash, which CI runs on Linux,
 # from $HOME, with CLAUDE_PLUGIN_ROOT unset.
 # fix_report <unit>: the report the newest fix brief of that unit pins, the one path fix-record
 # takes (gap row 250), or a file under $ROOT when no brief pins one.
@@ -50,7 +50,7 @@ TASKS="$PLUGIN/skills/task/scripts/task-actions.sh"
 LOG="$ROOT/log.txt"
 
 # Every stage action runs from the task's worktree (exit 79 otherwise), under the shell this
-# runner runs under, so the zsh run proves the plugin script under zsh. Output goes to the log.
+# runner runs under. Output goes to the log.
 SH=bash; [ -n "${ZSH_VERSION:-}" ] && SH=zsh
 in_wt() { (cd "$WT" && env -u CLAUDE_PLUGIN_ROOT "$SH" "$@") >>"$LOG" 2>&1; }
 must() { in_wt "$@" || { printf 'setup failed: %s\n' "$*"; tail -5 "$LOG"; exit 1; }; }

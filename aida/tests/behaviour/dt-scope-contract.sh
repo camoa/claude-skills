@@ -3,7 +3,7 @@
 # 130 and 132). Builds a project and one task, scoped through the plugin's own scope actions on
 # the setup of run-cu-fixture.sh. Rows: approve rewrites alignment.md so the criterion lines read
 # owner; set-goal rewrites it; update rewrites it; add and add-non-goal give the page a line;
-# remove takes one away; each prints rendered:; render still works alone. Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset, and calls the
+# remove takes one away; each prints rendered:; render still works alone. Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset, and calls the
 # plugin scripts under the shell this runner runs under.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
@@ -30,7 +30,7 @@ LOG="$ROOT/log.txt"
 WT=""
 
 # Every stage action runs from the task's worktree (exit 79 otherwise), under the shell this
-# runner runs under, so the zsh run proves the plugin script under zsh. Output goes to the log.
+# runner runs under. Output goes to the log.
 SH=bash; [ -n "${ZSH_VERSION:-}" ] && SH=zsh
 in_wt() { (cd "$WT" && env -u CLAUDE_PLUGIN_ROOT "$SH" "$@") >>"$LOG" 2>&1; }
 must() { in_wt "$@" || { printf 'setup failed: %s\n' "$*"; tail -5 "$LOG"; exit 1; }; }

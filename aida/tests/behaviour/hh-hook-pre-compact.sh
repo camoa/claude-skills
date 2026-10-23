@@ -3,7 +3,7 @@
 # `task save` stamps savedAt to the whole second, and a file time carries a fraction. So a stage
 # file written just before the save, in the same second, must not make hooks/pre-compact.sh
 # refuse. A stage file written in a later second still refuses, and a save over no stage file
-# still passes. Setup is copied from run-eh-fixture.sh. Runs under bash 3.2 and zsh, from $HOME,
+# still passes. Setup is copied from run-eh-fixture.sh. Runs under bash, which CI runs on Linux, from $HOME,
 # with CLAUDE_PLUGIN_ROOT unset.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u

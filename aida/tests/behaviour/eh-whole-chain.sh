@@ -4,8 +4,8 @@
 # `fake`. Four tasks carry the body's four shapes: a site up, `not-applicable`, no `environment`
 # key, and no worktree at all. One more task drives hooks/pre-compact.sh through each of its three
 # branches, with a file under `inputs/`, with one under `records/`, and then with a stage record
-# on disk. Setup is copied from run-ec-fixture.sh and run-ds-fixture.sh. Runs under bash 3.2 and
-# zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
+# on disk. Setup is copied from run-ec-fixture.sh and run-ds-fixture.sh. Runs under bash, which CI runs on
+# Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
 
@@ -40,7 +40,7 @@ CHECK_RECIPE_FLAG="fake=$RECIPES/checks.md"
 ENV_RECIPE_FLAG="fake=$RECIPES/worktree-environment.md"
 
 # Every stage action runs from the task's worktree (exit 79 otherwise), under the shell this
-# runner runs under, so the zsh run proves the plugin script under zsh. Output goes to the log.
+# runner runs under. Output goes to the log.
 SH=bash; [ -n "${ZSH_VERSION:-}" ] && SH=zsh
 in_wt() { wt="$1"; shift; (cd "$wt" && env -u CLAUDE_PLUGIN_ROOT "$SH" "$@") >>"$LOG" 2>&1; }
 must() { in_wt "$@" || { printf 'setup failed: %s\n' "$*"; tail -12 "$LOG"; exit 1; }; }

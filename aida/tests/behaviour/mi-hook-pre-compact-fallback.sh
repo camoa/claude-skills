@@ -16,7 +16,7 @@
 #   tree     cwd in the task's tree: compact refuses whatever the transcript says.
 #   no path  a payload with no transcript_path: compact refuses and session start names the task.
 #   no file  a transcript_path with no file yet: a session with no history works no task.
-# Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
 

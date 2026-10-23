@@ -10,7 +10,7 @@
 #           command, a catalog note names the recipe, and check 4 still reads met. Before the fix,
 #           the stub ran and the row read met.
 #   scoped  the same stub with a {paths} placeholder still runs over the changed files and reads met.
-# Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
 # run-md-fixture.sh.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u

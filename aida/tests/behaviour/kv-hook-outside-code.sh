@@ -20,7 +20,7 @@
 #            it resolves no project; a real one resolves as a git worktree of the checkout.)
 #   inside   cwd in the main checkout still resolves the owning project's record.
 #   stamp    dispatch-open writes CLAUDE_CODE_SESSION_ID as sessionId, and nothing when unset.
-# Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
 

@@ -5,8 +5,8 @@
 # path; one commit carries design-closed.json and the three files, and git show produces each one;
 # a second close keeps one copy of each and records them again; a close with no critique file is
 # unchanged; an unfinished critique is left out of the record and its count. Gap row 190 later made
-# the close move that unfinished file too, so run-ex-fixture.sh owns where it lands. Runs under bash 3.2
-# and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup copied from run-dv-fixture.sh.
+# the close move that unfinished file too, so run-ex-fixture.sh owns where it lands. Runs under bash,
+# which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup copied from run-dv-fixture.sh.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
 

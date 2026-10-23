@@ -11,7 +11,7 @@
 #           `$'...'` string, in a backtick pair, in `${...}`, mid-word, in quotes, at the start of a
 #           continued line, after a comment that ends with a backslash, and the four cases of the
 #           fix round's check.
-# Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 RUNS="${RUNS:-20}"
 set -u

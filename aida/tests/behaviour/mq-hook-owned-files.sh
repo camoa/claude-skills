@@ -16,7 +16,7 @@
 #            +=, a sed w command, an env prefix, a glued redirect, `>|` and `dd of=`: refused.
 #   allowed  `sed -i` and `mkdir -p "$(dirname ...)"` of the owned file, with `2>&1 | head` or
 #            `>/dev/null` after it; rm and cp with `2>/dev/null`; `awk '$1>5'`: allowed.
-# Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
 

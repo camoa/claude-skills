@@ -3,13 +3,15 @@
 # implementation (gap row 402). Linux caps one argument at 128 KiB, and records-hash.sh passed
 # every work order to jq as one --argjson argument, so design close refused ("could not compute
 # the records hash") and implement start refused ("Argument list too long"). The rows:
+#   same     a small contract with one order, and with three (wo1, wo2, wo10): each hashes to the
+#            value the code before row 402 gave, so no hash a design close recorded breaks.
 #   big      thirteen orders of about 16 KB each, about 210 KB: the hash is 64 hex characters,
 #            design closes, start takes the snapshot, a second start resumes on it, and after one
 #            order changes and design closes again, start takes that order fresh. No output names
 #            the limit.
 #   review   one built order, its frozen orders padded to 140 KB after finish, and a stub mutmut
 #            on PATH: review checks exits 0, the stub runs, and the mutation row reads met.
-# Runs under bash 3.2 and zsh, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
+# Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
 # run-kk-fixture.sh.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
@@ -67,6 +69,25 @@ use_task() {
   WT="$(jq -r '.worktree.path' "$TASK/task.json")"
   [ -d "$WT" ] || { printf 'setup failed: no worktree for %s\n' "$1"; exit 1; }
 }
+
+echo "--- same: small designs hash as they did before row 402"
+# golden <folder> <order id>...: a contract and one small work order per id.
+golden() {
+  local d="$1" o; shift
+  mkdir -p "$d/design"
+  printf '{"goal":"change a","criteria":[{"id":"c1","text":"a.php changes","author":"owner"}],"nonGoals":[]}\n' >"$d/alignment.json"
+  for o in "$@"; do
+    printf '{"id":"%s","title":"change %s","criteriaServed":["c1"],"ownedFiles":["%s.php"],"doneWhen":["%s changed"]}\n' \
+      "$o" "$o" "$o" "$o" >"$d/design/$o.json"
+  done
+}
+# The values are what records-hash.sh printed at 7b6b29ab^, before row 402, and still prints.
+golden "$ROOT/same/one" wo1
+golden "$ROOT/same/many" wo1 wo2 wo10
+expect "same: one order hashes as before" "$(hash_of "$ROOT/same/one")" \
+  "0a5f1b25801a121525a60a75e9c3f25172b3ee07ede6a24f828c19b8cbd1c99c"
+expect "same: three orders hash as before" "$(hash_of "$ROOT/same/many")" \
+  "d9f1d81cf0b57b649755fc0fd35d1713fc46e8516d75a9cc912d059840cef06b"
 
 echo "--- big: about 210 KB of work orders"
 CODE="$ROOT/code"
