@@ -331,11 +331,11 @@ frameworks exit zero when a filter selects nothing. Only an assertion that ran a
 a red run. A harness that never reached the behaviour is a setup gap, and a run that selected
 nothing looks like success and is the dangerous one.
 
-**When the author returns, run the coding-standards row over the new test files.** Take the
-command from the check recipe `references/preconditions.md` resolved, with `{paths}` as the test
-paths the author returned, and run it here. When the row lists `extensions`, pass only the test
-files that end in one of them. When none is left, the row does not apply: say so, and run
-nothing. Send any finding back to the author before the freeze. No script action runs one recipe row on its own, so this conversation runs the command.
+**The freeze runs the coding-standards row over the test files.** It takes the row from the
+check recipe `baseline.json` records. It runs the row over the test and support files the freeze
+adds or changes, and subtracts the baseline the way the build does. A finding refuses the freeze
+(exit 120) and names the files and the output. Send the finding back to the author. The author
+repairs the files and runs each test again, and the freeze runs again.
 This is the one place the tests' own standards are judged. The build and review leave the frozen
 tests out of their tool rows, because no role after the freeze may write them.
 

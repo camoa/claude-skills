@@ -318,10 +318,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  21  `preconditions` found <task_folder>/implementation/baseline.json already recorded at a
 #      commit other than the one this run's own ledger started from. A baseline is taken once, at
 #      the commit the build started from, and this refuses rather than overwrite a different one.
-#      The message names both commits. `build-record`, `build-recheck`, `fix-record` and `finish`
-#      refuse at 21 too, before they subtract a baseline taken at a commit other than startedFrom.
-#      After `start --rebased-onto`, that baseline would read the new start's failures as the
-#      build's (gap row 401).
+#      The message names both commits. `build-record`, `build-recheck`, `fix-record`, `finish`
+#      and `tests-freeze` refuse at 21 too, before they subtract a baseline taken at a commit
+#      other than startedFrom. After `start --rebased-onto`, that baseline would read the new
+#      start's failures as the build's (gap row 401).
 #  22  `tests-brief`, `tests-freeze` or `build-record` was given a unit id that is not in the frozen
 #      snapshot. `build-brief` names the same fact as exit 38 instead; see that entry for why.
 #  23  `tests-brief` found a unit in the given unit's dependsOn with no completion record in the
@@ -881,6 +881,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      entry. Design appended done-when rows after the freeze, and start removed the done-when
 #      judgement made on the shorter text. The next freeze with the same tests judges it again and
 #      removes the list (gap row 409). Nothing is written.
+#
+# 120  `tests-freeze` ran the coding-standards row of the check recipe baseline.json records over
+#      the test and support files this freeze adds or changes, and the row read unmet after the
+#      baseline subtraction (gap row 408). No role may write a frozen file. The message names the
+#      files and the first lines of the output. Nothing is frozen.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -6526,6 +6531,37 @@ TF_OWN_COMMITS
     esac
   fi
 
+  # --- 120: the coding-standards row passes over the files this freeze adds or changes -------------
+  # No role may write a frozen file, and build and review leave the frozen tests out of their tool
+  # rows. So the row runs here, while the test author can still repair the file (gap row 408). It
+  # runs over the files the commit below takes, through build-record's own check. A finding the
+  # baseline already held in a changed file is subtracted the same way, so it never refuses here.
+  local frozen_rel_paths tf_cs_paths="[]" tf_cs_p tf_cs_json tf_cs_out
+  frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
+    '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
+  while IFS= read -r tf_cs_p; do
+    [ -n "$tf_cs_p" ] && [ -n "$(git -C "$codepath" status --porcelain -- "$tf_cs_p")" ] \
+      && tf_cs_paths="$(printf '%s' "$tf_cs_paths" | jq -c --arg p "$tf_cs_p" '. + [$p]')"
+  done <<TF_CS_EOF
+$frozen_rel_paths
+TF_CS_EOF
+  if [ "$tf_cs_paths" != "[]" ]; then
+    CR_WHO="tests-freeze"; CR_TEST_RECIPES=""
+    CR_CHECK_RECIPES="$(base_check_recipes "$IMPL_DIR/baseline.json")"
+    cr_resolve
+    BRC_WHO="tests-freeze"; BRC_CODEPATH="$codepath"; BRC_RECIPES="$CR_DOC"; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
+    BRC_UNIT_JSON="$(jq -cn --argjson owned "$tf_cs_paths" '{ownedFiles: $owned}')"
+    brc_use_baseline "tests-freeze"
+    tf_cs_json="$(br_tool_check "coding-standards" "codingStandards" "coding-standards")" || exit "$?"
+    if [ "$(printf '%s' "$tf_cs_json" | jq -r '.verdict')" = "unmet" ]; then
+      tf_cs_out="$IMPL_DIR/coding-standards-$unit_id-freeze.txt"
+      printf '%s' "$tf_cs_json" | jq -r '.output // ""' >"$tf_cs_out"
+      die 120 "tests-freeze: the coding-standards row fails over $(printf '%s' "$tf_cs_paths" | jq -r 'join(", ")'): $(printf '%s' "$tf_cs_json" | jq -r '.detail')
+$(head -n 20 "$tf_cs_out")
+The test author repairs these files and runs each test again, and this freeze runs again. Nothing is frozen. The output is in $tf_cs_out."
+    fi
+  fi
+
   # --- the test files go into a commit before anything is measured against them --------------------
   # The intent puts the commit before the build ("Tests are committed and hash-frozen before the
   # slice's implementer starts"). Without this, the implementer is the role that commits the tests
@@ -6539,9 +6575,7 @@ TF_OWN_COMMITS
   # The subject carries no AIDA name, because the branch can go upstream as it is. The record says
   # which commit the freeze made, under `freezeCommits`, so no reader rests on the subject (live-run
   # row 374).
-  local frozen_rel_paths tree_left tf_made="" tf_before
-  frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
-    '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
+  local tree_left tf_made="" tf_before
   if [ -n "$frozen_rel_paths" ]; then
     set --
     while IFS= read -r p; do
