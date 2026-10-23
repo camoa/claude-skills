@@ -252,8 +252,8 @@
           "description": "Present only on a `decision-` check a person answered: the ruling word for a finding, keep or rebuild for a departure, or accept or reject for a changed non-goal. wrong, deferred, keep and accept read met; load-bearing, test-wrong, rebuild and reject read unmet. Completion offers a follow up task for each deferred one."
         },
         "frozenText": {
-          "type": "string",
-          "description": "Present only on a `decision-<id>-non-goal` check: the non-goal's text in the snapshot (gap row 410)."
+          "type": ["string", "null"],
+          "description": "Present only on a `decision-<id>-non-goal` check: the non-goal's text in the snapshot, or null when the live contract added it after the freeze (gap row 410)."
         },
         "liveText": {
           "type": ["string", "null"],

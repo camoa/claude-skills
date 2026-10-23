@@ -65,7 +65,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   3  the script could not do its job: a missing or unrecognized argument, jq or git not on PATH,
 #      the plugin root or a library that could not be resolved, a project or task folder that could
 #      not be resolved, a record or a frozen file that is present but unreadable, a record that does
-#      not match scripts/review-schema.json, a framework nothing was said about, or a code
+#      not match scripts/review-schema.json, a framework nothing was said about, a criterion the
+#      live contract changed after the freeze, or a code
 #      repository whose HEAD is not the commit implementation's own range ends at, or that commit
 #      with the files `task environment up` added removed.
 #   5  the recorded codePath exists and is not a git repository.
@@ -451,19 +452,36 @@ rw_require_person() {
 # The frozen contract, as an object.
 rw_alignment() { printf '%s' "$RW_SNAPSHOT_DOC" | jq -c '.alignment // {}'; }
 
-# Each frozen non-goal whose text the live contract changed or removed after the freeze, as one
-# JSON array of {id, frozen, live}, live null for a removed one (gap row 410). A build may prove a
-# non-goal's wording wrong, and only `restart` reached the frozen text. The reviewer judges the
-# live text, and close holds the verdict until a person accepts or rejects each change, so no
-# unattended run moves its own goalposts. A live contract that cannot be read changes nothing.
-rw_non_goal_changes() {
+# Each criterion and non-goal whose text the live contract changed after the freeze, as one JSON
+# array of {kind, id, frozen, live}: live null for one removed, frozen null for one added (gap row
+# 410). A build may prove a non-goal's wording wrong, and only `restart` reached the frozen text.
+# The reviewer judges the live non-goal, and close holds the verdict until the person's answer
+# accepts or rejects each change. On an unattended run that answer is the record the main session
+# writes, so the guard is as strong as that record and no stronger (gap row 357). A changed
+# criterion is refused instead, because its frozen tests prove the frozen text. A live contract
+# that cannot be read changes nothing.
+rw_contract_changes() {
   local live='{}'
   [ "$(json_file_state "$ALIGNMENT_FILE")" != ok ] || live="$(jq -c '.' "$ALIGNMENT_FILE")"
   printf '%s' "$RW_SNAPSHOT_DOC" | jq -c --argjson live "$live" '
-    [ (.alignment.nonGoals // [])[] | . as $f
-      | ([ ($live.nonGoals // [])[] | select(.id == $f.id) ][0]) as $l
-      | select($l == null or $l.text != $f.text)
-      | {id: $f.id, frozen: $f.text, live: ($l.text // null)} ]'
+    def changes($kind; $frozen; $now):
+      [ $frozen[] | . as $f | ([ $now[] | select(.id == $f.id) ][0]) as $l
+        | select($l == null or $l.text != $f.text)
+        | {kind: $kind, id: $f.id, frozen: $f.text, live: ($l.text // null)} ]
+      + [ $now[] | . as $l | select(([ $frozen[] | select(.id == $l.id) ] | length) == 0)
+          | {kind: $kind, id: $l.id, frozen: null, live: $l.text} ];
+    changes("criterion"; .alignment.criteria // []; $live.criteria // [])
+    + changes("non-goal"; .alignment.nonGoals // []; $live.nonGoals // [])'
+}
+rw_non_goal_changes() { rw_contract_changes | jq -c '[ .[] | select(.kind == "non-goal") | del(.kind) ]'; }
+
+# Exit 3 when the live contract changed a criterion after the freeze. Its frozen tests prove the
+# frozen text, so no answer at close can make them prove another one. $1 the action.
+rw_refuse_changed_criteria() {
+  local ids
+  ids="$(rw_contract_changes | jq -r '[ .[] | select(.kind == "criterion") | .id ] | join(", ")')"
+  [ -z "$ids" ] \
+    || die 3 "$1: the live contract changed these criteria after the freeze: $ids. The frozen tests prove the frozen text, so review cannot judge another one. Put the frozen text back with scope update, or take implement's restart so the tests freeze again."
 }
 
 # Every work order's ownedFiles, as one JSON array with duplicates removed.
@@ -1748,6 +1766,7 @@ do_brief() {
   # The reviewer reads the code at the final commit where a lens needs more than the diff, so the
   # brief names the repository it may read.
   rv_load_codepath "brief"
+  rw_refuse_changed_criteria "brief"
   rw_load_record "brief"
   rw_require_step "brief" "$CHECK_SERVES" "checks"
   rw_load_absence_clauses "brief"
@@ -1842,9 +1861,10 @@ RW_GUIDES
      findingsPath: $findings,
      lenses: ($lenses | split(" ")),
      criteria: [ ($alignment.criteria // [])[] | {id, text, verification, verifiedBy} ],
-     nonGoals: [ ($alignment.nonGoals // [])[] | . as $n
-                 | ([ $nonGoalChanges[] | select(.id == $n.id) ][0]) as $c
-                 | if $c == null then $n elif $c.live == null then empty else $n | .text = $c.live end ],
+     nonGoals: ([ ($alignment.nonGoals // [])[] | . as $n
+                  | ([ $nonGoalChanges[] | select(.id == $n.id) ][0]) as $c
+                  | if $c == null then $n elif $c.live == null then empty else $n | .text = $c.live end ]
+                + [ $nonGoalChanges[] | select(.frozen == null) | {id, text: .live} ]),
      nonGoalChanges: $nonGoalChanges,
      workOrders: [ ($snap.workOrders // [])[] | .reasoning = liveReasoning ],
      absenceClauses: $absenceClauses,
@@ -1892,7 +1912,7 @@ RW_GUIDES
       line("deferredFindings"; (.deferredFindings | length)),
       line("pendingDecisions"; (.pendingDecisions | length)) ] | .[]'
   printf '%s' "$brief_json" | jq -r '[ .nonGoalChanges[].id ] | select(length > 0)
-    | "BRIEF: the live contract changed these non-goals after the freeze: \(join(" ")). The reviewer judges the live text. close gives no verdict until a person accepts or rejects each change."' >&2
+    | "BRIEF: the live contract changed these non-goals after the freeze: \(join(" ")). The brief carries the live text. close gives no verdict until a person accepts or rejects each change."' >&2
   local skip_reason
   skip_reason="$(rw_reviewer_skip_reason)"
   if [ -n "$skip_reason" ]; then
@@ -2045,7 +2065,8 @@ do_findings() {
     rv_read_findings_array "$findings_path" "findings" "findings"
     raw="$RV_FINDINGS_ARRAY"
   fi
-  alignment="$(rw_alignment)"
+  # A non-goal added live after the freeze is one the brief carried, so a finding may cite it.
+  alignment="$(rw_alignment | jq -c --argjson c "$non_goal_changes" '.nonGoals = ((.nonGoals // []) + [ $c[] | select(.frozen == null) | {id, text: .live} ])')"
   findings_json='[]'
   count="$(printf '%s' "$raw" | jq 'length')"
   i=0; lens=""; linked=""; severity=""; disposition=""; built=""; cid=""
@@ -2220,13 +2241,13 @@ RW_RESEARCH_FILES
        detail: ((if .kind == "ruling"
                  then .unit + " finding " + .finding + " (" + .severity + ") waits for a ruling, because " + (.because // "its fix scope is empty") + ", and nobody was present: " + .text + ". The person rules it with --row " + $id + "=wrong|deferred|load-bearing|test-wrong."
                  else .unit + " departs from the design, and nobody has ruled on it yet: " + .text + ". The person answers with --row " + $id + "=keep|rebuild." end))}' >>"$rows_file"
-  # Each non-goal the live contract changed after the freeze, which the reviewer judged in its live
-  # text. Only a person accepts the change, so the row holds both texts for the record.
+  # Each non-goal the live contract changed, removed or added after the freeze. Only a person accepts the change, so the row holds both texts for the record.
   printf '%s' "$non_goal_changes" | jq -c '.[]
     | ("decision-" + .id + "-non-goal") as $id
     | {id: $id, verdict: "unknown", answeredBy: "nobody", frozenText: .frozen, liveText: .live,
-       detail: (.id + (if .live == null then " was removed from the live contract after the freeze, so the reviewer did not judge it."
-                       else " was changed in the live contract after the freeze, and the reviewer judged the live text." end)
+       detail: (.id + (if .live == null then " was removed from the live contract after the freeze, so the brief no longer carries it."
+                       elif .frozen == null then " was added to the live contract after the freeze, and the brief carries it."
+                       else " was changed in the live contract after the freeze, and the brief carries the live text." end)
                 + " The person answers with --row "
                 + $id + "=accept|reject.")}' >>"$rows_file"
   # --- the done-when clauses the tests step routed here, one verdict each ------------------------
@@ -2969,6 +2990,13 @@ do_close() {
   rw_load_record "close"
   rw_require_step "close" "$CHECK_E2E" "surfaces"
   rw_refuse_moved_code "close" "commit-only"
+  rw_refuse_changed_criteria "close"
+  # The texts each non-goal row records are the ones the reviewer was given. A change since then is
+  # one nobody judged, and an accept must not record it (gap row 410).
+  [ "$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.checks // [])[] | select(has("frozenText"))
+        | {id: (.id | ltrimstr("decision-") | rtrimstr("-non-goal")), frozen: .frozenText, live: .liveText} ]
+        | sort_by(.id)')" = "$(rw_non_goal_changes | jq -c 'sort_by(.id)')" ] \
+    || die 62 "close: $ALIGNMENT_FILE changed a non-goal since brief ran, so the reviewer judged another text. Run brief again, and dispatch the reviewer on the new brief."
   [ -z "$rows" ] || rw_require_person "close" "--row" "a person read a checklist row and judged it" "$rows_raw"
 
   # A person rules a finding that fails a criterion, with the words a build's ruling takes (gap row
@@ -3167,7 +3195,10 @@ RW_ROWS
                            "keep": " The person kept the departure.",
                            "rebuild": " The person did not keep the departure, so the check reads unmet. Rebuild the order on the task branch, then finish and review again.",
                            "accept": " The person accepted the live text.",
-                           "reject": " The person rejected the live text, so the check reads unmet. Put the frozen text back with scope update, then archive the review and run it again."}[$g.word]))
+                           "reject": (" The person rejected the live text, so the check reads unmet. "
+                                      + (if $c.liveText == null then "scope remove retired the id, so take restart in the implement skill to bring the non-goal back, then review again."
+                                         elif $c.frozenText == null then "Remove the added non-goal with scope remove, then archive the review and run it again."
+                                         else "Put the frozen text back with scope update, then archive the review and run it again." end))}[$g.word]))
         elif ($c.detail | startswith("no guide body is on disk")) then
           $c | .verdict = $g.verdict | .answeredBy = "person"
           | .detail = ((.detail | sub(" The person judged the diff (with no guide to follow|and found it does not follow the practice it should)\\.$"; ""))

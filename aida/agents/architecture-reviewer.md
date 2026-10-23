@@ -30,7 +30,7 @@ One per line in the dispatch, and nothing else:
 open it.
 
 The brief holds the criteria and the non-goals from the frozen contract. A non-goal the live
-contract changed after the freeze carries its live text, and you judge that text. Every work order.
+contract changed or added after the freeze carries its live text, and you judge that text. Every work order.
 The path to the diff file. The research records, and the paths they cite. The results of checks 4 to 8,
 including every tool row and every mutation survivor. The findings implementation ruled deferred at
 its fix round cap, each with its reason and the id it cited. It holds `pendingDecisions`: the

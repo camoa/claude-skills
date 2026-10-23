@@ -13,8 +13,9 @@ It refuses at exit 62 when `checks` recorded nothing, because five of the eight 
 results.
 
 It writes the brief to `review/brief.json`. The brief holds the criteria and the non-goals from the
-frozen contract, and every work order. A non-goal the live contract changed after the freeze
-carries its live text, and `nonGoalChanges` lists both texts. It holds the path to `review/diff.patch`. It holds the
+frozen contract, and every work order. A non-goal the live contract changed or added after the
+freeze carries its live text, and `nonGoalChanges` lists both texts. A criterion changed after the
+freeze refuses `brief` and `close` at exit 3, because its frozen tests prove the frozen text. It holds the path to `review/diff.patch`. It holds the
 research records. Each finding carries the paths its source names, each marked on disk or not,
 and its URLs apart. It holds `guideBodies`, the guide bodies design opened, each marked on disk
 or not. It holds `practiceSearch`: the review's own practice search and its count of findings
@@ -53,7 +54,8 @@ The script decides what the search proves. `brief` counts each finding with a UR
 `fetch-failed` snippet and no searched and empty answer. A count of one or more makes the search
 the body both lenses judge. Each of the two checks then reads met only when the reviewer's
 `practiceJudged` names, for that lens, a counted finding. `findings` refuses at exit 62 when the
-search holds more or fewer findings than the brief the reviewer read.
+search holds more or fewer findings than the brief the reviewer read. `findings` and `close` also
+refuse at exit 62 when a non-goal changed after `brief` ran.
 
 ## Dispatch the architecture reviewer
 
