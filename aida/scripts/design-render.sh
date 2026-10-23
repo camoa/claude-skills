@@ -61,6 +61,9 @@ die3() {
   exit 3
 }
 
+# shellcheck source=/dev/null
+source "$PLUGIN_ROOT/scripts/lib/render-text.sh" || die3 "the render-text library failed to load"
+
 # ---------------------------------------------------------------------------
 # 1. Arguments
 # ---------------------------------------------------------------------------
@@ -113,50 +116,32 @@ OUT_FILE="$TASK_PATH/design/$ID.md"
 TMP_FILE="$(mktemp "${TASK_PATH}/design/.$ID.md.XXXXXX")" || die3 "could not create a temporary file in $TASK_PATH/design"
 trap 'rm -f "$TMP_FILE"' EXIT
 
+# A list field, rendered in one jq, with the three-way not-array / empty / present distinction
+# every render script in this plugin draws for its own list fields. renderList is given the jq
+# that renders a present list.
+LIST_JQ="$RENDER_TEXT_JQ"'
+  def renderList(present): (.[$f]? // []) as $v | ($v | type) as $t
+    | if $t != "array" then "The \($f) field could not be read: it is present but is a \($t), not a list. This is not the same as none recorded; run check-design.sh against this task before this file is used.\n\n"
+      elif ($v | length) == 0 then "None.\n\n"
+      else $v | present end;'
+
 # render_id_list <field> <heading>: a list of ids (criteriaServed, criteriaOwned, nonGoals,
-# dependsOn), rendered as a comma-separated line, with the three-way not-array / empty / present
-# distinction every render script in this plugin draws for its own list fields.
+# dependsOn), rendered as a comma-separated line.
 render_id_list() {
-  local field="$1" heading="$2" ftype count line
-  ftype="$(jq -r --arg f "$field" '(.[$f]? // []) | type' "$WO_FILE")"
-  printf '## %s\n\n' "$heading"
-  if [ "$ftype" != "array" ]; then
-    printf 'The %s field could not be read: it is present but is a %s, not a list. This is not the same as none recorded; run check-design.sh against this task before this file is used.\n\n' "$field" "$ftype"
-    return
-  fi
-  count="$(jq -r --arg f "$field" '(.[$f] // []) | length' "$WO_FILE")"
-  if [ "$count" -eq 0 ]; then
-    printf 'None.\n\n'
-    return
-  fi
-  line="$(jq -r --arg f "$field" '(.[$f] // []) | map(if (type == "string") then . else ("(not a string: " + (. | tostring) + ")") end) | join(", ")' "$WO_FILE")"
-  printf '%s\n\n' "$line"
+  printf '## %s\n\n' "$2"
+  jq -j --arg f "$1" "$LIST_JQ"'
+    renderList(map(if type == "string" then . else "(not a string: " + tostring + ")" end)
+      | join(", ") | renderCutNewlines + "\n\n")' "$WO_FILE"
 }
 
 # render_text_list <field> <heading>: a list of free-text strings (ownedFiles, doneWhen), one
 # bullet per entry.
 render_text_list() {
-  local field="$1" heading="$2" ftype count
-  ftype="$(jq -r --arg f "$field" '(.[$f]? // []) | type' "$WO_FILE")"
-  printf '## %s\n\n' "$heading"
-  if [ "$ftype" != "array" ]; then
-    printf 'The %s field could not be read: it is present but is a %s, not a list. This is not the same as none recorded; run check-design.sh against this task before this file is used.\n\n' "$field" "$ftype"
-    return
-  fi
-  count="$(jq -r --arg f "$field" '(.[$f] // []) | length' "$WO_FILE")"
-  if [ "$count" -eq 0 ]; then
-    printf 'None.\n\n'
-    return
-  fi
-  while IFS= read -r entry; do
-    [ -n "$entry" ] || continue
-    if [ "$(printf '%s' "$entry" | jq -r 'type')" = "string" ] && [ -n "$(printf '%s' "$entry" | jq -r '.')" ]; then
-      printf -- '- %s\n' "$(printf '%s' "$entry" | jq -r '.')"
-    else
-      printf -- '- (not a non-empty string: %s)\n' "$(printf '%s' "$entry" | jq -c '.')"
-    fi
-  done < <(jq -c --arg f "$field" '(.[$f] // [])[]' "$WO_FILE")
-  printf '\n'
+  printf '## %s\n\n' "$2"
+  jq -j --arg f "$1" "$LIST_JQ"'
+    renderList(map(if type == "string" and (renderCutNewlines | length) > 0 then "- " + renderCutNewlines
+                   else "- (not a non-empty string: " + tojson + ")" end + "\n")
+      | join("") + "\n")' "$WO_FILE"
 }
 
 {
@@ -187,35 +172,22 @@ render_text_list() {
   fi
 
   printf '## Tests\n\n'
-  TESTS_TYPE="$(jq -r '(.tests? // []) | type' "$WO_FILE")"
-  if [ "$TESTS_TYPE" != "array" ]; then
-    printf 'The tests field could not be read: it is present but is a %s, not a list. This is not the same as no tests recorded; run check-design.sh against this task before this file is used.\n\n' "$TESTS_TYPE"
-  elif [ "$(jq -r '.proof // "tests"' "$WO_FILE")" = "gate" ]; then
-    printf 'None. This order is proved by its own verify run lines, then the `## Configuration gate` lines of the implement recipe. The tests of the order that consumes what it configures prove the behaviour.\n\n'
-  elif [ "$(jq '(.tests // []) | length' "$WO_FILE")" -eq 0 ]; then
-    printf 'None recorded.\n\n'
-  else
-    N=0
-    while IFS= read -r row; do
-      [ -n "$row" ] || continue
-      N=$((N + 1))
-      ROW_TYPE="$(printf '%s' "$row" | jq -r 'type')"
-      if [ "$ROW_TYPE" != "object" ]; then
-        printf -- '- (entry %d is not an object, is a %s: its fields cannot be rendered)\n' "$((N - 1))" "$ROW_TYPE"
-        continue
-      fi
-      # A test with no level is the ordinary case, not a gap. Design says what the test observes;
-      # the stage that writes it picks the tier and may record it back here.
-      T_LEVEL="$(printf '%s' "$row" | jq -r 'if (.level? | type) == "string" and (.level | length) > 0 then .level else "" end')"
-      T_DESC="$(printf '%s' "$row" | jq -r 'if (.description? | type) == "string" and (.description | length) > 0 then .description else "(no description recorded)" end')"
-      if [ -n "$T_LEVEL" ]; then
-        printf -- '- **%s.** %s\n' "$T_LEVEL" "$T_DESC"
-      else
-        printf -- '- %s\n' "$T_DESC"
-      fi
-    done < <(jq -c '.tests[]' "$WO_FILE")
-    printf '\n'
-  fi
+  # A test with no level is the ordinary case, not a gap. Design says what the test observes; the
+  # stage that writes it picks the tier and may record it back here.
+  jq -j "$RENDER_TEXT_JQ"'
+    (.tests? // []) as $v | ($v | type) as $t
+    | if $t != "array" then "The tests field could not be read: it is present but is a \($t), not a list. This is not the same as no tests recorded; run check-design.sh against this task before this file is used.\n\n"
+      elif ((.proof // "tests") | shellText) == "gate" then "None. This order is proved by its own verify run lines, then the `## Configuration gate` lines of the implement recipe. The tests of the order that consumes what it configures prove the behaviour.\n\n"
+      elif ($v | length) == 0 then "None recorded.\n\n"
+      else [ $v | to_entries[] | .key as $i | .value
+             | if type != "object" then "- (entry \($i) is not an object, is a \(type): its fields cannot be rendered)\n"
+               else ((if (.level? | type) == "string" and (.level | length) > 0 then .level else "" end)
+                     | renderCutNewlines) as $level
+                 | ((if (.description? | type) == "string" and (.description | length) > 0 then .description
+                     else "(no description recorded)" end) | renderCutNewlines) as $desc
+                 | if $level != "" then "- **\($level).** \($desc)\n" else "- \($desc)\n" end
+               end ] | join("") + "\n"
+      end' "$WO_FILE"
 
   render_text_list "doneWhen" "Done when"
 

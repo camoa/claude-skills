@@ -409,10 +409,16 @@ if [ "$DESIGN_STARTED" = "true" ]; then
     COMPARE_JSON="$(schema_check_compare "$DESIGN_SCHEMA_FILE" "$wfile")" \
       || die3 "the design field-list comparison itself failed to run on $wfile. Check $DESIGN_SCHEMA_FILE for a malformed entry"
 
-    MISSING_JSON="$(echo "$COMPARE_JSON" | jq -c '.missing')"
-    UNREADABLE_JSON="$(echo "$COMPARE_JSON" | jq -c '.unreadable')"
-    MISSING_COUNT="$(echo "$COMPARE_JSON" | jq '.missing | length')"
-    UNREADABLE_COUNT="$(echo "$COMPARE_JSON" | jq '.unreadable | length')"
+    # One jq for five reads, one value per line. LIST_FIELDS_OK is false when a list field that
+    # this file's content check and the cross-order checks both need is missing or wrongly shaped
+    # at the top level.
+    { IFS= read -r MISSING_JSON; IFS= read -r UNREADABLE_JSON; read -r MISSING_COUNT
+      read -r UNREADABLE_COUNT; read -r LIST_FIELDS_OK; } < <(jq -c '
+      .missing, .unreadable, (.missing | length), (.unreadable | length),
+      ([ (.missing + .unreadable)[].field ] as $named
+       | all("criteriaServed", "criteriaOwned", "nonGoals", "dependsOn", "ownedFiles", "tests",
+             "doneWhen"; . as $f | any($named[]; . == $f) | not))
+    ' <<<"$COMPARE_JSON")
 
     UNKNOWN_JSON="$(jq -c --argjson allowed "$ALLOWED_TOP_FIELDS_JSON" '
       [ keys_unsorted[] as $k | select(($allowed | index($k)) == null) | {field: $k} ]
@@ -421,16 +427,6 @@ if [ "$DESIGN_STARTED" = "true" ]; then
 
     THIS_SCHEMA_ISSUES=$((MISSING_COUNT + UNREADABLE_COUNT + UNKNOWN_COUNT))
     FILE_ISSUE_COUNT=$((FILE_ISSUE_COUNT + THIS_SCHEMA_ISSUES))
-
-    # The list fields this file's content check and the cross-order checks both need already
-    # present and well-shaped at the top level. A missing or wrongly-shaped one stops both.
-    LIST_FIELDS_OK="true"
-    for f in criteriaServed criteriaOwned nonGoals dependsOn ownedFiles tests doneWhen; do
-      if [ "$(schema_check_field_named_in "$MISSING_JSON" "$f")" = "true" ] \
-         || [ "$(schema_check_field_named_in "$UNREADABLE_JSON" "$f")" = "true" ]; then
-        LIST_FIELDS_OK="false"
-      fi
-    done
 
     CONTENT_ISSUES_JSON='[]'
     if [ "$LIST_FIELDS_OK" != "true" ]; then
