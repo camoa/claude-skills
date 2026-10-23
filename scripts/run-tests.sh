@@ -85,6 +85,8 @@ discover() {
     case "$kind" in
       bash)
         case "./$p" in
+          # Fixtures their own *-spec.sh runner runs in parallel.
+          */tests/behaviour/*) continue ;;
           */tests/*.sh|*-spec.sh) ;;
           *) continue ;;
         esac

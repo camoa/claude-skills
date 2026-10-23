@@ -68,6 +68,8 @@ die3() {
 
 # shellcheck source=/dev/null
 source "$PLUGIN_ROOT/scripts/lib/decided.sh" || die3 "the decided library failed to load"
+# shellcheck source=/dev/null
+source "$PLUGIN_ROOT/scripts/lib/render-text.sh" || die3 "the render-text library failed to load"
 
 # ---------------------------------------------------------------------------
 # 1. Arguments
@@ -152,66 +154,38 @@ trap 'rm -f "$TMP_FILE"' EXIT
   esac
 
   printf '## Acceptance criteria\n\n'
-  CRITERIA_TYPE="$(jq -r '(.criteria? // []) | type' "$ALIGNMENT_FILE")"
-  if [ "$CRITERIA_TYPE" != "array" ]; then
-    # Not the same fact as an empty, well-formed list (defect 21): criteria could be on disk and
-    # still not shown here, and this document is what a person approves, so it must not read as
-    # "there is none" when the true state is "this could not be read."
-    printf 'The criteria field could not be read: it is present but is a %s, not a list. This is not the same as no criteria recorded; run check-alignment.sh against this task before approving this document.\n\n' "$CRITERIA_TYPE"
-  elif [ "$(jq '(.criteria // []) | length' "$ALIGNMENT_FILE")" -eq 0 ]; then
-    printf 'No acceptance criteria recorded yet.\n\n'
-  else
-    N=0
-    while IFS= read -r row; do
-      [ -n "$row" ] || continue
-      N=$((N + 1))
-      ROW_TYPE="$(printf '%s' "$row" | jq -r 'type')"
-      if [ "$ROW_TYPE" != "object" ]; then
-        # defect 20: jq's own `.f?` on a non-object silently yields nothing, which let a
-        # non-object entry render with no placeholder at all. Asserted here, before any per-field
-        # read, and named by its position since it may carry no readable id.
-        printf '**%d.** (entry %d is not an object, is a %s: its fields cannot be rendered)\n\n' "$N" "$((N - 1))" "$ROW_TYPE"
-        continue
-      fi
-      C_TEXT="$(printf '%s' "$row" | jq -r 'if (.text? | type) == "string" and (.text | length) > 0 then .text else "(no text recorded)" end')"
-      C_ID="$(printf '%s' "$row" | jq -r '.id? // "(no id)"')"
-      C_VERIFIED_BY="$(printf '%s' "$row" | jq -r '.verifiedBy? // "(not set)"')"
-      C_VERIFICATION="$(printf '%s' "$row" | jq -r 'if (.verification? | type) == "string" and (.verification | length) > 0 then .verification else "(not set)" end')"
-      C_AUTHOR="$(printf '%s' "$row" | jq -r '.author? // "(not set)"')"
-      C_VERDICT="$(printf '%s' "$row" | jq -r '.verdict? // "(not set)"')"
-      # A clause a person wrote often ends with its own full stop; the line adds one only when it
-      # does not, so the rendered page a person approves never reads "..entered.."
-      case "$C_VERIFICATION" in *.) ;; *) C_VERIFICATION="$C_VERIFICATION." ;; esac
-      printf '**%d.** %s\n\n' "$N" "$C_TEXT"
-      printf '*Verified by %s: %s Asked for by %s. Verdict: %s. (`%s`)*\n\n' "$C_VERIFIED_BY" "$C_VERIFICATION" "$C_AUTHOR" "$C_VERDICT" "$C_ID"
-    done < <(jq -c '.criteria[]' "$ALIGNMENT_FILE")
-  fi
+  # Not the same fact as an empty, well-formed list (defect 21): criteria could be on disk and
+  # still not shown here, and this document is what a person approves, so it must not read as
+  # "there is none" when the true state is "this could not be read." A non-object entry is named
+  # by its position before any field is read, since it may carry no readable id (defect 20:
+  # jq's own `.f?` on a non-object silently yields nothing). A clause a person wrote often ends
+  # with its own full stop; the line adds one only when it does not, so the rendered page a
+  # person approves never reads "..entered.."
+  jq -j "$RENDER_TEXT_JQ"'
+    (.criteria? // []) as $v | ($v | type) as $t
+    | if $t != "array" then "The criteria field could not be read: it is present but is a \($t), not a list. This is not the same as no criteria recorded; run check-alignment.sh against this task before approving this document.\n\n"
+      elif ($v | length) == 0 then "No acceptance criteria recorded yet.\n\n"
+      else [ $v | to_entries[] | (.key + 1) as $n | .value
+             | if type != "object" then "**\($n).** (entry \($n - 1) is not an object, is a \(type): its fields cannot be rendered)\n\n"
+               else ((if (.text? | type) == "string" and (.text | length) > 0 then .text else "(no text recorded)" end)
+                     | shellText) as $text
+                 | ((if (.verification? | type) == "string" and (.verification | length) > 0 then .verification
+                     else "(not set)" end) | shellText | if endswith(".") then . else . + "." end) as $verification
+                 | "**\($n).** \($text)\n\n*Verified by \(.verifiedBy? // "(not set)" | shellText): \($verification) Asked for by \(.author? // "(not set)" | shellText). Verdict: \(.verdict? // "(not set)" | shellText). (`\(.id? // "(no id)" | shellText)`)*\n\n"
+               end ] | join("")
+      end' "$ALIGNMENT_FILE"
 
   printf '## Non-goals\n\n'
-  NONGOALS_TYPE="$(jq -r '(.nonGoals? // []) | type' "$ALIGNMENT_FILE")"
-  if [ "$NONGOALS_TYPE" != "array" ]; then
-    # defect 21, same distinction as criteria above: not an array is not the same fact as an
-    # empty, well-formed list.
-    printf 'The nonGoals field could not be read: it is present but is a %s, not a list. This is not the same as no non-goals recorded; run check-alignment.sh against this task before approving this document.\n' "$NONGOALS_TYPE"
-  elif [ "$(jq '(.nonGoals // []) | length' "$ALIGNMENT_FILE")" -eq 0 ]; then
-    printf 'No non-goals recorded yet.\n'
-  else
-    IDX=0
-    while IFS= read -r row; do
-      [ -n "$row" ] || continue
-      IDX=$((IDX + 1))
-      ROW_TYPE="$(printf '%s' "$row" | jq -r 'type')"
-      if [ "$ROW_TYPE" != "object" ]; then
-        # defect 20, the same hole as criteria above: assert the entry is an object before
-        # reading any of its fields, and name its position when it is not.
-        printf -- '- (entry %d is not an object, is a %s: its fields cannot be rendered)\n' "$((IDX - 1))" "$ROW_TYPE"
-        continue
-      fi
-      N_TEXT="$(printf '%s' "$row" | jq -r 'if (.text? | type) == "string" and (.text | length) > 0 then .text else "(no text recorded)" end')"
-      N_ID="$(printf '%s' "$row" | jq -r '.id? // "(no id)"')"
-      printf -- '- %s (`%s`)\n' "$N_TEXT" "$N_ID"
-    done < <(jq -c '.nonGoals[]' "$ALIGNMENT_FILE")
-  fi
+  # Defects 21 and 20, the same distinctions as criteria above.
+  jq -j "$RENDER_TEXT_JQ"'
+    (.nonGoals? // []) as $v | ($v | type) as $t
+    | if $t != "array" then "The nonGoals field could not be read: it is present but is a \($t), not a list. This is not the same as no non-goals recorded; run check-alignment.sh against this task before approving this document.\n"
+      elif ($v | length) == 0 then "No non-goals recorded yet.\n"
+      else [ $v | to_entries[] | .key as $i | .value
+             | if type != "object" then "- (entry \($i) is not an object, is a \(type): its fields cannot be rendered)\n"
+               else "- \((if (.text? | type) == "string" and (.text | length) > 0 then .text else "(no text recorded)" end) | shellText) (`\(.id? // "(no id)" | shellText)`)\n"
+               end ] | join("")
+      end' "$ALIGNMENT_FILE"
 
   DECIDED_TYPE="$(jq -r '(.decidedWithoutAPerson? // []) | type' "$ALIGNMENT_FILE")"
   if [ "$DECIDED_TYPE" != "array" ]; then
@@ -230,19 +204,13 @@ trap 'rm -f "$TMP_FILE"' EXIT
       | select(decidedState == "superseded" or decidedState == "retired")] | length' "$ALIGNMENT_FILE")"
     [ "$OPEN_COUNT" -eq 0 ] \
       || printf 'Nobody answered these. An unattended run took the recommended answer on each one.\n\n'
-    DIDX=0
-    while IFS= read -r row; do
-      [ -n "$row" ] || continue
-      DIDX=$((DIDX + 1))
-      ROW_TYPE="$(printf '%s' "$row" | jq -r 'type')"
-      if [ "$(printf '%s' "$row" | jq "$DECIDED_JQ decidedWhole")" != "true" ]; then
-        # defect 20's rule, for a list of sentences: assert the entry's type before reading it,
-        # and name its position when it is not one.
-        printf -- '- (entry %d is not a sentence, is a %s: it cannot be rendered)\n' "$((DIDX - 1))" "$ROW_TYPE"
-        continue
-      fi
-      printf '%s' "$row" | jq -r "$DECIDED_JQ"' select(decidedIsOpen) | "- " + (if type == "string" then . else .text end)'
-    done < <(jq -c '.decidedWithoutAPerson[]' "$ALIGNMENT_FILE")
+    # defect 20's rule, for a list of sentences: assert the entry's type before reading it, and
+    # name its position when it is not one.
+    jq -j "$DECIDED_JQ"'
+      [ .decidedWithoutAPerson | to_entries[] | .key as $i | .value
+        | if decidedWhole | not then "- (entry \($i) is not a sentence, is a \(type): it cannot be rendered)\n"
+          elif decidedIsOpen then "- " + (if type == "string" then . else .text end) + "\n"
+          else empty end ] | join("")' "$ALIGNMENT_FILE"
     if [ "$APPROVED_COUNT" -gt 0 ]; then
       [ "$OPEN_COUNT" -eq 0 ] || printf '\n'
       printf 'An unattended run took these, and a person approved them later with the whole contract.\n\n'

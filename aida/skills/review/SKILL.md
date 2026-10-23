@@ -140,6 +140,7 @@ branch is recorded rather than assumed.
 
 `surfaces` refuses `--accept-baseline` on an autonomous run, and `close` refuses a `--row` there
 unless `review/person-answer.json` holds the person's answer.
+A standing order never answers a changed non-goal: ask the person, who accepts or rejects it.
 A command surface needs no walk, because its exit status is the whole answer.
 A run with nobody present cannot sign off a task carrying one person verified criterion. That is
 intended: a check that could not run has established nothing.

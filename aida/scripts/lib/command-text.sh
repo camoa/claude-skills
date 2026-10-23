@@ -13,6 +13,7 @@
 #                              prints the command with every heredoc body dropped, or with only
 #                              the bodies whose opening line matches the extended regex pattern
 #   read_words <line>          fills array w with the whitespace-separated words of the line
+#   split_segments <command>   prints the command with one segment per line, split outside quotes
 
 # Drops every heredoc body from command $1 before a door reads it. The line holding `<<WORD`,
 # `<<-WORD`, `<<'WORD'` or `<<"WORD"` is kept, with its operator and word, so a redirect on it is
@@ -56,4 +57,30 @@ read_words() {
     # shellcheck disable=SC2034,SC2206 # read by the sourcing hook; the split is the point
     w=($1)
   fi
+}
+
+# Prints command $1 with one segment per line: a line break at each `;`, `|`, `&&` and `||` that
+# stands outside quotes, except the `|` of the redirect `>|`. So `sed -i 's/a/b/; s/c/d/' f` stays
+# one segment (gap row 407). A quote state ends with its line, so an apostrophe in a comment hides
+# no later line. A backslash escapes the next character, except inside single quotes; a `$'...'`
+# string takes backslash escapes.
+# hooks/deny-destructive-commands.sh joins quoted strings with its own quoted_words instead, because
+# it must still run when this file cannot be read.
+split_segments() {
+  printf '%s\n' "$1" | LC_ALL=C awk '{
+    out = ""; q = ""; e = 0; n = length($0)
+    for (i = 1; i <= n; i++) {
+      c = substr($0, i, 1)
+      if (c == "\\" && (q != "\047" || e)) { out = out substr($0, i, 2); i++; continue }
+      if (q != "") { if (c == q) q = ""; out = out c; continue }
+      if (c == "\047" || c == "\"") { q = c; e = (c == "\047" && substr($0, i - 1, 1) == "$"); out = out c; continue }
+      if (c == ";" || (c == "|" && substr($0, i - 1, 1) != ">") || (c == "&" && substr($0, i + 1, 1) == "&")) {
+        print out; out = ""
+        if (c != ";" && substr($0, i + 1, 1) == c) i++
+        continue
+      }
+      out = out c
+    }
+    print out
+  }'
 }

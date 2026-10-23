@@ -300,7 +300,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  18  `preconditions` was given a framework from project.json that the caller answered for
 #      neither way: no --recipe and no --lookup-failed. Refused rather than guessed, because a
 #      lookup nobody ran recorded as a recipe that declared nothing is the exact defect the
-#      declaration exists to close.
+#      declaration exists to close. The review recipe follows the same rule: no --check-recipe
+#      and no --check-lookup-failed refuses too, because with none recorded no tool row runs and
+#      the freeze cannot judge a test file's standards (gap row 408).
 #  19  `preconditions` ran and something stops the build: a condition answered no, nobody could
 #      tell, or a framework's own smoke run came back the same way. The record is written first
 #      and names every condition, every smoke run, and its reason, so this exit says do not
@@ -318,10 +320,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  21  `preconditions` found <task_folder>/implementation/baseline.json already recorded at a
 #      commit other than the one this run's own ledger started from. A baseline is taken once, at
 #      the commit the build started from, and this refuses rather than overwrite a different one.
-#      The message names both commits. `build-record`, `build-recheck`, `fix-record` and `finish`
-#      refuse at 21 too, before they subtract a baseline taken at a commit other than startedFrom.
-#      After `start --rebased-onto`, that baseline would read the new start's failures as the
-#      build's (gap row 401).
+#      The message names both commits. `build-record`, `build-recheck`, `fix-record`, `finish`
+#      and `tests-freeze` refuse at 21 too, before they subtract a baseline taken at a commit
+#      other than startedFrom. After `start --rebased-onto`, that baseline would read the new
+#      start's failures as the build's (gap row 401).
 #  22  `tests-brief`, `tests-freeze` or `build-record` was given a unit id that is not in the frozen
 #      snapshot. `build-brief` names the same fact as exit 38 instead; see that entry for why.
 #  23  `tests-brief` found a unit in the given unit's dependsOn with no completion record in the
@@ -361,7 +363,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      commit other than the one this run is at. The message names both commits. The one freeze
 #      exempt is the first after `retake-tests`: HEAD holds the attempt the record was frozen
 #      before, so the ledger's last retake names the record's commit and the freeze overwrites it
-#      with `retakenFrom` instead (live-run row 110).
+#      with `retakenFrom` instead (live-run row 110). The second is the freeze after a builder's
+#      `Stop: test-wrong`, which no `retake-tests` follows: the order is at tests-frozen and not
+#      halted, and the report its build brief names holds that one stop line and is newer than the
+#      record (live-run row 406).
 #  36  `tests-freeze` was given a --test whose path, once resolved against codePath, names
 #      something outside codePath altogether. The message names the path and the code root. Every
 #      path this step records is relative to codePath (baseline.json's own `scope` field is
@@ -435,6 +440,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  49  the order is halted, so the step refuses. Every step-five action refuses on it, and the
 #      message carries the halt's own recorded reason. `build-record` refuses on it too, so a
 #      halted order records no attempt; --accept-deviation lets the deviation's own halt through.
+#      `build-brief` and `dispatch-open implementer` refuse on it, so no builder starts (gap row 409).
 #  50  a review record already exists for this order, and an order gets one review, ever
 #      (ideal/implementation.md, 'One review per order'). `review-brief` refuses to hand over a
 #      second brief and `review-record` refuses to write a second record. Interactive,
@@ -872,6 +878,21 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # 119  `reopen` found no failed task review of this finish, or no finding of it that fails a
 #      criterion in a file a closed order owns (gap row 390). Nothing is written.
+#
+# 120  `build-brief` or `dispatch-open implementer` found `doneWhenGained` on the order's ledger
+#      entry. Design appended done-when rows after the freeze, and start removed the done-when
+#      judgement made on the shorter text. The next freeze with the same tests judges it again and
+#      removes the list (gap row 409). Nothing is written.
+#
+# 121  `tests-freeze` ran a verify run line that proves a criterion over the files it freezes, and
+#      the line did not pass or did not apply (gap row 370). The implementer may not edit a frozen
+#      test, so the test author repairs the files first. Nothing is frozen.
+#
+# 122  `tests-freeze` ran the coding-standards row of the check recipe baseline.json records over
+#      the test and support files this freeze adds or changes, and the row read unmet after the
+#      baseline subtraction (gap row 408). No role may write a frozen file. The message names the
+#      files and the first lines of the output. Nothing is frozen. A row that reads unknown or
+#      undeclared judged nothing; its detail goes to standard error and the freeze goes on.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -1668,6 +1689,8 @@ im_next_step() {
            "build \($bd.id), or \($recheck_route[$bd.id]) \($bd.id) when the code has not moved"
          elif $bd.lastStep == "tests-frozen" and ($retake_pending[$bd.id] // false) then
            "tests \($bd.id): the tests were retaken and not frozen again yet"
+         elif $bd.lastStep == "tests-frozen" and ($bd.doneWhenGained // null) != null then
+           "tests \($bd.id): the done-when gained rows after the freeze, so judge the done-when row again and freeze the same tests"
          else "build \($bd.id)" end)
       elif $removed != null and $ts != null then "finish: offer the restart, the design removed \($removed.id), and its frozen test record still guards its test files"
       elif $ts != null then "tests \($ts.id)"
@@ -2311,15 +2334,35 @@ $(jq_files -rn --argjson snap "$snapshot_workorders_json" --argjson live "$live_
         | ((.ownedFiles // []) - ($l.ownedFiles // [])), ((.sharedFiles // []) - ($l.sharedFiles // [])) | .[] ]
     | unique | .[]')
 REMOVED_PATHS
+      # Done-when rows appended after the frozen ones are taken in place too (gap row 409). Tests
+      # are frozen against criteria, and only the done-when row is judged against the done-when
+      # text. An order with that judgement keeps its tests only while a second freeze can still
+      # run (exit 76): `doneWhenGained` below drops the judgement, and the order is judged again.
+      # An order still owed that judgement counts as judged, so a second append joins the list.
+      # Past tests-frozen a build rests on the old text, so it halts. An order with no done-when
+      # row keeps its tests until review, which reads the rows from the snapshot. From `reviewed`
+      # on, nothing would read the new row, so it halts. A reworded row halts too, because design
+      # rewords a row by removing it.
+      local dw_judged_json
+      dw_judged_json="$(jq -c '[ (.orders // [])[] | {(.id): {step: (.lastStep // ""), judged: (.doneWhenJudgement != null or .doneWhenGained != null)}} ] | add // {}' "$LEDGER_FILE" 2>/dev/null)"
+      [ -n "$dw_judged_json" ] || dw_judged_json='{}'
       widened_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson phantom "$phantom_json" \
-          --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" '
+          --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" \
+          --argjson judged "$dw_judged_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
           | ($snap | map({(.id): .}) | add // {}) as $snapMap
           | [ $drifted[] | .id as $d
               | select(($started | index($d)) != null)
               | ($snapMap[$d]) as $s | ($liveMap[$d]) as $l
               | select($l != null)
-              | select(($l | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed, .choicesKept)) == ($s | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed, .choicesKept)))
+              | select(($l | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed, .choicesKept, .doneWhen)) == ($s | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed, .choicesKept, .doneWhen)))
+              | ($s.doneWhen // []) as $sd
+              | select(($l.doneWhen // [])[0:($sd | length)] == $sd)
+              | (($l.doneWhen // [])[($sd | length):]) as $gained
+              | ($judged[$d] // {step: "", judged: false}) as $j
+              | select(($gained | length) == 0
+                  or (if $j.judged then $j.step == "tests-frozen"
+                      else ([ "", "tests-frozen", "code-written", "checks-passed" ] | index($j.step)) != null end))
               | select(($l.reasoning // "") | startswith($s.reasoning // ""))
               | select(((($s.ownedFiles // []) - ($l.ownedFiles // []) - $phantom) | length) == 0)
               | select(((($s.sharedFiles // []) - ($l.sharedFiles // []) - $phantom) | length) == 0)
@@ -2332,9 +2375,11 @@ REMOVED_PATHS
                   (if $l.findings != $s.findings then "findings changed" else empty end),
                   (if $l.reasoning != $s.reasoning then "reasoning appended" else empty end),
                   (if $l.absenceReviewed != $s.absenceReviewed then "absence rows marked reviewed changed" else empty end),
-                  (if $l.choicesKept != $s.choicesKept then "interface pairs kept changed" else empty end) ] as $why
+                  (if $l.choicesKept != $s.choicesKept then "interface pairs kept changed" else empty end),
+                  (if ($gained | length) > 0 then "gained done-when rows" else empty end) ] as $why
               | select(($why | length) > 0)
-              | {id: $d, why: $why} ]')"
+              | {id: $d, why: $why}
+                + (if ($gained | length) > 0 and ($judged[$d].judged // false) then {gained: $gained} else {} end) ]')"
       widened_ids_json="$(printf '%s' "$widened_json" | jq -c 'map(.id)')"
       # A changed contract refreshes the snapshot's alignment under the same rule, whether or not
       # an order is taken fresh: a criterion nobody serves yet, or one only halted orders serve,
@@ -2570,13 +2615,18 @@ REMOVED_PATHS
     # the same drift adds nothing, because the reason it would write is already at the front.
     # An unstarted order the design removed leaves the order list here, as it left the snapshot,
     # and an order the design added enters it not started.
+    # An order whose done-when gained rows loses the judgement made on the shorter text, and lists
+    # the rows its next freeze is judged on (gap row 409). The time is what that freeze reads: the
+    # checker's verdict file must be newer, so an old verdict on the shorter text clears nothing.
     final_orders_json="$(printf '%s' "$ledger_doc" | jq -c --argjson drifted "$drift_halts_json" --argjson gone "$removed_ids_json" \
-        --argjson added "$added_ids_json" "$HALT_MERGE_JQ"'
+        --argjson added "$added_ids_json" --argjson widened "$widened_json" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HALT_MERGE_JQ"'
         (.orders + [ $added[] | {id: ., lastStep: null, attemptsUsed: 0, roundsUsed: 0} ])
         | map(. as $o | select(($gone | index($o.id)) == null)) | map(
           . as $o
           | (([ $drifted[] | select(.id == $o.id) | .reason ])[0]) as $r
           | if $r == null then $o else ($o + {haltedBecause: halt_merge($o.haltedBecause; $r)}) end
+          | (([ $widened[] | select(.id == $o.id) | .gained // empty ])[0]) as $g
+          | if $g == null then . else (del(.doneWhenJudgement) | .doneWhenGained = ((.doneWhenGained // []) + $g) | .doneWhenGainedAt = $now) end
         )
       ')"
     # A drift halt outlives the drift that wrote it (live-run row 143). The design goes back to
@@ -3701,6 +3751,10 @@ PC_RECIPES
       lookup="$(cr_lookup "$failures" "$fw")"
       [ -n "$lookup" ] || die 18 "preconditions: nothing was said about the recipe for framework $fw; pass --recipe or --lookup-failed"
     fi
+    # The same rule for the review recipe. With none recorded, no tool row runs anywhere, and the
+    # freeze cannot judge a frozen test's standards (gap row 408).
+    [ -n "$(cr_lookup "$check_recipes" "$fw")" ] || [ -n "$(cr_lookup "$check_failures" "$fw")" ] \
+      || die 18 "preconditions: nothing was said about the review recipe for framework $fw; pass --check-recipe or --check-lookup-failed"
 
     # The implement recipe is a second lookup, and this step is the first place a person can be
     # told about it. Its `## Oracle files` block holds the globs `tests-freeze` needs, so without
@@ -4978,6 +5032,16 @@ tf_freeze_commits() {
          else [] end' "$1" 2>/dev/null || printf '[]'
 }
 
+# Returns 0 when order $1's build brief names a report holding one stop line, `Stop: test-wrong`,
+# and that report is newer than freeze record $2.
+tf_stopped_test_wrong() {
+  local report
+  report="$(jq -r '.reportPath // ""' "$IMPL_DIR/brief-$1-build.json" 2>/dev/null)"
+  [ -n "$report" ] && [ "$report" -nt "$2" ] || return 1
+  [ "$(br_marked_lines "$report" stop | grep -c '.')" = "1" ] || return 1
+  br_marked_lines "$report" stop | grep -q -i '^stop:[[:space:]]*test-wrong'
+}
+
 # Parses --test values, one per line of $1 (`<path>::<test name>=<criterion id>[,<criterion
 # id>...]`), appending one `{path, name, criteria}` JSON object per line to file $2. `criteria` is
 # always a JSON array, however many ids the line named.
@@ -5414,7 +5478,7 @@ do_tests_freeze() {
   # The commit the record was frozen at when `retake-tests` last sent this order back, read here
   # with the step: the freeze after a retake finds HEAD past that commit, and 35 below lets it
   # through on this value alone (live-run row 110).
-  local tf_prior_step tf_prior_ledger tf_retake_commit=""
+  local tf_prior_step tf_prior_ledger tf_retake_commit="" tf_prior_halt=""
   if [ -f "$IMPL_DIR/ledger.json" ]; then
     tf_prior_ledger="$(jq -c '.' "$IMPL_DIR/ledger.json" 2>/dev/null)"
     if [ -n "$tf_prior_ledger" ]; then
@@ -5426,6 +5490,8 @@ do_tests_freeze() {
       esac
       tf_retake_commit="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" \
         '([ (.orders // [])[] | select(.id == $id) ][0].retakes // []) | last // {} | .freezeCommit // ""')"
+      tf_prior_halt="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" \
+        '[ (.orders // [])[] | select(.id == $id) ][0].haltedBecause // ""')"
     fi
   fi
 
@@ -5745,6 +5811,19 @@ TF_EOF
         | join(", ")' "$IMPL_DIR/row-check-$unit_id.json" 2>/dev/null)"
     [ -z "$tf_overruled" ] \
       || die 64 "tests-freeze: the --row says a model confirmed $tf_overruled, and the checker's verdict file $IMPL_DIR/row-check-$unit_id.json rejects it. No model settles the checker's rejection. Send the row back to the test author, then put it to the checker again. Nothing is written."
+  fi
+  # While done-when rows wait to be judged (gap row 409), the verdict file must hold a verdict on
+  # this order's done-when row, written after start listed them. A file from before judged the
+  # shorter text, so a --row alone cannot clear the list.
+  local tf_gained_at tf_gained_epoch tf_check_epoch
+  tf_gained_at="$(printf '%s' "$tf_ledger_doc" | jq -r --arg u "$unit_id" '[ (.orders // [])[] | select(.id == $u) ][0].doneWhenGainedAt // empty' 2>/dev/null)"
+  if [ -n "$tf_gained_at" ]; then
+    tf_gained_epoch="$(jq -rn --arg t "$tf_gained_at" '$t | fromdateiso8601' 2>/dev/null)"
+    tf_check_epoch="$(im_mtime "$IMPL_DIR/row-check-$unit_id.json")"
+    { [ -n "$tf_gained_epoch" ] && [ -n "$tf_check_epoch" ] && [ "$tf_check_epoch" -ge "$tf_gained_epoch" ] \
+      && jq -e --arg u "$unit_id" 'any((.rows // [])[]; type == "object" and .criterion == $u and (.verdict == "confirmed" or .verdict == "rejected"))' \
+           "$IMPL_DIR/row-check-$unit_id.json" >/dev/null 2>&1; } \
+      || die 64 "tests-freeze: design appended done-when rows to $unit_id at $tf_gained_at, and $IMPL_DIR/row-check-$unit_id.json holds no verdict on the $unit_id row written since. The earlier verdict judged the shorter text. Put the rows to the row-checker with the full done-when text, then run tests-freeze again. Nothing is written."
   fi
 
   # --- 64: the --row set and this order's tests must correspond, in all four ways ------------------
@@ -6435,9 +6514,14 @@ TF_OWN_COMMITS
     local existing_rows new_rows
     existing_rows="$(jq -cS '{unit, testGlobs, rows, support: (.support // [])}' "$record_file" 2>/dev/null)"
     new_rows="$(jq -cS -n --arg unit "$unit_id" --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --argjson support "$support_json" '{unit: $unit, testGlobs: $testGlobs, rows: $rows, support: $support}')"
-    [ "$existing_rows" = "$new_rows" ] \
-      || die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding."
-    tf_unchanged_at="$existing_commit"
+    if [ "$existing_rows" = "$new_rows" ]; then
+      tf_unchanged_at="$existing_commit"
+    # The builder's stop is the route build.md gives a wrong test before any attempt, and other
+    # orders commit while a person rules on it (live-run row 406). No halt means a person cleared
+    # the stop. A report older than the record stopped before an earlier retake.
+    elif [ "$tf_prior_step" != "tests-frozen" ] || [ -n "$tf_prior_halt" ] || ! tf_stopped_test_wrong "$unit_id" "$record_file"; then
+      die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding. A wrong test is retaken after retake-tests, or after a builder's Stop: test-wrong once its halt is cleared."
+    fi
   fi
 
   # --- 121: each verify line that proves a criterion passes now, over the files about to freeze ----
@@ -6458,6 +6542,52 @@ TF_OWN_COMMITS
     esac
   fi
 
+  # --- 122: the coding-standards row passes over the files this freeze adds or changes -------------
+  # No role may write a frozen file, and build and review leave the frozen tests out of their tool
+  # rows. So the row runs here, while the test author can still repair the file (gap row 408). It
+  # runs over the files the commit below takes, through build-record's own check. A finding the
+  # baseline already held in a changed file is subtracted the same way, so it never refuses here.
+  # The files absent at the baseline commit run apart from the ones it held. One file it held
+  # makes the whole run read unknown under an undeclared baseline, and a new file is then unjudged.
+  local frozen_rel_paths tf_cs_new="[]" tf_cs_old="[]" tf_cs_at tf_cs_p tf_cs_group tf_cs_json tf_cs_out tf_cs_verdict
+  frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
+    '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
+  tf_cs_at="$(jq -r '.commit // ""' "$IMPL_DIR/baseline.json" 2>/dev/null)"
+  while IFS= read -r tf_cs_p; do
+    [ -n "$tf_cs_p" ] && [ -n "$(git -C "$codepath" status --porcelain -- "$tf_cs_p")" ] || continue
+    if [ -n "$tf_cs_at" ] && git -C "$codepath" cat-file -e "$tf_cs_at:./$tf_cs_p" 2>/dev/null; then
+      tf_cs_old="$(printf '%s' "$tf_cs_old" | jq -c --arg p "$tf_cs_p" '. + [$p]')"
+    else
+      tf_cs_new="$(printf '%s' "$tf_cs_new" | jq -c --arg p "$tf_cs_p" '. + [$p]')"
+    fi
+  done <<TF_CS_EOF
+$frozen_rel_paths
+TF_CS_EOF
+  if [ "$tf_cs_new$tf_cs_old" != "[][]" ]; then
+    CR_WHO="tests-freeze"; CR_TEST_RECIPES=""
+    CR_CHECK_RECIPES="$(base_check_recipes "$IMPL_DIR/baseline.json")"
+    cr_resolve
+    BRC_WHO="tests-freeze"; BRC_CODEPATH="$codepath"; BRC_RECIPES="$CR_DOC"; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
+    brc_use_baseline "tests-freeze"
+    for tf_cs_group in "$tf_cs_new" "$tf_cs_old"; do
+      [ "$tf_cs_group" != "[]" ] || continue
+      BRC_UNIT_JSON="$(jq -cn --argjson owned "$tf_cs_group" '{ownedFiles: $owned}')"
+      tf_cs_json="$(br_tool_check "coding-standards" "codingStandards" "coding-standards")" || exit "$?"
+      tf_cs_verdict="$(printf '%s' "$tf_cs_json" | jq -r '.verdict')"
+      case "$tf_cs_verdict" in
+        unmet)
+          tf_cs_out="$IMPL_DIR/coding-standards-$unit_id-freeze.txt"
+          printf '%s' "$tf_cs_json" | jq -r '.output // ""' >"$tf_cs_out"
+          die 122 "tests-freeze: the coding-standards row fails over $(printf '%s' "$tf_cs_group" | jq -r 'join(", ")'): $(printf '%s' "$tf_cs_json" | jq -r '.detail | sub("newLines holds the first 20[.]$"; "The first 20 lines of the output follow.")')
+$(head -n 20 "$tf_cs_out")
+The test author repairs these files and runs each test again, and this freeze runs again. Nothing is frozen. The output is in $tf_cs_out." ;;
+        unknown|undeclared)
+          printf 'tests-freeze: the coding-standards row over %s reads %s, so it judged nothing: %s\n' \
+            "$(printf '%s' "$tf_cs_group" | jq -r 'join(", ")')" "$tf_cs_verdict" "$(printf '%s' "$tf_cs_json" | jq -r '.detail')" >&2 ;;
+      esac
+    done
+  fi
+
   # --- the test files go into a commit before anything is measured against them --------------------
   # The intent puts the commit before the build ("Tests are committed and hash-frozen before the
   # slice's implementer starts"). Without this, the implementer is the role that commits the tests
@@ -6471,9 +6601,7 @@ TF_OWN_COMMITS
   # The subject carries no AIDA name, because the branch can go upstream as it is. The record says
   # which commit the freeze made, under `freezeCommits`, so no reader rests on the subject (live-run
   # row 374).
-  local frozen_rel_paths tree_left tf_made="" tf_before
-  frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
-    '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
+  local tree_left tf_made="" tf_before
   if [ -n "$frozen_rel_paths" ]; then
     set --
     while IFS= read -r p; do
@@ -6543,7 +6671,7 @@ TF_EOF
                + (if $carried == [] then {} else {rowsCarried: $carried} end)) end)
             | (if ($absences | length) == 0 then del(.absenceClauses)
                else .absenceClauses = $absences end)
-            | del(.rowsRejected, .rowsConfirmed, .rowsSentBack))
+            | del(.rowsRejected, .rowsConfirmed, .rowsSentBack, .doneWhenGained, .doneWhenGainedAt))
       end))')"
   [ -n "$ledger_with_judgements" ] \
     || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
@@ -6697,6 +6825,19 @@ IM_DEPS
     '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
   [ "$order_entry" != "null" ] \
     || die 3 "$who: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
+
+  # --- exit 49: a halted order is not handed to a builder. build-record refused only after the work
+  # was spent (gap row 409).
+  local bb_halt
+  bb_halt="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // empty')"
+  [ -z "$bb_halt" ] \
+    || die 49 "$who: $unit_id is halted, so this step refuses. The ledger records the reason: $bb_halt"
+
+  # --- exit 120: done-when rows appended after the freeze that no freeze has judged (gap row 409) --
+  local dw_gained
+  dw_gained="$(printf '%s' "$order_entry" | jq -r '(.doneWhenGained // []) | join(" | ")')"
+  [ -z "$dw_gained" ] \
+    || die 120 "$who: design appended done-when rows to $unit_id after its tests were frozen: $dw_gained. The done-when row was judged on the shorter text, so start removed that judgement. Put the rows to the row-checker again, then run tests-freeze with the same tests and the new verdicts. Nothing is handed over."
 
   # --- exit 116: a build starts or resumes only where `read` routes one --------------------------
   # tests-frozen is the first build, and the step a retake-tests returns to. code-written is a

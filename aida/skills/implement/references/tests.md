@@ -13,6 +13,18 @@ the build dispatch for the order. Its `lookups=` list names every catalog point 
 One function decides both lists from the proof kind: `br_order_needs` in `scripts/lib/proof.sh`.
 Do not work them out from the kind here. `dispatch-open` refuses a role the list lacks (exit 102).
 
+## When the done-when gained rows after the freeze
+
+The `next:` line can read `tests <id>: the done-when gained rows after the freeze`. Design added
+done-when rows to an order whose tests were frozen, and `start` kept those tests. The done-when
+row was judged on the shorter text, so `start` removed that judgement. The ledger entry lists the
+new rows under `doneWhenGained`. Do not dispatch the test author. Put the rows to the checker
+again, as the checkpoint section below says, with the full done-when text. Then run `tests-freeze`
+with the flags of the earlier freeze and the new verdicts. The frozen record holds the tests, and
+the red files are still in the implementation folder. The freeze refuses (exit 64) until the
+checker's verdict file is newer than the list. It then finds the same tests, writes the judgement
+and removes the list. Until then the build refuses the order (exit 120).
+
 ## Resolve the recipes for this step
 
 Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup once per point in
@@ -319,11 +331,13 @@ frameworks exit zero when a filter selects nothing. Only an assertion that ran a
 a red run. A harness that never reached the behaviour is a setup gap, and a run that selected
 nothing looks like success and is the dangerous one.
 
-**When the author returns, run the coding-standards row over the new test files.** Take the
-command from the check recipe `references/preconditions.md` resolved, with `{paths}` as the test
-paths the author returned, and run it here. When the row lists `extensions`, pass only the test
-files that end in one of them. When none is left, the row does not apply: say so, and run
-nothing. Send any finding back to the author before the freeze. No script action runs one recipe row on its own, so this conversation runs the command.
+**The freeze runs the coding-standards row over the test files.** It takes the row from the
+check recipe `baseline.json` records. It runs the row over the test and support files the freeze
+adds or changes, and subtracts the baseline the way the build does. A finding refuses the freeze
+(exit 122) and names the files and the output. Send the finding back to the author. The author
+repairs the files and runs each test again, and the freeze runs again.
+A row that reads unknown or undeclared judged nothing, and the freeze prints why and goes on.
+Then nothing checks those files: say so to the person when you report this step.
 This is the one place the tests' own standards are judged. The build and review leave the frozen
 tests out of their tool rows, because no role after the freeze may write them.
 

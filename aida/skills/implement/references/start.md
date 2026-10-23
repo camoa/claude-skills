@@ -116,8 +116,15 @@ design marked reviewed. Its frozen tests were written from
 fields that did not change. An order already built carries the new findings only into a review it
 has not had yet, never into the build it already had. So is one that dropped an owned or shared
 path that names no file now and named none where the build started. Such a path never existed.
+A started order whose done-when only gained rows after its frozen rows is taken in place too.
+Tests are frozen against criteria, and only the done-when row reads the done-when text. When that
+row was judged, the order keeps its tests only at `tests-frozen`. The judgement leaves its ledger
+entry, and `doneWhenGained` lists the new rows. Its next step judges the row again and freezes
+the same tests. Past `tests-frozen` it halts, because a build already rests on the old text.
+An order with no done-when row keeps its tests until review. From `reviewed` on it halts,
+because nothing would read the new row.
 A removed owned file the code holds or held, or any other change, halts it as before. A reasoning
-whose earlier text changed halts too.
+whose earlier text changed halts too. So does a changed or removed done-when row.
 An order the live design no longer holds, because design merged or removed it, has no live copy
 to take. When it has not started, it is dropped from the snapshot and the ledger, and the
 `removed:` line names it. That line prints only when an order was dropped. When it has started,

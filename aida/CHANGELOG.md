@@ -4,6 +4,61 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.20] - 2026-10-23
+
+Changes from the periplus run, the dev_guides_site run, the camoa_skills
+run on aida-multi-client, and the AIDA developer's own sessions. CI now
+runs a behaviour suite. The action scripts start fewer processes.
+
+### Fixed
+
+- `preconditions` accepted a framework with neither `--check-recipe` nor
+  `--check-lookup-failed`. Then the baseline held no check recipe, and no
+  tool row ran in the build or the freeze. It now refuses that at exit 18,
+  the rule `--recipe` already follows.
+- A frozen test file that failed the linter had no repair route, because
+  no role may write a frozen file. `tests-freeze` now runs the baseline's
+  coding-standards row over the test and support files it freezes. An old
+  finding never refuses. A new one refuses at exit 122, names the files
+  and shows the first 20 lines of the output. Nothing is frozen.
+- A design change that only added done-when rows after the freeze halted
+  the order, and only `restart` got through. `start` now keeps the tests
+  of such an order before review and lists the new rows. `build-brief` and
+  `dispatch-open implementer` refuse at exit 120 while the list stands.
+  `tests-freeze` refuses at exit 64 until the row checker writes a verdict
+  after the change. From review on, the order halts as before.
+- `build-brief` and `dispatch-open implementer` gave a halted order to a
+  builder, and only `build-record` refused after the work. Both now refuse
+  at exit 49.
+- After a builder's `Stop: test-wrong`, `tests-freeze` refused the
+  corrected tests at exit 35 once another order had committed. It now
+  takes them when the order is at tests-frozen, is not halted, and the
+  builder's report holds that stop and is newer than the record.
+- The owned-files write hook read a sed script, a `dirname` argument and
+  a variable name as write paths, so it refused ordinary implementer and
+  fixer commands. It now judges only where a write lands. It splits a
+  command outside quotes, follows `cd`, and reads literal assignments. It
+  also judges sed `w` commands, `dd of=` and the `>|` redirect.
+- The review brief read only the frozen contract, so a non-goal that
+  `scope update` corrected after the build never reached the reviewer.
+  The brief now carries the live text. Close needs the person's accept or
+  reject on each changed non-goal, and refuses at exit 62 if the text
+  changed after the brief. A standing order never answers that accept. A
+  criterion changed after the freeze refuses brief and close at exit 3.
+
+### Changed
+
+- CI runs `tests/behaviour-spec.sh`: 20 fixtures that exercise the action
+  scripts and hooks, each in its own temporary folders. Before, CI ran
+  only the structure specs.
+- The README no longer claims zsh testing. Every plugin script runs under
+  its own bash shebang.
+- The trim, atomic-write and task-folder helpers, `check-design.sh` and
+  the design and alignment renderers start fewer processes: about 15 to
+  20 percent fewer per action. Output is unchanged, except one case: a
+  short `--argjson` value through `jq_files` that is not one JSON text
+  now exits 2 from jq, where it exited 5.
+
 ## [6.0.19] - 2026-10-23
 
 Changes from the periplus run, the camoa_skills run on aida-multi-client,

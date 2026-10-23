@@ -90,8 +90,9 @@ forward and none of them did; `build-brief` is what actually forwards it now.
 
 It refuses when the tests for this order were never frozen, when an order this one depends on has
 no completion record, and when the attempts are already spent. It also refuses an order past its
-build: a build starts only from `tests-frozen` or `code-written` (exit 116). Read a refusal and
-act on it.
+build: a build starts only from `tests-frozen` or `code-written` (exit 116). It refuses an order
+whose done-when gained rows after the freeze until a freeze judges them (exit 120). Read a refusal
+and act on it.
 
 That list is the withheld list.
 
@@ -222,7 +223,10 @@ returned. Open the row-checker's dispatch again and put the affected rows to it.
 `tests-freeze` again, with every flag the first freeze took, the new red run, and the rows the
 checker returned. That freeze is
 allowed only while the order is still at `tests-frozen`. Once `build-record` has recorded an
-attempt, it refuses (exit 76). The
+attempt, it refuses (exit 76). Other orders may have committed since the first freeze. The freeze
+still retakes, because the report holds the `Stop: test-wrong` line. Unattended, the stop halted
+the order, and a halt still standing refuses (exit 35). `clear-halt` refuses on an autonomous run
+(exit 68), so a person first sets the task to interactive, then runs `clear-halt`. The
 retake prints `retaken:` with the earlier commit and the new one, and the record names the
 earlier one under `retakenFrom`. No attempt is spent, because none was recorded. The builder's
 stop left the tree dirty on purpose. The freeze commits only the test paths, and the next

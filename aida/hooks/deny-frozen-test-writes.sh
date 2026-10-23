@@ -24,9 +24,19 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # a miss into a false stop. Two misses are closed (2026-09-20, live-run row 95). A heredoc body is
 # dropped before either rule reads the command. A token that is not path-shaped is not rule two's.
 # Such a token is what a comparison operator leaves once `>` is read as a redirect. Its refusal
-# names the token it read as a path. The known limits stay. A path from a variable, an
-# interpreter, an editor or a symlink passes. `cd lib && echo x > l.php` is judged as a write to
+# names the token it read as a path. The known limits stay. A path from an interpreter, an editor
+# or a symlink passes. `cd lib && echo x > l.php` is judged as a write to
 # l.php at the code root and to lib/l.php, since a `cd` operand moves where later targets resolve.
+# After a `cd` to an absolute path, rules two and three judge a relative target where the shell
+# stands only, so `cd <task folder> && cat > interface-wo2.md` is not a write in the worktree
+# (gap row 407). Since gap row 407, a `$NAME` that an earlier segment of the same command assigned
+# a literal is read as that literal, and `$(dirname WORD)` as WORD's parent. Any other variable is
+# read as its name, so its write under codePath refuses. Of `sed`, only the file operands of an
+# in-place edit are write positions, never its script, unless the script holds a w or W command.
+# A redirect word, such as `2>&1`, is never an operand. An assignment before the command word is
+# skipped, a redirect glued to a bare word (`echo x>f`) is read, and so is `dd of=`. Still out of
+# reach: `find -exec`, `xargs`, `env` and `sudo` before a verb, and a glued redirect to a quoted
+# target.
 # A `mkdir`, with or without `-p`, of a directory that an owned path lies
 # under is allowed (2026-09-20, live-run row 100). Design owns files, not directories, so a new
 # unit's first directory has no other route. Any other verb on an unowned directory still refuses.
@@ -347,8 +357,8 @@ owner_of_arg() {
   if u="$(owner_of "$cand")"; then
     OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
   fi
-  note_stray "$cand" "$arg"; note_main "$cand"
-  if [ "$RUN_DIR" != "$CODE_CANON" ]; then
+  [ "$RUN_KNOWN" = true ] || { note_stray "$cand" "$arg"; note_main "$cand"; }
+  if [ "$RUN_KNOWN" = true ] || [ "$RUN_DIR" != "$CODE_CANON" ]; then
     cand="$(normalize_abs "$(resolve_against "$arg" "$RUN_DIR")")"
     if u="$(owner_of "$cand")"; then
       OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
@@ -357,8 +367,73 @@ owner_of_arg() {
   fi
   return 1
 }
-# The payload's directory. The Bash door moves it at each `cd`.
-RUN_DIR="$CWD_CANON"
+# The payload's directory. The Bash door moves it at each `cd`. RUN_KNOWN turns true at a `cd` to
+# an absolute path, and rules two and three then read a relative target where the shell stands
+# only. Rule one always reads the codePath resolution too. A `cd` in a subshell, `cd -`, `popd` and
+# a bare `pushd` leave the directory unknown, and RUN_KNOWN false.
+RUN_DIR="$CWD_CANON"; RUN_KNOWN=false
+
+# The literals this command assigned so far, one "NAME<TAB>value" line each, the latest first. A
+# name assigned anything else, or two different literals, holds its own `$NAME` and stays unknown.
+KNOWN=""
+known_value() {
+  local line
+  while IFS= read -r line; do
+    [ "${line%%	*}" = "$1" ] && { printf '%s' "${line#*	}"; return 0; }
+  done <<KNOWN_EOF
+$KNOWN
+KNOWN_EOF
+  return 1
+}
+# Prints segment $1 with each known $NAME and ${NAME} replaced by its value, and each
+# $(dirname WORD) by WORD's parent.
+expand_known() {
+  local rest="$1" out="" name tail val
+  while [ "${rest#*\$}" != "$rest" ]; do
+    out="$out${rest%%\$*}"; rest="${rest#*\$}"
+    case "$rest" in
+      '{'*'}'*) name="${rest#\{}"; name="${name%%\}*}"; tail="${rest#*\}}" ;;
+      *) name="${rest%%[!A-Za-z0-9_]*}"; tail="${rest#"$name"}" ;;
+    esac
+    if [ -n "$name" ] && val="$(known_value "$name")"; then out="$out$val"; rest="$tail"; else out="$out\$"; fi
+  done
+  printf '%s' "$out$rest" | sed -E 's#\$\(dirname +"?([^ "$()`]*)/[^ /"$()`]*"?\)#\1#g'
+}
+# Adds to KNOWN each word of segment $1 when every word, after an optional `export`, is an
+# assignment. A value is a literal when, quotes dropped, it holds no `$`, backtick or parenthesis.
+# Any other segment that can set a name makes it unknown: `NAME=` or `NAME+=` beside a command or
+# in a subshell, and each name after for, read, declare, local, export, typeset or readonly.
+record_assignments() {
+  local a name val old setter=false
+  set -f; read_words "$1"; set +f
+  [ "${w[0]:-}" != export ] || w=("${w[@]:1}")
+  [ "${#w[@]}" -gt 0 ] || return 0
+  for a in "${w[@]}"; do
+    case "${a%%=*}" in ''|[0-9]*|*[!A-Za-z0-9_]*) setter=mixed; break ;; esac
+    case "$a" in *=*) ;; *) setter=mixed; break ;; esac
+  done
+  if [ "$setter" = mixed ]; then
+    setter=false
+    set -f; read_words "$1"; set +f
+    for a in "${w[@]}"; do
+      a="${a#"${a%%[!(]*}"}"
+      case "$a" in for|read|declare|local|export|typeset|readonly) setter=true; continue ;; esac
+      name="${a%%=*}"; name="${name%+}"
+      case "$name" in ''|[0-9]*|*[!A-Za-z0-9_]*) continue ;; esac
+      [ "$name" = "$a" ] && [ "$setter" = false ] && continue
+      KNOWN="$name	\$$name
+$KNOWN"
+    done
+    return 0
+  fi
+  for a in "${w[@]}"; do
+    name="${a%%=*}"; val="${a#*=}"; val="${val//[\"\']/}"
+    case "$val" in *'$'*|*'`'*|*'('*|*')'*|'') val="\$$name" ;; esac
+    old="$(known_value "$name")" && [ "$old" != "$val" ] && val="\$$name"
+    KNOWN="$name	$val
+$KNOWN"
+  done
+}
 
 deny() {
   jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
@@ -436,9 +511,15 @@ case "$TOOL" in
     HIT=""; HIT_OWNER=""
     while IFS= read -r seg; do
       [ -n "$HIT" ] && break
+      seg="$(expand_known "$seg")"
+      record_assignments "$seg"
       set -f; read_words "$(printf '%s' "$seg" | tr '`$"()' '     ' | tr -d "'")"; set +f
       # shellcheck disable=SC2154 # w is filled by read_words, scripts/lib/command-text.sh
       [ "${#w[@]}" -gt 0 ] || continue
+      # An assignment before the command word, as in `LC_ALL=C sed -i`, is not the command.
+      while [ "${#w[@]}" -gt 1 ] && case "${w[0]}" in [A-Za-z_]*=*) true ;; *) false ;; esac; do
+        w=("${w[@]:1}")
+      done
       i=0
       while [ "$i" -lt "${#w[@]}" ]; do
         t="${w[$i]}"; n=$((i + 1))
@@ -449,12 +530,22 @@ case "$TOOL" in
               if owner_of_arg "${w[$n]}"; then HIT="${w[$n]}"; HIT_OWNER="$OWNER_UNIT"; break; fi
             fi ;;
           '2>'*) ;;
-          '>'*|'1>'*|'&>'*)
-            x="${t#&}"; x="${x#1}"; x="${x#>>}"; x="${x#>}"; x="${x#|}"
+          '>'*|'&>'*)
+            x="${t#&}"; x="${x#>>}"; x="${x#>}"; x="${x#|}"
             if [ -n "$x" ]; then
               VIA="${t%"$x"}"
               if owner_of_arg "$x"; then HIT="$x"; HIT_OWNER="$OWNER_UNIT"; break; fi
             fi ;;
+          *'>'*)
+            # A redirect glued to a word, as in `echo x>file` or `1>file`. Only a bare word of the
+            # segment is one, so `awk '$1>5'` is not. A number other than 1 names another stream.
+            p="${t%%>*}"; x="${t#*>}"; x="${x#>}"; x="${x#|}"
+            case " $seg " in *[[:space:]]"$t"[[:space:]]*) ;; *) x="" ;; esac
+            case "$p" in 1|*[!0-9]*) ;; *) x="" ;; esac
+            case "$x" in ''|'&'*) ;; *)
+              VIA='>'
+              if owner_of_arg "$x"; then HIT="$x"; HIT_OWNER="$OWNER_UNIT"; break; fi ;;
+            esac ;;
         esac
         i=$n
       done
@@ -465,7 +556,7 @@ case "$TOOL" in
           mode_skip=false; [ "${w[0]}" = chmod ] && mode_skip=true
           VIA="${w[0]}"
           for t in "${w[@]:1}"; do
-            case "$t" in -*) continue ;; esac
+            case "$t" in -*|*'>'*|*'<'*) continue ;; esac
             if [ "$mode_skip" = true ]; then mode_skip=false; continue; fi
             if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
           done ;;
@@ -487,11 +578,48 @@ case "$TOOL" in
               if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
             done
             RUN_DIR="$shell_dir" ;; esac ;;
-        sed) case "${w[1]:-}" in -i*)
-               VIA="sed ${w[1]}"
-               for t in "${w[@]:2}"; do
-                 if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
-               done ;; esac ;;
+        sed)
+          # Only the file operands of an in-place edit are write positions. The first operand is
+          # the script unless -e or -f named one. A script is quoted and may hold spaces, `#` or
+          # parentheses, so xargs reads the words again with quotes kept, and expands nothing. A
+          # segment xargs cannot split is judged on every operand, as before gap row 407. A script
+          # that holds sed's own w or W command writes a file too, so every operand is judged.
+          VIA="sed -i"; edit=false; script=false; skip=false; files=""
+          if printf '%s' "$seg" | grep -Eq '(^|[;}0-9$]|[^[:alnum:][:space:]][gpIiMme0-9]*)[[:space:]]*[wW][[:space:]]'; then
+            VIA="sed w"; edit=true
+            for t in "${w[@]:1}"; do files="$files$t
+"; done
+          elif sedw="$(printf '\n%s\n' "$seg" | xargs printf '%s\n' 2>/dev/null)"; then
+            sedw="
+$sedw"
+            while IFS= read -r t; do
+              if [ "$skip" = true ]; then skip=false; continue; fi
+              case "$t" in
+                --in-place*) edit=true ;;
+                --expression=*|--file=*) script=true ;;
+                --expression|--file) script=true; skip=true ;;
+                --*) ;;
+                -*i*) edit=true ;;
+                -*[ef]) script=true; skip=true ;;
+                -l) skip=true ;;
+                -*) ;;
+                *) if [ "$script" = true ]; then files="$files$t
+"; else script=true; fi ;;
+              esac
+            done <<<"${sedw#*
+sed
+}"
+          else
+            case " ${w[*]} " in *' -i'*) edit=true ;; esac
+            for t in "${w[@]:1}"; do files="$files$t
+"; done
+          fi
+          if [ "$edit" = true ]; then
+            while IFS= read -r t; do
+              case "$t" in ''|-*|*'>'*|*'<'*) continue ;; esac
+              if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
+            done <<<"$files"
+          fi ;;
         cp|mv|ln|install|rsync)
           VIA="${w[0]}"
           # -t names where the copy lands, except in rsync, where it keeps times, and the last
@@ -504,12 +632,14 @@ case "$TOOL" in
               -t|--target-directory) [ "${w[0]}" != rsync ] || continue; named=true; t="${w[$j]:-}"; j=$((j + 1)) ;;
               --target-directory=*) named=true; t="${t#*=}" ;;
               -*) continue ;;
+              *'>'*|*'<'*) continue ;;
               *) [ "${w[0]}" = mv ] || continue ;;
             esac
             if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; fi
           done
-          last="${w[$((${#w[@]} - 1))]}"
-          if [ -z "$HIT" ] && [ "$named" = false ] && owner_of_arg "$last"; then
+          last=""
+          for t in "${w[@]:1}"; do case "$t" in *'>'*|*'<'*) ;; *) last="$t" ;; esac; done
+          if [ -z "$HIT" ] && [ "$named" = false ] && [ -n "$last" ] && owner_of_arg "$last"; then
             HIT="$last"; HIT_OWNER="$OWNER_UNIT"
           fi ;;
         tar)
@@ -538,6 +668,12 @@ case "$TOOL" in
             x) note_main "$into" ;;
             c) [ -z "$archive" ] || note_main "$(normalize_abs "$(resolve_against "$archive" "$RUN_DIR")")" ;;
           esac ;;
+        dd)
+          VIA="dd"
+          for t in "${w[@]:1}"; do
+            case "$t" in of=*) if owner_of_arg "${t#of=}"; then HIT="${t#of=}"; HIT_OWNER="$OWNER_UNIT"; break; fi ;; esac
+          done ;;
+        popd) RUN_KNOWN=false ;;
         cd|pushd)
           # A cd operand is never a write target, so rules two and three must not see it: STRAY
           # and MAIN_HIT are put back to what they were, and rule one keeps its own check. The
@@ -547,9 +683,17 @@ case "$TOOL" in
             HIT="${w[1]}"; HIT_OWNER="$OWNER_UNIT"
           fi
           STRAY="$stray_before"; MAIN_HIT="$main_before"
-          RUN_DIR="$(shell_dir_after "$RUN_DIR" "${w[@]}")" ;;
+          RUN_DIR="$(shell_dir_after "$RUN_DIR" "${w[@]}")"
+          case "${seg%%"${w[0]}"*}" in
+            *'('*) RUN_KNOWN=false ;;
+            *) case " ${w[*]:1} " in
+                 *' - '*|*' -'[0-9]*|*' +'[0-9]*) RUN_KNOWN=false ;;
+                 *' /'*|*' ~ '*|*' ~/'*) RUN_KNOWN=true ;;
+               esac ;;
+          esac
+          [ "${w[0]}" = cd ] || [ "${#w[@]}" -gt 1 ] || RUN_KNOWN=false ;;
       esac
-    done < <(strip_heredocs "$CMD" | sed -e 's/&&/\n/g; s/||/\n/g; s/[;|]/\n/g')
+    done < <(split_segments "$(strip_heredocs "$CMD")")
     if [ -n "$HIT" ]; then
       if is_test_author "$AGENT" && [ "$HIT_OWNER" = "$UNIT" ]; then
         if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then

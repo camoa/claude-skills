@@ -106,9 +106,9 @@ refuses rather than guess, because a lookup nobody ran must never be recorded as
 declared nothing. `no-recipe` records the framework `undeclared`: the catalog looked and holds
 nothing for it, so the build goes on. `listing-unreachable` and `fetch-failed` record it
 `unknown`, and stop: nobody looked. Every framework prints its own line on every run.
-`--check-recipe` is optional per framework: absent, its three tool checks record
-undeclared, with a reason saying no check recipe was resolved. A failed `review` lookup passes
-`--check-lookup-failed <framework>=<word>`. The record keeps each framework's answer as
+Every framework also needs a `--check-recipe` or a `--check-lookup-failed <framework>=<word>`.
+The script refuses either way missing (exit 18). With no review recipe on record, no tool row
+runs, and the freeze cannot judge the standards of a test file no role may change later. The record keeps each framework's answer as
 `reviewLookup`. The `reviewNotResolved:` line names each framework with no review recipe, and
 `none` when every framework has one. Read that line to the person. A light run asks every point
 in one dispatch, and this line is what shows an answer that dispatch dropped.
@@ -245,7 +245,7 @@ Last, it records what was already broken at the commit the build started from. T
 whole, from the `## Test commands` block's own `suite` row, because the orders' tests do not exist
 yet and no framework maps changed paths to the tests covering them. The three tools from the
 `## Check commands` block run over the union of every work order's own owned files. A framework
-with no `--check-recipe` records each tool undeclared instead. A suite that is already red is
+with a failed review lookup records each tool undeclared instead. A suite that is already red is
 recorded, never refused. Knowing it is the point: a builder chasing a failure it did not cause
 spends every attempt it has.
 
