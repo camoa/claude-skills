@@ -21,8 +21,9 @@ row was judged on the shorter text, so `start` removed that judgement. The ledge
 new rows under `doneWhenGained`. Do not dispatch the test author. Put the rows to the checker
 again, as the checkpoint section below says, with the full done-when text. Then run `tests-freeze`
 with the flags of the earlier freeze and the new verdicts. The frozen record holds the tests, and
-the red files are still in the implementation folder. The freeze finds the same tests, writes the
-judgement and removes the list. Until then the build refuses the order (exit 120).
+the red files are still in the implementation folder. The freeze refuses (exit 64) until the
+checker's verdict file is newer than the list. It then finds the same tests, writes the judgement
+and removes the list. Until then the build refuses the order (exit 120).
 
 ## Resolve the recipes for this step
 

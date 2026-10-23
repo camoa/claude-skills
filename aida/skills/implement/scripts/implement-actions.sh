@@ -438,6 +438,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  49  the order is halted, so the step refuses. Every step-five action refuses on it, and the
 #      message carries the halt's own recorded reason. `build-record` refuses on it too, so a
 #      halted order records no attempt; --accept-deviation lets the deviation's own halt through.
+#      `build-brief` and `dispatch-open implementer` refuse on it, so no builder starts (gap row 409).
 #  50  a review record already exists for this order, and an order gets one review, ever
 #      (ideal/implementation.md, 'One review per order'). `review-brief` refuses to hand over a
 #      second brief and `review-record` refuses to write a second record. Interactive,
@@ -2326,10 +2327,12 @@ REMOVED_PATHS
       # text. An order with that judgement keeps its tests only while a second freeze can still
       # run (exit 76): `doneWhenGained` below drops the judgement, and the order is judged again.
       # An order still owed that judgement counts as judged, so a second append joins the list.
-      # Past tests-frozen a build rests on the old text, so it halts. A reworded row halts too,
-      # because design rewords a row by removing it.
+      # Past tests-frozen a build rests on the old text, so it halts. An order with no done-when
+      # row keeps its tests until review, which reads the rows from the snapshot. From `reviewed`
+      # on, nothing would read the new row, so it halts. A reworded row halts too, because design
+      # rewords a row by removing it.
       local dw_judged_json
-      dw_judged_json="$(jq -c '[ (.orders // [])[] | select(.doneWhenJudgement != null or .doneWhenGained != null) | {(.id): (.lastStep // "")} ] | add // {}' "$LEDGER_FILE" 2>/dev/null)"
+      dw_judged_json="$(jq -c '[ (.orders // [])[] | {(.id): {step: (.lastStep // ""), judged: (.doneWhenJudgement != null or .doneWhenGained != null)}} ] | add // {}' "$LEDGER_FILE" 2>/dev/null)"
       [ -n "$dw_judged_json" ] || dw_judged_json='{}'
       widened_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson phantom "$phantom_json" \
           --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" \
@@ -2344,7 +2347,10 @@ REMOVED_PATHS
               | ($s.doneWhen // []) as $sd
               | select(($l.doneWhen // [])[0:($sd | length)] == $sd)
               | (($l.doneWhen // [])[($sd | length):]) as $gained
-              | select(($gained | length) == 0 or ($judged | has($d) | not) or $judged[$d] == "tests-frozen")
+              | ($judged[$d] // {step: "", judged: false}) as $j
+              | select(($gained | length) == 0
+                  or (if $j.judged then $j.step == "tests-frozen"
+                      else ([ "", "tests-frozen", "code-written", "checks-passed" ] | index($j.step)) != null end))
               | select(($l.reasoning // "") | startswith($s.reasoning // ""))
               | select(((($s.ownedFiles // []) - ($l.ownedFiles // []) - $phantom) | length) == 0)
               | select(((($s.sharedFiles // []) - ($l.sharedFiles // []) - $phantom) | length) == 0)
@@ -2361,7 +2367,7 @@ REMOVED_PATHS
                   (if ($gained | length) > 0 then "gained done-when rows" else empty end) ] as $why
               | select(($why | length) > 0)
               | {id: $d, why: $why}
-                + (if ($gained | length) > 0 and ($judged | has($d)) then {gained: $gained} else {} end) ]')"
+                + (if ($gained | length) > 0 and ($judged[$d].judged // false) then {gained: $gained} else {} end) ]')"
       widened_ids_json="$(printf '%s' "$widened_json" | jq -c 'map(.id)')"
       # A changed contract refreshes the snapshot's alignment under the same rule, whether or not
       # an order is taken fresh: a criterion nobody serves yet, or one only halted orders serve,
@@ -2598,16 +2604,17 @@ REMOVED_PATHS
     # An unstarted order the design removed leaves the order list here, as it left the snapshot,
     # and an order the design added enters it not started.
     # An order whose done-when gained rows loses the judgement made on the shorter text, and lists
-    # the rows its next freeze is judged on (gap row 409).
+    # the rows its next freeze is judged on (gap row 409). The time is what that freeze reads: the
+    # checker's verdict file must be newer, so an old verdict on the shorter text clears nothing.
     final_orders_json="$(printf '%s' "$ledger_doc" | jq -c --argjson drifted "$drift_halts_json" --argjson gone "$removed_ids_json" \
-        --argjson added "$added_ids_json" --argjson widened "$widened_json" "$HALT_MERGE_JQ"'
+        --argjson added "$added_ids_json" --argjson widened "$widened_json" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HALT_MERGE_JQ"'
         (.orders + [ $added[] | {id: ., lastStep: null, attemptsUsed: 0, roundsUsed: 0} ])
         | map(. as $o | select(($gone | index($o.id)) == null)) | map(
           . as $o
           | (([ $drifted[] | select(.id == $o.id) | .reason ])[0]) as $r
           | if $r == null then $o else ($o + {haltedBecause: halt_merge($o.haltedBecause; $r)}) end
           | (([ $widened[] | select(.id == $o.id) | .gained // empty ])[0]) as $g
-          | if $g == null then . else (del(.doneWhenJudgement) | .doneWhenGained = ((.doneWhenGained // []) + $g)) end
+          | if $g == null then . else (del(.doneWhenJudgement) | .doneWhenGained = ((.doneWhenGained // []) + $g) | .doneWhenGainedAt = $now) end
         )
       ')"
     # A drift halt outlives the drift that wrote it (live-run row 143). The design goes back to
@@ -5789,6 +5796,19 @@ TF_EOF
     [ -z "$tf_overruled" ] \
       || die 64 "tests-freeze: the --row says a model confirmed $tf_overruled, and the checker's verdict file $IMPL_DIR/row-check-$unit_id.json rejects it. No model settles the checker's rejection. Send the row back to the test author, then put it to the checker again. Nothing is written."
   fi
+  # While done-when rows wait to be judged (gap row 409), the verdict file must hold a verdict on
+  # this order's done-when row, written after start listed them. A file from before judged the
+  # shorter text, so a --row alone cannot clear the list.
+  local tf_gained_at tf_gained_epoch tf_check_epoch
+  tf_gained_at="$(printf '%s' "$tf_ledger_doc" | jq -r --arg u "$unit_id" '[ (.orders // [])[] | select(.id == $u) ][0].doneWhenGainedAt // empty' 2>/dev/null)"
+  if [ -n "$tf_gained_at" ]; then
+    tf_gained_epoch="$(jq -rn --arg t "$tf_gained_at" '$t | fromdateiso8601' 2>/dev/null)"
+    tf_check_epoch="$(im_mtime "$IMPL_DIR/row-check-$unit_id.json")"
+    { [ -n "$tf_gained_epoch" ] && [ -n "$tf_check_epoch" ] && [ "$tf_check_epoch" -ge "$tf_gained_epoch" ] \
+      && jq -e --arg u "$unit_id" 'any((.rows // [])[]; type == "object" and .criterion == $u and (.verdict == "confirmed" or .verdict == "rejected"))' \
+           "$IMPL_DIR/row-check-$unit_id.json" >/dev/null 2>&1; } \
+      || die 64 "tests-freeze: design appended done-when rows to $unit_id at $tf_gained_at, and $IMPL_DIR/row-check-$unit_id.json holds no verdict on the $unit_id row written since. The earlier verdict judged the shorter text. Put the rows to the row-checker with the full done-when text, then run tests-freeze again. Nothing is written."
+  fi
 
   # --- 64: the --row set and this order's tests must correspond, in all four ways ------------------
   # Rows follow the tests' claims. A machine-verified criterion a --test names needs exactly one
@@ -6591,7 +6611,7 @@ TF_EOF
                + (if $carried == [] then {} else {rowsCarried: $carried} end)) end)
             | (if ($absences | length) == 0 then del(.absenceClauses)
                else .absenceClauses = $absences end)
-            | del(.rowsRejected, .rowsConfirmed, .rowsSentBack, .doneWhenGained))
+            | del(.rowsRejected, .rowsConfirmed, .rowsSentBack, .doneWhenGained, .doneWhenGainedAt))
       end))')"
   [ -n "$ledger_with_judgements" ] \
     || die 3 "tests-freeze: the ledger update for $unit_id's judgements failed."
@@ -6745,6 +6765,13 @@ IM_DEPS
     '(.orders // []) | map(select(.id == $id)) | .[0] // null')"
   [ "$order_entry" != "null" ] \
     || die 3 "$who: $unit_id has no entry in $ledger_file, though start opens one entry per snapshot work order."
+
+  # --- exit 49: a halted order is not handed to a builder. build-record refused only after the work
+  # was spent (gap row 409).
+  local bb_halt
+  bb_halt="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // empty')"
+  [ -z "$bb_halt" ] \
+    || die 49 "$who: $unit_id is halted, so this step refuses. The ledger records the reason: $bb_halt"
 
   # --- exit 120: done-when rows appended after the freeze that no freeze has judged (gap row 409) --
   local dw_gained

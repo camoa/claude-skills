@@ -219,6 +219,11 @@
           "items": { "type": "string", "minLength": 1 },
           "description": "The done-when rows design appended after this order's tests were frozen, each verbatim. Written by `start` when it takes the live copy in place with the frozen tests kept, on an order at tests-frozen whose done-when row was judged. That judgement read the shorter text, so `start` removes it. `build-brief` and `dispatch-open implementer` refuse while this stands (exit 120). The next freeze with the same tests judges the done-when row again and removes it (gap row 409)."
         },
+        "doneWhenGainedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+          "description": "The UTC time `start` last wrote doneWhenGained. Present only beside it. While it stands, `tests-freeze` refuses (exit 64) unless `implementation/row-check-<order id>.json` holds a verdict on the order's done-when row and was written at or after this time, so a verdict on the shorter text clears nothing. Removed with doneWhenGained (gap row 409)."
+        },
         "rowsRejected": {
           "type": "array",
           "minItems": 1,

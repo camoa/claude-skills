@@ -121,6 +121,8 @@ Tests are frozen against criteria, and only the done-when row reads the done-whe
 row was judged, the order keeps its tests only at `tests-frozen`. The judgement leaves its ledger
 entry, and `doneWhenGained` lists the new rows. Its next step judges the row again and freezes
 the same tests. Past `tests-frozen` it halts, because a build already rests on the old text.
+An order with no done-when row keeps its tests until review. From `reviewed` on it halts,
+because nothing would read the new row.
 A removed owned file the code holds or held, or any other change, halts it as before. A reasoning
 whose earlier text changed halts too. So does a changed or removed done-when row.
 An order the live design no longer holds, because design merged or removed it, has no live copy
