@@ -19,12 +19,17 @@ Ask whether any guide covers the task. When none does, the person judges the dif
 
 A check whose id begins `decision-` is a decision a build left. Ask it in the
 words of `references/review.md` under the implement skill, under Rulings for a finding and under
-the departure halt for a departure. The answer decides what happens next:
+the departure halt for a departure. A check whose id ends `-non-goal` is a non-goal the live
+contract changed after the freeze. Show both texts from the summary's `nonGoal` line, verbatim,
+and ask whether the person approves the live text. The answer decides what happens next:
 
 - `wrong`: the reviewer was mistaken, and the work stands as built.
 - `deferred`: the finding is real and waits. Completion offers it as a follow up task, the way
   it offers a follow-up finding (`skills/completion/scripts/completion-actions.sh`, `cp_load_follow_ups`).
 - `keep`: the departure stands as built.
+- `accept`: the person approves the live text of a changed non-goal. The record keeps both texts.
+- `reject`: the reviewer judged a text the person did not approve, so the review fails. Put the
+  frozen text back with `scope update`, then archive the review and run it again.
 - `load-bearing`, `test-wrong` or `rebuild`: the check reads unmet, so the review fails. The
   order is closed, so the routes inside implement no longer reach it. The route is a fix
   commit on the task branch, then finish again, per "Finish runs again after a failed review"

@@ -13,7 +13,8 @@ It refuses at exit 62 when `checks` recorded nothing, because five of the eight 
 results.
 
 It writes the brief to `review/brief.json`. The brief holds the criteria and the non-goals from the
-frozen contract, and every work order. It holds the path to `review/diff.patch`. It holds the
+frozen contract, and every work order. A non-goal the live contract changed after the freeze
+carries its live text, and `nonGoalChanges` lists both texts. It holds the path to `review/diff.patch`. It holds the
 research records. Each finding carries the paths its source names, each marked on disk or not,
 and its URLs apart. It holds `guideBodies`, the guide bodies design opened, each marked on disk
 or not. It holds `practiceSearch`: the review's own practice search and its count of findings

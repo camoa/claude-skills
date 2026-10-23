@@ -244,12 +244,20 @@
         "answeredBy": {
           "type": "string",
           "enum": ["person", "nobody"],
-          "description": "Present only on a check a person decides rather than the script: a lens check whose findings are all low (gap row 274), or a `decision-` check, one per decision a build left in finished.json `pendingDecisions` (gap row 279). `nobody` before the person answers, when the check reads unknown. A low-findings lens check on a run with nobody present reads met with `nobody`. `person` once `close --row` took the answer."
+          "description": "Present only on a check a person decides rather than the script: a lens check whose findings are all low (gap row 274), or a `decision-` check, one per decision a build left in finished.json `pendingDecisions` (gap row 279) and one per non-goal the live contract changed after the freeze (gap row 410). `nobody` before the person answers, when the check reads unknown. A low-findings lens check on a run with nobody present reads met with `nobody`. `person` once `close --row` took the answer."
         },
         "answer": {
           "type": "string",
-          "enum": ["wrong", "deferred", "load-bearing", "test-wrong", "keep", "rebuild"],
-          "description": "Present only on a `decision-` check a person answered: the ruling word for a finding, or keep or rebuild for a departure. wrong, deferred and keep read met; load-bearing, test-wrong and rebuild read unmet. Completion offers a follow up task for each deferred one."
+          "enum": ["wrong", "deferred", "load-bearing", "test-wrong", "keep", "rebuild", "accept", "reject"],
+          "description": "Present only on a `decision-` check a person answered: the ruling word for a finding, keep or rebuild for a departure, or accept or reject for a changed non-goal. wrong, deferred, keep and accept read met; load-bearing, test-wrong, rebuild and reject read unmet. Completion offers a follow up task for each deferred one."
+        },
+        "frozenText": {
+          "type": "string",
+          "description": "Present only on a `decision-<id>-non-goal` check: the non-goal's text in the snapshot (gap row 410)."
+        },
+        "liveText": {
+          "type": ["string", "null"],
+          "description": "Present with frozenText: the text the reviewer judged, from the live contract, or null when the live contract removed the non-goal."
         },
         "scriptHalf": {
           "type": "object",
