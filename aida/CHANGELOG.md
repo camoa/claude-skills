@@ -4,6 +4,56 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.19] - 2026-10-23
+
+Changes from the periplus run, the camoa_skills run on aida-multi-client,
+and the AIDA developer's own sessions. A large design now closes and
+starts. A session that works no task can compact while another session
+builds one.
+
+### Fixed
+
+- `records-hash.sh` passed every work order to jq as one argument. Linux
+  caps one argument at 128 KiB. So a task whose design records passed
+  that size could not close design or start implementation. The hash now
+  reads the records from their files. A design under the cap keeps its
+  old hash.
+- A shared helper, `jq_files`, moves every other whole-record jq argument
+  to a file. These include the snapshot, the ledger, `finish`, the review
+  brief, the review mutation row and `design remove`. Past the cap, the
+  mutation row lost its survivors and still read met.
+- The PreCompact hook took the project's only in-progress task as the
+  session's task when no task worktree held the working folder. So a
+  session that worked no task was refused compaction for the unsaved
+  work of another session. The SessionStart hook named that task, its
+  notes and its run mode as the session's own.
+- Both hooks now tie that task to the session only when the session's
+  own tool calls since the last compaction name the task folder. An
+  untied session start lists the task as the project's task and names
+  `/aida:next <id>`. A hook input with no transcript keeps the old rule.
+- `build-record`, `build-recheck` and `fix-record` refuse at exit 3 when
+  a command token has no supplied value. They write nothing and spend no
+  attempt or fix round. Before, `build-recheck` rewrote the attempt as
+  stopped by an unknown order-tests row that no action could answer.
+- `build-record` and `fix-record` take a left-out `--test-recipe` from
+  `preconditions.json` and a left-out `--check-recipe` from
+  `baseline.json`, as `build-recheck` does. An order that its own tests
+  prove refuses at exit 3 when no test recipe is on record. Nothing is
+  spent. Before, the tool rows read undeclared and the attempt or round
+  was spent.
+- Review no longer runs a mutation command that takes no changed-file
+  path. Such a command runs over the whole project, so mutmut 3 mutated
+  the whole package for hours. The row now reads undeclared and names
+  the recipe. A catalog note asks for a scoped form.
+- `start --rebased-onto` accepts a new base that descends from
+  `startedFrom`. It does this when no order has committed and every
+  skipped commit is on another branch. Before, it refused a task branch
+  moved forward onto a later trunk commit. Review then read the later
+  trunk files as owned by no order.
+- `build-record`, `build-recheck`, `fix-record` and `finish` refuse at
+  exit 21 when the baseline was taken at another start. Retake the
+  baseline, then run the step again.
+
 ## [6.0.18] - 2026-10-21
 
 Changes from three live runs: the periplus run, the dev-guides site
