@@ -10,7 +10,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
 
 [![Tested: bash](https://img.shields.io/badge/tested-bash-blue.svg)](#status)
-[![Tested: zsh](https://img.shields.io/badge/tested-zsh-blue.svg)](#status)
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-supported-blueviolet.svg)](#installing-it)
 [![Copilot CLI](https://img.shields.io/badge/Copilot_CLI-unsupported-lightgrey.svg)](#status)
@@ -58,10 +57,13 @@ make a decision once.
 
 ## Status
 
-Version 6. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. Every stage
-is built and proved against fixtures under bash and zsh. Live tasks on real projects have run since
-the betas, and each release fixes the defects they found. Copilot CLI, Codex, Cursor, OpenCode and
-Antigravity are not supported yet. A task to support them is open.
+Version 6. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. Every stage is
+built against behaviour fixtures. On every pull request, continuous integration runs the structure
+specs and the behaviour suite in `tests/behaviour`, under bash on Linux. The suite runs each stage
+end to end, and tests the hooks that guard commands, writes, reads, stops and compaction. The
+plugin's scripts run under bash, whatever shell the session uses. Live tasks on real projects have
+run since the betas, and each release fixes the defects they found. Copilot CLI, Codex, Cursor,
+OpenCode and Antigravity are not supported yet. A task to support them is open.
 
 ## Installing it
 

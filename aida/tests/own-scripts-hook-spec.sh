@@ -5,7 +5,8 @@
 # `bash <script>` for every shell script in the plugin, the way an agent runs one. It names the
 # file and line of each refusal. It finds a refused line by feeding the hook each line alone.
 # The hooks folder is left out: the platform runs a hook, never the Bash tool, so this hook never
-# reads one.
+# reads one. tests/behaviour is left out too: no skill runs a fixture, and fixture jl holds the
+# commands this hook must refuse.
 set -uo pipefail
 if [ -n "${ZSH_VERSION:-}" ]; then SCRIPT_SOURCE="$0"; else SCRIPT_SOURCE="${BASH_SOURCE[0]}"; fi
 PLUGIN="$(cd -- "$(dirname -- "$SCRIPT_SOURCE")/.." >/dev/null 2>&1 && pwd -P)"
@@ -32,6 +33,6 @@ while IFS= read -r p; do
   done <"$PLUGIN/$p"
   [ "$found" = true ] || printf 'refused: %s, on no single line: %s\n' "$p" "$reason"
 done <<SCRIPTS
-$(cd "$PLUGIN" && find . -name '*.sh' -not -path './hooks/*' | sed 's#^\./##' | sort)
+$(cd "$PLUGIN" && find . -name '*.sh' -not -path './hooks/*' -not -path './tests/behaviour/*' | sed 's#^\./##' | sort)
 SCRIPTS
 exit "$FAIL"
