@@ -614,8 +614,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      The message names `start --rebased-onto <commit>`. That sets startedFrom to the commit the
 #      branch now builds on and keeps the old value under startedFromBefore with the date. The
 #      flag is an argument error, exit 3, in four cases. Its value is not a commit, not an
-#      ancestor of HEAD, or the value already held. HEAD still descends from startedFrom, so
-#      nothing was rewritten. The run has no ledger to rewrite.
+#      ancestor of HEAD, or the value already held. HEAD still descends from startedFrom, and
+#      the value does not, or an order has committed (gap row 401). The run has no ledger.
 #  83  a resumed `start` found baseline.json outside the shape this version writes. That is a
 #      required field missing or of the wrong type against baseline-schema.json. Or it is a suite
 #      or tool entry that ran (it carries exitCode) with no outputFile. `build-record` subtracts from
@@ -2508,10 +2508,16 @@ REMOVED_PATHS
         || die 3 "start: --rebased-onto ($rebased_onto) is not a commit in the code repository at $code_path."
       [ "$rebased_full" != "$ledger_started_from" ] \
         || die 3 "start: --rebased-onto ($rebased_onto) is the commit $LEDGER_FILE already holds as startedFrom. Nothing to rewrite."
-      # The flag answers exit 82 alone. On a branch that still descends from startedFrom it would
-      # move the start past the build's own commits, so a wrong rewrite is undone by hand instead.
+      # The flag answers exit 82. On a branch that still descends from startedFrom it would move
+      # the start past the build's own commits, so a wrong rewrite is undone by hand instead. One
+      # case is safe: the branch moved forward onto a later commit before any order committed.
+      # No order has a lastStep and no tests, build or fix record exists in any folder, so no
+      # commit between the two starts is the build's (gap row 401).
       if git -C "$code_path" merge-base --is-ancestor "$ledger_started_from" "$started_from" >/dev/null 2>&1; then
-        die 3 "start: --rebased-onto was given, but HEAD ($started_from) still descends from startedFrom ($ledger_started_from). The branch was not rewritten, so there is nothing to repair. A wrong earlier rewrite is corrected by editing startedFrom in $LEDGER_FILE by hand."
+        { git -C "$code_path" merge-base --is-ancestor "$ledger_started_from" "$rebased_full" >/dev/null 2>&1 \
+          && [ "$(printf '%s' "$ledger_doc" | jq '[.orders[] | select(.lastStep != null)] | length')" = "0" ] \
+          && [ -z "$(find "$TASK_PATH" -mindepth 2 -maxdepth 3 -type f \( -name 'tests-wo*.json' -o -name 'build-wo*.json' -o -name 'fix-wo*-*.json' \) 2>/dev/null)" ]; } \
+          || die 3 "start: --rebased-onto was given, but HEAD ($started_from) still descends from startedFrom ($ledger_started_from). The flag moves the start forward on such a branch only to a descendant of startedFrom, and only before any order has committed. Otherwise the range would drop the build's own commits. A wrong earlier rewrite is corrected by editing startedFrom in $LEDGER_FILE by hand."
       fi
       git -C "$code_path" merge-base --is-ancestor "$rebased_full" "$started_from" >/dev/null 2>&1 \
         || die 3 "start: --rebased-onto ($rebased_full) is not an ancestor of HEAD ($started_from) in $code_path. The build's own commits must follow it."
