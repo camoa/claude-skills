@@ -300,7 +300,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  18  `preconditions` was given a framework from project.json that the caller answered for
 #      neither way: no --recipe and no --lookup-failed. Refused rather than guessed, because a
 #      lookup nobody ran recorded as a recipe that declared nothing is the exact defect the
-#      declaration exists to close.
+#      declaration exists to close. The review recipe follows the same rule: no --check-recipe
+#      and no --check-lookup-failed refuses too, because with none recorded no tool row runs and
+#      the freeze cannot judge a test file's standards (gap row 408).
 #  19  `preconditions` ran and something stops the build: a condition answered no, nobody could
 #      tell, or a framework's own smoke run came back the same way. The record is written first
 #      and names every condition, every smoke run, and its reason, so this exit says do not
@@ -882,10 +884,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      judgement made on the shorter text. The next freeze with the same tests judges it again and
 #      removes the list (gap row 409). Nothing is written.
 #
-# 120  `tests-freeze` ran the coding-standards row of the check recipe baseline.json records over
+# 121  `tests-freeze` ran a verify run line that proves a criterion over the files it freezes, and
+#      the line did not pass or did not apply (gap row 370). The implementer may not edit a frozen
+#      test, so the test author repairs the files first. Nothing is frozen.
+#
+# 122  `tests-freeze` ran the coding-standards row of the check recipe baseline.json records over
 #      the test and support files this freeze adds or changes, and the row read unmet after the
 #      baseline subtraction (gap row 408). No role may write a frozen file. The message names the
-#      files and the first lines of the output. Nothing is frozen.
+#      files and the first lines of the output. Nothing is frozen. A row that reads unknown or
+#      undeclared judged nothing; its detail goes to standard error and the freeze goes on.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -3744,6 +3751,10 @@ PC_RECIPES
       lookup="$(cr_lookup "$failures" "$fw")"
       [ -n "$lookup" ] || die 18 "preconditions: nothing was said about the recipe for framework $fw; pass --recipe or --lookup-failed"
     fi
+    # The same rule for the review recipe. With none recorded, no tool row runs anywhere, and the
+    # freeze cannot judge a frozen test's standards (gap row 408).
+    [ -n "$(cr_lookup "$check_recipes" "$fw")" ] || [ -n "$(cr_lookup "$check_failures" "$fw")" ] \
+      || die 18 "preconditions: nothing was said about the review recipe for framework $fw; pass --check-recipe or --check-lookup-failed"
 
     # The implement recipe is a second lookup, and this step is the first place a person can be
     # told about it. Its `## Oracle files` block holds the globs `tests-freeze` needs, so without
@@ -6531,35 +6542,50 @@ TF_OWN_COMMITS
     esac
   fi
 
-  # --- 120: the coding-standards row passes over the files this freeze adds or changes -------------
+  # --- 122: the coding-standards row passes over the files this freeze adds or changes -------------
   # No role may write a frozen file, and build and review leave the frozen tests out of their tool
   # rows. So the row runs here, while the test author can still repair the file (gap row 408). It
   # runs over the files the commit below takes, through build-record's own check. A finding the
   # baseline already held in a changed file is subtracted the same way, so it never refuses here.
-  local frozen_rel_paths tf_cs_paths="[]" tf_cs_p tf_cs_json tf_cs_out
+  # The files absent at the baseline commit run apart from the ones it held. One file it held
+  # makes the whole run read unknown under an undeclared baseline, and a new file is then unjudged.
+  local frozen_rel_paths tf_cs_new="[]" tf_cs_old="[]" tf_cs_at tf_cs_p tf_cs_group tf_cs_json tf_cs_out tf_cs_verdict
   frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
     '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
+  tf_cs_at="$(jq -r '.commit // ""' "$IMPL_DIR/baseline.json" 2>/dev/null)"
   while IFS= read -r tf_cs_p; do
-    [ -n "$tf_cs_p" ] && [ -n "$(git -C "$codepath" status --porcelain -- "$tf_cs_p")" ] \
-      && tf_cs_paths="$(printf '%s' "$tf_cs_paths" | jq -c --arg p "$tf_cs_p" '. + [$p]')"
+    [ -n "$tf_cs_p" ] && [ -n "$(git -C "$codepath" status --porcelain -- "$tf_cs_p")" ] || continue
+    if [ -n "$tf_cs_at" ] && git -C "$codepath" cat-file -e "$tf_cs_at:./$tf_cs_p" 2>/dev/null; then
+      tf_cs_old="$(printf '%s' "$tf_cs_old" | jq -c --arg p "$tf_cs_p" '. + [$p]')"
+    else
+      tf_cs_new="$(printf '%s' "$tf_cs_new" | jq -c --arg p "$tf_cs_p" '. + [$p]')"
+    fi
   done <<TF_CS_EOF
 $frozen_rel_paths
 TF_CS_EOF
-  if [ "$tf_cs_paths" != "[]" ]; then
+  if [ "$tf_cs_new$tf_cs_old" != "[][]" ]; then
     CR_WHO="tests-freeze"; CR_TEST_RECIPES=""
     CR_CHECK_RECIPES="$(base_check_recipes "$IMPL_DIR/baseline.json")"
     cr_resolve
     BRC_WHO="tests-freeze"; BRC_CODEPATH="$codepath"; BRC_RECIPES="$CR_DOC"; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
-    BRC_UNIT_JSON="$(jq -cn --argjson owned "$tf_cs_paths" '{ownedFiles: $owned}')"
     brc_use_baseline "tests-freeze"
-    tf_cs_json="$(br_tool_check "coding-standards" "codingStandards" "coding-standards")" || exit "$?"
-    if [ "$(printf '%s' "$tf_cs_json" | jq -r '.verdict')" = "unmet" ]; then
-      tf_cs_out="$IMPL_DIR/coding-standards-$unit_id-freeze.txt"
-      printf '%s' "$tf_cs_json" | jq -r '.output // ""' >"$tf_cs_out"
-      die 120 "tests-freeze: the coding-standards row fails over $(printf '%s' "$tf_cs_paths" | jq -r 'join(", ")'): $(printf '%s' "$tf_cs_json" | jq -r '.detail')
+    for tf_cs_group in "$tf_cs_new" "$tf_cs_old"; do
+      [ "$tf_cs_group" != "[]" ] || continue
+      BRC_UNIT_JSON="$(jq -cn --argjson owned "$tf_cs_group" '{ownedFiles: $owned}')"
+      tf_cs_json="$(br_tool_check "coding-standards" "codingStandards" "coding-standards")" || exit "$?"
+      tf_cs_verdict="$(printf '%s' "$tf_cs_json" | jq -r '.verdict')"
+      case "$tf_cs_verdict" in
+        unmet)
+          tf_cs_out="$IMPL_DIR/coding-standards-$unit_id-freeze.txt"
+          printf '%s' "$tf_cs_json" | jq -r '.output // ""' >"$tf_cs_out"
+          die 122 "tests-freeze: the coding-standards row fails over $(printf '%s' "$tf_cs_group" | jq -r 'join(", ")'): $(printf '%s' "$tf_cs_json" | jq -r '.detail | sub("newLines holds the first 20[.]$"; "The first 20 lines of the output follow.")')
 $(head -n 20 "$tf_cs_out")
-The test author repairs these files and runs each test again, and this freeze runs again. Nothing is frozen. The output is in $tf_cs_out."
-    fi
+The test author repairs these files and runs each test again, and this freeze runs again. Nothing is frozen. The output is in $tf_cs_out." ;;
+        unknown|undeclared)
+          printf 'tests-freeze: the coding-standards row over %s reads %s, so it judged nothing: %s\n' \
+            "$(printf '%s' "$tf_cs_group" | jq -r 'join(", ")')" "$tf_cs_verdict" "$(printf '%s' "$tf_cs_json" | jq -r '.detail')" >&2 ;;
+      esac
+    done
   fi
 
   # --- the test files go into a commit before anything is measured against them --------------------

@@ -334,8 +334,10 @@ nothing looks like success and is the dangerous one.
 **The freeze runs the coding-standards row over the test files.** It takes the row from the
 check recipe `baseline.json` records. It runs the row over the test and support files the freeze
 adds or changes, and subtracts the baseline the way the build does. A finding refuses the freeze
-(exit 120) and names the files and the output. Send the finding back to the author. The author
+(exit 122) and names the files and the output. Send the finding back to the author. The author
 repairs the files and runs each test again, and the freeze runs again.
+A row that reads unknown or undeclared judged nothing, and the freeze prints why and goes on.
+Then nothing checks those files: say so to the person when you report this step.
 This is the one place the tests' own standards are judged. The build and review leave the frozen
 tests out of their tool rows, because no role after the freeze may write them.
 
