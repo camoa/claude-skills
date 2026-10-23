@@ -324,7 +324,7 @@ jq_files() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --arg|--argjson)
-        tmp="$(mktemp)" || return 2
+        tmp="$(mktemp)" || { [ "${#tmps[@]}" -eq 0 ] || rm -f "${tmps[@]}"; return 2; }
         tmps+=("$tmp")
         printf '%s' "$3" > "$tmp" || { rm -f "${tmps[@]}"; return 2; }
         if [ "$1" = "--arg" ]; then

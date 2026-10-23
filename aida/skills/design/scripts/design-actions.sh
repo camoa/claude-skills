@@ -1807,7 +1807,7 @@ do_remove() {
 
   # The criteria of the live contract that only this order serves, then those only it owns.
   local alone
-  alone="$(jq -r --argjson others "$others" --argjson live "$(contract_criteria_json)" '
+  alone="$(jq_files -r --argjson others "$others" --argjson live "$(contract_criteria_json)" '
       ($live | map(.id)) as $ids
       | def only(k): [ (.[k] // [])[] | . as $c | select(($ids | index($c)) != null)
                        | select(([ $others[] | (.[k] // [])[] ] | index($c)) == null) ] | join(", ");

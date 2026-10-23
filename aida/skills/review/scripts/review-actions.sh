@@ -1092,7 +1092,7 @@ rw_run_mutation() {
     # belongs to which criterion, and the frozen orders say which source file belongs to which order
     # and what that order serves. A survivor no path attaches is still recorded, because the
     # reviewer reads the whole list and a survivor nobody can attach is a fact rather than a finding.
-    survivors="$(jq -Rn --argjson changed "$RW_CHANGED_JSON" --argjson rows "$RW_TEST_ROWS" \
+    survivors="$(jq_files -Rn --argjson changed "$RW_CHANGED_JSON" --argjson rows "$RW_TEST_ROWS" \
       --argjson orders "$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -c '.workOrders // []')" \
       --rawfile out "$outfile" '
       [ ($out | split("\n"))[]
