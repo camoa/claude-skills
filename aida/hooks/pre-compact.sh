@@ -24,7 +24,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Two folders are excluded beside notes/ in all three branches (live-run row 152).
 #
-# inputs/ first. docs/task.md calls it material carried in from before the task existed. A file
+# inputs/ first. It holds material carried in from before the task existed. A file
 # there is usually not work this window decided. Research is the exception: it writes a fetched
 # page and a pulled tree there. Each of those is already a finding's source, and that finding's
 # record under research/ still refuses, so the window is one step wide.
