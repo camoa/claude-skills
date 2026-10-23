@@ -224,7 +224,8 @@ checker returned. That freeze is
 allowed only while the order is still at `tests-frozen`. Once `build-record` has recorded an
 attempt, it refuses (exit 76). Other orders may have committed since the first freeze. The freeze
 still retakes, because the report holds the `Stop: test-wrong` line. Unattended, the stop halted
-the order, and a halt still standing refuses (exit 35): the person runs `clear-halt` first. The
+the order, and a halt still standing refuses (exit 35). `clear-halt` refuses on an autonomous run
+(exit 68), so a person first sets the task to interactive, then runs `clear-halt`. The
 retake prints `retaken:` with the earlier commit and the new one, and the record names the
 earlier one under `retakenFrom`. No attempt is spent, because none was recorded. The builder's
 stop left the tree dirty on purpose. The freeze commits only the test paths, and the next
