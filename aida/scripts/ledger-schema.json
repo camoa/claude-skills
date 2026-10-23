@@ -213,6 +213,12 @@
           },
           "description": "The checkpoint's verdict on the tests that prove this order's own doneWhen rather than a criterion: the `--row` keyed by the order's id, written by `tests-freeze` and replaced on every freeze of this order. Present only when the order froze such a test. A supporting order serves criteria it cannot observe, so its tests are judged against its doneWhen text instead of a verify clause (live-run row 59). Counted with the criterion judgements in every rowsJudgedByModel, so a model's reading here is listed for a person to judge again like any other."
         },
+        "doneWhenGained": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "The done-when rows design appended after this order's tests were frozen, each verbatim. Written by `start` when it takes the live copy in place with the frozen tests kept, on an order at tests-frozen whose done-when row was judged. That judgement read the shorter text, so `start` removes it. `build-brief` and `dispatch-open implementer` refuse while this stands (exit 120). The next freeze with the same tests judges the done-when row again and removes it (gap row 409)."
+        },
         "rowsRejected": {
           "type": "array",
           "minItems": 1,

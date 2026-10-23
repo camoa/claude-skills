@@ -13,6 +13,17 @@ the build dispatch for the order. Its `lookups=` list names every catalog point 
 One function decides both lists from the proof kind: `br_order_needs` in `scripts/lib/proof.sh`.
 Do not work them out from the kind here. `dispatch-open` refuses a role the list lacks (exit 102).
 
+## When the done-when gained rows after the freeze
+
+The `next:` line can read `tests <id>: the done-when gained rows after the freeze`. Design added
+done-when rows to an order whose tests were frozen, and `start` kept those tests. The done-when
+row was judged on the shorter text, so `start` removed that judgement. The ledger entry lists the
+new rows under `doneWhenGained`. Do not dispatch the test author. Put the rows to the checker
+again, as the checkpoint section below says, with the full done-when text. Then run `tests-freeze`
+with the flags of the earlier freeze and the new verdicts. The frozen record holds the tests, and
+the red files are still in the implementation folder. The freeze finds the same tests, writes the
+judgement and removes the list. Until then the build refuses the order (exit 120).
+
 ## Resolve the recipes for this step
 
 Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup once per point in
