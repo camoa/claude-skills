@@ -484,7 +484,7 @@ CP_WANTED
 # printed; its path is. $1 the record this close is about to write, $2 the lines the review
 # script's `audit` printed, empty when there is no review record.
 cp_render_body() {
-  jq -nr --arg task "$CP_TASK_ID" --argjson alignment "$CP_ALIGNMENT_DOC" --argjson finished "$CP_FINISHED_DOC" \
+  jq_files -nr --arg task "$CP_TASK_ID" --argjson alignment "$CP_ALIGNMENT_DOC" --argjson finished "$CP_FINISHED_DOC" \
     --argjson review "$CP_REVIEW_DOC" --argjson record "$1" --argjson taskDoc "$CP_TASK_DOC" --arg audit "$2" \
     --argjson observed "$CP_OBSERVED" --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" '
     def section($title; $lines): ["## " + $title, ""] + $lines + [""];

@@ -1376,13 +1376,13 @@ snapshot_self_hash() {
 # live copy is appended (gap row 335).
 snapshot_with_live_orders() {
   local doc="$1" ids="$2" live="$3" alignment="$4" orders hash
-  orders="$(printf '%s' "$doc" | jq -c --argjson ids "$ids" --argjson live "$live" '
+  orders="$(printf '%s' "$doc" | jq_files -c --argjson ids "$ids" --argjson live "$live" '
       ($live | map({(.id): .}) | add // {}) as $lm
       | (.workOrders | map(.id)) as $have
       | (.workOrders | map(. as $o | if (($ids | index($o.id)) != null) then $lm[$o.id] else $o end))
         + [ $ids[] | . as $i | select(($have | index($i)) == null) | $lm[$i] | select(. != null) ]')"
   hash="$(snapshot_self_hash "$alignment" "$orders")" || return 1
-  printf '%s' "$doc" | jq -c --arg hash "$hash" --argjson orders "$orders" --argjson alignment "$alignment" \
+  printf '%s' "$doc" | jq_files -c --arg hash "$hash" --argjson orders "$orders" --argjson alignment "$alignment" \
     '.hash = $hash | .alignment = $alignment | .workOrders = $orders'
 }
 
@@ -1632,7 +1632,7 @@ im_next_step() {
     retake_pending="$(printf '%s' "$retake_pending" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
     i=$((i + 1))
   done
-  printf '%s' "$ledger" | jq -r --argjson opens "$opens" --argjson recheck_route "$recheck_route" --argjson snap "$snapshot" \
+  printf '%s' "$ledger" | jq_files -r --argjson opens "$opens" --argjson recheck_route "$recheck_route" --argjson snap "$snapshot" \
     --argjson retake_pending "$retake_pending" --argjson departure_prefixes "$RR_DEPARTURE_PREFIXES" \
     --argjson allowed "$BUILD_ATTEMPTS_ALLOWED" --argjson precon "$precon" '
     (.orders // []) as $orders
@@ -2153,7 +2153,7 @@ do_start() {
 
     local taken_at snapshot_json
     taken_at="$(date -u +%Y-%m-%d)"
-    snapshot_json="$(jq -n \
+    snapshot_json="$(jq_files -n \
       --arg takenAt "$taken_at" --arg hash "$live_hash" \
       --argjson alignment "$live_alignment_json" --argjson workOrders "$live_workorders_json" \
       '{schemaVersion: 1, takenAt: $takenAt, hash: $hash, alignment: $alignment, workOrders: $workOrders}')"
@@ -2184,14 +2184,14 @@ do_start() {
       # No test was written from it, so it is not a contract change (gap row 319). Its author is
       # who approved it, and scope's approve turns every designer into owner. No test was written
       # from that either, so a relabel alone halts no order (gap row 355).
-      contract_changed="$(jq -n --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" \
+      contract_changed="$(jq_files -n --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" \
         'def nv: .criteria = [ (.criteria // [])[] | del(.verdict, .author) ];
          if ($a | nv) == ($b | nv) then false else true end')"
       # Every drift halt reason begins with "design drift: ", which is what `restart` reads to tell
       # an order halted by a design change from one halted for a spent attempt counter or a
       # load-bearing finding. A prefix rather than a field of its own, the same way the attempt cap
       # already writes "attempts spent" and `grant-attempt` already reads it.
-      drifted_orders_json="$(jq -n --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" '
+      drifted_orders_json="$(jq_files -n --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
           | [ $snap[] | . as $s
               | ($liveMap[$s.id]) as $l
@@ -2212,7 +2212,7 @@ do_start() {
       # clearing below removes the segment about the design file alone. So one reopen that changed
       # the file and the criterion keeps the order halted when only the file goes back.
       if [ "$contract_changed" = "true" ]; then
-        changed_criteria_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
+        changed_criteria_json="$(jq_files -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
             (($b.criteria // []) | map({(.id): del(.verdict, .author)}) | add // {}) as $liveMap
             | [ ($a.criteria // [])[] | del(.verdict, .author) | select($liveMap[.id] != .) | .id ]')"
         # A criterion whose verify clause alone changed spares each order whose frozen test record
@@ -2222,12 +2222,12 @@ do_start() {
         # with a recorded reason: one more decidedWithoutAPerson entry on that criterion than the
         # snapshot's contract holds, because scoping unattended already wrote one per criterion.
         local clause_only_json o_id clause_records
-        clause_only_json="$(jq -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" --argjson changed "$changed_criteria_json" '
+        clause_only_json="$(jq_files -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" --argjson changed "$changed_criteria_json" '
             (($b.criteria // []) | map({(.id): del(.verdict, .author, .verification)}) | add // {}) as $liveMap
             | [ ($a.criteria // [])[] | del(.verdict, .author, .verification) | .id as $i
                 | select($liveMap[$i] == . and ($changed | index($i)) != null) | $i ]')"
         if [ "$(task_run_mode "$TASK_PATH" scope)" = "autonomous" ]; then
-          clause_only_json="$(jq -cn --argjson ids "$clause_only_json" --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
+          clause_only_json="$(jq_files -cn --argjson ids "$clause_only_json" --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
               def entries($doc; $c): [ ($doc.decidedWithoutAPerson // [])[] | objects | select(.field == $c) ] | length;
               [ $ids[] | . as $c | select(entries($b; $c) > entries($a; $c)) ]')"
         fi
@@ -2247,7 +2247,7 @@ do_start() {
 $(printf '%s' "$snapshot_workorders_json" | jq -r '.[].id')
 CLAUSE_ORDERS
         fi
-        drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" "$HALT_MERGE_JQ"'
+        drifted_orders_json="$(jq_files -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" "$HALT_MERGE_JQ"'
             [ $snap[] | . as $s
               | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null)
                    | select((($spared[$s.id] // []) | index($c)) == null) ]) as $hits
@@ -2272,10 +2272,10 @@ CLAUSE_ORDERS
       # design.
       local started_ids_json
       started_ids_json="$(started_orders_json "$TASK_PATH")"
-      resnapshot_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
+      resnapshot_ids_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) != null) | $d ]')"
-      removed_ids_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
+      removed_ids_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) == null) | $d ]')"
       # A started order whose live copy differs from the frozen one only by added owned files is
@@ -2305,13 +2305,13 @@ CLAUSE_ORDERS
         esac
         phantom_json="$(printf '%s' "$phantom_json" | jq -c --arg p "$removed_path" '. + [$p]')"
       done <<REMOVED_PATHS
-$(jq -rn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" '
+$(jq_files -rn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" '
     ($live | map({(.id): .}) | add // {}) as $liveMap
     | [ $snap[] | ($liveMap[.id]) as $l | select($l != null)
         | ((.ownedFiles // []) - ($l.ownedFiles // [])), ((.sharedFiles // []) - ($l.sharedFiles // [])) | .[] ]
     | unique | .[]')
 REMOVED_PATHS
-      widened_json="$(jq -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson phantom "$phantom_json" \
+      widened_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson phantom "$phantom_json" \
           --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" '
           ($live | map({(.id): .}) | add // {}) as $liveMap
           | ($snap | map({(.id): .}) | add // {}) as $snapMap
@@ -2351,7 +2351,7 @@ REMOVED_PATHS
       # An order design added after the snapshot was taken has not started either, so it is taken
       # in from the live design the same way (gap row 335). Left out, its criterion entered the
       # snapshot with no order to build it, and the run read every order closed.
-      added_ids_json="$(jq -cn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" \
+      added_ids_json="$(jq_files -cn --argjson snap "$snapshot_workorders_json" --argjson live "$live_workorders_json" \
         '[ $live[].id ] - [ $snap[].id ]')"
       if [ "$(printf '%s' "$added_ids_json" | jq 'length')" -gt 0 ]; then
         [ -z "$drift_what" ] || drift_what="$drift_what; and "
@@ -2380,7 +2380,7 @@ REMOVED_PATHS
       # its records aside. It will never build again, so its owned files take no part in the build
       # order derived below: the live survivor that absorbed them would otherwise refuse a
       # conflict with a copy nothing will build.
-      halted_removed_ids_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson live "$live_workorders_json" '
+      halted_removed_ids_json="$(jq_files -cn --argjson drifted "$drifted_orders_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id | . as $d | select(($liveIds | index($d)) == null) ]')"
       # An order that depends on a drifted one, directly or through another order, is halted too.
@@ -2389,7 +2389,7 @@ REMOVED_PATHS
       # table: "Halt every order the change touches"). The reason names the drifted orders it
       # reaches, so a person reads what to look at without walking the graph themselves. An order
       # that drifted itself keeps its own reason and never takes this one.
-      dependent_halts_json="$(jq -n --argjson orders "$snapshot_workorders_json" --argjson drifted "$drifted_orders_json" '
+      dependent_halts_json="$(jq_files -n --argjson orders "$snapshot_workorders_json" --argjson drifted "$drifted_orders_json" '
           def reach($adj; $start):
             def go($frontier; $visited):
               if ($frontier | length) == 0 then $visited
@@ -2422,9 +2422,9 @@ REMOVED_PATHS
 
   # --- step 10: derive the build order; refuse on a cycle or an owned-file overlap ----------------
   local build_orders_json cycles_json overlap_json
-  build_orders_json="$(jq -cn --argjson orders "$snapshot_workorders_json" --argjson gone "$halted_removed_ids_json" \
+  build_orders_json="$(jq_files -cn --argjson orders "$snapshot_workorders_json" --argjson gone "$halted_removed_ids_json" \
     '[ $orders[] | . as $o | select(($gone | index($o.id)) == null) ]')"
-  cycles_json="$(jq -c -n --argjson orders "$build_orders_json" '
+  cycles_json="$(jq_files -c -n --argjson orders "$build_orders_json" '
       def reach($adj; $start):
         def go($frontier; $visited):
           if ($frontier | length) == 0 then $visited
@@ -2682,7 +2682,7 @@ DEP_SEGMENTS
     base_orders_json="$(printf '%s' "$snapshot_workorders_json" | jq -c '[ .[] | {id: .id, lastStep: null, attemptsUsed: 0, roundsUsed: 0} ]')"
     # A ledger opened here carries no halt yet, so there is nothing to keep. The same expression is
     # written anyway, so the two paths cannot drift into halting two different ways.
-    final_orders_json="$(jq -n --argjson orders "$base_orders_json" --argjson drifted "$drift_halts_json" "$HALT_MERGE_JQ"'
+    final_orders_json="$(jq_files -n --argjson orders "$base_orders_json" --argjson drifted "$drift_halts_json" "$HALT_MERGE_JQ"'
         $orders | map(
           . as $o
           | (([ $drifted[] | select(.id == $o.id) | .reason ])[0]) as $r
@@ -2734,7 +2734,7 @@ LO_MOVE
 
   mkdir -p "$IMPL_DIR" || die 3 "start: could not create $IMPL_DIR"
   local ledger_json_out
-  ledger_json_out="$(jq -n \
+  ledger_json_out="$(jq_files -n \
     --arg startedFrom "$ledger_started_from" --arg runMode "$ledger_run_mode" \
     --arg snapshotHash "$snapshot_hash_on_disk" --arg startedAt "$ledger_started_at" \
     --argjson orders "$final_orders_json" --argjson criteria "$final_criteria_json" \
@@ -2773,7 +2773,7 @@ LO_MOVE
 
   # --- step 13: the report --------------------------------------------------------------------------
   local ready_ids_json halted_json in_flight_json
-  ready_ids_json="$(jq -n --argjson orders "$snapshot_workorders_json" --argjson ledgerOrders "$final_orders_json" '
+  ready_ids_json="$(jq_files -n --argjson orders "$snapshot_workorders_json" --argjson ledgerOrders "$final_orders_json" '
       ($ledgerOrders | map({(.id): .}) | add // {}) as $lm
       | [ $orders[] | . as $o
           | ($lm[$o.id]) as $le
@@ -2844,7 +2844,7 @@ LO_MOVE
   [ -f "$IMPL_DIR/preconditions.json" ] && jq empty "$IMPL_DIR/preconditions.json" 2>/dev/null && st_precon=true
   [ -f "$IMPL_DIR/finished.json" ] && jq empty "$IMPL_DIR/finished.json" 2>/dev/null && st_finished=true
   st_ledger_now="$(jq -c '.' "$LEDGER_FILE" 2>/dev/null)"
-  st_next="$(im_next_step "$st_ledger_now" "$(jq -nc --argjson w "$snapshot_workorders_json" --arg h "$snapshot_hash_on_disk" '{workOrders: $w, hash: $h}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
+  st_next="$(im_next_step "$st_ledger_now" "$(jq_files -nc --argjson w "$snapshot_workorders_json" --arg h "$snapshot_hash_on_disk" '{workOrders: $w, hash: $h}')" "$IMPL_DIR" "$st_precon" "$st_finished")"
   # After a retake, or a restart from before restart reverted (gap row 252), the order's own build
   # and fix commits may still be on the branch; one line per order names them while they are. Not
   # a refusal: a retake keeps them on purpose (live-run row 94). The line is dropped when there is
@@ -5926,7 +5926,7 @@ TF_RECORDED
     # once already, or the order has no test author. Each of those needs a person or design.
     if [ -n "$rejected_by_model" ] && [ "$tf_run_mode" = "autonomous" ] && [ -n "$tf_ledger_doc" ]; then
       local tf_why tf_halted_doc tf_model_rows
-      tf_model_rows="$(jq -nc --argjson rows "$rows_meta_json" --argjson check "$tf_check_doc" \
+      tf_model_rows="$(jq_files -nc --argjson rows "$rows_meta_json" --argjson check "$tf_check_doc" \
           --argjson author "$tf_has_author" --arg id "$unit_id" --argjson ledger "$tf_ledger_doc" '
           ([ ($ledger.orders // [])[] | select(.id == $id) ][0].rowsSentBack // []) as $sent
           | [ $rows[] | select(.verdict == "rejected" and .judgedBy == "model") | .criterion as $c
@@ -12380,7 +12380,7 @@ do_finish() {
   # nothing to do next and no way to learn what. A criterion an order proved by confirm puts to the
   # person, confirmCriteria in scripts/lib/proof.sh, is not asked here: its task has no automated
   # tests, and the person answers it at review from the checklist rows below (gap row 196).
-  unconfirmed="$(jq -nr --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" "$BR_ORDER_FACTS_JQ"'
+  unconfirmed="$(jq_files -nr --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" "$BR_ORDER_FACTS_JQ"'
       ([ ($snap.workOrders // [])[] | confirmCriteria[] ]) as $confirmed
       | ([ ($snap.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id
            | select(. as $i | $confirmed | index($i) | not) ]) as $machine
@@ -12574,7 +12574,7 @@ FN_RECIPES
   [ -n "$task_id" ] || die 3 "finish: $TASK_PATH/task.json has no usable id field"
   today="$(date -u +%Y-%m-%d)"
   record_file="$IMPL_DIR/finished.json"
-  record_json="$(jq -n --arg takenAt "$today" --arg task "$task_id" \
+  record_json="$(jq_files -n --arg takenAt "$today" --arg task "$task_id" \
     --arg range "$started_from..$head_now" \
     --argjson ledger "$FN_LEDGER_DOC" --argjson snap "$SNAPSHOT_DOC" \
     --argjson checklists "$checklists_json" --argjson deferred "$deferred_json" \
@@ -13417,7 +13417,7 @@ RS_SPLIT
     || die 3 "restart: could not compute a hash over the live alignment.json and design/*.json."
   [ "$(design_closed_state)" = "ok" ] && [ "$(design_closed_hash)" = "$live_hash" ] \
     || die 13 "restart: the halted orders would be taken fresh from the live design, but $CLOSED_FILE does not record a close over the live alignment.json and design/*.json. Close design again, then run restart."
-  removed_ids_json="$(jq -nc --argjson ids "$drifted_ids_json" --argjson live "$live_workorders_json" \
+  removed_ids_json="$(jq_files -nc --argjson ids "$drifted_ids_json" --argjson live "$live_workorders_json" \
     '($live | map(.id)) as $l | [ $ids[] | . as $d | select(($l | index($d)) == null) ]')"
   retaken_ids_json="$(jq -nc --argjson ids "$drifted_ids_json" --argjson gone "$removed_ids_json" \
     '[ $ids[] | . as $d | select(($gone | index($d)) == null) ]')"
@@ -13559,7 +13559,7 @@ RS_MINE
   # A halted order's entry goes back to what start opens it as, or leaves the list when the design
   # removed it. The judgements its freeze wrote go too, and every criterion it serves goes back to
   # not judged, since close confirms a row only once every serving order is closed.
-  new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --argjson ids "$drifted_ids_json" --argjson snap "$SNAPSHOT_DOC" \
+  new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq_files -c --argjson ids "$drifted_ids_json" --argjson snap "$SNAPSHOT_DOC" \
     --argjson retaken "$retaken_ids_json" --argjson gone "$removed_ids_json" \
     --arg from "$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.snapshotHash')" --arg to "$new_hash" --arg at "$today" '
     ([ ($snap.workOrders // [])[] | . as $o | select(($ids | index($o.id)) != null)

@@ -629,7 +629,7 @@ unaccounted_findings() {
     | while IFS= read -r f; do jq -c '(.findings // [])[] | {ref, text}' "$f" 2>/dev/null; done)"
   find "$TASK_PATH/research" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort \
     | while IFS= read -r f; do
-        jq -r --arg s "$(basename -- "$f" .json)" --arg acc "$accounted" '
+        jq_files -r --arg s "$(basename -- "$f" .json)" --arg acc "$accounted" '
           ($acc | split("\n") | map(select(length > 0) | fromjson)) as $acc
           | (.findings // []) | to_entries[] | ($s + "#" + (.key + 1 | tostring)) as $ref
           | .value.text as $t

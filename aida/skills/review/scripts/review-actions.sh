@@ -1742,7 +1742,7 @@ do_brief() {
     doc="$(jq -c '.' "$one" 2>/dev/null)"
     [ -n "$doc" ] \
       || die 3 "brief: $one exists but could not be read as JSON. Repair or remove it by hand before running this again."
-    research_json="$(jq -nc --argjson have "$research_json" --argjson doc "$doc" --arg file "$one" '
+    research_json="$(jq_files -nc --argjson have "$research_json" --argjson doc "$doc" --arg file "$one" '
       $have + [{file: $file, search: ($doc.search // ""), searchedFor: ($doc.searchedFor // ""),
                 findings: [ ($doc.findings // [])[]
                   | {text, source, lookedAt, criteriaServed: (.criteriaServed // [])} ]}]')"
@@ -1804,7 +1804,7 @@ $(jq -r '(.guides // [])[] | (.path // empty)' "$TASK_PATH/design-guides-read.js
 RW_GUIDES
   fi
 
-  brief_json="$(jq -n --arg task "$RW_TASK_ID" --arg diff "$DIFF_FILE" \
+  brief_json="$(jq_files -n --arg task "$RW_TASK_ID" --arg diff "$DIFF_FILE" \
     --arg findings "$FINDINGS_TARGET" --arg codePath "$RV_CODEPATH" \
     --argjson alignment "$(rw_alignment)" --argjson snap "$RW_SNAPSHOT_DOC" \
     --slurpfile record "$RECORD_FILE" --argjson research "$research_json" \
@@ -2040,7 +2040,7 @@ do_findings() {
     built="$(printf '%s' "$one" | jq -c --arg disposition "$disposition" '
       {id, lens, severity, file: (.file // ""), lines: (.lines // ""),
        linkedTo: (.linkedTo // ""), evidence, disposition: $disposition}')"
-    findings_json="$(jq -nc --argjson have "$findings_json" --argjson one "$built" '$have + [$one]')"
+    findings_json="$(jq_files -nc --argjson have "$findings_json" --argjson one "$built" '$have + [$one]')"
     i=$((i + 1))
   done
 
@@ -2255,11 +2255,11 @@ RW_RESEARCH_FILES
   [ -n "$reviewer_notes" ] || reviewer_notes='[]'
   # The checks step's frozen-test findings stay, numbered after the reviewer's own. No lens check reads
   # the frozen-tests lens, so they block nothing.
-  findings_json="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson mine "$findings_json" '
+  findings_json="$(printf '%s' "$RW_RECORD_DOC" | jq_files -c --argjson mine "$findings_json" '
     ([ $mine[] | .id[1:] | tonumber ] | max // 0) as $top
     | $mine + ([ (.findings // [])[] | select(.lens == "frozen-tests") ]
                | to_entries | map(.value + {id: ("f" + (($top + .key + 1) | tostring))}))')"
-  updated="$(jq -s -c --slurpfile record "$RECORD_FILE" --argjson findings "$findings_json" \
+  updated="$(jq_files -s -c --slurpfile record "$RECORD_FILE" --argjson findings "$findings_json" \
     --argjson notes "$reviewer_notes" --argjson absences "$absence_rows" --arg skip "$skip_reason" '
     . as $rows
     | $record[0]

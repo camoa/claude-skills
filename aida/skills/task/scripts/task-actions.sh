@@ -1040,7 +1040,7 @@ do_set_run_mode() {
     else
       orders="$(find "$task_dir/design" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' -exec cat {} + 2>/dev/null | jq -sc '.' 2>/dev/null)"
       [ -n "$orders" ] || orders='[]'
-      person_rows="$(jq -r --argjson orders "$orders" "$BR_ORDER_FACTS_JQ"'
+      person_rows="$(jq_files -r --argjson orders "$orders" "$BR_ORDER_FACTS_JQ"'
         {alignment: ., workOrders: $orders} | personCriteria | join(", ")' "$task_dir/alignment.json" 2>/dev/null)"
     fi
     [ -n "$orders" ] || orders='[]'
