@@ -20,6 +20,7 @@
 #                                         <search>#<n>, counted from 1; 1 when no such search
 #   write_atomic <target> <content>       writes through a temporary file beside the target
 #   jq_files <jq arguments>               jq, with each long --arg and --argjson value passed in a file
+#   jq_files_bytes <text>                 sets JQ_FILES_BYTES to the length of <text> in bytes
 #   plugin_version                        prints the version from the plugin's own plugin.json,
 #                                         or unknown when that file cannot be read
 #   version_at_least <have> <want>        true when <have> is <want> or later
@@ -322,18 +323,26 @@ write_atomic() {
   mv -f "$tmp" "$target" || { rm -f "$tmp"; die3 "could not write $target"; }
 }
 
+# Sets JQ_FILES_BYTES to the length of $1 in bytes, whatever the caller's locale. The local LC_ALL
+# ends with this function, so jq_files runs jq in the caller's locale.
+jq_files_bytes() { local LC_ALL=C; JQ_FILES_BYTES="${#1}"; }
+
 # jq, with each long `--arg` and `--argjson NAME VALUE` handed over in a temporary file, never as an
 # argument. Linux caps one argument at 128 KiB, and a snapshot, a ledger or a task's work orders
 # grow past it (live-run row 402). A value of 32,000 characters or fewer is at most 128,000 bytes,
-# so it stays an argument and costs no file (gap row 403). $NAME is bound to the value as --arg or
-# --argjson binds it, and an --argjson value that is not one JSON text fails the call. It takes single-letter flags,
-# --arg, --argjson, --slurpfile and --rawfile, then the filter, then input files.
+# so it stays an argument and costs no file (gap row 403). Values stay arguments only while their
+# bytes add up to 256 KiB or less, well inside the 1 MiB macOS allows for all arguments. $NAME is
+# bound to the value as --arg or --argjson binds it, and an --argjson value that is not one JSON
+# text fails the call. It takes single-letter flags, --arg, --argjson, --slurpfile and --rawfile,
+# then the filter, then input files.
 jq_files() {
-  local args=() tmps=() bind='' tmp rc
+  local args=() tmps=() bind='' tmp rc inline=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --arg|--argjson)
-        if [ "${#3}" -le 32000 ]; then
+        jq_files_bytes "$3"
+        if [ "${#3}" -le 32000 ] && [ $((inline + JQ_FILES_BYTES)) -le 262144 ]; then
+          inline=$((inline + JQ_FILES_BYTES))
           args+=("$1" "$2" "$3")
         else
           tmp="$(mktemp)" || { [ "${#tmps[@]}" -eq 0 ] || rm -f "${tmps[@]}"; return 2; }
@@ -1201,14 +1210,14 @@ active_tree_for() {
   local code="$1" dir="$2" top common out
   code="$(cd "$code" && pwd -P)"
   out="$(git -C "$dir" rev-parse --show-toplevel --git-common-dir 2>/dev/null)" || { printf '%s' "$code"; return 0; }
-  # git prints the common dir relative to $dir, or absolute.
+  # git prints the common dir relative to the physical $dir, or absolute.
   { IFS= read -r top; IFS= read -r common; } <<TOP_COMMON
 $out
 TOP_COMMON
   top="$(cd "$top" && pwd -P)"
   # The code path itself needs no common dir: either answer prints it.
   [ "$top" != "$code" ] || { printf '%s' "$code"; return 0; }
-  common="$(cd "$dir" && cd "$common" && pwd -P)"
+  common="$(cd -P "$dir" && cd -P "$common" && pwd -P)"
   if [ "$common" = "$(cd "$code" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" ]; then
     printf '%s' "$top"
   else

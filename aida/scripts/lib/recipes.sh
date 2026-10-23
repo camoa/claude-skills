@@ -224,12 +224,17 @@ is_git_repo() {
 
 
 # Trims leading and trailing whitespace. sed trims each line of a value that holds a newline, so
-# that value keeps the sed. Any other value is trimmed in bash, with no process (gap row 403).
+# that value keeps the sed. A value over 4,096 characters keeps it too, because the bash patterns
+# grow slower than sed there. Any other value is trimmed in bash, with no process (gap row 403).
 pc_trim() {
   local v="$1"
-  case "$v" in *$'\n'*) printf '%s' "$v" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; return ;; esac
-  v="${v#"${v%%[![:space:]]*}"}"
-  printf '%s' "${v%"${v##*[![:space:]]}"}"
+  if [ "${#v}" -le 4096 ]; then
+    case "$v" in
+      *$'\n'*) ;;
+      *) v="${v#"${v%%[![:space:]]*}"}"; printf '%s' "${v%"${v##*[![:space:]]}"}"; return ;;
+    esac
+  fi
+  printf '%s' "$v" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
 }
 
 
