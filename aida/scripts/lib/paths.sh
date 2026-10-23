@@ -345,7 +345,9 @@ git_tree_of() {
 # JSON object each, the session's directory $2 and its transcript $3 (gap row 398). Both the
 # PreCompact and the SessionStart hook ask here. First the task whose tree holds $2, with its branch
 # checked out there: a chain made with --in-tree shares one tree (gap row 302). Else the project's
-# only task in progress, when the transcript names that task's folder after its last compaction.
+# only task in progress, when a tool call this session made after its last compaction names that
+# task's folder. Only the session's own tool calls count. Tool results, hook output and summaries
+# name the folder too: /aida:next prints it, and so does this hook's own Notes line.
 # A stage call can run from outside the tree with a cd prefix, so the tree alone misses that
 # session. The only task with no further test ties every session in the project to it, while
 # another session may build it. A session that made or read the task days ago named the folder in
@@ -368,8 +370,13 @@ session_task() {
   if [ -n "${3:-}" ]; then
     [ -s "$3" ] || return 0
     from="$(grep -n '"subtype":"compact_boundary"' "$3" | tail -1 | cut -d: -f1)"
-    # No -q: grep stopping early fails the pipe under a caller's pipefail.
-    tail -n +"${from:-1}" "$3" | grep -F -- "$(printf '%s' "$1" | jq -r '.path')" >/dev/null || return 0
+    # The folder as a whole name, so tasks/foo is not found in tasks/foo-bar. fromjson? skips a
+    # line the platform is still writing. No -q: grep stopping early fails the pipe under a
+    # caller's pipefail.
+    tail -n +"${from:-1}" "$3" | grep -F '"type":"assistant"' \
+      | jq -cR 'fromjson? | .message.content[]? | select(.type? == "tool_use") | .input' 2>/dev/null \
+      | grep -E -- "$(printf '%s' "$1" | jq -r '.path' | sed 's/[][\.*^$+?(){}|]/\\&/g')([^A-Za-z0-9._-]|\$)" >/dev/null \
+      || return 0
   fi
   printf '%s\n' "$1"
 }
