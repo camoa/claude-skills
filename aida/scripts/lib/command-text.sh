@@ -60,9 +60,10 @@ read_words() {
 }
 
 # Prints command $1 with one segment per line: a line break at each `;`, `|`, `&&` and `||` that
-# stands outside quotes. So `sed -i 's/a/b/; s/c/d/' f` stays one segment (gap row 407). A quote
-# state ends with its line, so an apostrophe in a comment hides no later line. A backslash escapes
-# the next character, except inside single quotes; a `$'...'` string takes backslash escapes.
+# stands outside quotes, except the `|` of the redirect `>|`. So `sed -i 's/a/b/; s/c/d/' f` stays
+# one segment (gap row 407). A quote state ends with its line, so an apostrophe in a comment hides
+# no later line. A backslash escapes the next character, except inside single quotes; a `$'...'`
+# string takes backslash escapes.
 # hooks/deny-destructive-commands.sh joins quoted strings with its own quoted_words instead, because
 # it must still run when this file cannot be read.
 split_segments() {
@@ -73,7 +74,7 @@ split_segments() {
       if (c == "\\" && (q != "\047" || e)) { out = out substr($0, i, 2); i++; continue }
       if (q != "") { if (c == q) q = ""; out = out c; continue }
       if (c == "\047" || c == "\"") { q = c; e = (c == "\047" && substr($0, i - 1, 1) == "$"); out = out c; continue }
-      if (c == ";" || c == "|" || (c == "&" && substr($0, i + 1, 1) == "&")) {
+      if (c == ";" || (c == "|" && substr($0, i - 1, 1) != ">") || (c == "&" && substr($0, i + 1, 1) == "&")) {
         print out; out = ""
         if (c != ";" && substr($0, i + 1, 1) == c) i++
         continue
