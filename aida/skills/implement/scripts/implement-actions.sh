@@ -6740,7 +6740,7 @@ TF_EOF
 # Step four: build-brief and build-record. The model writes the code; this script never does.
 # `build-brief` assembles exactly what that model may see, from the frozen snapshot, the frozen
 # test record for one unit, and the ledger. `build-record` verifies what came back: it runs all
-# eight deciding checks docs/implementation.md names ("The deciding checks run before anything
+# eight deciding checks docs/stages/implement/checks.md names ("The deciding checks run before anything
 # judges") and moves the attempt counter. Seven of them come from `br_seven_checks`, which a fix
 # round calls again; the eighth, the interface record, is this step's own, and a fix round never
 # re-runs it, because a fix round does not rewrite that record.

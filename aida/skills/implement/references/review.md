@@ -167,7 +167,7 @@ that task, so run, once per finding said yes to:
   create --project "<projectPath>" --name "<task-id>-<finding id>" \
   -- <the finding's evidence, then one sentence naming the finding, the order and the file>
 ```
-That is the id and the goal completion gives a leftover finding, in `docs/finishing.md`. Show
+That is the id and the goal completion gives a leftover finding, in `docs/stages/completion/follow-ups.md`. Show
 the whole output, and do not enter the new worktree. Then go to Close in either answer.
 Unattended, nothing prints, and the record holds them.
 

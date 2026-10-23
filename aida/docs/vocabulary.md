@@ -1,24 +1,73 @@
 # Vocabulary
 
-Every word AIDA holds to one sense, so the same thing is never called two names. Short by
-design: a word is here because a check enforces it. The list itself is `tests/vocabulary.txt`
-in the plugin, and `tests/vocabulary-spec.sh` flags every banned synonym in shipped prose.
+These are the words AIDA holds to one sense, so one thing never has two names. The rows below
+are the rows of `tests/vocabulary.txt` in the plugin. AIDA's pages and skills never use a word
+from the "Not called" column for the thing in that row.
+
+## The stages
 
 | Word | What it names | Not called |
 |---|---|---|
-| scope, research, design, implement, review, completion | the six stages, named as their skills are; the implement skill runs the implementation stage, and the pages say implementation | |
-| met, unmet, unknown, undeclared | a check's verdict: it looked and the answer is yes; it looked and the answer is no; it could not look; the recipe never declared it | `satisfied`, `unsatisfied`, `undecidable` |
+| scope | the first stage: the contract a task is judged against | |
+| research | the second stage: what design needs, found in the code, outside it, and in the recipes | |
+| design | the third stage: the work orders | |
+| implement | the fourth stage: the build, per work order. Its folder and its prose name are implementation | |
+| review | the fifth stage: sixteen checks over the whole task, one verdict | |
+| completion | the sixth stage: closing a finished task. Not complete, which is the task action and the state value | |
+
+## Check verdicts
+
+| Word | What it names | Not called |
+|---|---|---|
+| met | a check that looked and the answer is yes | `satisfied` |
+| unmet | a check that looked and the answer is no | `unsatisfied` |
+| unknown | a check that could not look | `undecidable` |
+| undeclared | a check the recipe never declared | |
+| not-needed | a check the orders it covers did not ask for: today, the suite of a task whose every order is proved by its record | |
+| warned | a suite check that failed while no test failed: the recipe names the lines that failed it. finish refuses on it unless a person accepts it | |
+| deferred | put off to a later step: a suite check a record step left to finish, or a finding ruled for a later task | |
+
+## Criteria, candidates and findings
+
+| Word | What it names | Not called |
+|---|---|---|
 | unanswered | a criterion nobody answered | `unresolved` |
-| high, medium, low | a finding's severity | `major`, `minor`, `blocker` |
-| open, addressed, ruled | a finding's status; a ruled finding is wrong, deferred, load-bearing or test-wrong | |
-| work order | the unit of work: one build, one review, one commit | `epic`, `slice`, `batch` |
-| check | one blocking check a stage runs | `validate`, `validation`. `audit` is not banned: it is the review action that lists how each verdict came about |
-| gate | the proof kind of a configuration work order: the recipe's own lines decide it, not a test | |
-| record (proof kind) | the proof kind of a document work order: its done-when rows decide it, not a test, and it lands no commit in the code repository | |
-| confirm (proof kind) | the proof kind of a code work order on a task with no automated tests: a person confirms its done-when rows at review, and no test runs | |
-| record, recipe, source | a file a stage writes as proof it ran; a catalog document a stage resolves; where a play or a finding came from | |
+| decline | a dispose verdict: a candidate weighed and set aside, with the reason. Also a person's no to an offer | |
+| severity | high, medium, low, on a finding | `major`, `minor`, `blocker` |
+| status | open, addressed, ruled, on a finding | |
+| ruling | wrong, deferred, load-bearing, test-wrong, on a ruled finding | |
+
+## The unit of work and its proof
+
+| Word | What it names | Not called |
+|---|---|---|
+| work order | the unit of work: one build, one review, one commit | `epic`, `epics`, `slice`, `slices`, `batch`, `batches` |
+| check | one blocking check a stage runs | `validate`, `validates`, `validated`, `validating`, `validation` |
+| gate | the proof kind of a configuration order: the recipe's own lines decide it, not a test | |
+| observe | the proof kind of a page order: a model looks through a browser after the build and judges each done-when row | |
+
+## Records and sources
+
+| Word | What it names | Not called |
+|---|---|---|
+| record | a file a stage writes as proof it ran, read by the next stage | |
+| recipe | a catalog document a stage resolves for the project's framework | |
+| source | where a play or a finding came from: a person's file, the project, a catalog set | |
 | vocabulary | this list | `glossary` |
 
-`verify` is not banned: a criterion's verify clause and the reviewer's verify mode are its own
-senses. A word with a second legitimate use stays off the list, because the check cannot read
-meaning.
+## Words used above
+
+- **finish** is the last step of implement. It hands the task to review.
+- **A done-when row** is one line of an order's own proof: what must be true once it is built.
+- **Proved by its record** means the order's deliverable is a document, so no test proves it.
+- **A dispose verdict** is design's answer on a reuse candidate: reuse, extend, supersede or
+  decline.
+
+`verify` and `audit` are not on the list. Each has a second real use in AIDA's prose.
+
+## Why it works this way
+
+- **One name per thing.** When two words name one thing, a reader has to guess whether they are
+  two things. A model guesses too.
+
+Source: tests/vocabulary.txt

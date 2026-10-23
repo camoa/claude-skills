@@ -91,10 +91,9 @@ registered. `claude --debug` shows the load itself, including manifest errors.
 
 ## Documentation
 
-The documentation lives in `docs/`. Start at `docs/README.md`, then `docs/overview.md`. There is a
-page per topic. The pages cover the process and every variant of it: each entry point, the run
-modes, every task shape, every build path, the optional test harnesses, and a stack that has no
-recipe.
+The documentation lives in `docs/`. Start at `docs/README.md`, then `docs/start/`. Each folder
+has an index, and each page answers one question: how to do a thing, what AIDA does, and briefly
+why it works that way. When AIDA refuses or stops, `docs/when-it-stops/` says what to do.
 
 ## License
 
