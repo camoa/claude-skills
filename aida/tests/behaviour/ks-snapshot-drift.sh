@@ -163,7 +163,7 @@ add_and_approve
 rc="$(resumed_start "$ROOT/start-2.txt")"
 expect "start exits 0" "$rc" "0"
 expect "a changed criterion text still halts wo1" "$(ledger_halt wo1)" \
-  "design drift: criterion c1, which wo1 serves, changed since the snapshot was taken"
+  "design drift: the live text of criterion c1, which wo1 serves, differs from the frozen copy the snapshot keeps"
 expect "wo2 halts as wo1's dependent" "$(ledger_halt wo2)" "$DEP2"
 
 printf 'passed %s of %s\n' "$PASS" "$TOTAL"

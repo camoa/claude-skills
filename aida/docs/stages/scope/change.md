@@ -28,12 +28,16 @@ A change is still allowed once implementation has started. It reaches the build 
 close, then implementation's start. There, each work order that serves or owns a changed criterion
 is affected:
 
-- **A work order not started yet** takes the new criterion. It does not halt.
-- **A started work order halts**, in both run modes, when the criterion's words changed. With a
-  person present, implementation offers to restart it.
+- **When no started work order serves the criterion**, each work order takes the new criterion.
+  None halts.
+- **When a started work order serves it**, every work order that serves it halts, closed ones
+  included, in both run modes. The build keeps the old text. Put the old text back word for word
+  and the halts clear at the next start. With a person present, implementation offers to restart
+  the halted orders instead.
 - **A change to the verify clause alone** spares a started work order whose frozen tests and
   records do not name that criterion. On an unattended run, scope must first record the change as
-  a decision for that criterion, or no order is spared.
+  a decision for that criterion, or no order is spared. A recorded decision spares nothing when
+  the criterion's words changed.
 
 See [A work order halted](../../when-it-stops/halts.md).
 

@@ -449,7 +449,10 @@ To edit an existing criterion or non-goal rather than add or remove one:
 ```
 After implementation started, a corrected verify clause reaches the build through design's
 `close` and then implement's `start`. Unattended, run `record-decision --field <id>` with the
-reason first, or the change halts every started order that serves the criterion.
+reason first, or the change halts every started order that serves the criterion. The decision
+spares a change to the verify clause alone. When a started order serves a criterion, a change to
+its text halts every order that serves it, whatever is recorded. Those halts clear when the text
+goes back word for word.
 A non-goal's id only accepts `--text`; the others are a criterion's own fields. `--author owner`
 is for a criterion the person corrected in this conversation; `approve` promotes the rest. Both
 only ever move a criterion from `designer` to `owner`, and the other way round is refused.

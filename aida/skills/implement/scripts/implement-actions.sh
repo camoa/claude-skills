@@ -1217,10 +1217,10 @@ halt_segments() {
   printf '%s' "$1" | jq -Rr 'if . == "" then empty else split("; earlier: ")[] end' 2>/dev/null
 }
 
-# The two drift reasons a later `start` can re-derive: both compare the snapshot's own copy of one
-# order against the live design file, and the snapshot keeps that copy while the order is halted.
-# A criterion reason and a reason naming another order are not here; the comment in `start` says why.
-DRIFT_OWN_COPY_PREFIXES='["design drift: the design file for ","design drift: the design removed "]'
+# The drift reasons a later `start` can re-derive: each compares the snapshot's own copy of one
+# order or one criterion against the live record, and the snapshot keeps that copy while the order
+# is halted. A reason naming another order is not here; the comment in `start` says why.
+DRIFT_OWN_COPY_PREFIXES='["design drift: the design file for ","design drift: the design removed ","design drift: the live text of criterion "]'
 
 # The segments of halt reason $1 that begin with one of the prefixes in JSON array $2, joined back
 # into a halt reason. $3 is `keep` for those segments, or `drop` for every other one. Empty prints
@@ -2144,6 +2144,7 @@ do_start() {
   local drift_checked=false
   local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' halted_removed_ids_json='[]'
   local widened_ids_json='[]' widened_json='[]' spared_json='{}'
+  local held_json='[]' held_hits_json='[]' kept_alignment_json=""
 
   if [ "$snapshot_present" = "false" ]; then
     # ---- new run: design must be formally closed on exactly these live files --------------------
@@ -2233,9 +2234,9 @@ do_start() {
       # a changed order file: the tests are written from the frozen criterion, so an order built
       # after the change would assert the old sentence (live-run row 86). Changed means the
       # snapshot's criterion object differs from the live one or is gone from it. An order that
-      # already drifted on its own file carries both reasons, as two segments of one halt. The
-      # clearing below removes the segment about the design file alone. So one reopen that changed
-      # the file and the criterion keeps the order halted when only the file goes back.
+      # already drifted on its own file carries both reasons, as two segments of one halt.
+      local started_ids_json
+      started_ids_json="$(started_orders_json "$TASK_PATH")"
       if [ "$contract_changed" = "true" ]; then
         changed_criteria_json="$(jq_files -cn --argjson a "$snapshot_alignment_json" --argjson b "$live_alignment_json" '
             (($b.criteria // []) | map({(.id): del(.verdict, .author)}) | add // {}) as $liveMap
@@ -2277,13 +2278,37 @@ CLAUSE_ORDERS
               | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null)
                    | select((($spared[$s.id] // []) | index($c)) == null) ]) as $hits
               | select(($hits | length) > 0)
-              | {id: $s.id, reason: ("design drift: criterion " + ($hits | join(", ")) + ", which " + $s.id + " serves, changed since the snapshot was taken")}
+              | {id: $s.id, reason: ("design drift: the live text of criterion " + ($hits | join(", ")) + ", which " + $s.id + " serves, differs from the frozen copy the snapshot keeps")}
             ] as $byCriterion
             | ($drifted | map(.id)) as $have
             | ($drifted | map(. as $d
                 | (([ $byCriterion[] | select(.id == $d.id) | .reason ])[0]) as $c
                 | if $c == null then $d else ($d + {reason: halt_merge($c; $d.reason)}) end))
               + [ $byCriterion[] | . as $b | select(($have | index($b.id)) == null) ]')"
+        # A changed criterion a started order stands on is held: the snapshot keeps its frozen
+        # copy, and every order that serves or owns it halts, closed or not started included (gap
+        # row 428). The frozen copy is the text those tests prove. So the halt clears when the live
+        # text equals it again, and review still refuses a criterion changed after the freeze
+        # (gap row 410). A closed order halts too, because `restart` resets only halted orders
+        # and takes the live contract: a closed order left out would keep tests on the old text.
+        # A criterion only unstarted orders serve is not held, and the snapshot takes its live text.
+        held_json="$(jq_files -cn --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" \
+            --argjson started "$started_ids_json" --argjson spared "$spared_json" '
+            [ $changed[] | . as $c
+              | select(any($snap[]; . as $s | ($started | index($s.id)) != null
+                  and ((($s.criteriaServed // []) + ($s.criteriaOwned // [])) | index($c)) != null
+                  and ((($spared[$s.id] // []) | index($c)) == null))) ]')"
+        held_hits_json="$(jq_files -cn --argjson snap "$snapshot_workorders_json" --argjson held "$held_json" --argjson spared "$spared_json" '
+            [ $snap[] | . as $s
+              | select(any((($s.criteriaServed // []) + ($s.criteriaOwned // []))[]; . as $c
+                  | ($held | index($c)) != null and ((($spared[$s.id] // []) | index($c)) == null)))
+              | .id ]')"
+        kept_alignment_json="$(jq_files -cn --argjson snap "$snapshot_alignment_json" --argjson live "$live_alignment_json" --argjson held "$held_json" '
+            ($snap.criteria // []) as $frozen
+            | $live | .criteria = ([ (.criteria // [])[] | . as $l
+                  | if ($held | index($l.id)) != null then ([ $frozen[] | select(.id == $l.id) ][0]) else $l end ]
+                + [ $frozen[] | . as $f | select(($held | index($f.id)) != null)
+                    | select(([ ($live.criteria // [])[] | select(.id == $f.id) ] | length) == 0) ])')"
       fi
       # A drifted order that has not started is not halted: nothing was built against its old
       # shape, so it is replaced in the snapshot by the live copy instead, and its dependents are
@@ -2294,12 +2319,11 @@ CLAUSE_ORDERS
       # derived over them refuses a conflict that does not exist (live-run row 82); started, it
       # stays a halt and `restart` drops it. The live copy is taken, or the frozen one dropped,
       # only when design closed on the live files, the same rule a new run applies to the whole
-      # design.
-      local started_ids_json
-      started_ids_json="$(started_orders_json "$TASK_PATH")"
-      resnapshot_ids_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
+      # design. An unstarted order that serves a held criterion stays halted, because the snapshot
+      # keeps that criterion's frozen text.
+      resnapshot_ids_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" --argjson held "$held_hits_json" '
           ($live | map(.id)) as $liveIds
-          | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) != null) | $d ]')"
+          | [ $drifted[] | .id as $d | select(($started + $held | index($d)) == null) | select(($liveIds | index($d)) != null) | $d ]')"
       removed_ids_json="$(jq_files -n --argjson drifted "$drifted_orders_json" --argjson started "$started_ids_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id as $d | select(($started | index($d)) == null) | select(($liveIds | index($d)) == null) | $d ]')"
@@ -2384,7 +2408,7 @@ REMOVED_PATHS
                 + (if ($gained | length) > 0 and ($judged[$d].judged // false) then {gained: $gained} else {} end) ]')"
       widened_ids_json="$(printf '%s' "$widened_json" | jq -c 'map(.id)')"
       # A changed contract refreshes the snapshot's alignment under the same rule, whether or not
-      # an order is taken fresh: a criterion nobody serves yet, or one only halted orders serve,
+      # an order is taken fresh: a criterion nobody serves yet, or one no started order stands on,
       # still has to be the frozen copy the next order's tests are written from.
       local drift_what=""
       if [ "$(printf '%s' "$resnapshot_ids_json" | jq 'length')" -gt 0 ] || [ "$(printf '%s' "$removed_ids_json" | jq 'length')" -gt 0 ]; then
@@ -2405,9 +2429,14 @@ REMOVED_PATHS
         drift_what="${drift_what}these work orders were added since the snapshot was taken: $(printf '%s' "$added_ids_json" | jq -r 'join(", ")'). Each would be taken in from the live design, not started"
         resnapshot_ids_json="$(jq -cn --argjson a "$resnapshot_ids_json" --argjson b "$added_ids_json" '$a + $b')"
       fi
-      if [ "$contract_changed" = "true" ]; then
+      # A held criterion keeps its frozen copy, so a change to held criteria alone refreshes nothing.
+      [ -n "$kept_alignment_json" ] || kept_alignment_json="$live_alignment_json"
+      if [ "$contract_changed" = "true" ] && [ "$(jq_files -n --argjson a "$snapshot_alignment_json" --argjson b "$kept_alignment_json" \
+          'def nv: .criteria = [ (.criteria // [])[] | del(.verdict, .author) ]; ($a | nv) != ($b | nv)')" = "true" ]; then
         [ -z "$drift_what" ] || drift_what="$drift_what; and "
         drift_what="${drift_what}the contract changed since the snapshot was taken, and the snapshot would take the live alignment.json"
+        [ "$(printf '%s' "$held_json" | jq 'length')" -eq 0 ] \
+          || drift_what="${drift_what}, except the frozen copy of criterion $(printf '%s' "$held_json" | jq -r 'join(", ")')"
       fi
       if [ -n "$drift_what" ]; then
         [ "$(design_closed_state)" = "ok" ] && [ "$(design_closed_hash)" = "$live_hash" ] \
@@ -2415,7 +2444,7 @@ REMOVED_PATHS
         # The removed orders leave the document before the helper runs, so the one hash it
         # re-derives covers the live copies taken in and the frozen copies dropped together.
         resnapshot_doc="$(snapshot_with_live_orders "$(printf '%s' "$snapshot_doc" | jq -c --argjson ids "$removed_ids_json" \
-            '.workOrders = [ .workOrders[] | . as $o | select(($ids | index($o.id)) == null) ]')" "$resnapshot_ids_json" "$live_workorders_json" "$live_alignment_json")" \
+            '.workOrders = [ .workOrders[] | . as $o | select(($ids | index($o.id)) == null) ]')" "$resnapshot_ids_json" "$live_workorders_json" "$kept_alignment_json")" \
           || die 3 "start: could not re-derive a hash for the snapshot with the live copies taken in (see stderr above)"
         resnapshot_hash="$(printf '%s' "$resnapshot_doc" | jq -r '.hash')"
         snapshot_alignment_json="$(printf '%s' "$resnapshot_doc" | jq -c '.alignment')"
@@ -2641,33 +2670,43 @@ REMOVED_PATHS
     # `clear-halt` still refuses a drift halt (exit 85). `start` is the one action that computes
     # drift, and a second computation there would be a second producer for one fact.
     #
-    # A criterion halt is left for `restart`, because this comparison cannot re-derive it. It is
-    # written in the same run that replaces the snapshot's alignment with the live contract, so the
-    # next comparison finds no difference while the order's frozen tests still assert the old
-    # sentence. Clearing it would let that order build against them. A halt that names another
-    # order stands on that order's state, so the second pass below clears it once no order it
-    # names is still halted for a drift of its own.
+    # A criterion segment clears the same way, because the snapshot keeps the frozen copy of a
+    # held criterion (gap row 428). A segment in the wording 6.0.20 wrote stays for `restart`:
+    # that run replaced the snapshot's copy, so no comparison can say what the tests assert. An
+    # order this run halts again loses only the segments this run did not write again. So when
+    # one reopen changed the file and a criterion, and only the file goes back, the criterion
+    # segment alone holds the order. A halt that names another order stands on that order's
+    # state, so the second pass below clears it once no order it names is still halted for a
+    # drift of its own.
     halts_cleared_json="$(printf '%s' "$ledger_doc" | jq -c '.haltsCleared // []')"
     if [ "$drift_checked" = "true" ]; then
-      local cleared_id cleared_halt cleared_rest cleared_today
+      local cleared_id cleared_halt cleared_rest cleared_today cleared_stale cleared_now
       cleared_today="$(date -u +%Y-%m-%d)"
-      for cleared_id in $(printf '%s' "$final_orders_json" | jq -r --argjson drifted "$drift_halts_json" '
-          ($drifted | map(.id)) as $bad
-          | [ .[] | . as $o | select(($bad | index($o.id)) == null) | select($o | has("haltedBecause")) | $o.id ][]'); do
+      for cleared_id in $(printf '%s' "$final_orders_json" | jq -r '[ .[] | select(has("haltedBecause")) | .id ][]'); do
         cleared_halt="$(printf '%s' "$final_orders_json" | jq -r --arg id "$cleared_id" \
           '.[] | select(.id == $id) | .haltedBecause')"
-        [ -n "$(halt_segments_matching "$cleared_halt" "$DRIFT_OWN_COPY_PREFIXES" keep)" ] || continue
-        cleared_rest="$(halt_segments_matching "$cleared_halt" "$DRIFT_OWN_COPY_PREFIXES" drop)"
+        cleared_now="$(printf '%s' "$drift_halts_json" | jq -r --arg id "$cleared_id" '[ .[] | select(.id == $id) | .reason ][0] // ""')"
+        cleared_stale="$(jq -cn --arg h "$cleared_halt" --arg r "$cleared_now" --argjson p "$DRIFT_OWN_COPY_PREFIXES" '
+            ($r | if . == "" then [] else split("; earlier: ") end) as $now
+            | [ $h | split("; earlier: ")[] | . as $s
+                | select(any($p[]; . as $x | $s | startswith($x))) | select(($now | index($s)) == null) ]')"
+        [ "$cleared_stale" != "[]" ] || continue
+        cleared_rest="$(halt_segments_matching "$cleared_halt" "$cleared_stale" drop)"
         final_orders_json="$(printf '%s' "$final_orders_json" | jq -c --arg id "$cleared_id" --arg rest "$cleared_rest" '
             map(if .id == $id then
                   (if $rest == "" then del(.haltedBecause) else .haltedBecause = $rest end)
                 else . end)')"
         halts_cleared_json="$(printf '%s' "$halts_cleared_json" | jq -c --arg id "$cleared_id" \
-          --arg reason "$cleared_halt" --arg today "$cleared_today" --arg rest "$cleared_rest" '
+          --arg reason "$cleared_halt" --arg today "$cleared_today" --arg rest "$cleared_rest" --arg now "$cleared_now" '
           . + [{id: $id, reason: $reason, clearedAt: $today,
-                because: ("start: this resumed run compared the live design to the snapshot and found no drift for "
-                          + $id + ", so the design drift segment naming its own design copy cleared"
-                          + (if $rest == "" then "" else "; the order stays halted for what is left" end))}]')"
+                because: (if $now != "" then
+                            "start: this resumed run no longer found the drift some segments named for " + $id
+                            + ", so they cleared; the order stays halted for what is left"
+                          else
+                            "start: this resumed run compared the live design to the snapshot and found no drift for "
+                            + $id + ", so the design drift segment naming its own design copy cleared"
+                            + (if $rest == "" then "" else "; the order stays halted for what is left" end)
+                          end)}]')"
         drift_cleared_ids_json="$(printf '%s' "$drift_cleared_ids_json" | jq -c --arg id "$cleared_id" '. + [$id]')"
       done
       # The second pass (gap row 319). When the design goes back, the pass above clears the order

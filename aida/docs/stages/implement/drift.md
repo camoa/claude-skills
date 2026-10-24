@@ -10,8 +10,8 @@ refuses and says to close design again.
 ## What halts and what does not
 
 A started order is one with a step reached, frozen tests or a build record. Only a started order
-halts. An order that has not started is taken fresh from the live design, and the
-`resnapshotted:` line names it.
+halts, except for a changed criterion, below. An order that has not started is taken fresh from
+the live design, and the `resnapshotted:` line names it.
 
 A started order is taken in place, and keeps its step, when it only:
 
@@ -27,8 +27,10 @@ A started order is taken in place, and keeps its step, when it only:
 Any other change halts it: a removed owned file the code holds, a changed or removed done-when
 row, a reasoning whose earlier text changed. Every order that depends on a halted order halts too.
 
-A changed criterion halts each started order that serves or owns it. The snapshot then takes the
-live contract, so no test is written from a sentence you replaced. When only a criterion's verify
+A changed criterion that a started order serves or owns halts every order that serves or owns it,
+closed and not started included. The snapshot keeps the criterion's frozen text, because the
+started orders' tests prove that text. A changed criterion that only unstarted orders serve halts
+nothing, and the snapshot takes its new text. When only a criterion's verify
 clause changed, an order whose frozen tests and judgements never name that criterion is spared.
 The `clauseSpared:` line names it. Unattended, a clause change spares nothing without a recorded
 scope decision.
@@ -42,7 +44,9 @@ design enters as not started, and the `added:` line names it.
 
 A halt about an order's own design file clears itself. Put the file back to what the snapshot
 holds, then run `start`. The `driftCleared:` line names each order it cleared. A halt for a changed
-criterion never clears this way, because the snapshot already holds the new contract.
+criterion clears the same way: put the criterion's text back word for word, close design, and run
+`start`. A criterion halt written by 6.0.20 does not clear, because that version replaced the
+snapshot's text. It takes the restart.
 
 ## The restart
 
