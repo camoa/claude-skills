@@ -2304,11 +2304,19 @@ CLAUSE_ORDERS
                   | ($held | index($c)) != null and ((($spared[$s.id] // []) | index($c)) == null)))
               | .id ]')"
         kept_alignment_json="$(jq_files -cn --argjson snap "$snapshot_alignment_json" --argjson live "$live_alignment_json" --argjson held "$held_json" '
+            # A held criterion the live contract removed goes back after the entry that precedes
+            # it in the snapshot, so the kept list matches the snapshot where nothing else changed.
             ($snap.criteria // []) as $frozen
-            | $live | .criteria = ([ (.criteria // [])[] | . as $l
-                  | if ($held | index($l.id)) != null then ([ $frozen[] | select(.id == $l.id) ][0]) else $l end ]
-                + [ $frozen[] | . as $f | select(($held | index($f.id)) != null)
-                    | select(([ ($live.criteria // [])[] | select(.id == $f.id) ] | length) == 0) ])')"
+            | ($frozen | map(.id)) as $order
+            | def pos($id): ($order | index($id)) // -1;
+            ([ ($live.criteria // [])[] | . as $l
+               | if ($held | index($l.id)) != null then ([ $frozen[] | select(.id == $l.id) ][0]) else $l end ]) as $kept
+            | reduce ($frozen[] | . as $f | select(($held | index($f.id)) != null)
+                | select(([ ($live.criteria // [])[] | select(.id == $f.id) ] | length) == 0)) as $f ($kept;
+                (pos($f.id)) as $at
+                | ([ to_entries[] | select(pos(.value.id) >= 0 and pos(.value.id) < $at) | .key ] | max // -1) as $after
+                | .[:($after + 1)] + [$f] + .[($after + 1):])
+            | . as $criteria | $live | .criteria = $criteria')"
       fi
       # A drifted order that has not started is not halted: nothing was built against its old
       # shape, so it is replaced in the snapshot by the live copy instead, and its dependents are

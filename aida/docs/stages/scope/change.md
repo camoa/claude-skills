@@ -25,7 +25,7 @@ say the change is right. See [Approve the contract](approve.md).
 ## A change after the build started
 
 A change is still allowed once implementation has started. It reaches the build through design's
-close, then implementation's start. There, each work order that serves or owns a changed criterion
+close, then implementation's start. A change that only halts work orders needs no design close. There, each work order that serves or owns a changed criterion
 is affected:
 
 - **When no started work order serves the criterion**, each work order takes the new criterion.

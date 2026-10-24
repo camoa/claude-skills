@@ -5,7 +5,8 @@ A work order not yet started takes the new design quietly. A started order whose
 what was built halts, and you choose: rebuild it with the restart, or put the design back.
 
 Design must close again on the live files before the build takes any change. Otherwise `start`
-refuses and says to close design again.
+refuses and says to close design again. A changed criterion that only halts orders is not taken,
+so it needs no design close, and neither does putting its text back.
 
 ## What halts and what does not
 
@@ -44,8 +45,7 @@ design enters as not started, and the `added:` line names it.
 
 A halt about an order's own design file clears itself. Put the file back to what the snapshot
 holds, then run `start`. The `driftCleared:` line names each order it cleared. A halt for a changed
-criterion clears the same way: put the criterion's text back word for word, close design, and run
-`start`. A criterion halt written by 6.0.20 does not clear, because that version replaced the
+criterion clears the same way: put the criterion's text back word for word, then run `start`. A criterion halt written by 6.0.20 does not clear, because that version replaced the
 snapshot's text. It takes the restart.
 
 ## The restart
