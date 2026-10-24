@@ -13288,15 +13288,20 @@ do_retake_tests() {
   [ -n "$new_ledger" ] || die 3 "retake-tests: the ledger update for $unit_id failed."
 
   mkdir -p "$target" || die 3 "retake-tests: could not create $target"
-  # The files among the names restart moves, less the two the tests step wrote: the freeze
-  # record, which the next freeze overwrites, and the tests brief, which the next tests-brief
-  # overwrites. A folder stays, because a retake keeps the unchanged tests' red runs.
+  # The files among the names restart moves, less the ones the tests step wrote: the freeze
+  # record and the tests brief, which the next freeze and tests-brief overwrite, the checker's
+  # verdicts and interface file, the author's report, the freeze's own check output, and the red
+  # runs. A retake keeps the unchanged tests' red runs and their verdicts (live-run row 426), so a
+  # red run named red-<order>-... stays, as a <order>-red-runs/ folder does.
   local moved moved_count
   moved_count=0
   while IFS= read -r moved; do
     [ -n "$moved" ] || continue
     case "$moved" in
-      "$tests_file"|"$IMPL_DIR/brief-$unit_id-tests.json") continue ;;
+      "$tests_file"|"$IMPL_DIR/brief-$unit_id-tests.json"|"$IMPL_DIR/row-check-$unit_id.json") continue ;;
+      "$IMPL_DIR/interfaces-$unit_id.json"|"$IMPL_DIR/answers-$unit_id-tests.md") continue ;;
+      "$IMPL_DIR/verify-$unit_id-freeze.txt"|"$IMPL_DIR/coding-standards-$unit_id-freeze.txt") continue ;;
+      "$IMPL_DIR/red-$unit_id-"*) continue ;;
     esac
     mv "$moved" "$target/" || die 3 "retake-tests: could not move $moved to $target"
     moved_count=$((moved_count + 1))
