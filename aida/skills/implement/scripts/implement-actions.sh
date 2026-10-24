@@ -767,15 +767,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      fresh role meets such files. A row-checker, a test author sent back for a rejected row, and
 #      `--resume` are exempt.
 # The code the builder's stop added (gap row 219).
-# 105  `build-record` was given a report whose stop line is not `Stop: none`. The builder
-#      stopped, so this is not an attempt, whatever it committed. The message quotes the line and
-#      names each commit after --started-at. Nothing is recorded and no attempt is spent.
-#      Unattended, the order halts first, and the halt names the commits. A deviation line other
-#      than `Deviation: none`, or a heading that starts with "Deviation", in the report or the
-#      interface record, is a stop too (gap row 221). A person keeps a deviation with
-#      --accept-deviation, interactive only (exit 68), and the message and the halt name that
-#      route. A stop line other than `Stop: none` has no such route (gap row 266). Unattended, a
-#      deviation is no stop: the attempt is recorded, and review-record keeps it (gap row 279).
+# 105  `build-record` was given a report whose stop line is not `Stop: none`. The builder stopped,
+#      so this is not an attempt, whatever it committed. The message quotes the line and names each
+#      commit after --started-at. No attempt is recorded or spent. Unattended, the order halts
+#      first, the halt names the commits, and the message says it halted (gap row 411). A deviation
+#      line other than `Deviation: none`, or a heading that starts with "Deviation", in the report
+#      or the interface record, is a stop too (gap row 221). A person keeps a deviation with
+#      --accept-deviation, interactive only (exit 68), and the message and the halt name that route.
+#      A stop line other than `Stop: none` has no such route (gap row 266). Unattended, a deviation
+#      is no stop: the attempt is recorded, and review-record keeps it (gap row 279).
 #      A `Stop: closed-order-defect: <file>: <what fails>` line naming a file a closed order owns
 #      exits 0 instead: br_open_repair reopens that order for one fix round (gap row 286).
 #      A `Stop: row-wrong: <row number>: <the evidence>` line exits 105 too, and the message
@@ -785,6 +785,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      attempt is spent. A builder stopped at its turn limit writes no stop line, so the message
 #      names `dispatch-open --resume` (gap row 228). A stop or deviation line in the report or the
 #      interface record that reads none followed by more text refuses the same way (gap row 298).
+#      So does a stop line with no cause and reason, such as the placeholder `Stop: pending`, and
+#      nothing halts (gap row 411).
 #
 # The code a departure at review added (gap row 224).
 # 107  `review-record` found a departure the builder declared, by build-record's own scan, in the
@@ -9186,15 +9188,17 @@ do_build_record() {
       keep_route=" Or, interactive only, a person keeps the deviation: run build-record again with --accept-deviation <their reason>."
       halt_front="$BR_DEVIATION_PREFIX a Deviation: line or heading says so"
     fi
+    local stop_halt_text=""
     if [ "$ledger_run_mode" = "autonomous" ]; then
       local stop_ledger_doc
       stop_ledger_doc="$(halt_order_in "$ledger_doc" "$unit_id" "$halt_front, at $stop_file.$stop_commit_text$keep_route")"
       [ -n "$stop_ledger_doc" ] || die 3 "build-record: the halt on $unit_id could not be written."
       write_atomic "$ledger_file" "$stop_ledger_doc"
+      stop_halt_text=" Nobody is present, so $unit_id is halted on this stop."
     fi
     [ -z "$stop_commit_text" ] \
       || stop_commit_text="$stop_commit_text Revert them, or have the person keep them, before the next build."
-    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so nothing is recorded and no attempt is spent.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route$BR_REPAIR_NOTE$row_note"
+    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so no attempt is recorded or spent.$stop_halt_text$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route$BR_REPAIR_NOTE$row_note"
   fi
   if [ "$started_at_full" = "$current_commit" ]; then
     local br_freeze_parent

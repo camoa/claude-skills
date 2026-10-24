@@ -1,7 +1,7 @@
 # A builder stopped, or returned no report
 
 The agent that writes the code stops rather than working around a problem. A stop is not an
-attempt: nothing is recorded and no attempt is spent (exit 105). Only you may change what it
+attempt: no attempt is recorded or spent (exit 105). Only you may change what it
 stopped on. The stop rules are on [write the code](../stages/implement/build.md).
 
 ## What you see
@@ -42,7 +42,8 @@ When you say the test stands, the next attempt builds against it as it is.
 ## A role came back without its report
 
 - **Exit 106.** The report holds no stop line, or more than one. A builder stopped at its turn
-  limit writes none.
+  limit writes none. A stop line with no cause and reason, such as `Stop: pending`, refuses the
+  same way. It halts nothing, so the corrected report records.
 - **A role stopped at its turn limit.** AIDA sends the same agent one message to finish. When it
   returns with no report again, the order halts (exit 110). Clear the halt, then let AIDA run
   `start` to keep or set aside its files.

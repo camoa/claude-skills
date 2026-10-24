@@ -27,10 +27,11 @@ An order has two attempts unless you grant one more. See [The eight checks](chec
 
 ## When the builder stops
 
-The report always holds one stop line, `Stop: none` or a cause. Under `Stop: none` it also holds
-one deviation line, `Deviation: none` or what departed and why. A cause, or a deviation, is a stop.
-A stop records nothing and spends no attempt. AIDA names any commit made after the attempt began,
-and you revert or keep it before the next build.
+The report always holds one stop line, `Stop: none` or a cause and its reason. Under `Stop: none`
+it also holds one deviation line, `Deviation: none` or what departed and why. A cause, or a
+deviation, is a stop. A placeholder such as `Stop: pending` is no stop line, and the record step
+refuses it. A stop records no attempt and spends none. With nobody present, it halts the order.
+AIDA names any commit made after the attempt began, and you revert or keep it before the next build.
 
 Interactive, AIDA puts the stop to you in plain words. The builder can say a test is wrong, a
 done-when row is wrong, the interface does not fit, it needs a file it does not own, or its

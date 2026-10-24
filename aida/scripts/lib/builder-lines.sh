@@ -45,16 +45,22 @@ br_deviations() {
 }
 
 # Prints the sentence that says why the lines are unusable, and returns 1 for a none line with
-# text, 2 for a stop count other than one, 3 for a deviation count other than one under
-# `Stop: none`. Prints nothing and returns 0 when the lines can be read. A deviation named in
-# either file stands for the deviation line. $1 the answers file, $2 the interface record, if any.
+# text or a stop line with no cause and reason, 2 for a stop count other than one, 3 for a
+# deviation count other than one under `Stop: none`. Prints nothing and returns 0 when the lines
+# can be read. A deviation named in either file stands for the deviation line. $1 the answers
+# file, $2 the interface record, if any.
+# A live builder wrote `Stop: pending` before it built, and a hook refused the rewrite (gap row
+# 411). A stop with no reason names nothing a person can rule on, so it is no stop.
 br_lines_fault() {
   local f line count
   for f in "$1" "${2:-}"; do
     [ -n "$f" ] && [ -f "$f" ] || continue
-    line="$(br_none_with_text "$f" | head -n 1)"
+    line="$({ br_none_with_text "$f"
+              [ "$f" != "$1" ] || br_marked_lines "$f" stop \
+                | grep -v -i -e '^stop: none$' -e '^stop:[[:space:]]*[^:[:space:]][^:]*:[[:space:]]*[^[:space:]]'
+            } | head -n 1)"
     [ -z "$line" ] || {
-      printf "%s holds the line '%s'. A stop or deviation line reads none alone, or names its cause, so this line is neither." "$f" "$line"
+      printf "%s holds the line '%s'. A stop or deviation line reads none alone, or a cause, a colon and a reason, so this line is neither." "$f" "$line"
       return 1
     }
   done

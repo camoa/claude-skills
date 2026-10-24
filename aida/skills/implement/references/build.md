@@ -151,7 +151,8 @@ shell assembles at run time passes the hook and is still denied.
 not fit, or the attempts running out are all stops. So is a file the unit needs and does not own.
 A stop looks like this in the conversation: the role returns early. Its report's stop line names
 the cause, and nothing is committed. Every report holds exactly one stop line, `Stop: none` or a
-cause, and `build-record` refuses a report without one (exit 106). Under `Stop: none`, the report
+cause and its reason, and `build-record` refuses a report without one (exit 106). It refuses a
+placeholder such as `Stop: pending` the same way. Under `Stop: none`, the report
 also holds exactly one deviation line, `Deviation: none` or `Deviation: <what>: <why>`, and the
 same refusal applies. The builder writes each line alone, and puts any note on its own line.
 A deviation other than none, or a heading that starts with "Deviation", in
