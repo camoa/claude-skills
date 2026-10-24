@@ -507,7 +507,7 @@ open_summary_of() {
         ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
         ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
         ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
-        ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
+        ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " " + .problem),
         ((.coverage.gateOrdersDeclaringTests // [])[] | "order " + .id + " is proved by the configuration gate and declares a test"),
         ((.coverage.recordOrdersDeclaringTests // [])[] | "order " + .id + " is " + prover(.proof) + " and declares a test"),
         ((.coverage.recordOrdersOwningOutsideProjectFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " " + .reason),

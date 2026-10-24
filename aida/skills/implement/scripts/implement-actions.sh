@@ -2025,7 +2025,7 @@ do_start() {
             ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
             ((.coverage.criteriaWithUnusableVerifiedBy // [])[] | "criterion " + .id + " has a verifiedBy of " + (.verifiedBy | tostring) + ", which is neither machine nor person"),
             ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
-            ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " owns a machine-verified criterion (" + .criterionId + ") with no test"),
+            ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " " + .problem),
             ((.coverage.unknownCriteriaIds // [])[] | "file " + .path + " names an unknown criterion id " + .id + " in " + .field),
             ((.coverage.unknownNonGoalIds // [])[] | "file " + .path + " names an unknown non-goal id " + .id),
             ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),

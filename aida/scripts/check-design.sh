@@ -178,7 +178,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 criteriaWithMultipleOwners: [ {id, text, owners} ],
 #                 criteriaWithUnusableVerifiedBy: [ {id, text, verifiedBy} ],
 #                 ordersServingNothing: [ {id, path} ],
-#                 ordersMissingRequiredTests: [ {id, path, criterionId} ],
+#                 ordersMissingRequiredTests: [ {id, path, criterionId, problem} ],
 #                 gateOrdersDeclaringTests: [ {id, path} ],
 #                 recordOrdersDeclaringTests: [ {id, path, proof} ],   record, observe and confirm orders
 #                 recordOrdersOwningOutsideProjectFolder: [ {id, path, reason} ],
@@ -456,6 +456,7 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             ownsCode: $f.ownsCode,
             surfacesCount: ([ (.surfaces // [])[]? | select(type == "string" and length > 0) ] | length),
             doneWhenCount: ([ (.doneWhen // [])[]? | select(type == "string" and length > 0) ] | length),
+            criteriaByRun: [ (.verify // [])[]? | select(type == "object" and has("run")) | .criterion? | strings ],
             # A test counts on its description alone. The level is optional and design does not set
             # one: choosing a tier belongs to the stage that writes the test.
             testsCount: ( [ (.tests // [])[]? | select(type == "object")
@@ -630,12 +631,18 @@ else
   # judges each row against what its surfaces render after the build (live-run row 104), so it
   # needs a surface as well. An order whose proof is confirm owes no test and needs a done-when
   # row on the same two rules: a person confirms each row at review (gap row 196). The two shared
-  # rules keep the record lists, with the proof on each entry.
+  # rules keep the record lists, with the proof on each entry. A run line that names a criterion
+  # spares that criterion a test, never the order its last one: the freeze refuses an order with no
+  # row (exit 74). So the entry's problem says which repair applies (gap row 412).
   ORDERS_MISSING_REQUIRED_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
     | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.slot == "order-tests")
         | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
-        | {id: $o.id, path: $o.path, criterionId: $cid} ]
+        | {id: $o.id, path: $o.path, criterionId: $cid,
+           problem: (if ($o.criteriaByRun | index($cid)) == null
+                     then "owns a machine-verified criterion (" + $cid + ") with no test"
+                     else "declares no test, and a run line proves " + $cid + " but is not a test of its own. Add a test to " + $o.id + ", or give " + $cid + " to an order that has a test"
+                     end)} ]
   ')"
   GATE_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "configuration-gate") | select(.testsCount > 0) | {id: .id, path: .path} ]
