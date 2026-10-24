@@ -42,8 +42,8 @@ When you say the test stands, the next attempt builds against it as it is.
 ## A role came back without its report
 
 - **Exit 106.** The report holds no stop line, or more than one. A builder stopped at its turn
-  limit writes none. A stop line with no cause and reason, such as `Stop: pending`, refuses the
-  same way. It halts nothing, so the corrected report records.
+  limit writes none. build-record refuses a stop line with no cause and reason, such as
+  `Stop: pending`, the same way. It halts nothing, so the corrected report records.
 - **A role stopped at its turn limit.** AIDA sends the same agent one message to finish. When it
   returns with no report again, the order halts (exit 110). Clear the halt, then let AIDA run
   `start` to keep or set aside its files.

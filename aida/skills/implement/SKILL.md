@@ -222,9 +222,11 @@ The script reads that word from the frozen order. The signal is the runtime's ow
 role stopped at its turn limit. The script also sees it for the reviewer, the row-checker and the
 implementer. A plain close refuses (exit 111) when the file the role writes is missing. That is
 the findings or verdicts file the brief names, the row-checker's `row-check-<order id>.json`, or
-the implementer's answers file, which also needs its stop line. The fixer and the test author end
-the report their brief pins with `Report: complete`. A fixer's report also gives each finding an
-`Outcome:` line, and a `Ran:` line with its output when the finding is fixed or already correct.
+the implementer's answers file, which also needs its stop line. A placeholder such as
+`Stop: pending` is no stop line, so that builder is unfinished and takes this route. The fixer
+and the test author end the report their brief pins with `Report: complete`. A fixer's report
+also gives each finding an `Outcome:` line, and a `Ran:` line with its output when the finding
+is fixed or already correct.
 A plain close whose report lacks one of these lines takes the step below itself (exit 112).
 The first time a fixer's report misses an outcome or run line, or its fix brief is missing, the
 112 spends no resume, with or without `--no-report`, because the fixer finished. Resume it by

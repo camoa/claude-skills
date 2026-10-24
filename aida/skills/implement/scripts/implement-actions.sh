@@ -786,7 +786,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      names `dispatch-open --resume` (gap row 228). A stop or deviation line in the report or the
 #      interface record that reads none followed by more text refuses the same way (gap row 298).
 #      So does a stop line with no cause and reason, such as the placeholder `Stop: pending`, and
-#      nothing halts (gap row 411).
+#      nothing halts. The message names each commit after --started-at (gap row 411).
 #
 # The code a departure at review added (gap row 224).
 # 107  `review-record` found a departure the builder declared, by build-record's own scan, in the
@@ -5035,12 +5035,13 @@ tf_freeze_commits() {
 }
 
 # Returns 0 when order $1's build brief names a report holding one stop line, `Stop: test-wrong`,
-# and that report is newer than freeze record $2.
+# and that report is newer than freeze record $2. The lines are read with build-record's own rule,
+# so a line it refuses at 106, such as a bare `Stop: test-wrong`, drives no retake (gap row 411).
 tf_stopped_test_wrong() {
-  local report
-  report="$(jq -r '.reportPath // ""' "$IMPL_DIR/brief-$1-build.json" 2>/dev/null)"
+  local report brief="$IMPL_DIR/brief-$1-build.json"
+  report="$(jq -r '.reportPath // ""' "$brief" 2>/dev/null)"
   [ -n "$report" ] && [ "$report" -nt "$2" ] || return 1
-  [ "$(br_marked_lines "$report" stop | grep -c '.')" = "1" ] || return 1
+  [ -z "$(br_lines_fault "$report" "$(jq -r '.interfacePath // ""' "$brief" 2>/dev/null)")" ] || return 1
   br_marked_lines "$report" stop | grep -q -i '^stop:[[:space:]]*test-wrong'
 }
 
@@ -9121,13 +9122,18 @@ do_build_record() {
   local is_deviation=false accepted_json=""
   # The task's own mode, not the ledger's copy from start (gap row 265).
   ledger_run_mode="$(task_run_mode "$TASK_PATH" implement)"
+  local stop_commits stop_commit_text=""
+  stop_commits="$(git -C "$codepath" log --format=%h "$started_at_full..$current_commit" 2>/dev/null | tr '\n' ' ')"
+  stop_commits="${stop_commits% }"
+  [ -z "$stop_commits" ] \
+    || stop_commit_text=" It committed $(printf '%s' "$stop_commits" | wc -w | tr -d ' ') after it began: $stop_commits."
   local lines_fault lines_rc turn_note=""
   lines_fault="$(br_lines_fault "$report_path" "$interface_path")"
   lines_rc=$?
   [ "$lines_rc" != "2" ] \
     || turn_note=" A builder stopped at its turn limit writes none: run dispatch-open with implementer, $unit_id and --resume, then resume the same agent by message."
   [ -z "$lines_fault" ] \
-    || die 106 "build-record: $lines_fault Nothing is recorded and no attempt is spent. Have the builder write the line alone, put any note on its own line, then run build-record again.$turn_note"
+    || die 106 "build-record: $lines_fault Nothing is recorded and no attempt is spent.$stop_commit_text Have the builder write the line alone, put any note on its own line, then run build-record again.$turn_note"
   stop_lines="$(br_marked_lines "$report_path" stop)"
   stop_value="$(printf '%s' "${stop_lines#*:}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
   case "$stop_value" in
@@ -9156,15 +9162,8 @@ do_build_record() {
     stop_lines=""
   fi
   if [ -n "$stop_lines" ]; then
-    local stop_commits stop_commit_count stop_commit_text=""
-    stop_commits="$(git -C "$codepath" log --format=%h "$started_at_full..$current_commit" 2>/dev/null | tr '\n' ' ')"
-    stop_commits="${stop_commits% }"
     $is_deviation \
       || br_open_repair "$unit_id" "$stop_value" "$report_path" "$attempt_number" "$ledger_file" "$ledger_doc" "$stop_commits" "$ledger_run_mode"
-    stop_commit_count="$(printf '%s' "$stop_commits" | wc -w | tr -d ' ')"
-    if [ "$stop_commit_count" -gt 0 ]; then
-      stop_commit_text=" It committed $stop_commit_count after it began: $stop_commits."
-    fi
     local keep_route="" halt_front="$BR_STOP_PREFIX a Stop: line says so" row_n row_text row_note=""
     case "$stop_value" in
       "$BR_ROW_KIND:"*)
@@ -14744,6 +14743,8 @@ do_dispatch_close() {
     elif [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "implementer" ]; then
       # The implementer writes its answers first and its stop line last, so the stop line is
       # its finished mark. The rule is the one build-record and the return hook read (gap row 327).
+      # A placeholder such as `Stop: pending` is no stop line, so that builder takes the resume
+      # route as unfinished (gap row 411).
       rp_cause="$(br_lines_fault "$rp_path" "$(jq -r '.interfacePath // ""' \
         "$(dirname "$dispatch_file")/brief-$(jq -r '.unit // ""' "$dispatch_file")-build.json" 2>/dev/null)")"
       rp_cause="${rp_cause%.}"

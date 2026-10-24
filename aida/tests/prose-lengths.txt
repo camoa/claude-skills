@@ -6,7 +6,7 @@ agents/disposition-confirmer.md 63
 agents/distiller.md 110
 agents/split-advisor.md 66
 agents/fixer.md 101
-agents/implementer.md 143
+agents/implementer.md 142
 agents/internal-searcher.md 56
 agents/outward-searcher.md 41
 agents/playbook-loader.md 85
@@ -16,7 +16,7 @@ agents/test-author.md 167
 skills/completion/SKILL.md 114
 skills/completion/references/close.md 137
 skills/design/SKILL.md 974
-skills/implement/SKILL.md 286
+skills/implement/SKILL.md 288
 skills/implement/references/build.md 601
 skills/implement/references/finish.md 290
 skills/implement/references/preconditions.md 304
