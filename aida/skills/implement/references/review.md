@@ -466,7 +466,8 @@ It moves the order's build, review, fix and verify records into
 fix rounds go back to zero, because the review record they counted moved. It
 records the retake under `retakes` on the ledger entry, clears the halt with the finding as the
 reason, and prints `next: tests <order id>`. It refuses an order not halted for a test ruled
-wrong (exit 99). From there the route is the wrong-test route under the builder's stop in
+wrong (exit 99), unless a person rules at `code-written` with `--because`, under "Offer the
+grant" in `references/finish.md`. From there the route is the wrong-test route under the builder's stop in
 `references/build.md`. Open the author's dispatch again for this order. It corrects the test
 the finding names and nothing else. Run the coding-standards row, then the checker over the
 affected rows, then `tests-freeze` with every flag the first freeze took. That freeze prints `retaken:`; the

@@ -9,7 +9,7 @@ attempt fails, the order halts with `attempts spent` and waits for you. What the
 AIDA opens with "The builder used every attempt it was allowed on this unit of work and still
 failed a check. You decide which of three things is true." It names the recorded attempts by path.
 The halted order refuses every record (exit 49) until a person acts, so each route starts with a
-grant or a restart:
+grant, a restart or a retake:
 
 - **The code is hard, or one more try may pass.** Say so. AIDA runs `grant-attempt` with your
   reason, which clears the halt and allows one more attempt. When you write the code yourself,
@@ -17,12 +17,14 @@ grant or a restart:
 - **The work order is wrong**, too big or with an interface that does not fit. Change it in
   design and close design. The next `start` halts it for design drift, and the restart builds it
   fresh. See [a work order halted](halts.md).
-- **The test is wrong.** A frozen test cannot be corrected once an attempt is recorded: the
-  freeze refuses (exit 76), the retake needs a review ruling (exit 99), and an edited test fails
-  the frozen-tests check. The route is the one above: change the order in design so the restart
-  writes its tests again.
+- **The test is wrong.** Say which test and why. AIDA runs `retake-tests --because` with your
+  words. It moves the build records aside, sends the order back to its tests step, clears the
+  halt, and grants one more attempt with your words as the reason. The test writer corrects the
+  test, the checker reads it, the freeze runs again, and the order is built again. A freeze or an
+  edit on its own is refused: the freeze refuses once an attempt is recorded (exit 76), and an
+  edited test fails the frozen-tests check.
 
-A grant needs a person. On an unattended run it refuses (exit 68) until you set the task
+A grant or a retake needs a person. On an unattended run it refuses (exit 68) until you set the task
 interactive or give your answer as a record. See [a run with nobody present](person-must-answer.md).
 
 ## When only a tool check failed

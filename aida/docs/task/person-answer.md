@@ -6,7 +6,8 @@ the task interactive, or write your answer as a record and keep the run mode.
 ## The calls that wait for you
 
 - In design: `close --approve-runs`, your approval of the verify lines research wrote.
-- In implementation: `grant-attempt`, `clear-halt`, `restart`, `finish --accept-warnings`, the keeps
+- In implementation: `grant-attempt`, `clear-halt`, `restart`, `retake-tests --because`,
+  `finish --accept-warnings`, the keeps
   of a design departure, `verify-record --ruling` and `fix-brief --allow`.
 - In review: `close --row`.
 - In completion: `close` with `--reason`, `--leave`, `--captures-offered` or

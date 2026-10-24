@@ -22,8 +22,9 @@ You rule on it; a model never does. When you agree the test is wrong:
 4. The builder's stop left its code uncommitted on purpose. Say whether to keep it for the next
    attempt or clean the tree. Then the build goes on.
 
-This works only while the order is still at its tests step, which a stop leaves it at. With
-nobody present, the stop halted the order, and the freeze refuses (exit 35) until the halt is
+This works only while the order is still at its tests step, before any attempt is recorded. After
+an attempt, the freeze refuses (exit 76). Then AIDA runs `retake-tests --because` with your ruling,
+as [an attempt failed its checks](checks-failed.md) says. With nobody present, the stop halted the order, and the freeze refuses (exit 35) until the halt is
 cleared. Set the task interactive, or give your answer as a record, then clear the halt. See
 [a run with nobody present](person-must-answer.md).
 

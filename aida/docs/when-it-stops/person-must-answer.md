@@ -10,7 +10,7 @@ goes on.
   reason, a site action, a test confirmation, a tool install, or a project write such as the task
   rule.
 - **Exit 68.** A person's judgement in the build: `grant-attempt`, `restart`, `clear-halt`,
-  `--accept-warnings` or `--accept-deviation`.
+  `retake-tests --because`, `--accept-warnings` or `--accept-deviation`.
 - **Exit 55 or 100.** A ruling on a finding, or an `--allow` for a fix round.
 - **A halt.** The order halts with its reason, and the run ends with a report.
 - **"The offer waits for a person".** A site offer, a project setup, a split or a recipe offer

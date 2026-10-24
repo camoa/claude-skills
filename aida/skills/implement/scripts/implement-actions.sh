@@ -93,7 +93,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh restart <task_folder> --reason <text> [--split <commit>]...
 #   implement-actions.sh unattributed <task_folder>
 #   implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
-#   implement-actions.sh retake-tests <task_folder> <unit_id>
+#   implement-actions.sh retake-tests <task_folder> <unit_id> [--because <the person's ruling>]
 #   implement-actions.sh dispatch-open <task_folder> <role> <unit_id> \
 #                            [--deny-read <path relative to codePath>]... \
 #                            [--allow-write <path relative to codePath>]... \
@@ -734,8 +734,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The code a wrong frozen test after the build added (live-run row 110).
 #  99  `retake-tests` was asked for an order whose halt does not begin `test wrong:`. A retake moves
 #      the build, review, fix and verify records aside and sends the order back to `tests-frozen`,
-#      which is right only after a person ruled a finding `test-wrong` at `verify-record`. The
-#      message names the halt found, or that the order is not halted, and nothing is written.
+#      which is right only after a person ruled a finding `test-wrong` at `verify-record`. Or after
+#      a person's `--because` on an order at `code-written`, not halted or halted only for
+#      `attempts spent` (live-run row 426). The message names the step and the halt found, and
+#      nothing is written.
 #
 # The code a fix scope outside the order's files added (live-run row 116).
 # 100  `fix-brief` was given `--allow` on an unattended run. An allow is a person's grant of one
@@ -1022,6 +1024,11 @@ attempts_allowed_for() {
   printf '%s' "$value"
 }
 
+# One grant on one ledger entry, from $allowedAfter, $reason and $today. grant-attempt writes it,
+# and so does a retake at the attempt cap.
+GRANT_JQ='.attemptsAllowed = $allowedAfter
+  | .grants = ((.grants // []) + [{reason: $reason, grantedAt: $today, allowedAfter: $allowedAfter}])'
+
 # How many fix rounds one order gets after a review, before every still-open finding needs a ruling.
 # Two, for the same reason the build gets two attempts: a third round is a model repeating itself
 # rather than learning something new. A constant here beside the attempt cap, so the two caps are
@@ -1183,7 +1190,7 @@ usage: implement-actions.sh read  <task_folder>
        implement-actions.sh restart <task_folder> --reason <text> [--split <commit>]...
        implement-actions.sh unattributed <task_folder>
        implement-actions.sh clear-halt <task_folder> <unit_id> --because <text>
-       implement-actions.sh retake-tests <task_folder> <unit_id>
+       implement-actions.sh retake-tests <task_folder> <unit_id> [--because <the person's ruling>]
        implement-actions.sh dispatch-open <task_folder> <role> <unit_id>
                             [--deny-read <path relative to codePath>]...
                             [--allow-write <path relative to codePath>]...
@@ -4923,13 +4930,16 @@ TB_OWNED
   # The review record holding the finding moved with the rest, so it is read from the retake's
   # own `movedTo` and never from a guessed folder name. A record a person removed is absent, not
   # fatal: the key says which one is gone and carries what is left.
-  local retake_json='null' retake_entry retake_review_file retake_finding_json retake_frozen_json
+  local retake_json='null' retake_entry retake_review_file retake_finding_json retake_frozen_json retake_ruling
   local retake_absent_json='[]'
   if [ "$(im_retake_pending "$ledger_doc" "$IMPL_DIR" "$unit_id")" = "true" ]; then
     retake_entry="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
       '(.orders // []) | map(select(.id == $id)) | .[0].retakes | last')"
     retake_review_file="$(printf '%s' "$retake_entry" | jq -r '.movedTo')/review-$unit_id.json"
     retake_finding_json='null'
+    # A retake on a person's ruling at code-written had no review, so the ruling is the cause.
+    retake_ruling="$(printf '%s' "$retake_entry" | jq -r '.ruling // ""')"
+    [ -z "$retake_ruling" ] || retake_review_file=""
     if [ -f "$retake_review_file" ]; then
       # `linkedTo` names the criterion the finding is about, and the frozen rows below are keyed by
       # criterion and hold each test's path and name. It is the join from the finding to the tests
@@ -4943,7 +4953,7 @@ TB_OWNED
                 rulingReason: (.rulingReason // null)} end' "$retake_review_file" 2>/dev/null)"
       [ -n "$retake_finding_json" ] || retake_finding_json='null'
     fi
-    if [ "$retake_finding_json" = "null" ]; then
+    if [ "$retake_finding_json" = "null" ] && [ -z "$retake_ruling" ]; then
       retake_absent_json="$(printf '%s' "$retake_absent_json" | jq -c --arg p "$retake_review_file" \
         '. + ["the review record at \($p) does not hold the ruled finding, so its evidence and its ruling reason are not here"]')"
     fi
@@ -4962,9 +4972,10 @@ TB_OWNED
       ([ ($frozenTests.rows // [])[] | (.criterion // $unit) as $k | (.tests // [])[]
          | {name, path, key: $k, red: has("red")} ]) as $entries
       | (if ($finding.linkedTo // null) == null then [] else red_again($entries; $finding.linkedTo) end) as $again
-      | {at: $entry.at, finding: $finding, reviewRecord: $reviewRecord, frozenTests: $frozenTests,
+      | {at: $entry.at, finding: $finding, ruling: ($entry.ruling // null),
+         reviewRecord: (if $reviewRecord == "" then null else $reviewRecord end), frozenTests: $frozenTests,
          absent: $absent, redAgain: $again,
-         whatToDo: ("This order already has frozen tests. Correct the tests the finding names, and leave every other frozen row alone. Write no new test for a criterion the frozen rows already cover."
+         whatToDo: ("This order already has frozen tests. Correct the tests the \(if $entry.ruling then "ruling" else "finding" end) names, and leave every other frozen row alone. Write no new test for a criterion the frozen rows already cover."
                     + (if ($again | length) == 0 then ""
                        else " Then run again each test that redAgain names, and write each new run. Each shares a test file with a corrected test, so its earlier red is older than that file." end))}')"
     [ -n "$retake_json" ] || die 3 "tests-brief: could not assemble the retake key for $unit_id."
@@ -5049,8 +5060,9 @@ TB_OWNED
      reuses: (.reuses | if length == 0 then null else length end),
      treeHolds: (if has("treeHolds") then ([ .treeHolds.commits[] | .commit[0:7] + " " + .kind ]) else null end),
      retake: (if has("retake") then
-                ((.retake.finding.id // "the ruled finding") + ": "
-                 + (.retake.finding.rulingReason // "the ruling reason is not on record")
+                ((if .retake.ruling then "ruled by a person: " + .retake.ruling
+                 else (.retake.finding.id // "the ruled finding") + ": "
+                      + (.retake.finding.rulingReason // "the ruling reason is not on record") end)
                  + " | correct the tests it names and leave the other frozen rows alone")
               else null end),
      rowsRejected: (if has("rowsRejected") then ([ .rowsRejected.rows[] | .criterion ] | join(", ")) else null end),
@@ -5536,7 +5548,7 @@ do_tests_freeze() {
         '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""')"
       case "$tf_prior_step" in
         ""|null|tests-frozen) ;;
-        *) die 76 "tests-freeze: $unit_id is at step $tf_prior_step, so it has already left tests-frozen. A second freeze rewinds the step and leaves the spent attempt counter and the stale build record where they are. Use restart when the design moved, retake-tests when a person ruled a frozen test wrong at verify-record; otherwise this order goes forward, not back." ;;
+        *) die 76 "tests-freeze: $unit_id is at step $tf_prior_step, so it has already left tests-frozen. A second freeze rewinds the step and leaves the spent attempt counter and the stale build record where they are. Use restart when the design moved, retake-tests when a person ruled a frozen test wrong at verify-record, or retake-tests --because with the person's ruling at code-written; otherwise this order goes forward, not back." ;;
       esac
       tf_retake_commit="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" \
         '([ (.orders // [])[] | select(.id == $id) ][0].retakes // []) | last // {} | .freezeCommit // ""')"
@@ -12991,8 +13003,7 @@ do_grant_attempt() {
   today="$(date -u +%Y-%m-%d)"
   # attemptsUsed is never touched. The count of what a builder has already spent is a fact about the
   # past, and a cap that can be lowered by editing that count is not a cap at all.
-  expr='.attemptsAllowed = $allowedAfter
-        | .grants = ((.grants // []) + [{reason: $reason, grantedAt: $today, allowedAfter: $allowedAfter}])'
+  expr="$GRANT_JQ"
   if [ -n "$halt_spent" ] && [ -z "$halt_rest" ]; then
     expr="$expr | del(.haltedBecause)"
   elif [ -n "$halt_spent" ]; then
@@ -13144,11 +13155,33 @@ do_clear_halt() {
 # the grant's to answer at the next build-brief. The fix rounds go back to zero: they counted
 # the review record that moved, and the review after the rebuild starts its own. Allowed only
 # while the halt begins `test wrong:`, the reason `verify-record` writes for that ruling (exit 99 otherwise).
+# Live-run row 426: an order at code-written never reaches that ruling, and the freeze refuses it
+# (exit 76). So a person rules there with --because, on an order halted `attempts spent` or not
+# halted. At the cap the retake grants one attempt too, or the rebuild dies at exit 41.
 do_retake_tests() {
-  [ "$#" -ge 2 ] || die 3 "retake-tests: a task folder and a unit id are required"
-  [ "$#" -le 2 ] || die 3 "retake-tests: unrecognized extra argument: $3"
-  local unit_id="$2" resolve_rc
-  TASK_PATH="$(resolve_task_folder "$1" "retake-tests")"
+  local task_arg="" unit_id="" because=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --because)
+        [ "$#" -ge 2 ] || die 3 "retake-tests: --because needs the person's ruling: which frozen test is wrong, and why"
+        [ -n "$2" ] || die 3 "retake-tests: --because was given an empty ruling."
+        halt_refuse_separator "retake-tests" "--because" "$2"
+        because="$2"; shift 2 ;;
+      -*) die 3 "retake-tests: unrecognized argument: $1" ;;
+      *)
+        if [ -z "$task_arg" ]; then
+          task_arg="$1"
+        elif [ -z "$unit_id" ]; then
+          unit_id="$1"
+        else
+          die 3 "retake-tests: unrecognized extra argument: $1"
+        fi
+        shift ;;
+    esac
+  done
+  [ -n "$unit_id" ] || die 3 "retake-tests: a task folder and a unit id are required"
+  local resolve_rc
+  TASK_PATH="$(resolve_task_folder "$task_arg" "retake-tests")"
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
@@ -13163,15 +13196,25 @@ do_retake_tests() {
   [ "$order_entry" != "null" ] \
     || die 3 "retake-tests: $unit_id has no entry in $FN_LEDGER_FILE, though start opens one entry per snapshot work order."
 
-  local halt finding
+  local halt finding="" rt_step rt_grant=false rt_allowed=0 rt_routes
   halt="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // ""')"
+  rt_step="$(printf '%s' "$order_entry" | jq -r '.lastStep // ""')"
+  rt_routes="A retake follows a test-wrong ruling at verify-record, or a person's --because on an order at code-written that is not halted or is halted only for attempts spent."
   case "$halt" in
-    "test wrong: "*) ;;
-    "") die 99 "retake-tests: $unit_id is not halted. A retake follows a test-wrong ruling at verify-record, and nothing else. Nothing is written." ;;
-    *) die 99 "retake-tests: $unit_id is halted for something a retake does not answer: $halt. A retake follows a test-wrong ruling at verify-record, and nothing else. Nothing is written." ;;
+    "test wrong: "*)
+      [ -z "$because" ] \
+        || die 3 "retake-tests: $unit_id is halted for a test-wrong ruling verify-record already recorded, so it takes no --because. Nothing is written."
+      finding="${halt#test wrong: }"
+      finding="${finding%%:*}" ;;
+    *)
+      if [ -z "$because" ] || [ "$rt_step" != "code-written" ] \
+         || { [ -n "$halt" ] && [ -n "$(halt_segments_matching "$halt" '["attempts spent"]' drop)" ]; }; then
+        die 99 "retake-tests: $unit_id is at step ${rt_step:-not started}, halted for: ${halt:-nothing}. $rt_routes Nothing is written."
+      fi
+      fn_require_interactive "retake-tests" "ruling a frozen test wrong" "$unit_id" "$because"
+      rt_allowed="$(attempts_allowed_for "$order_entry")"
+      [ "$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')" -lt "$rt_allowed" ] || rt_grant=true ;;
   esac
-  finding="${halt#test wrong: }"
-  finding="${finding%%:*}"
 
   local tests_file freeze_commit
   tests_file="$IMPL_DIR/tests-$unit_id.json"
@@ -13189,13 +13232,18 @@ do_retake_tests() {
   local today new_ledger
   today="$(date -u +%Y-%m-%d)"
   new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --arg id "$unit_id" --arg reason "$halt" \
-    --arg today "$today" --arg finding "$finding" --arg target "$target" --arg commit "$freeze_commit" '
-    .orders = (.orders | map(if .id == $id then
+    --arg today "$today" --arg finding "$finding" --arg target "$target" --arg commit "$freeze_commit" \
+    --arg because "$because" --argjson grant "$rt_grant" --argjson allowedAfter "$((rt_allowed + 1))" '
+    (if $finding != "" then {finding: $finding} else {ruling: $because} end) as $cause
+    | .orders = (.orders | map(if .id == $id then
         (del(.haltedBecause) | .lastStep = "tests-frozen" | .roundsUsed = 0
-         | .retakes = ((.retakes // []) + [{finding: $finding, at: $today, movedTo: $target, freezeCommit: $commit}]))
+         | .retakes = ((.retakes // []) + [$cause + {at: $today, movedTo: $target, freezeCommit: $commit}])
+         | if $grant then ($because as $reason | '"$GRANT_JQ"') else . end)
       else . end))
-    | .haltsCleared = ((.haltsCleared // []) + [{id: $id, reason: $reason, clearedAt: $today,
-        because: ("retake-tests: the records moved to " + $target + ", and the tests are retaken for " + $finding)}])')"
+    | if $reason == "" then . else
+        .haltsCleared = ((.haltsCleared // []) + [{id: $id, reason: $reason, clearedAt: $today,
+          because: ("retake-tests: the records moved to " + $target + ", and the tests are retaken for "
+                    + (if $finding != "" then $finding else "a person'"'"'s ruling: " + $because end))}]) end')"
   [ -n "$new_ledger" ] || die 3 "retake-tests: the ledger update for $unit_id failed."
 
   mkdir -p "$target" || die 3 "retake-tests: could not create $target"
@@ -13215,20 +13263,22 @@ do_retake_tests() {
   write_atomic "$FN_LEDGER_FILE" "$new_ledger"
 
   im_print_summary "retake-tests" "$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" \
-    --arg finding "$finding" --arg cleared "$halt" --arg target "$target" --argjson moved "$moved_count" \
-    --arg ledger "$FN_LEDGER_FILE" '
+    --arg finding "$finding" --arg because "$because" --arg cleared "$halt" --arg target "$target" --argjson moved "$moved_count" \
+    --argjson grant "$rt_grant" --arg ledger "$FN_LEDGER_FILE" '
     ((.orders // []) | map(select(.id == $id)) | .[0]) as $o
-    | {order: $id,
-       finding: $finding,
-       haltCleared: $cleared,
+    | (if $finding != "" then "finding" else "ruling" end) as $what
+    | {order: $id}
+    + (if $finding != "" then {finding: $finding} else {ruling: $because} end)
+    + {haltCleared: (if $cleared == "" then "none: the order was not halted" else $cleared end),
        movedTo: $target,
        moved: "\($moved) records",
        resumesAt: ($o.lastStep // "not started"),
-       attempts: "\($o.attemptsUsed // 0) used, the counter stays",
-       rounds: "0 used, the review record moved",
+       attempts: ("\($o.attemptsUsed // 0) used, the counter stays"
+                  + (if $grant then ", and one more is granted: \($o.attemptsAllowed) allowed" else "" end)),
+       rounds: ("0 used" + (if $finding != "" then ", the review record moved" else "" end)),
        retakes: (($o.retakes // []) | length),
        ledger: $ledger,
-       next: "tests \($id): the author corrects the test the finding names, the checker reads the affected rows, then tests-freeze"}')"
+       next: "tests \($id): the author corrects the test the \($what) names, the checker reads the affected rows, then tests-freeze"}')"
   exit 0
 }
 

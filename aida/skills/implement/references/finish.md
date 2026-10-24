@@ -112,12 +112,28 @@ An order halted with a reason beginning `attempts spent` has used every attempt 
 still failed a check. Interactive, with a person present, open with: "The builder used every
 attempt it was allowed on this unit of work and still failed a check. You decide which of three
 things is true; a model choosing would let the test describe the code. The test is
-wrong: you correct it, and one more attempt is granted. The unit of work is wrong, too big or
+wrong: it is corrected, and one more attempt is granted. The unit of work is wrong, too big or
 its interface does not fit. Then design changes it, and the build takes it fresh. The code is hard:
 you write it, and the same checks judge it. If you want one more attempt as it stands, say so."
 Then name the two recorded attempts by
-path. SKILL.md's "One order halting" section is where the three things are stated. If they decide
-the order needs one more attempt, run:
+path. SKILL.md's "One order halting" section is where the three things are stated.
+
+When the person rules the test wrong, a grant alone does not help: the frozen-tests check refuses
+an edited test. Run the retake, with the person's own words:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh retake-tests "<task_folder>" <order id> \
+  --because <which test is wrong, and why>
+```
+It moves the order's build records into `implementation/retaken-<order id>-<n>/` and sets the
+order back to `tests-frozen`. It grants the one more attempt and records the grant with the same
+words. It clears the halt. The tests brief gives the words to the test author in place of a
+finding. Then follow the retake route under Rulings in `references/review.md`: the author
+corrects the test, the checker reads the affected rows, `tests-freeze` retakes the record, and
+the build runs again. The same call takes an order at `code-written` that is not halted, and
+grants nothing there. It refuses any other halt (exit 99). An unattended stage refuses it
+(exit 68), unless the person's answer is on record.
+
+If they decide the order needs one more attempt as it stands, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh grant-attempt "<task_folder>" <order id> \
   --reason <why this order gets another attempt>
@@ -261,7 +277,7 @@ line.
 ## A person's answer in an unattended run
 
 A light or autonomous run refuses a person's call. In implement the calls are `grant-attempt`,
-`clear-halt`, `restart`, `finish --accept-warnings`, the two `--accept-deviation` keeps (exit 68),
+`clear-halt`, `restart`, `retake-tests --because`, `finish --accept-warnings`, the two `--accept-deviation` keeps (exit 68),
 `verify-record --ruling` (exit 55) and `fix-brief --allow` (exit 100). In review the call is
 `close --row` (exit 70). In completion it is `close` with `--reason`, `--leave`,
 `--captures-offered` or `--observed-accepted` (exit 70). In the task skill the calls are
