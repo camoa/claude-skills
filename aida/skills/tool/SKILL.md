@@ -105,7 +105,7 @@ order's untouched list.
 | 0 | Every step ran. | Run the tool once to confirm it works. |
 | 70 | The run is autonomous, and an install needs a person. | Say the install waits for a person. Stop. |
 | 2 | No recipe for this tool. | Go to "No recipe," below. |
-| 3 | A command was refused, or the recipe has no install steps. A shipped file differs from the file on disk. Arguments were given after `--`. | Show the error text and stop. The first two name the recipe, which is where the fix belongs. A differing file may be a person's edit or a stale recipe, so name the file and ask the person which. The last is a call to correct: run the tool, do not install it, when the person wants arguments passed. |
+| 3 | A command was refused, or the recipe has no install steps. A file on disk matches neither the recipe's file nor any earlier version this machine holds. Arguments were given after `--`. | Show the error text and stop. The first two name the recipe, which is where the fix belongs. A file that holds an earlier version is replaced, with a `file:` line, and a matching file is kept; neither refuses. A file that matches no version may be a person's edit or a stale recipe, so name the file and ask the person which. The last is a call to correct: run the tool, do not install it, when the person wants arguments passed. |
 | 4 | A step failed. | The `first:` line quotes the step's first line of output, and the file at `output:` holds the rest. Show what it said; it says what is missing better than a guess would. |
 
 Do not install by hand when a step fails. A missing package manager or a wrong version is the

@@ -124,10 +124,11 @@ the order needs one more attempt, run:
 ```
 It raises the order's own allowed count by one, and records the reason and the date. It clears the
 halt only when the halt began with `attempts spent`; any other halt refuses, naming it. It never
-touches the attempts already used, so the counter still never goes down. It refuses outright on an
-autonomous implement stage: the grant is a person's judgement, and the person sets the task
-interactive first. The reason may not hold the text `; earlier: `, the text this stage joins one
-halt reason to another with; a reason carrying it would forge a segment nobody wrote.
+touches the attempts already used, so the counter still never goes down. It refuses on an
+autonomous implement stage (exit 68), because the grant is a person's judgement. Either route in
+"A person's answer in an unattended run" passes it. The reason may not hold the text
+`; earlier: `, the text this stage joins one halt reason to another with; a reason carrying it
+would forge a segment nobody wrote.
 
 The grant is the person's to offer and the person's to take. Do not run it on their own behalf
 because an order is halted; put the halt and its recorded attempts to them first.
@@ -252,7 +253,7 @@ the grant, the restart or the retake answers (exit 85), naming that action, and 
 (exit 67). For a drift halt the refusal also names `start`, which clears a segment about the
 order's own design file once the design no longer differs. It
 refuses when the task's implement stage is autonomous (exit 68), because clearing a halt is a
-person's judgement. The person sets the task interactive first. The reason may not hold
+person's judgement. Either route in the next section passes it. The reason may not hold
 `; earlier: `, for the same cause as the grant's. Then run `start` again and take the `next:`
 line.
 

@@ -19,8 +19,8 @@ Four sources, in precedence order:
    folder holds `playbook.md` at its root, in the format below. The project skill's
    `add-source <target> playbooks <folder>` declares one. A team with one shared set of plays
    puts it here: the person's file is per machine and the project's file is per project.
-4. Catalog sets, one per framework the project declares, recorded in `project.json` under
-   `playbookSubscriptions`. The project skill's `subscribe-playbook` writes one.
+4. Catalog sets, recorded in `project.json` under `playbookSubscriptions` as a list of set ids
+   per framework the project declares. The project skill's `subscribe-playbook` adds one.
 
 A play's id is its source and its title as a slug, so a play from a folder carries that folder's
 path. Open the file the id names to read the play in full.
@@ -64,8 +64,8 @@ refused for a missing field. A play's id is its source and its title as a slug, 
 ```
 One line per play, `<id>  <title>`, from the person's file, the project's file, and the newest
 loaded record under the project's tasks. That record also holds the plays from each declared
-folder and each catalog set. A source with nothing prints `<source>: none`. Show the
-lines as printed. To read one play in full, open the file the id names.
+folder and each catalog set. A source with nothing prints `<source>: none`. With no loaded
+record, the last line reads `folder and catalog: no record loaded`. Show the lines as printed. To read one play in full, open the file the id names.
 
 ## `capture`, a play by hand
 

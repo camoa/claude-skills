@@ -570,9 +570,10 @@ code. Say no and the work stays where it is until you return." Then say which ch
 in plain words, and name the record path that holds what the tool printed. Do not read the
 record here.
 
-An unknown on interface-record does not spend the attempt. The declaration named no backticked
+An unknown on interface-record does not fail the attempt. The declaration named no backticked
 element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every
-other unmet or unknown does.
+other unmet or unknown does. Every attempt counts against the allowed number, whatever the checks
+said.
 
 **order-tests is the floor,** or `configuration-gate` on a `gate` order, or `done-when` on a
 `record` order. Every other check may

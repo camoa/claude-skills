@@ -911,7 +911,8 @@ playbooks_path_json() {
   if [ -f "$record" ]; then jq -n --arg p "$record" '$p'; else printf 'null'; fi
 }
 
-# The stage a task stands at, one of scope, research, design, implementation, review, completion.
+# The stage a task stands at, one of scope, research, design, implement, review, completion.
+# Each word is the stage's skill name, so `/aida:<stage>` is the command to run.
 # Derived from the records in the task folder every time, never stored: each stage writes one
 # record when it closes, and the stage is the first whose record is absent. Scope's is the
 # distill sidecar, records/scope-distill.json, which approve and distill both need before they
@@ -931,7 +932,7 @@ task_stage() {
   elif [ ! -f "$task_folder/design-closed.json" ]; then
     echo "design"
   elif [ ! -f "$task_folder/implementation/finished.json" ]; then
-    echo "implementation"
+    echo "implement"
   elif [ "$review" != "passed" ] && [ "$review" != "failed" ] || task_review_outdated "$task_folder" >/dev/null; then
     echo "review"
   else

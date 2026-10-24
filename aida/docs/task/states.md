@@ -40,7 +40,7 @@ absent:
 | scope | `records/scope-distill.json`. A light task closes scope when the contract records the plugin version |
 | research | `records/research-check.json`, with a passing exit code |
 | design | `design-closed.json` |
-| implementation | `implementation/finished.json` |
+| implement | `implementation/finished.json` |
 | review | `review/review.json` with a passed or failed verdict, for the build that is finished now |
 
 A review covers the commits the build had when the review ran. If the build finishes again
@@ -48,8 +48,7 @@ later, after a fix, the old verdict does not count. The task reads stage review 
 completion refuses until review runs.
 
 Each stage refuses to start without the record of the stage before it. So the order holds in
-both run modes. `/aida:next` prints the stage and names the command to run. Each command is
-`/aida:<stage>`, except implementation, whose command is `/aida:implement`.
+both run modes. `/aida:next` prints the stage and names the command to run, `/aida:<stage>`.
 
 ## Why it works this way
 

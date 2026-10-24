@@ -118,9 +118,9 @@ order that owns its file through the implement skill's `reopen`. Its `next:` lin
 `close` writes one field back into the contract, each criterion's `verdict` in `alignment.json`, which
 that schema reserves for review. Nothing else in the contract is touched.
 
-**That write moves the contract hash.** The hash covers the whole file, so the next `start` reports
-the contract as changed, and it halts no order. Say in the report that review made that write, and
-that the drift is review's own. A reader who is not told reads it as a contract somebody edited.
+**That write changes the file, not the contract.** The implement stage's `start` compares the
+contract without verdicts, so it reports no change and halts no order. Say in the report that
+review wrote the verdicts. A reader of the file's history who is not told reads it as an edit.
 
 Close the report with the three things SKILL.md requires: the checks reading undeclared or unknown,
 the count of criteria reading unanswered, and the count of catalog notes.

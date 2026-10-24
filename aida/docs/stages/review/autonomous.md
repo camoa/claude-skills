@@ -5,7 +5,7 @@ its own branch, and the record says which branch ran. A light task reads as auto
 
 | Question | A person is present | Nobody is present |
 |---|---|---|
-| a criterion a person verifies | you answer met or unmet | unanswered, and no sign off |
+| a criterion a person verifies | you answer met or unmet | your answer from the person-answer file; else unanswered, and no sign off |
 | the walk of the surfaces | you walk every one | recorded as not done, and the surface checks read unknown |
 | a lens check whose findings are all low | you confirm, met, or reject, unmet | met, and named in the audit list |
 | a follow up finding | review offers a task | recorded, and no task is created |
@@ -13,7 +13,8 @@ its own branch, and the record says which branch ran. A light task reads as auto
 | a new baseline for a surface | shown, confirmed, then written | refused, and the refusal is recorded |
 | setting up a surface | offered once | not offered, and recorded as not offered |
 
-So an autonomous run cannot sign off a task that carries one criterion a person verifies. A check
+So an autonomous run with no person-answer file cannot sign off a task that carries one criterion
+a person verifies. A check
 that could not run has established nothing. The close names each criterion that waits, and the
 route to answer it.
 

@@ -223,7 +223,8 @@ an API. Keep `person` for what only a person judges, such as how a page looks. S
 only after a step the task never takes, such as a push behind a sudo gate. No build step runs
 after that step, so write `person`. Say the step in the outcome as the person's action. For such
 a step, name in the verify clause the command that reads the fact, not a page the person opens.
-Review close runs it.
+At review's close, the session runs that command and shows its output. The person answers met or
+unmet; no script runs the clause.
 
 Never pass a verdict. It starts `unanswered` and stays there until an end of task review runs;
 scope never sets it, on `add` or on `update`.

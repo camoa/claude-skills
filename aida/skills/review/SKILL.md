@@ -131,7 +131,7 @@ branch is recorded rather than assumed.
 
 | Question | Interactive | Autonomous |
 |---|---|---|
-| A person verified criterion | the person answers met or unmet | `unanswered`, and no sign off |
+| A person verified criterion | the person answers met or unmet | the answer in `review/person-answer.json`; else `unanswered`, and no sign off |
 | The walk of the surfaces | the person walks every one | recorded as not done, and checks 13 to 15 read unknown |
 | A lens check whose findings are all low | the person confirms them, met, or rejects them, unmet | met, and named in the audit lines |
 | A finding citing neither a criterion nor a non-goal, or a low one citing a criterion | a follow up task is offered | recorded, and no task is created |
@@ -142,7 +142,8 @@ branch is recorded rather than assumed.
 unless `review/person-answer.json` holds the person's answer.
 A standing order never answers a changed non-goal: ask the person, who accepts or rejects it.
 A command surface needs no walk, because its exit status is the whole answer.
-A run with nobody present cannot sign off a task carrying one person verified criterion. That is
+A run with nobody present and no person-answer file cannot sign off a task carrying one person
+verified criterion. That is
 intended: a check that could not run has established nothing.
 
 ## The line the person is shown

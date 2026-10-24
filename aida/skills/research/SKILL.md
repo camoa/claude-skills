@@ -487,10 +487,10 @@ design decides reuse, extend, supersede or decline, not research. Each assumptio
 finding showed false, in one sentence. A count and a next command are not a presentation. The
 findings are what design acts on, so the person sees them here or not at all.
 
-Exit 4: a research file itself is broken: not valid JSON, not an object, or a top-level field
-such as `searchedFor` missing or malformed. No action wrote such a file and none repairs it,
-`drop` included. Say which file and what is wrong with it, and stop; a person decides what it
-was. A broken finding inside a readable file is exit 5, below.
+Exit 4: a research file itself is broken: not valid JSON, not an object, or a field missing,
+malformed or undeclared at any depth, such as `searchedFor`. A malformed finding the schema can
+describe is exit 4 too. No action wrote such a file and none repairs it, `drop` included. Say
+which file and what is wrong with it, and stop; a person decides what it was.
 
 Exit 3: the script could not run the check at all. Read its stderr and fix the named problem,
 then check again.

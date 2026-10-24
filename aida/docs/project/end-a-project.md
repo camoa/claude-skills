@@ -20,10 +20,9 @@ AIDA asks why first. Your answer becomes the reason in the commit. AIDA writes t
 the project file and the registry row, and commits the change. With nobody present, AIDA uses a
 reason already given, or records "(autonomous run, no reason given)".
 
-Then AIDA prints an `OPEN TASKS:` line. It counts every task folder in the project, complete ones
-too, and names none.
-A project with no tasks folder yet reads "unknown". AIDA never refuses to close a project over
-that count. You decide. Last, the check runs.
+Then AIDA prints an `OPEN TASKS:` line. It counts the tasks that are not complete and names each
+one, or says `none`. AIDA never refuses to close a project over that count. You decide. Last, the
+check runs.
 
 ## Unregister a project
 

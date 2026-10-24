@@ -775,14 +775,18 @@ do_state() {
   fi
 
   # ideal/project.md, "Ending a project": closing says what is still open rather than refusing
-  # or pretending. No task system is built into any part of this plugin yet, so the honest
-  # answer is that this check cannot be run, not that nothing is open.
-  if [ -d "$project_path/tasks" ]; then
-    local open_count
-    open_count="$(find "$project_path/tasks" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
-    echo "OPEN TASKS: ${open_count} folder(s) under ${project_path}/tasks"
+  # or pretending. A task.json that cannot be read counts as open, so a broken task never hides.
+  local open_tasks="" open_count=0 tj
+  for tj in "$project_path"/tasks/*/task.json; do
+    [ -f "$tj" ] || continue
+    [ "$(jq -r '.state // "new"' "$tj" 2>/dev/null)" != "complete" ] || continue
+    open_tasks="${open_tasks:+$open_tasks, }$(basename "$(dirname "$tj")")"
+    open_count=$((open_count + 1))
+  done
+  if [ "$open_count" -gt 0 ]; then
+    echo "OPEN TASKS: ${open_count}: ${open_tasks}"
   else
-    echo "OPEN TASKS: unknown. No task system has been built yet in this project, so nothing here can be listed as open or closed."
+    echo "OPEN TASKS: none"
   fi
 
   check_after_write "$project_path" project.json
