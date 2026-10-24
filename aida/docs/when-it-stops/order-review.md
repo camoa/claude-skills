@@ -31,7 +31,8 @@ reason. What each word does next:
   the order's own files. Clear the halt and say what you did. AIDA then runs `build-recheck`,
   which runs the checks over your commits. When every check passes, it records them, and the
   order closes. When one fails, nothing is recorded (exit 123), and the close refuses (exit 63)
-  until you repair the fix.
+  until you repair the fix. Commit first, then clear: a commit after the clearing needs a new
+  clearing (exit 88).
 
 With nobody present, a ruling (exit 55) or an `--allow` for one more file (exit 100) is refused.
 See [a run with nobody present](person-must-answer.md).

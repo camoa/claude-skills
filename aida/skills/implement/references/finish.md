@@ -278,9 +278,11 @@ A finding ruled load-bearing leaves no fix round, so the person commits the fix 
 branch. Put the commits in the order's own files. Clear the halt with the person's words, then
 run `build-recheck` on the order, as `references/build.md` shows. It runs the checks over the
 last record's range, extended to HEAD. Every check must pass. Then it moves the record's commit
-to HEAD and keeps the clear-halt words under `personFix`, so `close` takes the commits. A failed
-check records nothing (exit 123), and `close` still refuses (exit 63). Repair the fix and run
-`build-recheck` again. One clearing takes one such run. A later commit refuses (exit 88).
+to HEAD and keeps the clear-halt words under `personFix`, so `close` takes the commits. The
+clearing keeps HEAD as it stood, and `build-recheck` takes only that commit. A later commit
+refuses (exit 88) and needs a new clearing: run `clear-halt` again at the new commit, with the
+person's words. A failed check records nothing (exit 123), and `close` still refuses (exit 63).
+Repair the fix, clear the halt again, and run `build-recheck` again.
 
 ## A person's answer in an unattended run
 

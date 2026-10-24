@@ -9595,17 +9595,21 @@ do_build_recheck() {
   # Live-run row 426: a finding ruled load-bearing leaves no round for the fix, so a person commits
   # it and runs clear-halt, a person's call. The order's newest clearing is then that halt, and
   # HEAD is past the last record. The checks run over the record's range extended to HEAD, and a
-  # pass moves the record's commit there, so close reads a record at HEAD. One clearing takes one
-  # such run: the record keeps the clearing's index under personFix.
-  local pf_index="" pf_because=""
+  # pass moves the record's commit there, so close reads a record at HEAD. The clearing kept HEAD
+  # as it stood, and the run takes only that commit: a later commit is no fix the person accepted.
+  local pf_index="" pf_because="" pf_commit=""
   case "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')" in
     reviewed|fixed)
       if [ -z "$halt" ] && [ "$current_commit" != "$record_commit" ]; then
-        pf_index="$(printf '%s' "$RV_LEDGER_DOC" | jq -r --arg id "$unit_id" --arg mark "$LOAD_BEARING_MARK" \
-          --argjson used "$(printf '%s' "$record_doc" | jq '.personFix.cleared // -1')" '
+        pf_index="$(printf '%s' "$RV_LEDGER_DOC" | jq -r --arg id "$unit_id" --arg mark "$LOAD_BEARING_MARK" '
           [ (.haltsCleared // []) | to_entries[] | select(.value.id == $id) ] | last // empty
-          | select(.value.reason | contains($mark)) | select(.key != $used) | .key')"
-        [ -z "$pf_index" ] || pf_because="$(printf '%s' "$RV_LEDGER_DOC" | jq -r --argjson i "$pf_index" '.haltsCleared[$i].because')"
+          | select(.value.reason | contains($mark)) | .key')"
+        if [ -n "$pf_index" ]; then
+          pf_because="$(printf '%s' "$RV_LEDGER_DOC" | jq -r --argjson i "$pf_index" '.haltsCleared[$i].because')"
+          pf_commit="$(printf '%s' "$RV_LEDGER_DOC" | jq -r --argjson i "$pf_index" '.haltsCleared[$i].commit // ""')"
+          [ "$pf_commit" = "$current_commit" ] \
+            || die 88 "build-recheck: $RV_RANGE_NAME is at $current_commit, and the person cleared the load-bearing halt on $unit_id at ${pf_commit:-a commit the clearing did not record}. Only the fix at that commit is the one the person accepted. Clear the halt again at this commit, with the person's words, then run build-recheck. Nothing ran."
+        fi
       fi ;;
   esac
   # A fix round's own work is answered by the next round, or by a ruling at the cap.
@@ -9703,7 +9707,7 @@ EOF_PATHS
   # A person's fix that fails a check is not recorded: close would read a record at HEAD and take it.
   if [ -n "$pf_index" ] && [ "$(br_checks_pass "$BR_CHECKS_JSON" "interface-record")" != "true" ]; then
     rm -f "$BR_CHECKS_FILE"
-    die 123 "build-recheck: the commits after $record_commit, the fix a person committed after a load-bearing ruling, fail $(br_first_stopper "$BR_CHECKS_JSON" "interface-record"). Checks: $(printf '%s' "$BR_CHECKS_JSON" | jq -r 'map("\(.id) \(.verdict)") | join(", ")'). Nothing is recorded, so close still refuses. Repair the fix on the branch, then run build-recheck again."
+    die 123 "build-recheck: the commits after $record_commit, the fix a person committed after a load-bearing ruling, fail $(br_first_stopper "$BR_CHECKS_JSON" "interface-record"). Checks: $(printf '%s' "$BR_CHECKS_JSON" | jq -r 'map("\(.id) \(.verdict)") | join(", ")'). Nothing is recorded, so close still refuses. Repair the fix on the branch, clear the halt again at the new commit, then run build-recheck again."
   fi
 
   # The record keeps the attempt, its range and its date, and takes the new checks and the interface
@@ -13137,6 +13141,10 @@ do_clear_halt() {
   [ "$last_step" != "closed" ] \
     || die 67 "clear-halt: $unit_id is closed, so there is nothing to resume. Nothing is written."
   halt="$(printf '%s' "$order_entry" | jq -r '.haltedBecause // ""')"
+  # A person's fix that changed after the clearing needs a new clearing at the new commit, so an
+  # order whose newest clearing was a load-bearing halt takes it again (live-run row 426).
+  [ -n "$halt" ] || halt="$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$unit_id" --arg mark "$LOAD_BEARING_MARK" '
+    [ (.haltsCleared // [])[] | select(.id == $id) ] | last // {} | .reason // "" | select(contains($mark))')"
   [ -n "$halt" ] || die 3 "clear-halt: $unit_id is not halted. Nothing is written."
 
   # Every segment is read, the way the grant and the restart read theirs, so a halt that holds
@@ -13161,12 +13169,23 @@ do_clear_halt() {
   [ -z "$other_action" ] \
     || die 85 "clear-halt: $unit_id is halted for something $other_action answers: $halt. Run $other_action instead.$drift_route Nothing is written."
 
+  # A load-bearing halt's clearing keeps HEAD: the person's words accept the fix at that commit,
+  # and build-recheck records it only there (live-run row 426).
+  local ch_commit=""
+  case "$halt" in
+    *"$LOAD_BEARING_MARK"*)
+      rv_load_codepath "clear-halt"
+      rv_load_range_repo "clear-halt" "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) ][0]')"
+      ch_commit="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
+      [ -n "$ch_commit" ] || die 3 "clear-halt: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO). Nothing is written." ;;
+  esac
   local today new_ledger
   today="$(date -u +%Y-%m-%d)"
   new_ledger="$(printf '%s' "$FN_LEDGER_DOC" | jq -c --arg id "$unit_id" --arg reason "$halt" \
-    --arg today "$today" --arg because "$because" '
+    --arg today "$today" --arg because "$because" --arg commit "$ch_commit" '
     .orders = (.orders | map(if .id == $id then del(.haltedBecause) else . end))
-    | .haltsCleared = ((.haltsCleared // []) + [{id: $id, reason: $reason, clearedAt: $today, because: $because}])')"
+    | .haltsCleared = ((.haltsCleared // []) + [{id: $id, reason: $reason, clearedAt: $today, because: $because}
+        + (if $commit == "" then {} else {commit: $commit} end)])')"
   [ -n "$new_ledger" ] || die 3 "clear-halt: the ledger update for $unit_id failed."
   write_atomic "$FN_LEDGER_FILE" "$new_ledger"
 

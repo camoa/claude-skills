@@ -363,11 +363,17 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["at", "movedTo", "freezeCommit"],
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["finding", "at", "movedTo", "freezeCommit"],
+         "properties": {"finding": {"$ref": "#/$defs/retake/properties/finding"}, "at": {"$ref": "#/$defs/retake/properties/at"}, "movedTo": {"$ref": "#/$defs/retake/properties/movedTo"}, "freezeCommit": {"$ref": "#/$defs/retake/properties/freezeCommit"}}},
+        {"type": "object", "additionalProperties": false, "required": ["ruling", "at", "movedTo", "freezeCommit"],
+         "properties": {"ruling": {"$ref": "#/$defs/retake/properties/ruling"}, "at": {"$ref": "#/$defs/retake/properties/at"}, "movedTo": {"$ref": "#/$defs/retake/properties/movedTo"}, "freezeCommit": {"$ref": "#/$defs/retake/properties/freezeCommit"}}}
+      ],
       "properties": {
         "finding": {
           "type": "string",
           "pattern": "^f[1-9][0-9]*$",
-          "description": "The finding ruled test-wrong, read from the front of the halt reason `verify-record` wrote. A retake holds this or `ruling`, never both."
+          "description": "The finding ruled test-wrong, read from the front of the halt reason `verify-record` wrote. A retake holds exactly one of this and `ruling`, which the oneOf above states."
         },
         "ruling": {
           "type": "string",
@@ -396,6 +402,11 @@
       "additionalProperties": false,
       "required": ["id", "reason", "clearedAt", "because"],
       "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "HEAD of the order's repository when clear-halt cleared a halt with a finding ruled load-bearing (live-run row 426). build-recheck records the person's fix only at this commit, so the person's words accept that fix and no later commit."
+        },
         "id": {
           "type": "string",
           "pattern": "^wo[1-9][0-9]*$",
