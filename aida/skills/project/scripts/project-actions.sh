@@ -17,7 +17,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh         (sourced, for the one source walk)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-findings.sh (sourced, the version 5 markers and the
 #                                                          retired fields)
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh     (sourced, for task_is_open)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-state.sh       (sourced, for task_is_open)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-project.sh        (the project check)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape those two check)
 #
@@ -139,7 +139,7 @@ source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh"
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/scripts/lib/paths.sh"  # worktree_base_refusal, for worktree_base_value
 # shellcheck source=/dev/null
-source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"  # task_is_open, for the close's open tasks
+source "${PLUGIN_ROOT}/scripts/lib/task-state.sh"  # task_is_open, for the close's open tasks
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.

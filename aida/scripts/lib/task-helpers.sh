@@ -69,7 +69,7 @@
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
-#   task_is_open <task.json>              true unless the task's state reads complete
+#   task_is_open <task.json>              true unless the task's state reads complete (task-state.sh)
 #   task_review_outdated <folder>         true, and prints both ranges, when the review covers
 #                                         a commit range the finished build no longer ends at
 #   active_tree_for <codePath> <dir>      prints <dir>'s git top level when it is a worktree of
@@ -912,12 +912,9 @@ playbooks_path_json() {
   if [ -f "$record" ]; then jq -n --arg p "$record" '$p'; else printf 'null'; fi
 }
 
-# A task is open until its state reads complete. The one copy of that rule, for next's listing and
-# the project close. A file jq cannot read answers true; a caller that skips such a file tests it
-# first. $1 the task.json. Calls no die function.
-task_is_open() {
-  [ "$(jq -r '.state // "new"' "$1" 2>/dev/null)" != "complete" ]
-}
+# task_is_open, the one reading of a task's open state.
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/task-state.sh"
 
 # The stage a task stands at, one of scope, research, design, implement, review, completion.
 # Each word is the stage's skill name, so `/aida:<stage>` is the command to run.
