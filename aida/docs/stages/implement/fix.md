@@ -41,7 +41,9 @@ word and a reason:
 - **wrong.** The reviewer was mistaken. The order can close.
 - **deferred.** The problem is real and goes to a later task. The order can close, and the review
   stage sees it again.
-- **load-bearing.** The work cannot be accepted with it. The order halts until you act.
+- **load-bearing.** The work cannot be accepted with it. The order halts until you act. You
+  commit the fix, clear the halt, and `build-recheck` runs the checks over your commits before
+  the order closes.
 - **test-wrong.** The problem is real, and the fix needs a frozen test changed. The order halts,
   and `retake-tests` sends it back to its tests.
 

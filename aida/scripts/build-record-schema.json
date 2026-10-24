@@ -87,6 +87,17 @@
       "minimum": 0,
       "description": "How many of the checks in `checks` actually executed: they ran a command, which is every check carrying an exitCode, or they computed a diff or a hash, which is owned-files and frozen-tests. A frozen-tests row reading undeclared hashed no file, so it is not counted either: counting it would do the thing this field exists to stop. interface-record compares two texts the caller handed over and runs nothing, so it is never counted. The field exists because a record saying every check answered, without saying how many of them ran, reads the same whether the code was tested or nothing was."
     },
+    "personFix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cleared", "because", "commitBefore"],
+      "properties": {
+        "cleared": { "type": "integer", "description": "The index in the ledger's haltsCleared of the clearing this fix answers. One clearing takes one such run." },
+        "because": { "type": "string", "minLength": 1, "description": "The person's words that clear-halt recorded with the clearing." },
+        "commitBefore": { "type": "string", "pattern": "^[0-9a-f]{7,40}$", "description": "The record's commit before this run moved it to HEAD." }
+      },
+      "description": "Present only after `build-recheck` ran the checks over the fix a person committed after a finding ruled load-bearing, once clear-halt cleared that halt (live-run row 426). The checks ran from `startedAt` to the new `commit`, and every one passed, so close reads a record at HEAD."
+    },
     "recheckedAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",

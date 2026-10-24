@@ -33,8 +33,10 @@ When AIDA cannot work out the trunk, it says so and goes on. See
   verifier has read the round yet, AIDA records the round again at the new commit, and no round
   is spent.
 - **At an order's close, exit 63.** Commits landed after the order's last record, and nothing is
-  open to take them. Move the branch back to the commit the message names, and put that later
-  work in a follow-up task. Or run the restart, which sets every order's records aside. See
+  open to take them. When they are your fix after a finding you ruled load-bearing, clear the
+  halt, then let AIDA run `build-recheck`. See [the review of one work order](order-review.md).
+  Otherwise move the branch back to the commit the message names, and put that later work in a
+  follow-up task. Or run the restart, which sets every order's records aside. See
   [a work order halted](halts.md).
 
 ## The branch was rewritten

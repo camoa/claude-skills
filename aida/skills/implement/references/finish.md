@@ -274,6 +274,14 @@ person's judgement. Either route in the next section passes it. The reason may n
 `; earlier: `, for the same cause as the grant's. Then run `start` again and take the `next:`
 line.
 
+A finding ruled load-bearing leaves no fix round, so the person commits the fix on the task
+branch. Put the commits in the order's own files. Clear the halt with the person's words, then
+run `build-recheck` on the order, as `references/build.md` shows. It runs the checks over the
+last record's range, extended to HEAD. Every check must pass. Then it moves the record's commit
+to HEAD and keeps the clear-halt words under `personFix`, so `close` takes the commits. A failed
+check records nothing (exit 123), and `close` still refuses (exit 63). Repair the fix and run
+`build-recheck` again. One clearing takes one such run. A later commit refuses (exit 88).
+
 ## A person's answer in an unattended run
 
 A light or autonomous run refuses a person's call. In implement the calls are `grant-attempt`,

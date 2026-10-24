@@ -671,7 +671,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      answer it (gap row 253). A halted order refuses at exit 49 like every step-five action, and
 #      `grant-attempt` is its route. After a fix round the same facts are read from that round's
 #      record, with owned-files in place of interface-record, and the route is the next round or
-#      a ruling (gap row 310).
+#      a ruling (gap row 310). One exception passes the moved HEAD and a record that passed: the
+#      order's newest cleared halt was a finding ruled load-bearing, so the commits are a person's
+#      fix, and the checks run over them once (live-run row 426).
 #
 # The code the support files added (live-run row 90).
 #  89  `tests-freeze` was given a --support whose path does not exist on disk, or whose path
@@ -897,6 +899,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      baseline subtraction (gap row 408). No role may write a frozen file. The message names the
 #      files and the first lines of the output. Nothing is frozen. A row that reads unknown or
 #      undeclared judged nothing; its detail goes to standard error and the freeze goes on.
+#
+# The code a person's fix after a load-bearing ruling added (live-run row 426).
+# 123  `build-recheck` ran the checks over the commits a person made after a finding ruled
+#      load-bearing, and a check did not pass. Nothing is recorded, so close still refuses those
+#      commits (exit 63). The message names each check's verdict.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -1260,6 +1267,10 @@ halt_refuse_separator() {
       ;;
   esac
 }
+
+# The words verify-record writes into a load-bearing halt, after the finding id. build-recheck
+# reads them on a cleared halt, for the fix a person committed after it (live-run row 426).
+LOAD_BEARING_MARK=" is ruled real and load-bearing: "
 
 # The halt verify-record writes at an unattended cap (exit 56), and its one other reader.
 # build-recheck answers it when it is the order's only halt and every finding it names is an open
@@ -9580,13 +9591,30 @@ do_build_recheck() {
   current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
   [ -n "$current_commit" ] \
     || die 3 "build-recheck: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
+
+  # Live-run row 426: a finding ruled load-bearing leaves no round for the fix, so a person commits
+  # it and runs clear-halt, a person's call. The order's newest clearing is then that halt, and
+  # HEAD is past the last record. The checks run over the record's range extended to HEAD, and a
+  # pass moves the record's commit there, so close reads a record at HEAD. One clearing takes one
+  # such run: the record keeps the clearing's index under personFix.
+  local pf_index="" pf_because=""
+  case "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')" in
+    reviewed|fixed)
+      if [ -z "$halt" ] && [ "$current_commit" != "$record_commit" ]; then
+        pf_index="$(printf '%s' "$RV_LEDGER_DOC" | jq -r --arg id "$unit_id" --arg mark "$LOAD_BEARING_MARK" \
+          --argjson used "$(printf '%s' "$record_doc" | jq '.personFix.cleared // -1')" '
+          [ (.haltsCleared // []) | to_entries[] | select(.value.id == $id) ] | last // empty
+          | select(.value.reason | contains($mark)) | select(.key != $used) | .key')"
+        [ -z "$pf_index" ] || pf_because="$(printf '%s' "$RV_LEDGER_DOC" | jq -r --argjson i "$pf_index" '.haltsCleared[$i].because')"
+      fi ;;
+  esac
   # A fix round's own work is answered by the next round, or by a ruling at the cap.
   local route="build" allowed_rows="the three tool rows, owned-files or interface-record"
   if [ "$fix_round" != 0 ]; then
     route="the next fix round, or a ruling"
     allowed_rows="the three tool rows or owned-files"
   fi
-  [ "$current_commit" = "$record_commit" ] \
+  [ "$current_commit" = "$record_commit" ] || [ -n "$pf_index" ] \
     || die 88 "build-recheck: $RV_RANGE_NAME is at $current_commit and the record holds $record_name at $record_commit, so the code has moved since that ${record_name% *}. A re-check runs over the recorded range alone; the route is $route."
 
   # --- exit 88, three: a check outside the tool rows, owned-files and interface-record stopped
@@ -9594,10 +9622,10 @@ do_build_recheck() {
   # An attempt nothing stopped is past the build, and there is nothing to run again ---------------
   local stoppers outside
   stoppers="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | stoppers | join(", ")')"
-  [ -n "$stoppers" ] \
+  [ -n "$stoppers" ] || [ -n "$pf_index" ] \
     || die 88 "build-recheck: $record_name at $unit_id passed its checks, so there is nothing to run again."
   outside="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | outside_recheck | join(", ")')"
-  [ -z "$outside" ] \
+  [ -z "$outside" ] || [ -n "$pf_index" ] \
     || die 88 "build-recheck: $record_name at $unit_id was stopped by $outside, which is not one of $allowed_rows. A re-check answers only a run those rows alone stopped; the route is $route."
 
   # --- exit 88, four: a path the interface check named is not in the code at the recorded commit.
@@ -9659,6 +9687,7 @@ EOF_PATHS
   BRC_SCOPE="$RV_RANGE_SCOPE"
   BRC_STARTED_AT="$record_started_at"
   BRC_CURRENT="$record_commit"
+  [ -z "$pf_index" ] || BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
   brc_use_baseline "$BRC_WHO"
@@ -9671,6 +9700,11 @@ EOF_PATHS
   # The observed record the build step accepted, at the path it names (live-run row 104).
   BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
   br_eight_checks "$unit_interface_declared" "$BR_INTERFACE_TEXT" "$checks_total"
+  # A person's fix that fails a check is not recorded: close would read a record at HEAD and take it.
+  if [ -n "$pf_index" ] && [ "$(br_checks_pass "$BR_CHECKS_JSON" "interface-record")" != "true" ]; then
+    rm -f "$BR_CHECKS_FILE"
+    die 123 "build-recheck: the commits after $record_commit, the fix a person committed after a load-bearing ruling, fail $(br_first_stopper "$BR_CHECKS_JSON" "interface-record"). Checks: $(printf '%s' "$BR_CHECKS_JSON" | jq -r 'map("\(.id) \(.verdict)") | join(", ")'). Nothing is recorded, so close still refuses. Repair the fix on the branch, then run build-recheck again."
+  fi
 
   # The record keeps the attempt, its range and its date, and takes the new checks and the interface
   # record's text as read now. When that text changed, the attempt's own text stays under
@@ -9681,9 +9715,12 @@ EOF_PATHS
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -c --arg recheckedAt "$today" --argjson executed "$BR_EXECUTED" \
     --arg interfaceRecord "$BR_INTERFACE_TEXT" --argjson fix "$fix_round" --slurpfile before "$record_file" \
-    --arg snapshotHash "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash // ""')" '
+    --arg snapshotHash "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash // ""')" \
+    --arg pfIndex "$pf_index" --arg pfBecause "$pf_because" --arg head "$current_commit" '
     . as $new
     | $before[0]
+    | if $pfIndex == "" then . else
+        .personFix = {cleared: ($pfIndex | tonumber), because: $pfBecause, commitBefore: .commit} | .commit = $head end
     | .checksBefore = ((.checks // []) | map({id, verdict}))
     | .checks = $new
     | if $fix > 0 then . else
@@ -9706,7 +9743,9 @@ EOF_PATHS
   all_met="$(br_checks_pass "$BR_CHECKS_JSON" "interface-record")"
   first_stopper="$(br_first_stopper "$BR_CHECKS_JSON" "interface-record")"
   new_ledger_doc="$RV_LEDGER_DOC"
-  if [ "$fix_round" != 0 ]; then
+  if [ -n "$pf_index" ]; then
+    :
+  elif [ "$fix_round" != 0 ]; then
     if [ "$all_met" = "true" ]; then
       rv_load_review_record "build-recheck" "$unit_id"
       addressed="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.origin == "check" and (.status == "open" or .status == "pending")) | .id ] | join(", ")')"
@@ -9739,6 +9778,7 @@ EOF_PATHS
     if [ "$all_met" = "true" ]; then br_state="fixed, every check met${addressed:+, addressed $addressed}"
     else br_state="fixed, stopped by $first_stopper"; fi
   fi
+  [ -z "$pf_index" ] || br_state="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep'), the person's fix recorded, every check met"
   local br_halt="none"
   if [ -n "$halt" ] && [ "$all_met" = "true" ]; then br_halt="cleared: $halt"
   elif [ -n "$halt" ]; then br_halt="$halt"; fi
@@ -9750,8 +9790,9 @@ EOF_PATHS
     + $count
     + (if $filled == "" then {} else {filledFromRecords: $filled} end)
     + {recheck: "\($name), checks replaced",
-     range: "\(.startedAt)..\(.commit)",
-     check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
+     range: "\(.startedAt)..\(.commit)"}
+    + (if has("personFix") then {personFix: "\(.personFix.commitBefore[0:7])..\(.commit[0:7]), because: \(.personFix.because)"} else {} end)
+    + {check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
      executed: "\(.executed) of \($total) ran a command, a diff or a hash",
      state: $state,
      halt: $halt,
@@ -12211,7 +12252,7 @@ RV_RULINGS
       load-bearing)
         case "$ruling_halt" in
           "test wrong: "*) ;;
-          *) ruling_halt="$rid is ruled real and load-bearing: $rreason" ;;
+          *) ruling_halt="$rid$LOAD_BEARING_MARK$rreason" ;;
         esac ;;
     esac
     ri=$((ri + 1))
@@ -12347,7 +12388,7 @@ do_close() {
   # ends at the record's commit (gap row 340).
   if [ "$last_commit" != "$head_now" ]; then
     im_moved_for_others "$RV_RANGE_REPO" "$last_commit" "$head_now" "$RV_UNIT_JSON" \
-      || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged. Nothing is open, so no fix round, repair round or test-wrong ruling can take the commits after $last_commit. A person moves the branch back to it, and that later work goes to a follow-up task, or runs restart, which sets every order's records aside."
+      || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged. Nothing is open, so no fix round, repair round or test-wrong ruling can take the commits after $last_commit. A person moves the branch back to it, and that later work goes to a follow-up task, or runs restart, which sets every order's records aside. A person's fix after a finding ruled load-bearing is the exception: run clear-halt on that halt, then build-recheck, which runs the checks over the commits and records them."
     head_now="$last_commit"
   fi
 

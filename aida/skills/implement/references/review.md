@@ -446,7 +446,8 @@ ignored, and the summary says so in its `verdicts:` line.
 
 `wrong` and `deferred` let the order close with the finding recorded. `load-bearing` halts the
 order, the finding named as the reason, and `clear-halt` is what follows once the person has
-acted on it. Interactive, this reaches the person as an escalation, not
+acted on it. A fix the person commits then goes through `build-recheck` before `close`, under
+"Clear any other halt" in `references/finish.md`. Interactive, this reaches the person as an escalation, not
 a question with an obvious answer. A ruling missing for an open finding at the cap refuses. A
 ruling's own reason may not hold `; earlier: `, the same refusal `--scope-insufficient` above
 takes, for the same reason.

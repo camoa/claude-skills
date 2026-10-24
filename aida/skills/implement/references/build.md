@@ -474,7 +474,8 @@ retry, and the route is `build`. Or no check stopped the attempt, so it passed a
 past the build. Or a path the interface check named does not exist at the recorded commit, so
 no amended record can answer it. A halted order refuses (exit 49), and `references/finish.md`
 names the grant. The clean-tree rule applies (exit 61). A missing interface record refuses as at `build-record`
-(exit 44).
+(exit 44). A person's fix after a finding ruled load-bearing passes the moved HEAD and the passed
+record once, under "Clear any other halt" in `references/finish.md`.
 
 It rewrites the record with the new checks and the interface record's text. When that text
 changed, the attempt's own text stays under `interfaceRecordBefore`. It keeps the attempt, its

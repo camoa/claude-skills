@@ -27,10 +27,11 @@ reason. What each word does next:
 - **`test-wrong`.** The order halts with `test wrong`. AIDA offers `retake-tests`, which sends the
   order back to its tests step. The test is corrected and frozen again, and the order is built
   again. Its attempt count stays.
-- **`load-bearing`.** The order halts. No fix round is left, and a fix you commit yourself cannot
-  be recorded: the close refuses commits after the last record (exit 63). The routes are the
-  restart, after you change the order in design, or moving the branch back and putting the fix in
-  a follow-up task.
+- **`load-bearing`.** The order halts. No fix round is left, so you commit the fix yourself, in
+  the order's own files. Clear the halt and say what you did. AIDA then runs `build-recheck`,
+  which runs the checks over your commits. When every check passes, it records them, and the
+  order closes. When one fails, nothing is recorded (exit 123), and the close refuses (exit 63)
+  until you repair the fix.
 
 With nobody present, a ruling (exit 55) or an `--allow` for one more file (exit 100) is refused.
 See [a run with nobody present](person-must-answer.md).
