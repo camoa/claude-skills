@@ -65,7 +65,8 @@ refused for a missing field. A play's id is its source and its title as a slug, 
 One line per play, `<id>  <title>`, from the person's file, the project's file, and the newest
 loaded record under the project's tasks. That record also holds the plays from each declared
 folder and each catalog set. A source with nothing prints `<source>: none`. With no loaded
-record, the last line reads `folder and catalog: no record loaded`. Show the lines as printed. To read one play in full, open the file the id names.
+record, the last line reads `folder and catalog: no record loaded`. Show the lines as printed.
+To read one play in full, open the file the id names.
 
 ## `capture`, a play by hand
 

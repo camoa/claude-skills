@@ -113,8 +113,9 @@ Stop there. Only a task whose `worktreeOnDisk` reads `yes` goes on to the two ro
 
 **The prefix.** Start the Bash call with `cd <worktree> &&`. It works from any folder on the
 machine and needs no version. The `cd` part asks for approval, because the tree sits outside this
-window's working directories. The shell forgets such a directory between calls, so every call
-carries the prefix.
+window's working directories. It does not ask when the tree is an added directory or an allow
+rule covers it. The shell forgets such a directory between calls, so every call carries the
+prefix.
 
 **Entry.** From a window inside the code checkout, call the `EnterWorktree` tool with the task's
 `worktree` path, a folder outside the checkout. The tool asks for approval, because the path

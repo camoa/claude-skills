@@ -315,7 +315,8 @@ said, if any, or record it as `(autonomous run, no reason given)`, and continue.
 It writes the new state into the project file and its registry copy, commits the change with that
 reason, and reports what it found for `OPEN TASKS`. Show that line as-is: it counts the tasks
 that are not complete and names each one, or says `none`. This call never refuses to close a
-project over what it finds there; it only reports it and lets the person decide. Finish by showing the check's report.
+project over what it finds there; it only reports it and lets the person decide. Finish by
+showing the check's report.
 
 ## `set-code-path <name-or-path> [<new-code-path>]`
 

@@ -17,6 +17,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh         (sourced, for the one source walk)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-findings.sh (sourced, the version 5 markers and the
 #                                                          retired fields)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh     (sourced, for task_is_open)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-project.sh        (the project check)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape those two check)
 #
@@ -137,6 +138,8 @@ source "$SOURCES_LIB"  # the one source walk, for recipe-source and agentic-sour
 source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh"
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/scripts/lib/paths.sh"  # worktree_base_refusal, for worktree_base_value
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"  # task_is_open, for the close's open tasks
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.
@@ -779,7 +782,7 @@ do_state() {
   local open_tasks="" open_count=0 tj
   for tj in "$project_path"/tasks/*/task.json; do
     [ -f "$tj" ] || continue
-    [ "$(jq -r '.state // "new"' "$tj" 2>/dev/null)" != "complete" ] || continue
+    task_is_open "$tj" || continue
     open_tasks="${open_tasks:+$open_tasks, }$(basename "$(dirname "$tj")")"
     open_count=$((open_count + 1))
   done

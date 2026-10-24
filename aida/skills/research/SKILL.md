@@ -498,7 +498,7 @@ then check again.
 Exit 6: the coverage is clean but the spike folder named on the `spike:` line still exists.
 Delete that folder, then check again. Nothing else is missing.
 
-Exit 5: the file reads, but a finding or the coverage is wrong. For each id the `open:` line
+Exit 5: the files read, but the coverage is wrong. For each id the `open:` line
 names under criteria with no finding, dispatch another search for that criterion specifically.
 Every finding names the criterion it serves, so repair each entry in the report's
 `findingsWithNoCriterion`.

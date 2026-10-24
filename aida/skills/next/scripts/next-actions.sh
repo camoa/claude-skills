@@ -211,7 +211,7 @@ legacy_stages() {
 
 gather_new_tasks() {
   local project_path="$1"
-  local tasks_dir="$project_path/tasks" d tj state key line review notes stage legacy wtp ondisk after
+  local tasks_dir="$project_path/tasks" d tj key line review notes stage legacy wtp ondisk after
   [ -d "$tasks_dir" ] || return 0
   while IFS= read -r d; do
     [ -n "$d" ] || continue
@@ -231,8 +231,7 @@ gather_new_tasks() {
       WARNED=1
       continue
     fi
-    state="$(jq -r '.state // "new"' "$tj" 2>/dev/null)"
-    [ "$state" != "complete" ] || continue
+    task_is_open "$tj" || continue
     key="$(sort_key "$project_path" "$d")"
     review="$(review_verdict_of "$d")"
     # The newest note under <task>/notes, by its dated file name, or none. The listing is read,
