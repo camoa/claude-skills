@@ -61,7 +61,9 @@ fi
 # before each Bash command in the same shell process (the mirror's hooks reference, "Persist
 # environment variables"), so the project skill's `check-machine` reads this and answers whether
 # the plugin changed since. Nothing is printed: a person reads this block, and this fact serves a
-# check they run rarely. The append keeps an export another hook wrote.
+# check they run rarely. The append keeps an export another hook wrote. The two exports skip both
+# version warnings: a warning shown here is lost, and its marker would silence it for the session.
+export AIDA_NEWER_CHECKED=1 AIDA_SESSION_CHECKED=1
 # shellcheck source=/dev/null
 if [ -n "${CLAUDE_ENV_FILE:-}" ] && source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" 2>/dev/null; then
   printf "export AIDA_SESSION_PLUGIN_VERSION='%s'\n" "$(plugin_version)" >> "$CLAUDE_ENV_FILE"

@@ -89,8 +89,8 @@
 #
 # Every script that sources this file runs warn_newer_installed and warn_session_version. These
 # never source it, so they never warn: next's legacy-tasks.sh, the scripts in scripts/ other than
-# check-design.sh and check-research.sh, and every hook but session-start.sh, which discards the
-# line. tool-actions.sh sources it in `require` alone.
+# check-design.sh and check-research.sh, and every hook but session-start.sh, which skips them
+# both. tool-actions.sh sources it in `require` alone.
 # project-actions.sh sources it in check-machine alone.
 #
 # task_worktree and resolve_task_folder both take resolve_project_folder, project_code_path_value

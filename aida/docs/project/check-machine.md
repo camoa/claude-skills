@@ -35,7 +35,8 @@ A plugin update keeps the old version on disk, so a stage script can print one o
   at start may be older. Start a new session, then restart the current step.
 
 The script still does its work. Neither warning refuses anything. Each warning prints once in a
-session for one pair of versions. Run this check to see the change again.
+session for one pair of versions. A subagent shares the session, so its script can take the one
+warning. Run this check to see the change again.
 
 ## Why it works this way
 
