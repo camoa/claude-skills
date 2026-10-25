@@ -3258,11 +3258,13 @@ RW_ROWS
   # A criterion only a person answers, such as one checked after a gated push, reads unanswered
   # until the person answers it. The route is a later close at this commit (gap row 378).
   # Every row that waits is named once, with the words it takes (live-run row 430). A person
-  # criterion waits when this call gave it no row, because a close keeps no earlier answer for one.
+  # criterion waits when this call gave it no row. Once any row waits, the later close needs every
+  # person criterion again, because a close keeps no earlier answer for one.
   local waiting person_line=""
   waiting_rows="$(rw_rows_waiting "$updated" \
     "$(printf '%s' "$person_owned" | jq -c --arg given "$rows" '([ ($given | split("\n"))[] | split("\t")[0] ]) as $g | map(select(. as $i | $g | index($i) | not))')" \
     "$rulable_findings")"
+  [ -z "$waiting_rows" ] || waiting_rows="$(rw_rows_waiting "$updated" "$person_owned" "$rulable_findings")"
   [ -z "$waiting_rows" ] \
     || person_line="CLOSE: these rows wait for the person, with the words each takes: $waiting_rows. When the person answers, run close again at this commit with one --row <id>=<word> each. A light or autonomous run takes the rows from $REVIEW_DIR/person-answer.json, written by the main session with step close."
   waiting="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select((.id | startswith("decision-")) and .verdict == "unknown") | .id ] | join(", ")')"

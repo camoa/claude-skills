@@ -85,7 +85,7 @@ finding the person ruled:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh close "<task_folder>" \
   --row <criterion>=met|unmet --row <check id>=met|unmet \
-  --row <decision id>=wrong|deferred|load-bearing|test-wrong|keep|rebuild \
+  --row <decision id>=wrong|deferred|load-bearing|test-wrong|keep|rebuild|accept|reject \
   --row <finding id>=wrong|deferred
 ```
 A close with no row, or with a row it refuses, prints every row that waits and the words each

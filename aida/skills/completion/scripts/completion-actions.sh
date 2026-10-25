@@ -314,11 +314,16 @@ cp_load() {
   [ -z "$waiting" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
     || CP_PERSON_ROUTE="These criteria wait for a person to answer met or unmet: $waiting. The person answers each with review close --row <criterion>=met|unmet at the reviewed commit. A light or autonomous run takes that answer from $TASK_PATH/review/person-answer.json, written by the main session with step close. Before either, run the command a criterion's verify clause names, and show its output to the person."
   # A finding that fails a criterion is no follow up, so --leave never takes it. The person rules it
-  # at review close, which makes it a follow up or clears it (live-run row 430).
-  local failing_findings
+  # at review close, which makes it a follow up or clears it (live-run row 430). A medium or high
+  # finding that cites no criterion fails its lens check until the person rules it there too.
+  local failing_findings lens_findings
   failing_findings="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.disposition == "criterion" and .ruling != "wrong") | .id ] | join(", ")' 2>/dev/null)"
+  lens_findings="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.disposition == "follow-up" and .severity != "low"
+    and (.linkedTo // "") == "" and .lens != "frozen-tests" and (.ruling // "") == "") | .id ] | join(", ")' 2>/dev/null)"
   [ -z "$failing_findings" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
     || CP_FINDING_ROUTE="These findings fail a criterion, so none is a follow up and none takes --leave: $failing_findings. The person rules each with review close --row <finding>=deferred, which makes it a follow up, or --row <finding>=wrong, which says the reviewer was mistaken."
+  [ -z "$lens_findings" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
+    || CP_FINDING_ROUTE="${CP_FINDING_ROUTE:+$CP_FINDING_ROUTE }These findings cite no criterion and fail their lens check until the person rules each at review close with --row <finding>=deferred or --row <finding>=wrong: $lens_findings."
   cp_load_children "$who"
   cp_load_follow_ups "$who"
   cp_load_observed "$who"
