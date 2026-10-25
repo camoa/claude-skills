@@ -28,6 +28,7 @@
 #                                         beside PLUGIN_ROOT; runs once when this file is sourced
 #   warn_session_version                  one stderr line when the session loaded another version
 #                                         of this plugin; runs once when this file is sourced
+#   say_once <line>                       prints <line> on stderr once per Claude Code session
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
@@ -440,7 +441,7 @@ warn_newer_installed() {
     | select(($top | key) > ($me.version | key))
     | "AIDA \($top) is installed, and this script runs from \($me.version). Run /reload-plugins, load the skill again, then restart the current step on \($top)."
   ' "$@" 2>/dev/null)"
-  [ -z "$found" ] || printf '%s\n' "$found" >&2
+  [ -z "$found" ] || say_once "$found"
   return 0
 }
 
@@ -460,9 +461,26 @@ warn_session_version() {
   [ -n "${AIDA_SESSION_PLUGIN_VERSION:-}" ] || return 0
   own="$(plugin_version)"
   [ "$own" != "unknown" ] && [ "$own" != "$AIDA_SESSION_PLUGIN_VERSION" ] || return 0
-  printf 'This session started on AIDA %s, and this script runs from %s. The agents and hooks loaded at start may still be %s. A new session loads %s for both; then restart the current step.\n' \
-    "$AIDA_SESSION_PLUGIN_VERSION" "$own" "$AIDA_SESSION_PLUGIN_VERSION" "$own" >&2
+  say_once "$(printf 'This session started on AIDA %s, and this script runs from %s. The agents and hooks loaded at start may still be %s. A new session loads %s for both; then restart the current step.' \
+    "$AIDA_SESSION_PLUGIN_VERSION" "$own" "$AIDA_SESSION_PLUGIN_VERSION" "$own")"
   return 0
+}
+
+# Both warnings above ask for a person's step, so each line prints once per session (gap row 432).
+# The exports above last one Bash call, because each call starts a new shell. So a long unattended
+# run printed the same line on every call. Claude Code sets CLAUDE_CODE_SESSION_ID in every Bash
+# subprocess (the mirror's environment variables reference), and /clear changes it. The marker is
+# one line, the session ID and the warning, in session-notices beside the registry. A line names
+# both versions, so a later update prints again. A line is written only on a mismatch, and nothing
+# prunes the file. With no session ID, or a file that cannot be written, the line prints every time.
+say_once() {
+  local file line="${CLAUDE_CODE_SESSION_ID:-} $1"
+  file="$(dirname -- "${AIDA_REGISTRY_PATH:-${HOME:-}/.claude/aida/registry.json}")/session-notices"
+  if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    grep -Fqx -- "$line" "$file" 2>/dev/null && return 0
+    { mkdir -p -- "$(dirname -- "$file")" && printf '%s\n' "$line" >>"$file"; } 2>/dev/null
+  fi
+  printf '%s\n' "$1" >&2
 }
 
 # The run mode of one stage, from task.json (task-schema.json, runMode and runModeStages). The

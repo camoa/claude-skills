@@ -34,7 +34,8 @@ A plugin update keeps the old version on disk, so a stage script can print one o
 - "This session started on AIDA <x>, and this script runs from <y>." The agents and hooks loaded
   at start may be older. Start a new session, then restart the current step.
 
-The script still does its work. Neither warning refuses anything.
+The script still does its work. Neither warning refuses anything. Each warning prints once in a
+session for one pair of versions. Run this check to see the change again.
 
 ## Why it works this way
 
