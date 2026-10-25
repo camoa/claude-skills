@@ -275,8 +275,9 @@ The baseline runs in the task worktree, because a site, `vendor/` or a virtualen
 there. So no role may write in the worktree until preconditions returns. A long suite can outlast
 one shell call. Then wait for the step to end before the next dispatch. The step refuses (exit 21)
 when an order's owned file is uncommitted before the run. It also refuses when HEAD or an owned
-file changed during the run, and writes no baseline. The baseline's `tree` names HEAD and every
-other uncommitted path.
+file changed during the run, and writes no baseline. Commit those files or set them aside, then
+run it again. While the run is live, `tests-brief` and `dispatch-open` of a writing role refuse
+(exit 21). The baseline's `tree` names HEAD and every other uncommitted path.
 
 ## A recipe changed since the record
 

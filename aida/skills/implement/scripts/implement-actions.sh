@@ -326,6 +326,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      start's failures as the build's (gap row 401). `preconditions` refuses at 21 too when an
 #      owned file is uncommitted before the baseline runs, or when HEAD or an owned file changed
 #      while it ran: the baseline would measure that work, not the commit (gap row 431).
+#      `tests-brief` and `dispatch-open` of a writing role refuse at 21 while that run is live.
 #  22  `tests-brief`, `tests-freeze` or `build-record` was given a unit id that is not in the frozen
 #      snapshot. `build-brief` names the same fact as exit 38 instead; see that entry for why.
 #  23  `tests-brief` found a unit in the given unit's dependsOn with no completion record in the
@@ -3264,6 +3265,21 @@ bl_tree_read() {
   BL_OWNED_DIRTY="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -r "[ .[] | select((.orders | length) > 0) ] | [ $LO_TEXT_JQ ] | join(\", \")")"
 }
 
+# A baseline run in progress holds its process id in this file, so tests-brief and dispatch-open
+# refuse a writing role before it writes, not after the run. The EXIT trap removes it. A file
+# whose process is gone is a run that was killed, and it blocks nothing. The path is a global,
+# because zsh runs the EXIT trap after the locals are gone.
+BL_RUNNING_FILE=""
+bl_running_remove() { [ -z "$BL_RUNNING_FILE" ] || rm -f "$BL_RUNNING_FILE"; BL_RUNNING_FILE=""; }
+# Refuses at 21 while a preconditions run takes this task's baseline. $1 the action. Reads IMPL_DIR.
+bl_refuse_running() {
+  local pid
+  pid="$(cat "$IMPL_DIR/.baseline-running" 2>/dev/null)"
+  case "$pid" in ''|*[!0-9]*) return 0 ;; esac
+  kill -0 "$pid" 2>/dev/null || return 0
+  die 21 "$1: preconditions (process $pid) is taking the baseline in the worktree now, and a file written there enters the baseline. Wait for preconditions to return, then run this again. Nothing was written."
+}
+
 # Points BRC_BASELINE_FILE at the task's baseline for the step named $1. Refuses at 21 when the
 # baseline was taken at a commit other than the ledger's startedFrom (gap row 401).
 brc_use_baseline() {
@@ -4206,8 +4222,13 @@ PC_FOLDER
           pc_orders_json="$(printf '%s' "$snapshot_doc" | jq -c '.workOrders // []')"
           bl_tree_read "$codepath" "$pc_orders_json"
           [ -z "$BL_OWNED_DIRTY" ] \
-            || die 21 "preconditions: owned files are uncommitted in $codepath: $BL_OWNED_DIRTY. The baseline would measure them, not commit $ledger_started_from. No baseline was written. To keep them, run start with --leftovers set-aside, which moves them under $task_folder/implementation/set-aside/ and deletes nothing. Then run preconditions again."
+            || die 21 "preconditions: owned files are uncommitted in $codepath: $BL_OWNED_DIRTY. The baseline would measure them, not commit $ledger_started_from. No baseline was written. Commit them, or run start with --leftovers set-aside, which moves them under $task_folder/implementation/set-aside/ and deletes nothing. Then run preconditions again."
           pc_head="$BL_HEAD"; pc_uncommitted_json="$BL_UNCOMMITTED_JSON"
+          BL_RUNNING_FILE="$task_folder/implementation/.baseline-running"
+          printf '%s\n' "$$" >"$BL_RUNNING_FILE" || die 3 "preconditions: could not write $BL_RUNNING_FILE"
+          trap 'bl_running_remove' EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
 
           suite_json_file="$task_folder/implementation/.baseline-suite.$$"
           : >"$suite_json_file"
@@ -4259,7 +4280,7 @@ PC_TOOL_ROWS
 
           bl_tree_read "$codepath" "$pc_orders_json"
           [ "$BL_HEAD" = "$pc_head" ] && [ -z "$BL_OWNED_DIRTY" ] \
-            || die 21 "preconditions: $codepath changed while the baseline ran, so it does not measure commit $ledger_started_from. HEAD was $pc_head and is $BL_HEAD. Owned files uncommitted now: ${BL_OWNED_DIRTY:-none}. No baseline was written, and what $task_folder/implementation/$BL_OUTPUT_DIR holds came from the changed tree. Wait for preconditions to return before any role writes in the worktree. Then run it again."
+            || die 21 "preconditions: $codepath changed while the baseline ran, so it does not measure commit $ledger_started_from. HEAD was $pc_head and is $BL_HEAD. Owned files uncommitted now: ${BL_OWNED_DIRTY:-none}. No baseline was written, and what $task_folder/implementation/$BL_OUTPUT_DIR holds came from the changed tree. Commit the owned files, or run start with --leftovers set-aside. Then run preconditions again, and dispatch no role until it returns."
 
           baseline_json="$(jq -n \
             --arg takenAt "$today" --arg commit "$ledger_started_from" \
@@ -4280,6 +4301,8 @@ PC_TOOL_ROWS
               tree:            {head: $head, uncommitted: ($before + $after | unique)}
             }')" || die 3 "preconditions: could not assemble the baseline record"
           write_atomic "$BASELINE_FILE" "$baseline_json"
+          bl_running_remove
+          trap - EXIT INT TERM
 
           baseline_status="written"
           baseline_note="taken at commit $ledger_started_from"
@@ -4809,6 +4832,7 @@ do_tests_brief() {
   resolve_rc=$?
   [ "$resolve_rc" -eq 0 ] || exit "$resolve_rc"
   IMPL_DIR="$TASK_PATH/implementation"
+  bl_refuse_running "tests-brief"
 
   tt_load_snapshot "tests-brief"
   local ledger_file="$IMPL_DIR/ledger.json"
@@ -14368,6 +14392,7 @@ do_dispatch_open() {
   if [ "$role_bare" = "test-author" ] || [ "$role_bare" = "row-checker" ] \
      || [ "$role_bare" = "implementer" ] || [ "$role_bare" = "fixer" ]; then
     IMPL_DIR="$TASK_PATH/implementation"
+    [ "$role_bare" = "row-checker" ] || bl_refuse_running "dispatch-open"
     tt_load_snapshot "dispatch-open"
     local unit_present
     unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" \

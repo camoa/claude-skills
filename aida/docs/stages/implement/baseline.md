@@ -28,7 +28,9 @@ from a different commit refuses rather than being overwritten.
 so a clean copy of the commit could not run the suite. So nothing may write in the worktree until
 the step returns. The step refuses with exit 21 when a file a work order owns is uncommitted before
 the run. It also refuses, and writes no baseline, when HEAD or an owned file changed during the
-run. The baseline's `tree` names HEAD and every other uncommitted path.
+run. Commit those files or set them aside, then run the step again. While the run is live, AIDA
+refuses to brief or dispatch a role that writes. The baseline's `tree` names HEAD and every other
+uncommitted path.
 
 ## A suite that is already red
 
