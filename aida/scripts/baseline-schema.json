@@ -68,6 +68,16 @@
       },
       "description": "Every other row the check recipes declare, such as duplication or a row a project added, keyed by its row id and read later the same way codingStandards is. Review subtracts a failing row's result here. A baseline taken before this field existed holds none, and review reads such a row as having no baseline."
     },
+    "tree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head", "uncommitted"],
+      "properties": {
+        "head": {"type": "string"},
+        "uncommitted": {"type": "array", "items": {"type": "string"}}
+      },
+      "description": "The task worktree the baseline ran in, read before and after the run (gap row 431). head is HEAD there, which differs from commit when the baseline was retaken after a commit. uncommitted names every path git reported changed or untracked, none owned by an order: preconditions refuses an owned one, and a change to HEAD or an owned file during the run. A baseline taken before this field existed holds none."
+    },
     "checkRecipes": {
       "type": "array",
       "default": [],

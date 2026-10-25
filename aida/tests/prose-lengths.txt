@@ -19,7 +19,7 @@ skills/design/SKILL.md 974
 skills/implement/SKILL.md 289
 skills/implement/references/build.md 603
 skills/implement/references/finish.md 317
-skills/implement/references/preconditions.md 304
+skills/implement/references/preconditions.md 311
 skills/implement/references/review.md 517
 skills/implement/references/start.md 164
 skills/implement/references/tests.md 611

@@ -323,7 +323,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      The message names both commits. `build-record`, `build-recheck`, `fix-record`, `finish`
 #      and `tests-freeze` refuse at 21 too, before they subtract a baseline taken at a commit
 #      other than startedFrom. After `start --rebased-onto`, that baseline would read the new
-#      start's failures as the build's (gap row 401).
+#      start's failures as the build's (gap row 401). `preconditions` refuses at 21 too when an
+#      owned file is uncommitted before the baseline runs, or when HEAD or an owned file changed
+#      while it ran: the baseline would measure that work, not the commit (gap row 431).
 #  22  `tests-brief`, `tests-freeze` or `build-record` was given a unit id that is not in the frozen
 #      snapshot. `build-brief` names the same fact as exit 38 instead; see that entry for why.
 #  23  `tests-brief` found a unit in the given unit's dependsOn with no completion record in the
@@ -3249,6 +3251,19 @@ bl_commit_of() {
   jq -r '.commit' "$BASELINE_FILE" 2>/dev/null
 }
 
+# The baseline runs in the task worktree, where the roles write (gap row 431). A clean tree of
+# the commit cannot stand in: a site, vendor/ or an in-tree virtualenv lives only in the worktree,
+# and an editable install imports from the worktree. So the tree is read before and after the
+# run. Sets BL_HEAD to HEAD in $1, BL_UNCOMMITTED_JSON to the uncommitted paths, and BL_OWNED_DIRTY
+# to the owned ones as start names them, or empty. $2 the snapshot's work orders.
+BL_HEAD=""; BL_UNCOMMITTED_JSON="[]"; BL_OWNED_DIRTY=""
+bl_tree_read() {
+  BL_HEAD="$(git -C "$1" rev-parse HEAD 2>/dev/null)"
+  im_scan_leftovers "$1" "$2"
+  BL_UNCOMMITTED_JSON="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -c '[ .[].path ]')"
+  BL_OWNED_DIRTY="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -r "[ .[] | select((.orders | length) > 0) ] | [ $LO_TEXT_JQ ] | join(\", \")")"
+}
+
 # Points BRC_BASELINE_FILE at the task's baseline for the step named $1. Refuses at 21 when the
 # baseline was taken at a commit other than the ledger's startedFrom (gap row 401).
 brc_use_baseline() {
@@ -3649,7 +3664,7 @@ do_preconditions() {
   local harness_needed harness_reason env_asked=no env_owner="" tooling_entries
   local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc build_json build_entries unchecked_json review_tools smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
   local pc_folder_gap="" pc_held pc_holders pc_where pc_missing
-  local pc_build_doc tool_rows_json pc_row_id pc_row_json
+  local pc_build_doc tool_rows_json pc_row_id pc_row_json pc_orders_json pc_head pc_uncommitted_json
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -4188,6 +4203,11 @@ PC_FOLDER
         missing)
           snapshot_doc="$SNAPSHOT_DOC"
           scope_json="$(printf '%s' "$snapshot_doc" | jq -c '[ (.workOrders // [])[] | (.ownedFiles // [])[] ] | unique')"
+          pc_orders_json="$(printf '%s' "$snapshot_doc" | jq -c '.workOrders // []')"
+          bl_tree_read "$codepath" "$pc_orders_json"
+          [ -z "$BL_OWNED_DIRTY" ] \
+            || die 21 "preconditions: owned files are uncommitted in $codepath: $BL_OWNED_DIRTY. The baseline would measure them, not commit $ledger_started_from. No baseline was written. To keep them, run start with --leftovers set-aside, which moves them under $task_folder/implementation/set-aside/ and deletes nothing. Then run preconditions again."
+          pc_head="$BL_HEAD"; pc_uncommitted_json="$BL_UNCOMMITTED_JSON"
 
           suite_json_file="$task_folder/implementation/.baseline-suite.$$"
           : >"$suite_json_file"
@@ -4237,6 +4257,10 @@ $(printf '%s' "$CR_DOC" | jq -r '(.tools // [])[].id | select(. != "coding-stand
 PC_TOOL_ROWS
           CR_DOC="$pc_build_doc"
 
+          bl_tree_read "$codepath" "$pc_orders_json"
+          [ "$BL_HEAD" = "$pc_head" ] && [ -z "$BL_OWNED_DIRTY" ] \
+            || die 21 "preconditions: $codepath changed while the baseline ran, so it does not measure commit $ledger_started_from. HEAD was $pc_head and is $BL_HEAD. Owned files uncommitted now: ${BL_OWNED_DIRTY:-none}. No baseline was written, and what $task_folder/implementation/$BL_OUTPUT_DIR holds came from the changed tree. Wait for preconditions to return before any role writes in the worktree. Then run it again."
+
           baseline_json="$(jq -n \
             --arg takenAt "$today" --arg commit "$ledger_started_from" \
             --argjson scope "$scope_json" --argjson suite "$suite_json" \
@@ -4245,13 +4269,15 @@ PC_TOOL_ROWS
             --argjson security "$sec_json" \
             --argjson toolRows "$tool_rows_json" \
             --argjson checkRecipes "$check_recipes_json" \
+            --arg head "$pc_head" --argjson before "$pc_uncommitted_json" --argjson after "$BL_UNCOMMITTED_JSON" \
             '{
               schemaVersion: 1, takenAt: $takenAt, commit: $commit, scope: $scope, suite: $suite,
               codingStandards: $codingStandards,
               staticAnalysis:  $staticAnalysis,
               security:        $security,
               toolRows:        $toolRows,
-              checkRecipes:    $checkRecipes
+              checkRecipes:    $checkRecipes,
+              tree:            {head: $head, uncommitted: ($before + $after | unique)}
             }')" || die 3 "preconditions: could not assemble the baseline record"
           write_atomic "$BASELINE_FILE" "$baseline_json"
 
