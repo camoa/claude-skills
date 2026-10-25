@@ -1714,7 +1714,7 @@ im_next_step() {
          else "build \($bd.id)" end)
       elif $removed != null and $ts != null then "finish: offer the restart, the design removed \($removed.id), and its frozen test record still guards its test files"
       elif $ts != null then "tests \($ts.id)"
-      elif (($orders | length) > 0 and ($closed | length) == ($orders | length) and $halted == 0) then "finish"
+      elif (($orders | length) > 0 and ($closed | length) == ($orders | length) and $halted == 0) then "finish: run finish <task_folder> [--value <name>=<value>]..., with no recipe flag, because finish reads the recipe paths from preconditions.json"
       elif $departure != null then "review: \($departure.id) is halted for a departure from the design, so offer review-record --accept-deviation or the restart"
       elif $drift != null then "finish: offer the restart, \($drift.id) is halted for design drift"
       elif $spent != null then "finish: offer the grant, \($spent.id) is halted with its attempts or its budget spent"

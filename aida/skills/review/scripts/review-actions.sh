@@ -177,6 +177,15 @@ done
 # empty, so a finding naming one is refused rather than recorded.
 LENS_WORDS="non-goals solid dry architecture guides practices mutation purpose"
 
+# The words a close --row takes, by the kind of row its id names. The refusal of a wrong word and
+# the list of waiting rows both read this one definition (gap row 279, live-run row 430).
+RW_ROW_WORDS_JQ='def row_words: if (startswith("decision-") and endswith("-departure")) then ["keep", "rebuild"]
+  elif (startswith("decision-") and endswith("-non-goal")) then ["accept", "reject"]
+  elif startswith("decision-") then ["wrong", "deferred", "load-bearing", "test-wrong"]
+  elif test("^f[1-9][0-9]*$") then ["wrong", "deferred"]
+  else ["met", "unmet"] end;
+def or_list: if length < 2 then join("") else (.[0:-1] | join(", ")) + " or " + .[-1] end;'
+
 # The search review records, through research-actions.sh record, when no guide body is on disk:
 # current practice for the stack, found by the outward searcher (gap row 364). It is a research
 # file, so the brief carries it with the others, and findings reads it by this name.
@@ -443,6 +452,18 @@ rw_require_person() {
   task_person_answered "$answer_file" "$TASK_PATH" "$who" "" "${4:-}" && return 0
   [ -z "${4:-}" ] || route=" Or the main session writes the person's answer to $answer_file, as the implement skill's references/finish.md says."
   die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written.$route"
+}
+
+# The rows a close still waits on, each with the words it takes, in one line (live-run row 430).
+# $1 the review record, $2 the person criteria that wait, as a JSON list of ids, $3 the findings a
+# person may rule, as a JSON list of ids. A finding already ruled and a check already answered do
+# not wait.
+rw_rows_waiting() {
+  printf '%s' "$1" | jq -r --argjson criteria "$2" --argjson rf "$3" "$RW_ROW_WORDS_JQ"'
+    [ $criteria[] ]
+    + [ (.findings // [])[] | select(.id as $i | ($rf | index($i)) != null) | select((.ruling // "") == "") | .id ]
+    + [ (.checks // [])[] | select(.verdict == "unknown" and ((.id | startswith("decision-")) or .answeredBy == "nobody")) | .id ]
+    | map(. + " takes " + (row_words | or_list)) | join("; ")'
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -2965,12 +2986,8 @@ do_close() {
         case "$2" in *=*) ;; *) die 3 "close: --row takes <criterion>=met|unmet, got: $2" ;; esac
         cid="${2%%=*}"; value="${2#*=}"
         [ -n "$cid" ] || die 3 "close: --row was given no criterion id: $2"
-        # A decision an unattended build left takes the ruling words, or keep and rebuild for a
-        # departure; the check below holds each word to its own kind of row (gap row 279).
-        case "$value" in
-          met|unmet|wrong|deferred|load-bearing|test-wrong|keep|rebuild|accept|reject) ;;
-          *) die 3 "close: --row takes met or unmet, not: $value. A row nobody could answer is left out, and it reads unanswered." ;;
-        esac
+        # The word is held to its own kind of row once the record is read, so the refusal can
+        # name every waiting row (live-run row 430).
         rows="$rows$(printf '%s\t%s' "$cid" "$value")
 "
         rows_raw="$rows_raw$2
@@ -3005,7 +3022,7 @@ do_close() {
   # finding stays in the record either way, and `ruling` holds the person's word. A medium or high
   # finding that cites no criterion still fails its lens check, so the person rules it the same way
   # (gap row 337). A frozen-tests finding decides no check, so nothing asks for its ruling.
-  local rulable_findings ruled
+  local rulable_findings ruled entry_doc="$RW_RECORD_DOC"
   rulable_findings="$(printf '%s' "$RW_RECORD_DOC" | jq -c --arg lenses "$LENS_WORDS" '[ (.findings // [])[]
     | . as $f | select(.disposition == "criterion" or has("ruling")
                        or (.severity != "low" and (($lenses | split(" ") | index($f.lens)) != null))) | .id ]')"
@@ -3124,6 +3141,10 @@ do_close() {
   # A --row for a criterion the contract does not hold, or one a machine verifies, is a caller
   # answering a question nobody asked. Every id is checked in one question rather than one per row.
   person_checks="$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.checks // [])[] | select(has("answeredBy")) | .id ]')"
+  # A refusal writes nothing, so every row that took no answer before this call still waits.
+  local waiting_rows
+  waiting_rows="$(rw_rows_waiting "$entry_doc" "$person_owned" "$rulable_findings")"
+  waiting_rows="${waiting_rows:+ These rows wait, with the words each takes: $waiting_rows.}"
   bad_rows="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --argjson pf "$rulable_findings" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
       | . as $id | select(($po | index($id)) == null) | select(($pc | index($id)) == null) | select(($pf | index($id)) == null) ]
@@ -3132,7 +3153,7 @@ $rows
 RW_ROWS
 )"
   [ -z "$bad_rows" ] \
-    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, no check of that id waits for the person, and no finding of that id fails a criterion or, at medium or high, its lens check. Any other machine-verified criterion is answered by the suite join, never by a flag."
+    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, no check of that id waits for the person, and no finding of that id fails a criterion or, at medium or high, its lens check. Any other machine-verified criterion is answered by the suite join, never by a flag.$waiting_rows"
 
   # A record `findings` wrote before gap row 274 routed low findings through criteria. Close does
   # not judge severity, so it names them and sends the person back to the producer.
@@ -3161,19 +3182,15 @@ RW_ROWS
   # decision an unattended build left (gap row 279).
   local check_rows
   local wrong_words
-  wrong_words="$(jq -Rrn --rawfile given /dev/stdin '
+  wrong_words="$(jq -Rrn --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
     [ ($given | split("\n"))[] | split("\t") | select(length == 2) | . as [$id, $w]
-      | select(if ($id | startswith("decision-") and endswith("-departure")) then (["keep", "rebuild"] | index($w)) == null
-               elif ($id | startswith("decision-") and endswith("-non-goal")) then (["accept", "reject"] | index($w)) == null
-               elif ($id | startswith("decision-")) then (["wrong", "deferred", "load-bearing", "test-wrong"] | index($w)) == null
-               elif ($id | test("^f[1-9][0-9]*$")) then (["wrong", "deferred"] | index($w)) == null
-               else (["met", "unmet"] | index($w)) == null end)
+      | select(($id | row_words | index($w)) == null)
       | $id + "=" + $w ] | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS
 )"
   [ -z "$wrong_words" ] \
-    || die 3 "close: --row gave $wrong_words. A ruling takes wrong, deferred, load-bearing or test-wrong; a departure takes keep or rebuild; a changed non-goal takes accept or reject; a finding takes wrong or deferred; every other row takes met or unmet."
+    || die 3 "close: --row gave $wrong_words. A ruling takes wrong, deferred, load-bearing or test-wrong; a departure takes keep or rebuild; a changed non-goal takes accept or reject; a finding takes wrong or deferred; every other row takes met or unmet.$waiting_rows"
   check_rows="$(jq -Rcn --argjson pc "$person_checks" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t") | select(length == 2) | select(($pc | index(.[0])) != null)
       | .[1] as $w
@@ -3240,16 +3257,20 @@ RW_ROWS
   # The record keeps every row without one, so a later close answers it with --row, no fresh pass.
   # A criterion only a person answers, such as one checked after a gated push, reads unanswered
   # until the person answers it. The route is a later close at this commit (gap row 378).
-  local waiting person_waiting person_line=""
-  person_waiting="$(printf '%s' "$updated" | jq -r '[ (.criteria // [])[] | select(.verdict == "unanswered" and .answeredBy == "nobody") | .id ] | join(", ")')"
-  [ -z "$person_waiting" ] \
-    || person_line="CLOSE: these criteria wait for a person to answer met or unmet: $person_waiting. When the person answers, run close again at this commit with --row <criterion>=met or --row <criterion>=unmet. A light or autonomous run takes that answer from $REVIEW_DIR/person-answer.json, written by the main session with step close."
+  # Every row that waits is named once, with the words it takes (live-run row 430). A person
+  # criterion waits when this call gave it no row, because a close keeps no earlier answer for one.
+  local waiting person_line=""
+  waiting_rows="$(rw_rows_waiting "$updated" \
+    "$(printf '%s' "$person_owned" | jq -c --arg given "$rows" '([ ($given | split("\n"))[] | split("\t")[0] ]) as $g | map(select(. as $i | $g | index($i) | not))')" \
+    "$rulable_findings")"
+  [ -z "$waiting_rows" ] \
+    || person_line="CLOSE: these rows wait for the person, with the words each takes: $waiting_rows. When the person answers, run close again at this commit with one --row <id>=<word> each. A light or autonomous run takes the rows from $REVIEW_DIR/person-answer.json, written by the main session with step close."
   waiting="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select((.id | startswith("decision-")) and .verdict == "unknown") | .id ] | join(", ")')"
   if [ -n "$waiting" ]; then
     rw_write_record "close" "$(printf '%s' "$updated" | jq -c 'del(.verdict)')"
     rw_print_summary "$updated" "close"
-    echo "CLOSE: no verdict yet. These decisions wait for the person: $waiting. Run close again with one --row per decision, as close.md says. A light or autonomous run takes the person's rows from $REVIEW_DIR/person-answer.json, written by the main session with step close." >&2
-    [ -z "$person_line" ] || echo "$person_line" >&2
+    echo "CLOSE: no verdict yet, because these decisions wait for the person: $waiting." >&2
+    echo "$person_line" >&2
     exit 0
   fi
 

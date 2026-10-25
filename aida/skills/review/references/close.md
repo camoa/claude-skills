@@ -88,6 +88,9 @@ finding the person ruled:
   --row <decision id>=wrong|deferred|load-bearing|test-wrong|keep|rebuild \
   --row <finding id>=wrong|deferred
 ```
+A close with no row, or with a row it refuses, prints every row that waits and the words each
+takes. Ask the person those rows in one go.
+
 On a record that already holds a verdict, it archives that record alone and writes the new
 verdict in its place. The brief, the findings and every check stay, because the commit has not
 moved. So a person who gave a wrong row, or left one out, runs `close` again. After a fix commit,
