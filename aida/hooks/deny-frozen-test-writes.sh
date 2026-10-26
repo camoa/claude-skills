@@ -53,8 +53,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Rule four, added for gap row 293, holds three roles to their own records. Since gap row 357 it
 # also keeps a person's answer record to the main session: no agent writes it through a file tool,
-# and since gap row 422 no agent runs a shell segment that names it beside a write signal. It is
-# stated where it runs, before the others.
+# and since gap row 422 no agent runs a shell segment that names it beside a write signal. Since gap
+# row 438 no agent runs task-actions.sh set-run-mode either. It is stated where it runs, before the
+# others.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -167,26 +168,39 @@ answer_write_signal() {
     && printf '%s' "$s" | grep -Eq '[[:space:]](-[A-Za-z]*i|--in-place)' && return 0
   return 1
 }
+# Gap row 438. The run mode decides whether a person check passes (scripts/lib/recipes.sh,
+# cr_require_person), so only the main session changes it, the same as the answer above. An agent is
+# refused a segment that names task-actions.sh, or a `$NAME` set to it, with the word set-run-mode
+# after that name. A grep for the action's name passes, because the script's name comes after it.
+RUN_MODE_REFUSAL="set-run-mode decides whether a person's check passes, and only the main session runs it. This command's agent_type is $AGENT. Report the halt to the main session and stop."
+run_mode_signal() {
+  local n='task-actions\.sh'
+  [ -z "$alt" ] || n="$n|\\\$\\{?($alt)\\}?"
+  printf '%s' "$1" | grep -Eq "($n)[\"']?[[:space:]](.*[[:space:]])?[\"']?set-run-mode[\"']?([[:space:]]|\$)"
+}
+# Refuses with reason $4 the first segment of ROLE_CMD that names $1, or a `$NAME` an earlier
+# segment set to a value matching the extended regex $2, and for which function $3 returns 0.
+deny_named_segment() {
+  case "$ROLE_CMD" in *"$1"*) ;; *) return 0 ;; esac
+  # Without the command library the segments cannot be read, so the whole command is refused.
+  # shellcheck source=/dev/null
+  source "$PLUGIN_ROOT/scripts/lib/command-text.sh" 2>/dev/null || deny_own_record "$4"
+  local seg named names="" alt=""
+  while IFS= read -r seg; do
+    named=false
+    case "$seg" in *"$1"*) named=true ;; esac
+    [ -z "$alt" ] || ! printf '%s' "$seg" | grep -Eq "\\\$\\{?($alt)([^A-Za-z0-9_]|$)" || named=true
+    [ "$named" = true ] || continue
+    "$3" "$seg" && deny_own_record "$4"
+    names="$names $(printf '%s' "$seg" | grep -oE "[A-Za-z_][A-Za-z0-9_]*=[^[:space:];]*$2" | sed 's/=.*//' | tr '\n' ' ')"
+    alt="$(printf '%s' "$names" | sed -E 's/^ +//; s/ +$//; s/ +/|/g')"
+  done < <(split_segments "$(strip_heredocs "$ROLE_CMD")")
+}
 if [ -n "$AGENT" ]; then
   if [ "$TOOL" = Bash ]; then
-    ANSWER_CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
-    case "$ANSWER_CMD" in
-      *person-answer.json*)
-        # Without the command library the segments cannot be read, so the whole command is refused.
-        # shellcheck source=/dev/null
-        source "$PLUGIN_ROOT/scripts/lib/command-text.sh" 2>/dev/null || deny_own_record "$ANSWER_REFUSAL"
-        names=""
-        while IFS= read -r seg; do
-          named=false
-          case "$seg" in *person-answer.json*) named=true ;; esac
-          [ -z "${names// /}" ] || ! printf '%s' "$seg" \
-            | grep -Eq "\\\$\\{?($(printf '%s' "$names" | sed -E 's/^ +//; s/ +$//; s/ +/|/g'))([^A-Za-z0-9_]|$)" || named=true
-          [ "$named" = true ] || continue
-          answer_write_signal "$seg" && deny_own_record "$ANSWER_REFUSAL"
-          names="$names $(printf '%s' "$seg" | grep -oE '[A-Za-z_][A-Za-z0-9_]*=[^[:space:];]*person-answer\.json' | sed 's/=.*//' | tr '\n' ' ')"
-        done < <(split_segments "$(strip_heredocs "$ANSWER_CMD")")
-        ;;
-    esac
+    ROLE_CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
+    deny_named_segment person-answer.json 'person-answer\.json' answer_write_signal "$ANSWER_REFUSAL"
+    deny_named_segment task-actions.sh 'task-actions\.sh' run_mode_signal "$RUN_MODE_REFUSAL"
   else
     case "$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" in
       *person-answer.json*) deny_own_record "$ANSWER_REFUSAL" ;;
