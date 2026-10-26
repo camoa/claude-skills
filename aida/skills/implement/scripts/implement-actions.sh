@@ -609,6 +609,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      declaring neither a marker nor a selector records the red unchecked instead of refusing.
 #      The same exit when two tests of one file have reds that print the same places in it: they
 #      failed on a shared precondition, not on their own assertions (live-run row 207).
+#      The same exit when build-record's order-tests check, run over the frozen files, fails and
+#      prints no line of any red file: it runs something other than the reds (gap row 436).
 #  81  `tests-freeze` was given an --absence the order cannot route to review. Two facts, one
 #      refusal, because both say the same thing: the flag names something that is not an absence
 #      clause of this order. The clause is not, verbatim, one of the order's frozen `doneWhen`
@@ -902,11 +904,6 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      baseline subtraction (gap row 408). No role may write a frozen file. The message names the
 #      files and the first lines of the output. Nothing is frozen. A row that reads unknown or
 #      undeclared judged nothing; its detail goes to standard error and the freeze goes on.
-#
-# 124  `tests-freeze` ran build-record's order-tests check over the files it freezes, and the run
-#      failed with output that holds no line of a red file (gap row 436). The build check then
-#      runs something other than what the reds show. The message names the command, the tests and
-#      the first lines of the output. Nothing is frozen.
 #
 # The code a person's fix after a load-bearing ruling added (live-run row 426).
 # 123  `build-recheck` ran the checks over the commits a person made after a finding ruled
@@ -6716,14 +6713,16 @@ The test author repairs these files and runs each test again, and this freeze ru
     done
   fi
 
-  # --- 124: build-record's order-tests check runs what each red shows (row 436) --------------------
+  # --- 80: build-record's order-tests check runs what the reds show (gap row 436) -----------------
   # The author runs each test on its own, and the build runs the frozen files whole, with the
   # recipe's order-tests command. A spec that ran a case only when named froze with a red per case,
   # then printed usage when run whole, so a correct build read unmet and spent an attempt. So the
-  # freeze runs that check itself, through br_test_check. When it fails and prints something, each
-  # red file must share a line with what it printed. A run that printed nothing gives no line to
-  # compare, and a run that passes or reads unknown is left to the build.
-  local tf_ot_paths tf_ot_json tf_ot_out tf_ot_lines tf_ot_missing=""
+  # freeze runs that check itself, through br_test_check. When it fails and prints something, at
+  # least one red file must share a line with it, compared through br_line_keys so a duration or a
+  # count does not differ. One is enough: a file that stops at its first failing case shows only
+  # that red. A run that printed nothing, passed or read unknown is left to the build. A line that
+  # differs only in a random name, such as a temporary path, does not match; that is the limit.
+  local tf_ot_paths tf_ot_json tf_ot_out tf_ot_keys tf_ot_red_keys tf_ot_names
   tf_ot_paths="$(br_frozen_test_paths "$rows_json")"
   if [ "$red_count" -gt 0 ] && [ "$BR_ORDER_SLOT" = "order-tests" ] && [ "$tf_ot_paths" != "[]" ]; then
     CR_WHO="tests-freeze"; CR_TEST_RECIPES="$test_recipes"; CR_CHECK_RECIPES=""
@@ -6731,23 +6730,23 @@ The test author repairs these files and runs each test again, and this freeze ru
     BRC_WHO="tests-freeze"; BRC_CODEPATH="$codepath"; BRC_RECIPES="$CR_DOC"; BRC_VALUES=""
     BRC_SELECTED_JSON="$tf_ot_paths"; BRC_TESTS_DOC="$(jq -cn --argjson rows "$rows_json" '{rows: $rows}')"
     tf_ot_json="$(br_test_check "order-tests" "orderTests" "order-tests")" || exit "$?"
-    tf_ot_out="$IMPL_DIR/order-tests-$unit_id-freeze.txt"
+    tf_ot_out="$(mktemp)" || die 3 "tests-freeze: could not create a temporary file"
+    tf_ot_keys="$(mktemp)" || { rm -f "$tf_ot_out"; die 3 "tests-freeze: could not create a temporary file"; }
+    tf_ot_red_keys="$(mktemp)" || { rm -f "$tf_ot_out" "$tf_ot_keys"; die 3 "tests-freeze: could not create a temporary file"; }
     printf '%s' "$tf_ot_json" | jq -r '.output // ""' >"$tf_ot_out"
-    if [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" = "unmet" ] && grep -a -q '[^[:space:]]' "$tf_ot_out"; then
-      tf_ot_lines="$IMPL_DIR/.tests-freeze-red-lines.$$"
-      ri=0
-      while [ "$ri" -lt "$red_count" ]; do
-        red_name="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].name')"
-        red_path="$(printf '%s' "$reds_json" | jq -r --argjson ri "$ri" '.[$ri].path')"
-        grep -a -v '^[[:space:]]*$' "$red_path" >"$tf_ot_lines"
-        grep -a -F -x -q -f "$tf_ot_lines" "$tf_ot_out" || tf_ot_missing="${tf_ot_missing:+$tf_ot_missing, }$red_name"
-        ri=$((ri + 1))
-      done
-      rm -f "$tf_ot_lines"
-      [ -z "$tf_ot_missing" ] \
-        || die 124 "tests-freeze: the order-tests command build-record runs, $(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | (.orderTests.argv // []) | join(" ") ] | join("; ")'), over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), fails, and its output holds no line of the red file of these tests: $tf_ot_missing. It printed: $(head -n 5 "$tf_ot_out" | tr '\n' ' ')
-So the build check does not run what these reds show, and it would read a correct build unmet. Every test must run when that command runs its file, with no argument. The test author repairs the files and runs each test again, and this freeze runs again. Nothing is frozen. The output is in $tf_ot_out."
+    br_line_keys "$tf_ot_out" | grep -v '^$' | sort -u >"$tf_ot_keys"
+    printf '%s' "$reds_json" | jq -r '.[].path' | while IFS= read -r red_path; do
+      br_line_keys "$red_path"
+    done | grep -v '^$' | sort -u >"$tf_ot_red_keys"
+    if [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" = "unmet" ] && [ -s "$tf_ot_keys" ] \
+      && ! grep -a -F -x -q -f "$tf_ot_red_keys" "$tf_ot_keys"; then
+      tf_ot_names="$(printf '%s' "$reds_json" | jq -r 'map(.name) | unique | join(", ")')"
+      cp "$tf_ot_out" "$IMPL_DIR/order-tests-$unit_id-freeze.txt"
+      rm -f "$tf_ot_out" "$tf_ot_keys" "$tf_ot_red_keys"
+      die 80 "tests-freeze: the order-tests command build-record runs, $(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | (.orderTests.argv // []) | join(" ") ] | join("; ")'), over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), fails, and its output holds no line of any red file of these tests: $tf_ot_names. It printed: $(head -n 5 "$IMPL_DIR/order-tests-$unit_id-freeze.txt" | tr '\n' ' ')
+So the build check does not run what these reds show, and it would read a correct build unmet. Every test must run when that command runs its file, with no argument. The test author repairs the files and runs each test again, and this freeze runs again. Nothing is frozen. The output is in $IMPL_DIR/order-tests-$unit_id-freeze.txt."
     fi
+    rm -f "$tf_ot_out" "$tf_ot_keys" "$tf_ot_red_keys"
   fi
 
   # --- the test files go into a commit before anything is measured against them --------------------
