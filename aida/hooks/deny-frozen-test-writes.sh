@@ -54,8 +54,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Rule four, added for gap row 293, holds three roles to their own records. Since gap row 357 it
 # also keeps a person's answer record to the main session: no agent writes it through a file tool,
 # and since gap row 422 no agent runs a shell segment that names it beside a write signal. Since gap
-# row 438 no agent runs an action that records a person's approval, ruling or answer either. It is
-# stated where it runs, before the others.
+# row 438 no agent runs an action that records a person's approval, ruling or answer either, and no
+# agent writes a task's task.json. It is stated where it runs, before the others.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -156,6 +156,10 @@ deny_own_record() {
 # write is a forged answer, while a refused read costs one turn. A copy out of the record is refused
 # too. A name built at run time passes the Bash test.
 ANSWER_REFUSAL="person-answer.json holds a person's answer, and only the main session writes it. This write's agent_type is $AGENT. Report the halt to the main session and stop."
+# Gap row 438. task.json holds the run mode a person check reads, and only the task scripts write
+# it, so an agent is refused a write of it the same way. A role's call to an actions script does
+# not name the file.
+TASK_REFUSAL="task.json holds the run mode a person's check reads, and only the task scripts write it. This write's agent_type is $AGENT. Report the halt to the main session and stop."
 # Returns 0 when segment $1 holds a write signal: a redirect other than 2> or one to /dev/null, a
 # write verb, sed -i, find -delete, or an interpreter word.
 answer_write_signal() {
@@ -233,12 +237,14 @@ if [ -n "$AGENT" ]; then
   if [ "$TOOL" = Bash ]; then
     ROLE_CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
     deny_named_segment person-answer.json 'person-answer\.json' answer_write_signal "$ANSWER_REFUSAL"
+    deny_named_segment task.json 'task\.json' answer_write_signal "$TASK_REFUSAL"
     while read -r PA_SCRIPT; do
       deny_named_segment "$PA_SCRIPT" "$(printf '%s' "$PA_SCRIPT" | sed 's/\./\\./g')" person_action_signal "$PERSON_REFUSAL"
     done < <(printf '%s\n' "$PERSON_ACTIONS" | cut -d' ' -f1 | sort -u)
   else
     case "$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" in
       *person-answer.json*) deny_own_record "$ANSWER_REFUSAL" ;;
+      */task.json) deny_own_record "$TASK_REFUSAL" ;;
     esac
   fi
 fi
