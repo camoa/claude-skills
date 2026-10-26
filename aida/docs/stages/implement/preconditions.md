@@ -34,6 +34,10 @@ Read these lines when they print:
   proved by tests.
 - `notLookedUp:` a framework nobody looked up a code recipe for. That says nothing about the
   orders proved by tests, so the line names them.
+- `claudeSettings:` a Claude Code setting stops AIDA's hooks or removes WebFetch or WebSearch. It
+  names the setting, the file, what stops, what still checks, and the repair. The build goes on,
+  and you decide. The line is absent when no setting applies. See
+  [Check this machine](../../project/check-machine.md).
 
 ## The verdicts
 

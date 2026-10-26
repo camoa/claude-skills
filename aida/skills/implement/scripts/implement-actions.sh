@@ -3682,7 +3682,7 @@ do_preconditions() {
   local harness_needed harness_reason env_asked=no env_owner="" tooling_entries
   local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc build_json build_entries unchecked_json review_tools smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
   local pc_folder_gap="" pc_held pc_holders pc_where pc_missing
-  local pc_build_doc tool_rows_json pc_row_id pc_row_json pc_orders_json pc_head pc_uncommitted_json
+  local pc_build_doc tool_rows_json pc_row_id pc_row_json pc_orders_json pc_head pc_uncommitted_json pc_settings
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -4391,7 +4391,15 @@ PC_TOOL_ROWS
         || pc_advice="No folder holds a tooling recipe for $pc_no_recipe. Dispatch catalog-identifier with tooling: <tool> per tool, then run preconditions again with --tooling <tool>=<path>"
       ;;
   esac
+  # A setting that stops AIDA's hooks or its web search is told before the first order, and never
+  # refuses: a person may build without them (gap row 434). The project files are read from the
+  # code path, where the session runs.
+  # shellcheck source=/dev/null
+  source "$PLUGIN_ROOT/scripts/lib/claude-settings.sh" \
+    || die 3 "preconditions: the settings library failed to load: $PLUGIN_ROOT/scripts/lib/claude-settings.sh"
+  pc_settings="$(ccs_findings "$(project_code_path_value "$project_folder")" | jq -sc 'map({setting, file, stops, still, unchecked, fix} | with_entries(select(.value != "")))')"
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
+        --argjson claudeSettings "$pc_settings" \
         --argjson report "$record_json" --arg freeze "$im_freeze" --arg notLookedUp "$im_unlooked" \
         --arg freezeAdvice "$im_advice" --arg reviewNotResolved "$rv_unresolved" \
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
@@ -4444,7 +4452,7 @@ PC_TOOL_ROWS
                            else $folderRecipeMissing + " Add the file to that folder, or confirm the catalog recipe fits." end),
      failedOutput: $failedOutput,
      nextAdvice: $nextAdvice,
-     next: $next}')"
+     next: $next} + (if $claudeSettings == [] then {} else {claudeSettings: $claudeSettings} end)')"
 
   # `met` and `undeclared` both go on. A recipe that says this framework needs nothing before a
   # test runs, or nothing before a smoke command proves one, has answered, and refusing on it

@@ -30,6 +30,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   $AIDA_REGISTRY_PATH (default ~/.claude/aida/registry.json): the registry, if it exists
 #   whether the directory named by project.json's codePath still exists
 #   <plugin root>/scripts/lib/surfaces.sh and paths.sh: whether the surface file of a kind marked on exists
+#   <plugin root>/scripts/lib/claude-settings.sh: the Claude Code settings files, for advisory
+#     lines that never change the exit code
 #   $HOME, to apply the code-path safety rules
 #   git -C <path> status --porcelain=v1 --ignored: repository state and ignored files
 #
@@ -215,6 +217,8 @@ source "$FINDINGS_LIB" 2>/dev/null || die3 "the findings library failed to load:
 source "$PLUGIN_ROOT/scripts/lib/paths.sh" 2>/dev/null || die3 "the paths library failed to load: $PLUGIN_ROOT/scripts/lib/paths.sh"
 # shellcheck source=/dev/null
 source "$PLUGIN_ROOT/scripts/lib/surfaces.sh" 2>/dev/null || die3 "the surfaces library failed to load: $PLUGIN_ROOT/scripts/lib/surfaces.sh"
+# shellcheck source=/dev/null
+source "$PLUGIN_ROOT/scripts/lib/claude-settings.sh" 2>/dev/null || die3 "the settings library failed to load: $PLUGIN_ROOT/scripts/lib/claude-settings.sh"
 
 [ -f "$PROJECT_SCHEMA_FILE" ] || die3 "cannot read the project field list: $PROJECT_SCHEMA_FILE not found"
 jq empty "$PROJECT_SCHEMA_FILE" 2>/dev/null || die3 "cannot read the project field list: $PROJECT_SCHEMA_FILE is not valid JSON"
@@ -895,6 +899,12 @@ SURFACE_KINDS
       echo
       ;;
   esac
+fi
+
+# Advisory, outside the exit code: a setting that stops AIDA's hooks or its web search.
+if [ "$CODEPATH_EXISTS_JSON" = "true" ]; then
+  CLAUDE_SETTINGS_LINES="$(ccs_print "$CODEPATH_VALUE")"
+  [ -n "$CLAUDE_SETTINGS_LINES" ] && printf '%s\n\n' "$CLAUDE_SETTINGS_LINES"
 fi
 
 echo "Ready for work: $READY_JSON"

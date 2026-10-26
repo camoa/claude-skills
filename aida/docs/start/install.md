@@ -49,7 +49,8 @@ Run this from your code folder on a new machine, and again after a plugin update
 It prints your Claude Code version and the AIDA version on disk. It tells you whether your
 Claude Code has `/cd` (2.1.169 or later), which moves a session into a task's worktree. It also
 tells you whether it shows the approval prompt for a folder outside `.claude/worktrees/`
-(2.1.206 or later), and whether AIDA changed since this session started.
+(2.1.206 or later), and whether AIDA changed since this session started. When a Claude Code
+setting stops AIDA's hooks or its web search, it names that setting and the file that set it.
 
 Run from the code folder of a project, it also lists each task in progress: whether its
 worktree is on disk and whether git knows it. From any other folder those task lines are absent.
