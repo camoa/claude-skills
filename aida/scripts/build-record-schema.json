@@ -37,12 +37,22 @@
     "startedAt": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The commit this attempt began from, the full form of the `--started-at` value `build-record` was given, resolved and confirmed to name a real commit in the code repository (exit 43 otherwise). Check three's own diff runs from here to `commit`."
+      "description": "The commit this attempt began from, the full form of the `--started-at` value `build-record` was given, resolved and confirmed to name a real commit in the code repository (exit 43 otherwise). The list in `commits` is read from here to `commit`."
     },
     "commit": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
       "description": "The code repository's HEAD at the moment `build-record` ran, read fresh with `git rev-parse HEAD`, never assumed. Together with `attempt`, this is what exit 45 compares a new call against to refuse recording the same attempt twice."
+    },
+    "commits": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+      "description": "The commits the implementer made, full form, oldest first. `build-record` derives it: every commit from `startedAt` to `commit`, less each commit another order's records name, in a build or fix list or as a freeze. The owned-files check reads the files these commits change, and no range. `review-brief` builds the order's diff from this list, `commitsBefore` and the fix records' lists. A record without it was written before the lists: review-brief refuses it, and `build-recheck` writes it."
+    },
+    "commitsBefore": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+      "description": "Present after a second attempt: the commits the earlier attempts listed, which this file no longer holds, since it keeps the last attempt alone. `build-record` moves the earlier record's `commits` here. The owned-files check does not read them, so a stray change an earlier attempt reverted does not stop the next one. `review-brief` reads them, so every attempt is in the order's diff."
     },
     "attempt": {
       "type": "integer",

@@ -454,7 +454,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      round this stage takes as finished.
 #  61  `build-record` or `fix-record` was asked to record a run whose working tree is not clean:
 #      something is modified, staged or untracked in the code repository. Every check but one reads
-#      the working tree, and the owned-files check reads two commits, so an uncommitted change
+#      the working tree, and the owned-files check reads commits alone, so an uncommitted change
 #      passes that one check while staying in the tree and leaves the round's own diff empty. The
 #      role's work is committed before the record is written. Unattended, the two record steps write
 #      the halt onto the order before refusing, because an order left in flight with no reason is a
@@ -7054,10 +7054,11 @@ im_freeze_holds_work() {
 # because a positional list that long is read wrong sooner than it is read right.
 #   BRC_WHO             the action's own name, for a message
 #   BRC_CODEPATH        the code repository every command runs from inside
-#   BRC_STARTED_AT      the commit this attempt or round began from, full form
+#   BRC_COMMITS         the commits the record lists as its role's own, a JSON array from
+#                       im_role_commits. The owned-files check reads these commits and no range
 #   BRC_CURRENT         the code repository's HEAD now
-#   BRC_SCOPE           the one path the owned-files diff is scoped to, RV_RANGE_SCOPE: the task
-#                       folder for an order whose proof is record, empty for the whole tree
+#   BRC_SCOPE           the one path the owned-files check is scoped to, RV_RANGE_SCOPE: the
+#                       project folder for an order whose proof is record, empty for the whole tree
 #   BRC_UNIT_JSON       the frozen work order
 #   BRC_TESTS_DOC       the frozen test record for this order
 #   BRC_BASELINE_FILE   where step two wrote the baseline
@@ -7085,7 +7086,7 @@ im_freeze_holds_work() {
 #                       beside the order's ownedFiles (live-run row 116). A build attempt
 #                       leaves it `[]`
 # ------------------------------------------------------------------------------------------------
-BRC_WHO=""; BRC_CODEPATH=""; BRC_STARTED_AT=""; BRC_CURRENT=""; BRC_SCOPE=""
+BRC_WHO=""; BRC_CODEPATH=""; BRC_COMMITS="[]"; BRC_CURRENT=""; BRC_SCOPE=""
 BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""; BRC_ALLOWED_JSON="[]"
 BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
@@ -8205,16 +8206,12 @@ br_seven_checks() {
     br_tool_check "security"         "security"        "security"         >>"$parts_file"
   fi
 
-  # --- the realized diff touches only the files this order owns ------------------------------------
+  # --- the order's own commits touch only the files this order owns ---------------------------------
   local ofc_verdict ofc_detail
   local diff_output owned_files_json owned_count unmatched="" p matched gi g set_aside=0 aside_noun
-  local own_count allowed_hit="" env_aside="" rerun_step="" others=""
-  # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
-  # the new path, so a deleted file this order does not own would never appear here.
-  diff_output="$(git_diff_of "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$BRC_SCOPE" --no-renames --name-only)"
-  # Another order's commits inside the range are that order's to answer for (gap row 340).
-  [ -n "$BRC_SCOPE" ] || others="$(im_other_order_commits "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$BRC_UNIT_JSON")"
-  [ -z "$others" ] || diff_output="$(im_kept_paths "$BRC_CODEPATH" "$BRC_STARTED_AT" "$BRC_CURRENT" "$others" "$diff_output")"
+  local own_count allowed_hit="" env_aside="" rerun_step="" commit_count
+  diff_output="$(im_commits_paths "$BRC_CODEPATH" "$BRC_COMMITS" "$BRC_SCOPE")"
+  commit_count="$(printf '%s' "$BRC_COMMITS" | jq 'length')"
   # The paths a person allowed for a fix round follow the order's own. So an index at or past
   # own_count is an allowed path, and the detail names it (live-run row 116).
   owned_files_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c --argjson a "$BRC_ALLOWED_JSON" '(.ownedFiles // []) + $a')"
@@ -8257,15 +8254,14 @@ BR_DIFF
     [ "$BRC_ALLOWED_JSON" = "[]" ] || ofc_detail="${ofc_detail%.}, nor the paths allowed for this round: $(printf '%s' "$BRC_ALLOWED_JSON" | jq -r 'join(", ")')"
     rerun_step="$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
     [ -z "$rerun_step" ] || ofc_detail="${ofc_detail%.}.$rerun_step"
-  elif [ -n "$env_aside" ] || [ -n "$others" ]; then
+  elif [ -n "$env_aside" ]; then
     ofc_verdict="met"
-    ofc_detail="every other file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
+    ofc_detail="every other file the commits on the record's list ($commit_count) change matches this order's own ownedFiles."
   else
     ofc_verdict="met"
-    ofc_detail="every file changed between $BRC_STARTED_AT and $BRC_CURRENT matches this order's own ownedFiles."
+    ofc_detail="every file the commits on the record's list ($commit_count) change matches this order's own ownedFiles."
   fi
   [ -z "$env_aside" ] || ofc_detail="$ofc_detail Set aside as files \`task environment up\` recorded: ${env_aside%, }."
-  [ -z "$others" ] || ofc_detail="$ofc_detail Set aside as commits another order's record holds: $(printf '%s\n' "$others" | cut -c1-12 | tr '\n' ' ' | sed 's/ $//')."
   [ -z "$allowed_hit" ] || ofc_detail="$ofc_detail The paths a person allowed for this round that the diff touched: ${allowed_hit%, }."
   if [ "$BR_ORDER_RANGE" = "project" ]; then
     aside_noun="files"
@@ -9160,7 +9156,18 @@ do_build_record() {
   BRC_WHO="build-record"
   BRC_CODEPATH="$codepath"
   BRC_SCOPE="$RV_RANGE_SCOPE"
-  BRC_STARTED_AT="$started_at_full"
+  # The record holds the last attempt, so the earlier attempts' lists move to commitsBefore, which
+  # the review reads too. A record written before the lists has its commits read from its range,
+  # the same way.
+  local br_before='[]' br_old_commits
+  BRC_COMMITS="$(im_role_commits "$codepath" "$started_at_full" "$current_commit" "$unit_id")"
+  if [ -n "${existing_doc:-}" ]; then
+    br_old_commits="$(printf '%s' "$existing_doc" | jq -c '.commits // empty')"
+    [ -n "$br_old_commits" ] || br_old_commits="$(im_role_commits "$codepath" \
+      "$(printf '%s' "$existing_doc" | jq -r '.startedAt')" "$existing_commit" "$unit_id")"
+    br_before="$(printf '%s' "$existing_doc" | jq -c --argjson old "$br_old_commits" --argjson new "$BRC_COMMITS" \
+      '((.commitsBefore // []) + $old | unique) - $new')"
+  fi
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
@@ -9185,13 +9192,15 @@ do_build_record() {
     --arg commit "$current_commit" --argjson attempt "$attempt_number" \
     --arg interfaceRecord "$interface_text" --arg reportPath "$report_path" \
     --argjson executed "$executed_count" --argjson accepted "${accepted_json:-null}" \
-    --arg snapshotHash "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash // ""')" \
+    --arg snapshotHash "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash // ""')" --argjson commits "$BRC_COMMITS" \
+    --argjson commitsBefore "$br_before" \
     '{
       schemaVersion: 1,
       takenAt: $takenAt,
       unit: $unit,
       startedAt: $startedAt,
       commit: $commit,
+      commits: $commits,
       attempt: $attempt,
       snapshotHash: $snapshotHash,
       interfaceRecord: $interfaceRecord,
@@ -9200,7 +9209,8 @@ do_build_record() {
       executed: $executed,
       decidingChecks: { total: 8, ranHere: [ .[] | .id ] }
     }
-    + (if $accepted == null then {} else {deviationAccepted: $accepted} end)' "$checks_file")"
+    + (if $accepted == null then {} else {deviationAccepted: $accepted} end)
+    + (if $commitsBefore == [] then {} else {commitsBefore: $commitsBefore} end)' "$checks_file")"
   rm -f "$checks_file"
   [ -n "$record_json" ] || die3 "build-record: could not assemble the record for $unit_id."
 
@@ -9409,9 +9419,13 @@ do_build_recheck() {
   # --- exit 88, three: a check outside the tool rows, owned-files and interface-record stopped
   # the attempt, which is the implementer's work to answer, so a re-check would be a free retry.
   # An attempt nothing stopped is past the build, and there is nothing to run again ---------------
-  local stoppers outside
+  # A passed build record written before the lists runs again at checks-passed, so it gets its
+  # list before review-brief reads it.
+  local stoppers outside listless=false
+  [ "$fix_round" != 0 ] || [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')" != "checks-passed" ] \
+    || printf '%s' "$record_doc" | jq -e 'has("commits")' >/dev/null || listless=true
   stoppers="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | stoppers | join(", ")')"
-  [ -n "$stoppers" ] || [ -n "$pf_index" ] \
+  [ -n "$stoppers" ] || [ -n "$pf_index" ] || [ "$listless" = true ] \
     || die 88 "build-recheck: $record_name at $unit_id passed its checks, so there is nothing to run again."
   outside="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | outside_recheck | join(", ")')"
   [ -z "$outside" ] || [ -n "$pf_index" ] \
@@ -9474,9 +9488,16 @@ EOF_PATHS
   BRC_WHO="build-recheck"
   BRC_CODEPATH="$codepath"
   BRC_SCOPE="$RV_RANGE_SCOPE"
-  BRC_STARTED_AT="$record_started_at"
+  # The record's own list, read from its range when the record was written before the lists. A
+  # person's fix adds the commits after the record.
+  BRC_COMMITS="$(printf '%s' "$record_doc" | jq -c '.commits // empty')"
+  [ -n "$BRC_COMMITS" ] || BRC_COMMITS="$(im_role_commits "$codepath" "$record_started_at" "$record_commit" "$unit_id")"
   BRC_CURRENT="$record_commit"
-  [ -z "$pf_index" ] || BRC_CURRENT="$current_commit"
+  if [ -n "$pf_index" ]; then
+    BRC_CURRENT="$current_commit"
+    BRC_COMMITS="$(jq -cn --argjson old "$BRC_COMMITS" \
+      --argjson new "$(im_role_commits "$codepath" "$record_commit" "$current_commit" "$unit_id")" '$old + ($new - $old)')"
+  fi
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
   brc_use_baseline "$BRC_WHO"
@@ -9505,9 +9526,10 @@ EOF_PATHS
   record_json="$(jq -c --arg recheckedAt "$today" --argjson executed "$BR_EXECUTED" \
     --arg interfaceRecord "$BR_INTERFACE_TEXT" --argjson fix "$fix_round" --slurpfile before "$record_file" \
     --arg snapshotHash "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash // ""')" \
-    --arg pfIndex "$pf_index" --arg pfBecause "$pf_because" --arg head "$current_commit" '
+    --arg pfIndex "$pf_index" --arg pfBecause "$pf_because" --arg head "$current_commit" --argjson commits "$BRC_COMMITS" '
     . as $new
     | $before[0]
+    | .commits = $commits
     | if $pfIndex == "" then . else
         .personFix = {cleared: ($pfIndex | tonumber), because: $pfBecause, commitBefore: .commit} | .commit = $head end
     | .checksBefore = ((.checks // []) | map({id, verdict}))
@@ -9665,7 +9687,7 @@ rv_load_range_repo() {
   RV_RANGE_NAME="the project folder"
 }
 
-# Where an order's range starts, for review-brief and close (gap row 222). The build record keeps
+# Where an order's range starts, for close (gap row 222). The build record keeps
 # the last attempt only, so its startedAt drops every earlier attempt. In the code repository the
 # start is the freeze record's commit, HEAD when the tests froze: `restart` and `retake-tests`
 # move the records aside, so the next freeze starts a new range. A record order keeps the build
@@ -9797,21 +9819,90 @@ im_other_order_commits() {
       done | LC_ALL=C sort -u
 }
 
-# The paths among $5, one per line, that a commit after $2 up to $3 in the repository $1 changed,
-# leaving out the commits listed in $4. A path only another order's commits changed drops out.
-im_kept_paths() {
-  local kept="" c p
-  for c in $(git -C "$1" rev-list "$2..$3" 2>/dev/null); do
-    printf '%s\n' "$4" | grep -Fqx -- "$c" && continue
-    kept="$kept$(git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)
-"
-  done
+# The commits order $4's role made after $2 up to $3 in the repository $1, a JSON array, oldest
+# first. Each build and fix record stores this list, and the owned-files check and the review diff
+# read nothing else. Left out is every commit another order's records name: its build and fix
+# lists, its earlier attempts' lists, and its freezes, which are AIDA's own commits of that order's
+# tests. This order's own freeze stays, since it holds this order's tests. It enters a range only
+# when build-record starts the range at its parent because the freeze holds the order's work
+# (live-run row 371). The orders of one task
+# share one worktree, and their builds run one at a time. So another order's commit sits inside
+# this range only when the range began before that order's dispatch, and that order's record step,
+# which ran before this one, already listed it.
+im_role_commits() {
+  local taken f c
+  taken="$(find "$TASK_PATH" -mindepth 2 -maxdepth 3 -type f \( -name 'build-wo*.json' -o -name 'fix-wo*-*.json' -o -name 'tests-wo*.json' \) 2>/dev/null \
+    | while IFS= read -r f; do
+        case "$(basename "$f")" in
+          "build-$4.json"|"fix-$4-"*|"tests-$4.json") ;;
+          tests-*) tf_freeze_commits "$f" | jq -r '.[]' ;;
+          *) jq -r '(.commits // []) + (.commitsBefore // []) | .[]' "$f" 2>/dev/null ;;
+        esac
+      done)"
+  git -C "$1" rev-list --reverse "$2..$3" 2>/dev/null | while IFS= read -r c; do
+    printf '%s\n' "$taken" | grep -Fqx -- "$c" || printf '%s\n' "$c"
+  done | jq -Rsc 'split("\n") | map(select(. != ""))'
+}
+
+# The paths the commits in JSON array $2 change in the repository $1, one per line, sorted.
+# --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
+# the new path, so a deleted file the order does not own would never appear. $3 a path to scope
+# the read to, or empty.
+im_commits_paths() {
+  local c
+  printf '%s' "$2" | jq -r '.[]' | while IFS= read -r c; do
+    if [ -n "$3" ]; then git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames "$c" -- "$3"
+    else git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames "$c"; fi
+  done | LC_ALL=C sort -u
+}
+
+# Writes to file $6 the diff of the commits in JSON array $3, in the repository $2, up to commit
+# $4: the diff a reviewer or a verifier reads. Sets IM_DIFF_FROM to the commit it starts at, the
+# parent of the oldest listed commit, or $4 when the list is empty. A path order $5 owns alone is
+# diffed from there to $4. A path it shares is diffed per listed commit, so another order's lines
+# in it stay out (gap row 287). $7 the project folder a record order's diff reads whole, or empty.
+# A listed commit outside the history of $4 refuses, because the diff would leave it out. $1 the
+# action's own name.
+IM_DIFF_FROM=""
+im_list_diff() {
+  local who="$1" repo="$2" list="$3" to="$4" unit_json="$5" out="$6" scope="$7" sorted missing p shared_paths="" c
+  sorted="$(git -C "$repo" rev-list --reverse --topo-order "$to" 2>/dev/null | grep -Fx -f <(printf '%s' "$list" | jq -r '.[]'))"
+  missing="$(printf '%s' "$list" | jq -r '.[]' | grep -Fvx -f <(printf '%s\n' "$sorted") | tr '\n' ' ')"
+  [ -z "$missing" ] \
+    || die3 "$who: the order's records list commits that are not in the history of $to in $repo, so the diff would leave them out: ${missing% }. Nothing was written."
+  IM_DIFF_FROM="$to"
+  : >"$out" || die3 "$who: could not write $out."
+  [ -n "$sorted" ] || return 0
+  IM_DIFF_FROM="$(git -C "$repo" rev-parse --verify --quiet "$(printf '%s\n' "$sorted" | head -n 1)^")" \
+    || die3 "$who: the oldest commit the order's records list has no parent in $repo, so the diff has no start."
+  if [ -n "$scope" ]; then
+    git_diff_of "$repo" "$IM_DIFF_FROM" "$to" "$scope" >"$out" \
+      || die3 "$who: could not write the diff from $IM_DIFF_FROM to $to into $out."
+    return 0
+  fi
+  set --
   while IFS= read -r p; do
-    [ -n "$p" ] && printf '%s' "$kept" | grep -Fqx -- "$p" && printf '%s\n' "$p"
-  done <<IKP_PATHS
-$5
-IKP_PATHS
-  return 0
+    [ -n "$p" ] || continue
+    if [ "$(im_path_claim "$p" "$unit_json")" = "shared" ]; then shared_paths="$shared_paths$p
+"; else set -- "$@" "$p"; fi
+  done <<ILD_PATHS
+$(im_commits_paths "$repo" "$list" "")
+ILD_PATHS
+  if [ "$#" -gt 0 ]; then
+    git -C "$repo" diff "$IM_DIFF_FROM" "$to" -- "$@" >"$out" 2>/dev/null \
+      || die3 "$who: could not write the diff from $IM_DIFF_FROM to $to into $out."
+  fi
+  [ -n "$shared_paths" ] || return 0
+  set --
+  while IFS= read -r p; do [ -z "$p" ] || set -- "$@" "$p"; done <<ILD_SHARED
+$shared_paths
+ILD_SHARED
+  while IFS= read -r c; do
+    git -C "$repo" diff "$c^" "$c" -- "$@" >>"$out" 2>/dev/null \
+      || die3 "$who: could not write the diff of $c into $out."
+  done <<ILD_COMMITS
+$sorted
+ILD_COMMITS
 }
 
 # Succeeds when every commit after $2 up to $3 in the repository $1 is another order's, as
@@ -10227,56 +10318,28 @@ do_review_brief() {
 
   # The diff moves as a file the reviewer opens, never pasted through the orchestrator
   # (ideal/implementation.md, "What a review is given, and what it is refused"). For an order
-  # whose proof is record it is the task folder's diff in the project folder, and the brief names
-  # the deliverables by path, since a document is read whole and not as a patch (nyc defect 17).
-  # In the code repository the diff runs over every attempt, and holds only the files this order's
-  # own commits changed, so another order built between two attempts stays out (gap row 222).
-  # A file this order shares is diffed per own commit instead, so another order's lines in it stay
-  # out too (gap row 287).
-  local started_at commit diff_path deliverables_json own_commits own_paths shared_paths="" c
-  rv_load_order_start "review-brief" "$unit_id"
-  started_at="$RV_ORDER_START"
+  # whose proof is record it is the project folder's diff, and the brief names the deliverables
+  # by path, since a document is read whole and not as a patch (nyc defect 17). The diff holds the
+  # commits the order's build and fix records list, and the records a retake moved aside, since a
+  # retake keeps the code (gap row 437). So a commit another order made stays out (gap row 222).
+  local started_at commit diff_path deliverables_json own_commits='[]' f
   commit="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.commit // ""')"
   [ -n "$commit" ] \
     || die3 "review-brief: $IMPL_DIR/build-$unit_id.json holds no commit, though build-record writes it."
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    jq -e 'has("commits")' "$f" >/dev/null 2>&1 \
+      || die3 "review-brief: $f holds no commits list. It was written before each record kept the commits its role made, and the diff reads those lists alone. At the top of $IMPL_DIR, build-recheck on $unit_id writes the list. A record a retake moved aside has no step that writes it again."
+    own_commits="$(jq -c --argjson have "$own_commits" '$have + .commits + (.commitsBefore // []) | unique' "$f")"
+  done <<RB_RECORDS
+$IMPL_DIR/build-$unit_id.json
+$(find "$IMPL_DIR" -mindepth 1 -maxdepth 2 \( -path "$IMPL_DIR/fix-$unit_id-*.json" -o -path "$IMPL_DIR/retaken-$unit_id-*/*" \
+     \( -name "build-$unit_id.json" -o -name "fix-$unit_id-*.json" \) \) 2>/dev/null | sort)
+RB_RECORDS
   diff_path="$IMPL_DIR/diff-$unit_id.patch"
   deliverables_json="[]"
-  if [ -n "$RV_RANGE_SCOPE" ]; then
-    git_diff_of "$RV_RANGE_REPO" "$started_at" "$commit" "$RV_RANGE_SCOPE" > "$diff_path" \
-      || die3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
-  else
-    own_commits="$(im_order_commits "$RV_RANGE_REPO" "$started_at" "$commit" "$RV_UNIT_JSON" "$IMPL_DIR" \
-      | sed -n 's/^own //p')"
-    own_paths="$(printf '%s\n' "$own_commits" | while IFS= read -r c; do
-          [ -z "$c" ] || git -C "$RV_RANGE_REPO" diff-tree --no-commit-id --name-only -r --no-renames "$c"
-        done | LC_ALL=C sort -u)"
-    set --
-    while IFS= read -r p; do
-      [ -n "$p" ] || continue
-      if [ "$(im_path_claim "$p" "$RV_UNIT_JSON")" = "shared" ]; then shared_paths="$shared_paths$p
-"; else set -- "$@" "$p"; fi
-    done <<RB_PATHS
-$own_paths
-RB_PATHS
-    : > "$diff_path" || die3 "review-brief: could not write $diff_path."
-    if [ "$#" -gt 0 ]; then
-      git -C "$RV_RANGE_REPO" diff "$started_at" "$commit" -- "$@" > "$diff_path" 2>/dev/null \
-        || die3 "review-brief: could not write the diff from $started_at to $commit into $diff_path."
-    fi
-    if [ -n "$shared_paths" ]; then
-      set --
-      while IFS= read -r p; do [ -z "$p" ] || set -- "$@" "$p"; done <<RB_SHARED
-$shared_paths
-RB_SHARED
-      while IFS= read -r c; do
-        [ -n "$c" ] || continue
-        git -C "$RV_RANGE_REPO" diff "$c^" "$c" -- "$@" >> "$diff_path" 2>/dev/null \
-          || die3 "review-brief: could not write the diff of $c into $diff_path."
-      done <<RB_COMMITS
-$own_commits
-RB_COMMITS
-    fi
-  fi
+  im_list_diff "review-brief" "$RV_RANGE_REPO" "$own_commits" "$commit" "$RV_UNIT_JSON" "$diff_path" "$RV_RANGE_SCOPE"
+  started_at="$IM_DIFF_FROM"
   [ -z "$RV_RANGE_PATHS" ] || deliverables_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.ownedFiles // []')"
 
   local criteria_json nongoals_json tests_json
@@ -11305,7 +11368,7 @@ RV_AC
   BRC_WHO="fix-record"
   BRC_CODEPATH="$RV_RANGE_REPO"
   BRC_SCOPE="$RV_RANGE_SCOPE"
-  BRC_STARTED_AT="$started_at_full"
+  BRC_COMMITS="$(im_role_commits "$RV_RANGE_REPO" "$started_at_full" "$current_commit" "$unit_id")"
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
@@ -11345,23 +11408,9 @@ RV_AC
   br_require_supplied_values "$seven_file"
   checks_json="$(cat "$seven_file" 2>/dev/null)"
 
-  local diff_path fix_others="" fix_paths p
+  local diff_path
   diff_path="$IMPL_DIR/diff-$unit_id-fix$round_number.patch"
-  git_diff_of "$RV_RANGE_REPO" "$started_at_full" "$current_commit" "$RV_RANGE_SCOPE" > "$diff_path" \
-    || { rm -f "$seven_file"; die3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."; }
-  # The patch leaves out the files only another order's commits changed, as owned-files does.
-  [ -n "$RV_RANGE_SCOPE" ] || fix_others="$(im_other_order_commits "$RV_RANGE_REPO" "$started_at_full" "$current_commit" "$RV_UNIT_JSON")"
-  if [ -n "$fix_others" ]; then
-    fix_paths="$(im_kept_paths "$RV_RANGE_REPO" "$started_at_full" "$current_commit" "$fix_others" \
-      "$(git -C "$RV_RANGE_REPO" diff --no-renames --name-only "$started_at_full" "$current_commit" 2>/dev/null)")"
-    set --
-    while IFS= read -r p; do [ -z "$p" ] || set -- "$@" "$p"; done <<FR_PATHS
-$fix_paths
-FR_PATHS
-    : > "$diff_path"
-    [ "$#" -eq 0 ] || git -C "$RV_RANGE_REPO" diff "$started_at_full" "$current_commit" -- "$@" > "$diff_path" 2>/dev/null \
-      || { rm -f "$seven_file"; die3 "fix-record: could not write the fix diff from $started_at_full to $current_commit into $diff_path."; }
-  fi
+  im_list_diff "fix-record" "$RV_RANGE_REPO" "$BRC_COMMITS" "$current_commit" "$RV_UNIT_JSON" "$diff_path" "$RV_RANGE_SCOPE"
 
   local today record_json executed_count
   executed_count="$(br_executed_count "$checks_json")"
@@ -11369,13 +11418,14 @@ FR_PATHS
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -c --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
     --arg commit "$current_commit" --argjson round "$round_number" --arg reportPath "$report_path" \
-    --arg diffPath "$diff_path" --argjson executed "$executed_count" '
+    --arg diffPath "$diff_path" --argjson executed "$executed_count" --argjson commits "$BRC_COMMITS" '
     {
       schemaVersion: 1,
       takenAt: $takenAt,
       unit: $unit,
       startedAt: $startedAt,
       commit: $commit,
+      commits: $commits,
       round: $round,
       reportPath: $reportPath,
       diffPath: $diffPath,

@@ -37,12 +37,17 @@
     "startedAt": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The commit this round began from, the full form of the `--started-at` value `fix-record` was given, resolved and confirmed to name a real commit in the code repository (exit 43 otherwise). The owned-files check and the diff both run from here to `commit`."
+      "description": "The commit this round began from, the full form of the `--started-at` value `fix-record` was given, resolved and confirmed to name a real commit in the code repository (exit 43 otherwise). The list in `commits` is read from here to `commit`."
     },
     "commit": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
       "description": "The code repository's HEAD at the moment `fix-record` ran, read fresh with `git rev-parse HEAD`, never assumed. Together with `round`, this is what exit 45 compares a new call against to refuse recording the same round twice."
+    },
+    "commits": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+      "description": "The commits the fixer made this round, full form, oldest first. `fix-record` derives it as `build-record` does: every commit from `startedAt` to `commit`, less each commit another order's records name. The owned-files check reads the files these commits change, and the round's diff holds these commits alone. `review-brief` reads it beside the build record's list."
     },
     "round": {
       "type": "integer",
@@ -57,7 +62,7 @@
     "diffPath": {
       "type": "string",
       "minLength": 1,
-      "description": "Where this round's own diff was written, from `startedAt` to `commit`. The verification reads its verdicts against this diff only, which is what keeps one round from growing into the next."
+      "description": "Where this round's own diff was written: the diff of the commits in `commits`. The verification reads its verdicts against this diff only, which is what keeps one round from growing into the next."
     },
     "checks": {
       "type": "array",

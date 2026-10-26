@@ -319,14 +319,16 @@ recorded on any of these.
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
 Equal to the code repository's own current commit (exit 71), or not an ancestor of it (exit 3):
-either makes the range this attempt claims false. The build record keeps this attempt's range
-only. Review and close read the order's range from the freeze, so a second attempt that changes
-one line is reviewed with the code the first attempt wrote.
+either makes the range this attempt claims false. From that range the script lists the
+implementer's commits in the build record. It leaves out each commit another order's records
+name, in a build or fix list or as a freeze. The owned-files check reads the files those commits
+change, and no range. The earlier attempts' lists move to `commitsBefore`, which review reads, so a
+second attempt that changes one line is reviewed with the code the first attempt wrote.
 One equal commit is not refused. When it is this order's own freeze commit and every frozen test
 locks in, the freeze commit holds the order's work. A tests order whose deliverable is its test
 file is this case. So is a code order whose tests all pass on the code that is there already, and
-its range then holds its test files alone. The range then starts at the parent of the freeze commit, and review and close
-read it from there.
+its range then holds its test files alone. The range then starts at the parent of the freeze commit, so the
+freeze commit is on the order's list.
 
 **`build-record` refuses when the code repository's tree is not clean.** The implementer commits
 its own work before it returns. A dirty tree means that commit did not happen. This attempt is not
@@ -346,7 +348,7 @@ project folder with no history refuses (exit 3).
 
 **A `record` order's diff is the project folder's.** Its deliverable may sit beside earlier
 reports outside the task folder. So the owned-files check, the review diff and the fix patch
-read `git diff <range>` over the project folder whole. AIDA commits that folder between a
+read the listed commits over the project folder whole. AIDA commits that folder between a
 build brief and its record. A task note commits `tasks/` whole, and another task's stage close
 commits its folder. None of that is the implementer's, so the files AIDA's own scripts write
 are set aside before the owned list is compared. Inside this task's folder those are
