@@ -16,7 +16,7 @@ See [When it stops](../../when-it-stops/).
 
 | The halt begins | What it means | The action |
 |---|---|---|
-| `attempts spent` | every allowed attempt failed a check | `grant-attempt`, once you decide |
+| `attempts spent` | every allowed attempt failed a check | `grant-attempt` or `retake-tests --because`, once you decide |
 | `budget spent` | the task's ceiling on dispatches or minutes is reached | raise the ceiling, then `grant-attempt` |
 | `design drift: the builder declared a departure` or `design drift: the reviewer answered` | review found a departure from the design | keep the departure, or change the design and restart |
 | any other `design drift` | the design changed after the order started | the restart, or put the design back |
@@ -24,7 +24,8 @@ See [When it stops](../../when-it-stops/).
 | anything else | something only you can do | do it, then `clear-halt` |
 
 **Attempts spent.** AIDA names the recorded attempts, and you decide which of three things is
-true. The test is wrong: you correct it, and one more attempt is granted. The order is wrong, too
+true. The test is wrong: `retake-tests --because` records your ruling, sends the order back to its
+tests, and grants one more attempt. The test is corrected and frozen again. The order is wrong, too
 big or with an interface that does not fit: design changes it, and the build takes it fresh. The
 code is hard: you write it, and the same checks judge it. You can also grant one more attempt as
 it stands. A grant raises the order's allowance by one and records your reason.

@@ -446,7 +446,8 @@ ignored, and the summary says so in its `verdicts:` line.
 
 `wrong` and `deferred` let the order close with the finding recorded. `load-bearing` halts the
 order, the finding named as the reason, and `clear-halt` is what follows once the person has
-acted on it. Interactive, this reaches the person as an escalation, not
+acted on it. A fix the person commits then goes through `build-recheck` before `close`, under
+"Clear any other halt" in `references/finish.md`. Interactive, this reaches the person as an escalation, not
 a question with an obvious answer. A ruling missing for an open finding at the cap refuses. A
 ruling's own reason may not hold `; earlier: `, the same refusal `--scope-insufficient` above
 takes, for the same reason.
@@ -466,7 +467,8 @@ It moves the order's build, review, fix and verify records into
 fix rounds go back to zero, because the review record they counted moved. It
 records the retake under `retakes` on the ledger entry, clears the halt with the finding as the
 reason, and prints `next: tests <order id>`. It refuses an order not halted for a test ruled
-wrong (exit 99). From there the route is the wrong-test route under the builder's stop in
+wrong (exit 99), unless a person rules at `code-written` with `--because`, under "Offer the
+grant" in `references/finish.md`. From there the route is the wrong-test route under the builder's stop in
 `references/build.md`. Open the author's dispatch again for this order. It corrects the test
 the finding names and nothing else. Run the coding-standards row, then the checker over the
 affected rows, then `tests-freeze` with every flag the first freeze took. That freeze prints `retaken:`; the

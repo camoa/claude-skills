@@ -64,7 +64,7 @@ Each `OPEN:` line is one of two shapes:
   task had one, or one waiting on another task's build (`afterBuild`, below). With a path it carries `worktreeOnDisk` too, `yes` or `no`: whether that folder
   is on this machine. The key is absent with `none`.
   And `stage`: where the task stands, the first stage whose close record is absent,
-  one of `scope`, `research`, `design`, `implementation`, `review`, `completion`.
+  one of `scope`, `research`, `design`, `implement`, `review`, `completion`.
   `legacyStages` appears only on a moved version 5 task. It lists the stages whose version 5
   file the move kept under a `.v5` name and whose version 6 record is absent. The order is the
   stage order, from `scope`, `research`, `design`. Otherwise the key is absent. See "Carrying
@@ -112,8 +112,10 @@ the tree and names the path it made. When `afterBuild` is not `finished`, say in
 Stop there. Only a task whose `worktreeOnDisk` reads `yes` goes on to the two routes.
 
 **The prefix.** Start the Bash call with `cd <worktree> &&`. It works from any folder on the
-machine. It needs no approval and no version. The shell forgets the directory between calls, so
-every call carries the prefix.
+machine and needs no version. The `cd` part asks for approval, because the tree sits outside this
+window's working directories. It does not ask when the tree is an added directory or an allow
+rule covers it. The shell forgets such a directory between calls, so every call carries the
+prefix.
 
 **Entry.** From a window inside the code checkout, call the `EnterWorktree` tool with the task's
 `worktree` path, a folder outside the checkout. The tool asks for approval, because the path

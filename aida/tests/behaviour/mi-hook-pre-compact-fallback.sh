@@ -97,12 +97,12 @@ call() { printf '{"type":"assistant","message":{"role":"assistant","content":[{"
 {
   call "T=$TASK; mkdir -p \$T/sources"
   printf '%s\n' "$BOUNDARY"
-  printf '{"type":"user","message":{"content":"Task aida-multi-client has unsaved implementation stage work"}}\n'
+  printf '{"type":"user","message":{"content":"Task aida-multi-client has unsaved implement stage work"}}\n'
 } >"$OTHER"
 {
   printf '%s\n' "$BOUNDARY"
   call 'next-actions.sh --run-mode interactive open \"aida-multi-client\"'
-  printf '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t","type":"tool_result","content":"path: %s\\nstage: implementation"}]}}\n' "$TASK"
+  printf '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t","type":"tool_result","content":"path: %s\\nstage: implement"}]}}\n' "$TASK"
 } >"$NEXT"
 {
   printf '%s\n' "$BOUNDARY"
@@ -119,7 +119,7 @@ call() { printf '{"type":"assistant","message":{"role":"assistant","content":[{"
   # failed the hook's pipe under pipefail.
   yes '{"type":"user","message":{"content":"more work"}}' | head -n 200000
 } >"$OWN"
-MSG="Task aida-multi-client has unsaved implementation stage work"
+MSG="Task aida-multi-client has unsaved implement stage work"
 
 echo "--- other: a session that named the task before its last compaction only"
 RC="$(compact manual "$DOCS" ",\"transcript_path\":\"$OTHER\"" "$ROOT/c-other.txt")"

@@ -52,8 +52,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # type, is not its concern.
 #
 # Rule four, added for gap row 293, holds three roles to their own records. Since gap row 357 it
-# also keeps a person's answer record to the main session. It is stated where it runs, before the
-# others.
+# also keeps a person's answer record to the main session: no agent writes it through a file tool,
+# and since gap row 422 no agent runs a shell segment that names it beside a write signal. It is
+# stated where it runs, before the others.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -147,16 +148,50 @@ deny_own_record() {
 # Gap row 357. person-answer.json, under implementation/, review/ or the task folder, carries a
 # person's answer into an unattended run, so only the main session, the thread the person types in,
 # writes it. A main session started with --agent carries an agent type and is refused too. Every agent
-# type is refused it through the file tools, and refused any Bash command that names it. A name
-# built at run time passes the Bash test.
+# type is refused it through the file tools. Through Bash, since gap row 422, an agent is refused a
+# segment that names it and holds a write signal, so a grep, a heredoc body or a quoted name passes.
+# A segment names it through the name itself, or through a `$NAME` an earlier segment set to a value
+# holding the name. The test is wide on purpose: nothing checks this record afterwards, so a missed
+# write is a forged answer, while a refused read costs one turn. A copy out of the record is refused
+# too. A name built at run time passes the Bash test.
+ANSWER_REFUSAL="person-answer.json holds a person's answer, and only the main session writes it. This write's agent_type is $AGENT. Report the halt to the main session and stop."
+# Returns 0 when segment $1 holds a write signal: a redirect other than 2> or one to /dev/null, a
+# write verb, sed -i, find -delete, or an interpreter word.
+answer_write_signal() {
+  local s
+  s="$(printf '%s' "$1" | sed -E 's#[0-9]*>&[0-9-]+##g; s#(&|[0-9])?>>?[[:space:]]*/dev/null##g; s#2>>?[[:space:]]*[^[:space:]]*##g')"
+  case "$s" in *'>'*) return 0 ;; esac
+  printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])(tee|cp|mv|install|dd|rm|sponge|truncate|ln|rsync|python[0-9.]*|node|perl|ruby|php|sh|bash)([[:space:];&|)`]|$)' && return 0
+  printf '%s' "$s" | grep -Eq '(^|[[:space:]])-delete([[:space:]]|$)' && return 0
+  printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])sed[[:space:]]' \
+    && printf '%s' "$s" | grep -Eq '[[:space:]](-[A-Za-z]*i|--in-place)' && return 0
+  return 1
+}
 if [ -n "$AGENT" ]; then
-  case "$TOOL" in
-    Bash) ANSWER_TARGET="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)" ;;
-    *) ANSWER_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" ;;
-  esac
-  case "$ANSWER_TARGET" in
-    *person-answer.json*) deny_own_record "person-answer.json holds a person's answer, and only the main session writes it. This write's agent_type is $AGENT. Report the halt to the main session and stop." ;;
-  esac
+  if [ "$TOOL" = Bash ]; then
+    ANSWER_CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
+    case "$ANSWER_CMD" in
+      *person-answer.json*)
+        # Without the command library the segments cannot be read, so the whole command is refused.
+        # shellcheck source=/dev/null
+        source "$PLUGIN_ROOT/scripts/lib/command-text.sh" 2>/dev/null || deny_own_record "$ANSWER_REFUSAL"
+        names=""
+        while IFS= read -r seg; do
+          named=false
+          case "$seg" in *person-answer.json*) named=true ;; esac
+          [ -z "${names// /}" ] || ! printf '%s' "$seg" \
+            | grep -Eq "\\\$\\{?($(printf '%s' "$names" | sed -E 's/^ +//; s/ +$//; s/ +/|/g'))([^A-Za-z0-9_]|$)" || named=true
+          [ "$named" = true ] || continue
+          answer_write_signal "$seg" && deny_own_record "$ANSWER_REFUSAL"
+          names="$names $(printf '%s' "$seg" | grep -oE '[A-Za-z_][A-Za-z0-9_]*=[^[:space:];]*person-answer\.json' | sed 's/=.*//' | tr '\n' ' ')"
+        done < <(split_segments "$(strip_heredocs "$ANSWER_CMD")")
+        ;;
+    esac
+  else
+    case "$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" in
+      *person-answer.json*) deny_own_record "$ANSWER_REFUSAL" ;;
+    esac
+  fi
 fi
 if [ "$TOOL" != "Bash" ]; then
   OWN_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"

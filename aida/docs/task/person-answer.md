@@ -6,7 +6,8 @@ the task interactive, or write your answer as a record and keep the run mode.
 ## The calls that wait for you
 
 - In design: `close --approve-runs`, your approval of the verify lines research wrote.
-- In implementation: `grant-attempt`, `clear-halt`, `restart`, `finish --accept-warnings`, the keeps
+- In implementation: `grant-attempt`, `clear-halt`, `restart`, `retake-tests --because`,
+  `finish --accept-warnings`, the keeps
   of a design departure, `verify-record --ruling` and `fix-brief --allow`.
 - In review: `close --row`.
 - In completion: `close` with `--reason`, `--leave`, `--captures-offered` or
@@ -40,8 +41,10 @@ call again, and the call passes with the run mode unchanged.
 
 ## When one session coordinates agents
 
-A dispatched agent never answers for you. A hook refuses `person-answer.json` to every
-dispatched agent, and an agent never runs `set-run-mode`. An agent that meets a person's call
+A dispatched agent never answers for you. A hook refuses every dispatched agent a write of
+`person-answer.json` with the file tools. It also refuses a shell command part that names the file
+beside a write: a redirect, a copy, move or delete, `sed -i`, or an interpreter such as python. A
+grep or a read of the file passes. An agent never runs `set-run-mode`. An agent that meets a person's call
 reports it once to the coordinating session and stops. That session puts the question to you,
 then makes the call or writes the record itself.
 

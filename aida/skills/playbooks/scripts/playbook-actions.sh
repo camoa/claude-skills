@@ -189,11 +189,12 @@ pb_list_file() {
 do_list() {
   local project="${1:-}" newest=""
   pb_list_file person "$PERSON_FILE"
-  [ -n "$project" ] || { echo "project: none"; echo "catalog: none"; return 0; }
+  [ -n "$project" ] || { echo "project: none"; echo "folder and catalog: no record loaded"; return 0; }
   [ -d "$project" ] || die 3 "list: not a folder: $project"
   pb_list_file project "$project/playbook.md"
   [ -d "$project/tasks" ] && newest="$(find "$project/tasks" -mindepth 3 -maxdepth 3 -path '*/records/playbooks.json' -exec ls -t {} + 2>/dev/null | head -1)"
-  [ -n "$newest" ] && jq -r '.plays[] | select(.source != "person" and .source != "project") | .id + "  " + .title' "$newest" | grep . || echo "catalog: none"
+  [ -n "$newest" ] || { echo "folder and catalog: no record loaded"; return 0; }
+  jq -r '.plays[] | select(.source != "person" and .source != "project") | .id + "  " + .title' "$newest" | grep . || echo "folder and catalog: none"
 }
 
 action="${1:-}"

@@ -3,9 +3,6 @@
 Run `/aida:next`. AIDA lists the open tasks of this project, most recently worked first, and
 names the stage command to run for the one you pick.
 
-The command for the implementation stage is `/aida:implement`. `/aida:next` may name it
-`/aida:implementation` today, which does not exist; type `/aida:implement`.
-
 ## What you do
 
 ```

@@ -177,7 +177,7 @@ cp_paths() {
 CP_TASK_DOC=""; CP_TASK_ID=""; CP_STATE=""; CP_RUN_MODE="interactive"
 CP_ALIGNMENT_STATE=""; CP_FINISHED_STATE=""; CP_REVIEW_STATE=""; CP_RECORD_STATE=""
 CP_ALIGNMENT_DOC="null"; CP_FINISHED_DOC="null"; CP_REVIEW_DOC="null"
-CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=""; CP_PERSON_ROUTE=""; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"; CP_OBSERVED="[]"
+CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=""; CP_PERSON_ROUTE=""; CP_FINDING_ROUTE=""; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"; CP_OBSERVED="[]"
 
 # Reads one record as JSON text into the named variable, or dies when it is present and
 # unreadable. Missing is a real state every action reports in words, never a refusal. $1 the
@@ -313,6 +313,17 @@ cp_load() {
   waiting="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.criteria // [])[] | select(.verdict == "unanswered" and .answeredBy == "nobody") | .id ] | join(", ")' 2>/dev/null)"
   [ -z "$waiting" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
     || CP_PERSON_ROUTE="These criteria wait for a person to answer met or unmet: $waiting. The person answers each with review close --row <criterion>=met|unmet at the reviewed commit. A light or autonomous run takes that answer from $TASK_PATH/review/person-answer.json, written by the main session with step close. Before either, run the command a criterion's verify clause names, and show its output to the person."
+  # A finding that fails a criterion is no follow up, so --leave never takes it. The person rules it
+  # at review close, which makes it a follow up or clears it (live-run row 430). A medium or high
+  # finding that cites no criterion fails its lens check until the person rules it there too.
+  local failing_findings lens_findings
+  failing_findings="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.disposition == "criterion" and .ruling != "wrong") | .id ] | join(", ")' 2>/dev/null)"
+  lens_findings="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.disposition == "follow-up" and .severity != "low"
+    and (.linkedTo // "") == "" and .lens != "frozen-tests" and (.ruling // "") == "") | .id ] | join(", ")' 2>/dev/null)"
+  [ -z "$failing_findings" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
+    || CP_FINDING_ROUTE="These findings fail a criterion, so none is a follow up and none takes --leave: $failing_findings. The person rules each with review close --row <finding>=deferred, which makes it a follow up, or --row <finding>=wrong, which says the reviewer was mistaken."
+  [ -z "$lens_findings" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
+    || CP_FINDING_ROUTE="${CP_FINDING_ROUTE:+$CP_FINDING_ROUTE }These findings cite no criterion and fail their lens check until the person rules each at review close with --row <finding>=deferred or --row <finding>=wrong: $lens_findings."
   cp_load_children "$who"
   cp_load_follow_ups "$who"
   cp_load_observed "$who"
@@ -772,7 +783,7 @@ do_close() {
     local decide_route=""
     [ -z "$undecided" ] \
       || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. Or the run mode stays, and the main session writes those rows to $TASK_PATH/review/person-answer.json with step close. A --reason here closes the task with every one of those decisions unmade."
-    decide_route="$decide_route${CP_PERSON_ROUTE:+ $CP_PERSON_ROUTE A --reason here closes the task with those criteria unanswered.}"
+    decide_route="$decide_route${CP_PERSON_ROUTE:+ $CP_PERSON_ROUTE A --reason here closes the task with those criteria unanswered.}${CP_FINDING_ROUTE:+ $CP_FINDING_ROUTE}"
     case "$CP_RUN_MODE" in
       autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}$decide_route" ;;
       *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it.$decide_route" ;;
@@ -823,7 +834,7 @@ $leaves
 CP_LEAVES
 )"
   [ -z "$bad_leaves" ] \
-    || die 3 "close: --leave named $bad_leaves. A finding is left only when the review record holds it as a follow up and no task exists for it."
+    || die 3 "close: --leave named $bad_leaves. A finding is left only when the review record holds it as a follow up and no task exists for it. The findings --leave takes: $(printf '%s' "$CP_FOLLOW_UPS" | jq -r '[ .[] | select(.task == null) | .finding ] | if length == 0 then "none" else join(", ") end').${CP_FINDING_ROUTE:+ $CP_FINDING_ROUTE}"
   rows="$(jq -cn --argjson f "$CP_FOLLOW_UPS" --rawfile given /dev/stdin '
     ([ ($given | split("\n"))[] | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))} ] | from_entries) as $why
     | [ $f[] | {finding: .finding, severity: .severity, task: .task, reason: ($why[.finding] // "")} ]' <<CP_LEAVES2

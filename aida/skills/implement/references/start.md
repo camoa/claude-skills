@@ -91,10 +91,13 @@ own list also names the freezes, because its reset needs them. The line leaves t
 reader acts on one.
 
 The `drift:` line's `contractChanged` says whether the live `alignment.json` differs from the
-snapshot's copy. A changed criterion drifts each order that serves or owns it, with a reason
-naming the criterion, the same as a changed order file. An order serving none of the changed
-criteria is untouched. The snapshot then takes the live contract, so the tests are written from
-the criterion the person approved. That needs design closed on the live files too.
+snapshot's copy. A changed criterion that a started order serves or owns is held. Each order that
+serves or owns it halts, closed and not started included, with a reason naming the criterion. The
+snapshot keeps the held criterion's frozen copy, because the started orders' tests prove that
+text. So the halt clears when the live text equals it again, and review refuses the change until
+then. A changed criterion that only unstarted orders serve is not held. The snapshot takes its
+live text, so the tests are written from the criterion the person approved. An order serving none
+of the changed criteria is untouched. Taking live text needs design closed on the live files too.
 
 A criterion whose verify clause alone changed halts fewer orders. A started order is spared when
 its frozen test record exists and names that criterion in no row. Its observed record must not

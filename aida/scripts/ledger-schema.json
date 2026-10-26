@@ -276,7 +276,7 @@
           "items": {
             "$ref": "#/$defs/retake"
           },
-          "description": "One entry per time `retake-tests` sent this order back to tests-frozen after a person ruled a finding `test-wrong` at `verify-record`, in the order it happened. Present only when at least one was. The build, review, fix and verify records move aside, the step goes back, and attemptsUsed stays: the attempts were real, against the old test, and a spent counter is the grant's to answer. roundsUsed goes back to 0, because the review record it counted moved with the rest (live-run row 110)."
+          "description": "One entry per time `retake-tests` sent this order back to tests-frozen after a person ruled a finding `test-wrong` at `verify-record`, or ruled a frozen test wrong with `--because` at code-written, in the order it happened. Present only when at least one was. The build, review, fix and verify records move aside, the step goes back, and attemptsUsed stays: the attempts were real, against the old test. A spent counter is the grant's to answer, and a `--because` retake at the cap writes that grant itself. roundsUsed goes back to 0, because the review record it counted moved with the rest (live-run row 110)."
         }
       }
     },
@@ -362,12 +362,23 @@
     "retake": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["finding", "at", "movedTo", "freezeCommit"],
+      "required": ["at", "movedTo", "freezeCommit"],
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["finding", "at", "movedTo", "freezeCommit"],
+         "properties": {"finding": {"$ref": "#/$defs/retake/properties/finding"}, "at": {"$ref": "#/$defs/retake/properties/at"}, "movedTo": {"$ref": "#/$defs/retake/properties/movedTo"}, "freezeCommit": {"$ref": "#/$defs/retake/properties/freezeCommit"}}},
+        {"type": "object", "additionalProperties": false, "required": ["ruling", "at", "movedTo", "freezeCommit"],
+         "properties": {"ruling": {"$ref": "#/$defs/retake/properties/ruling"}, "at": {"$ref": "#/$defs/retake/properties/at"}, "movedTo": {"$ref": "#/$defs/retake/properties/movedTo"}, "freezeCommit": {"$ref": "#/$defs/retake/properties/freezeCommit"}}}
+      ],
       "properties": {
         "finding": {
           "type": "string",
           "pattern": "^f[1-9][0-9]*$",
-          "description": "The finding ruled test-wrong, read from the front of the halt reason `verify-record` wrote."
+          "description": "The finding ruled test-wrong, read from the front of the halt reason `verify-record` wrote. A retake holds exactly one of this and `ruling`, which the oneOf above states."
+        },
+        "ruling": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The person's --because words, for a retake of an order at code-written that no review reached (live-run row 426). tests-brief hands them to the test author in place of a finding."
         },
         "at": {
           "type": "string",
@@ -391,6 +402,11 @@
       "additionalProperties": false,
       "required": ["id", "reason", "clearedAt", "because"],
       "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "HEAD of the order's repository when clear-halt cleared a halt with a finding ruled load-bearing (live-run row 426). build-recheck records the person's fix only at this commit, so the person's words accept that fix and no later commit."
+        },
         "id": {
           "type": "string",
           "pattern": "^wo[1-9][0-9]*$",

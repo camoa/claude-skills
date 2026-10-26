@@ -24,6 +24,14 @@ changed reads as new. A finding fixed and brought back reads as old.
 The baseline is taken once per commit. A second run at the same commit leaves it alone. A baseline
 from a different commit refuses rather than being overwritten.
 
+**The baseline runs in the task's worktree.** A site, `vendor/` or a virtualenv lives only there,
+so a clean copy of the commit could not run the suite. So nothing may write in the worktree until
+the step returns. The step refuses with exit 21 when a file a work order owns is uncommitted before
+the run. It also refuses, and writes no baseline, when HEAD or an owned file changed during the
+run. Commit those files or set them aside, then run the step again. While the run is live, AIDA
+refuses to brief or dispatch a role that writes. The baseline's `tree` names HEAD and every other
+uncommitted path.
+
 ## A suite that is already red
 
 The `baselineRed:` line names each framework whose suite already fails. When it is not `none`, AIDA

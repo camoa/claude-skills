@@ -20,7 +20,7 @@ written down for a later reader. This page says which is which.
   hooks refuse it the denied reads and every write in the project's main checkout. That includes
   git run there and a copy in or out.
 - **The stop lines.** An implementer's first return is blocked once when its answers file lacks
-  the stop and deviation lines.
+  the stop and deviation lines, or holds a stop line with no cause and reason.
 - **Destructive commands.** For every role and for the main session, a hook refuses any `git push`,
   a hard reset, `git clean`, `git branch -D`, a checkout or restore of the whole tree, a recursive
   delete of the home, working or scratchpad folder, `gh pr merge` and `gh repo sync`. A person

@@ -271,6 +271,14 @@ new, or a finding fixed and reintroduced, which reads as old.
 The baseline is taken once, at that commit. A second run at the same commit leaves it alone. One
 recorded at a different commit refuses rather than overwrites, and names both commits.
 
+The baseline runs in the task worktree, because a site, `vendor/` or a virtualenv lives only
+there. So no role may write in the worktree until preconditions returns. A long suite can outlast
+one shell call. Then wait for the step to end before the next dispatch. The step refuses (exit 21)
+when an order's owned file is uncommitted before the run. It also refuses when HEAD or an owned
+file changed during the run, and writes no baseline. Commit those files or set them aside, then
+run it again. While the run is live, `tests-brief` and `dispatch-open` of a writing role refuse
+(exit 21). The baseline's `tree` names HEAD and every other uncommitted path.
+
 ## A recipe changed since the record
 
 The record pins each recipe's path, and every later step reads that path. When the catalog

@@ -4,6 +4,63 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.21] - 2026-10-25
+
+Changes from the periplus run, the dev_guides_site run, the camoa_skills
+run on aida-multi-client, and the docs audit of 6.0.20. A wrong frozen
+test and a person's own fix now have a route. Skill text matches its code.
+
+### Fixed
+
+- A frozen test proved wrong after the first attempt had no route, and
+  at the attempt cap only `restart` got through. `retake-tests --because`
+  now takes the person's ruling for an order at code-written. At the cap
+  it grants one attempt. Unattended, the ruling comes from the person's
+  answer file.
+- A fix the person committed after a finding was ruled real and
+  load-bearing could not be recorded, so close refused it. After the
+  person clears the halt, `build-recheck` runs the deciding checks up to
+  the commit `clear-halt` stored, and records the fix with the person's
+  words. A failed check records nothing (exit 123). Another commit
+  refuses (exit 88).
+- A changed criterion halted every order that served it, and the halt
+  stayed even after the text went back word for word. `start` now keeps
+  the frozen copy of the criterion, so putting the text back clears the
+  halt and closed orders stay closed.
+- `build-record` read a placeholder `Stop: pending` as a builder stop and
+  halted the order. A stop line now needs a cause and a reason. A
+  placeholder refuses at exit 106, with no halt and no attempt spent.
+- The preconditions baseline ran in the task worktree while roles wrote
+  there, so a half-written test could enter it. It now refuses at exit
+  21 when an owned file is uncommitted, or the tree changes during the
+  run. `tests-brief` and `dispatch-open` refuse a writing role while the
+  baseline runs.
+- The guard on the person's answer file refused any command that only
+  named the file, including a read or a docs edit. It now refuses a
+  write to the file and lets a read through.
+- `/aida:next` named `/aida:implementation`, which does not exist. The
+  stage word is now `implement` everywhere.
+- The next step after the last order said only `finish`. It now prints
+  the full call, with no recipe flag.
+- Review close named the values a row takes only in a refusal, one at a
+  time. A close with no rows, or with a wrong id or value, now prints
+  every waiting row and the values each takes.
+- After a newer version landed, every script call repeated the reload
+  notice. Each warning now prints once per session for each version pair.
+- Twelve skill passages said something their code does not do, among
+  them the research exit codes, the review close contract note, the
+  attempt count, the tool install over an existing file and the `cd`
+  approval. Each now matches the code.
+
+### Changed
+
+- The project check names the open tasks, not a count of every task.
+- `playbooks list` with no loaded record says so.
+- The vocabulary list holds the `tests` and `confirm` proof kinds and
+  the `pending` status.
+- The design check says when a run line proves the criterion of a tests
+  order that declares no test of its own.
+
 ## [6.0.20] - 2026-10-23
 
 Changes from the periplus run, the dev_guides_site run, the camoa_skills

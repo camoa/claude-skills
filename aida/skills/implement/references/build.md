@@ -151,7 +151,8 @@ shell assembles at run time passes the hook and is still denied.
 not fit, or the attempts running out are all stops. So is a file the unit needs and does not own.
 A stop looks like this in the conversation: the role returns early. Its report's stop line names
 the cause, and nothing is committed. Every report holds exactly one stop line, `Stop: none` or a
-cause, and `build-record` refuses a report without one (exit 106). Under `Stop: none`, the report
+cause and its reason, and `build-record` refuses a report without one (exit 106). It refuses a
+placeholder such as `Stop: pending` the same way. Under `Stop: none`, the report
 also holds exactly one deviation line, `Deviation: none` or `Deviation: <what>: <why>`, and the
 same refusal applies. The builder writes each line alone, and puts any note on its own line.
 A deviation other than none, or a heading that starts with "Deviation", in
@@ -223,7 +224,8 @@ returned. Open the row-checker's dispatch again and put the affected rows to it.
 `tests-freeze` again, with every flag the first freeze took, the new red run, and the rows the
 checker returned. That freeze is
 allowed only while the order is still at `tests-frozen`. Once `build-record` has recorded an
-attempt, it refuses (exit 76). Other orders may have committed since the first freeze. The freeze
+attempt, it refuses (exit 76). Then `retake-tests --because` with the person's ruling sends the
+order back, under "Offer the grant" in `references/finish.md`. Other orders may have committed since the first freeze. The freeze
 still retakes, because the report holds the `Stop: test-wrong` line. Unattended, the stop halted
 the order, and a halt still standing refuses (exit 35). `clear-halt` refuses on an autonomous run
 (exit 68), so a person first sets the task to interactive, then runs `clear-halt`. The
@@ -472,7 +474,8 @@ retry, and the route is `build`. Or no check stopped the attempt, so it passed a
 past the build. Or a path the interface check named does not exist at the recorded commit, so
 no amended record can answer it. A halted order refuses (exit 49), and `references/finish.md`
 names the grant. The clean-tree rule applies (exit 61). A missing interface record refuses as at `build-record`
-(exit 44).
+(exit 44). A person's fix after a finding ruled load-bearing passes the moved HEAD and the passed
+record once, under "Clear any other halt" in `references/finish.md`.
 
 It rewrites the record with the new checks and the interface record's text. When that text
 changed, the attempt's own text stays under `interfaceRecordBefore`. It keeps the attempt, its
@@ -570,9 +573,10 @@ code. Say no and the work stays where it is until you return." Then say which ch
 in plain words, and name the record path that holds what the tool printed. Do not read the
 record here.
 
-An unknown on interface-record does not spend the attempt. The declaration named no backticked
+An unknown on interface-record does not fail the attempt. The declaration named no backticked
 element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every
-other unmet or unknown does.
+other unmet or unknown does. Every attempt counts against the allowed number, whatever the checks
+said.
 
 **order-tests is the floor,** or `configuration-gate` on a `gate` order, or `done-when` on a
 `record` order. Every other check may

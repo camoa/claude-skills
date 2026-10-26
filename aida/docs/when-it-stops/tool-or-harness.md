@@ -10,7 +10,7 @@ change files only with your yes.
 |---|---|---|
 | 1 | no project owns this directory | run `/aida:project` |
 | 2 | no recipe for this tool and this stack | AIDA asks the catalog next |
-| 3 | a command was refused, a shipped file differs from the file on disk, or arguments were given after `--` to `install` or `show` | for a differing file, say which copy is right. To pass arguments, use `run` |
+| 3 | a command was refused, a file on disk matches no version of the recipe's file, or arguments were given after `--` to `install` or `show` | for a differing file, say which copy is right. To pass arguments, use `run` |
 | 4 | a command ran and failed | read the `first:` line; see [tools](../sources/tools.md) |
 | 70 | an install needs a person, and nobody is present | no answer record passes an install. Set the task interactive, then run `/aida:tool install <tool>` |
 

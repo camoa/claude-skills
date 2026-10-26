@@ -63,8 +63,8 @@ from the note for you to confirm. An autonomous task captures nothing. See
 
 It prints one line per play, `<id>  <title>`. Your file and the project's file are read directly.
 Plays from folders and catalog sets come from the newest loaded record under the project's tasks.
-A source with nothing prints `<source>: none`. With no project, it prints your file, then
-`project: none` and `catalog: none`.
+A source with nothing prints `<source>: none`. With no loaded record, or with no project, the
+last line reads `folder and catalog: no record loaded`.
 
 ## Why it works this way
 

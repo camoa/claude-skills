@@ -112,22 +112,39 @@ An order halted with a reason beginning `attempts spent` has used every attempt 
 still failed a check. Interactive, with a person present, open with: "The builder used every
 attempt it was allowed on this unit of work and still failed a check. You decide which of three
 things is true; a model choosing would let the test describe the code. The test is
-wrong: you correct it, and one more attempt is granted. The unit of work is wrong, too big or
+wrong: it is corrected, and one more attempt is granted. The unit of work is wrong, too big or
 its interface does not fit. Then design changes it, and the build takes it fresh. The code is hard:
 you write it, and the same checks judge it. If you want one more attempt as it stands, say so."
 Then name the two recorded attempts by
-path. SKILL.md's "One order halting" section is where the three things are stated. If they decide
-the order needs one more attempt, run:
+path. SKILL.md's "One order halting" section is where the three things are stated.
+
+When the person rules the test wrong, a grant alone does not help: the frozen-tests check refuses
+an edited test. Run the retake, with the person's own words:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh retake-tests "<task_folder>" <order id> \
+  --because <which test is wrong, and why>
+```
+It moves the order's build records into `implementation/retaken-<order id>-<n>/` and sets the
+order back to `tests-frozen`. It grants the one more attempt and records the grant with the same
+words. It clears the halt. The tests brief gives the words to the test author in place of a
+finding. Then follow the retake route under Rulings in `references/review.md`: the author
+corrects the test, the checker reads the affected rows, `tests-freeze` retakes the record, and
+the build runs again. The same call takes an order at `code-written` that is not halted, and
+grants nothing there. It refuses any other halt (exit 99). An unattended stage refuses it
+(exit 68), unless the person's answer is on record.
+
+If they decide the order needs one more attempt as it stands, run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh grant-attempt "<task_folder>" <order id> \
   --reason <why this order gets another attempt>
 ```
 It raises the order's own allowed count by one, and records the reason and the date. It clears the
 halt only when the halt began with `attempts spent`; any other halt refuses, naming it. It never
-touches the attempts already used, so the counter still never goes down. It refuses outright on an
-autonomous implement stage: the grant is a person's judgement, and the person sets the task
-interactive first. The reason may not hold the text `; earlier: `, the text this stage joins one
-halt reason to another with; a reason carrying it would forge a segment nobody wrote.
+touches the attempts already used, so the counter still never goes down. It refuses on an
+autonomous implement stage (exit 68), because the grant is a person's judgement. Either route in
+"A person's answer in an unattended run" passes it. The reason may not hold the text
+`; earlier: `, the text this stage joins one halt reason to another with; a reason carrying it
+would forge a segment nobody wrote.
 
 The grant is the person's to offer and the person's to take. Do not run it on their own behalf
 because an order is halted; put the halt and its recorded attempts to them first.
@@ -163,12 +180,13 @@ to what the snapshot holds, then run `start` again: it compares, finds no drift 
 and removes that segment. A segment that names another order that drifted clears in the same run,
 once no order it names holds a drift of its own. This holds for a closed order too. Any other
 segment stays and the order stays halted with it. The clearing is recorded under `haltsCleared`
-in the ledger, with the halt text as it stood. A segment that names a changed criterion never
-clears this way and always takes the restart. The run that wrote it replaced the snapshot's
-contract, so no later comparison sees the change. The order's frozen tests still assert the old
-sentence. One reopen that changed the design file and a criterion together writes both segments.
-The criterion one then holds the order when only the file goes back. Offer the restart when the
-new design is the one to build, and for a changed criterion.
+in the ledger, with the halt text as it stood. A segment about the live text of a criterion clears
+the same way. The snapshot keeps that criterion's frozen copy, so put the text back word for word
+with scope's `update`, then run `start`. A segment that reads `criterion <id>, which <order>
+serves, changed since the snapshot was taken` was written by 6.0.20. That run replaced the
+snapshot's copy, so it always takes the restart. One reopen that changed the design file and a
+criterion together writes both segments. The criterion one then holds the order when only the
+file goes back. Offer the restart when the new design or the new criterion is the one to build.
 
 Put that to the person, opening with: "The design changed after this unit of work was started, so
 what was built no longer matches it. Only you can say the new design is the one to build.
@@ -252,14 +270,24 @@ the grant, the restart or the retake answers (exit 85), naming that action, and 
 (exit 67). For a drift halt the refusal also names `start`, which clears a segment about the
 order's own design file once the design no longer differs. It
 refuses when the task's implement stage is autonomous (exit 68), because clearing a halt is a
-person's judgement. The person sets the task interactive first. The reason may not hold
+person's judgement. Either route in the next section passes it. The reason may not hold
 `; earlier: `, for the same cause as the grant's. Then run `start` again and take the `next:`
 line.
+
+A finding ruled load-bearing leaves no fix round, so the person commits the fix on the task
+branch. Put the commits in the order's own files. Clear the halt with the person's words, then
+run `build-recheck` on the order, as `references/build.md` shows. It runs the checks over the
+last record's range, extended to HEAD. Every check must pass. Then it moves the record's commit
+to HEAD and keeps the clear-halt words under `personFix`, so `close` takes the commits. The
+clearing keeps HEAD as it stood, and `build-recheck` takes only that commit. A later commit
+refuses (exit 88) and needs a new clearing: run `clear-halt` again at the new commit, with the
+person's words. A failed check records nothing (exit 123), and `close` still refuses (exit 63).
+Repair the fix, clear the halt again, and run `build-recheck` again.
 
 ## A person's answer in an unattended run
 
 A light or autonomous run refuses a person's call. In implement the calls are `grant-attempt`,
-`clear-halt`, `restart`, `finish --accept-warnings`, the two `--accept-deviation` keeps (exit 68),
+`clear-halt`, `restart`, `retake-tests --because`, `finish --accept-warnings`, the two `--accept-deviation` keeps (exit 68),
 `verify-record --ruling` (exit 55) and `fix-brief --allow` (exit 100). In review the call is
 `close --row` (exit 70). In completion it is `close` with `--reason`, `--leave`,
 `--captures-offered` or `--observed-accepted` (exit 70). In the task skill the calls are

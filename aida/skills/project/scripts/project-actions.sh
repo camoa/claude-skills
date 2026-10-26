@@ -17,6 +17,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh         (sourced, for the one source walk)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/project-findings.sh (sourced, the version 5 markers and the
 #                                                          retired fields)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-state.sh       (sourced, for task_is_open)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/check-project.sh        (the project check)
 #   ${CLAUDE_PLUGIN_ROOT}/templates/project-commit.md     (the five-field shape those two check)
 #
@@ -137,6 +138,8 @@ source "$SOURCES_LIB"  # the one source walk, for recipe-source and agentic-sour
 source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh"
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/scripts/lib/paths.sh"  # worktree_base_refusal, for worktree_base_value
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/task-state.sh"  # task_is_open, for the close's open tasks
 
 # ------------------------------------------------------------------------------------------------
 # Small, portable helpers shared by more than one action below.
@@ -775,14 +778,18 @@ do_state() {
   fi
 
   # ideal/project.md, "Ending a project": closing says what is still open rather than refusing
-  # or pretending. No task system is built into any part of this plugin yet, so the honest
-  # answer is that this check cannot be run, not that nothing is open.
-  if [ -d "$project_path/tasks" ]; then
-    local open_count
-    open_count="$(find "$project_path/tasks" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
-    echo "OPEN TASKS: ${open_count} folder(s) under ${project_path}/tasks"
+  # or pretending. A task.json that cannot be read counts as open, so a broken task never hides.
+  local open_tasks="" open_count=0 tj
+  for tj in "$project_path"/tasks/*/task.json; do
+    [ -f "$tj" ] || continue
+    task_is_open "$tj" || continue
+    open_tasks="${open_tasks:+$open_tasks, }$(basename "$(dirname "$tj")")"
+    open_count=$((open_count + 1))
+  done
+  if [ "$open_count" -gt 0 ]; then
+    echo "OPEN TASKS: ${open_count}: ${open_tasks}"
   else
-    echo "OPEN TASKS: unknown. No task system has been built yet in this project, so nothing here can be listed as open or closed."
+    echo "OPEN TASKS: none"
   fi
 
   check_after_write "$project_path" project.json

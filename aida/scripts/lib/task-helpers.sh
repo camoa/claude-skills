@@ -28,6 +28,7 @@
 #                                         beside PLUGIN_ROOT; runs once when this file is sourced
 #   warn_session_version                  one stderr line when the session loaded another version
 #                                         of this plugin; runs once when this file is sourced
+#   say_once <line>                       prints <line> on stderr once per Claude Code session
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
@@ -69,6 +70,7 @@
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
+#   task_is_open <task.json>              true unless the task's state reads complete (task-state.sh)
 #   task_review_outdated <folder>         true, and prints both ranges, when the review covers
 #                                         a commit range the finished build no longer ends at
 #   active_tree_for <codePath> <dir>      prints <dir>'s git top level when it is a worktree of
@@ -87,8 +89,8 @@
 #
 # Every script that sources this file runs warn_newer_installed and warn_session_version. These
 # never source it, so they never warn: next's legacy-tasks.sh, the scripts in scripts/ other than
-# check-design.sh and check-research.sh, and every hook but session-start.sh, which discards the
-# line. tool-actions.sh sources it in `require` alone.
+# check-design.sh and check-research.sh, and every hook but session-start.sh, which skips them
+# both. tool-actions.sh sources it in `require` alone.
 # project-actions.sh sources it in check-machine alone.
 #
 # task_worktree and resolve_task_folder both take resolve_project_folder, project_code_path_value
@@ -439,7 +441,7 @@ warn_newer_installed() {
     | select(($top | key) > ($me.version | key))
     | "AIDA \($top) is installed, and this script runs from \($me.version). Run /reload-plugins, load the skill again, then restart the current step on \($top)."
   ' "$@" 2>/dev/null)"
-  [ -z "$found" ] || printf '%s\n' "$found" >&2
+  [ -z "$found" ] || say_once "$found"
   return 0
 }
 
@@ -459,9 +461,26 @@ warn_session_version() {
   [ -n "${AIDA_SESSION_PLUGIN_VERSION:-}" ] || return 0
   own="$(plugin_version)"
   [ "$own" != "unknown" ] && [ "$own" != "$AIDA_SESSION_PLUGIN_VERSION" ] || return 0
-  printf 'This session started on AIDA %s, and this script runs from %s. The agents and hooks loaded at start may still be %s. A new session loads %s for both; then restart the current step.\n' \
-    "$AIDA_SESSION_PLUGIN_VERSION" "$own" "$AIDA_SESSION_PLUGIN_VERSION" "$own" >&2
+  say_once "$(printf 'This session started on AIDA %s, and this script runs from %s. The agents and hooks loaded at start may still be %s. A new session loads %s for both; then restart the current step.' \
+    "$AIDA_SESSION_PLUGIN_VERSION" "$own" "$AIDA_SESSION_PLUGIN_VERSION" "$own")"
   return 0
+}
+
+# Both warnings above ask for a person's step, so each line prints once per session (gap row 432).
+# The exports above last one Bash call, because each call starts a new shell. So a long unattended
+# run printed the same line on every call. Claude Code sets CLAUDE_CODE_SESSION_ID in every Bash
+# subprocess (the mirror's environment variables reference), and /clear changes it. The marker is
+# one line, the session ID and the warning, in session-notices beside the registry. A line names
+# both versions, so a later update prints again. A line is written only on a mismatch, and nothing
+# prunes the file. With no session ID, or a file that cannot be written, the line prints every time.
+say_once() {
+  local file line="${CLAUDE_CODE_SESSION_ID:-} $1"
+  file="$(dirname -- "${AIDA_REGISTRY_PATH:-${HOME:-}/.claude/aida/registry.json}")/session-notices"
+  if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    grep -Fqx -- "$line" "$file" 2>/dev/null && return 0
+    { mkdir -p -- "$(dirname -- "$file")" && printf '%s\n' "$line" >>"$file"; } 2>/dev/null
+  fi
+  printf '%s\n' "$1" >&2
 }
 
 # The run mode of one stage, from task.json (task-schema.json, runMode and runModeStages). The
@@ -911,7 +930,12 @@ playbooks_path_json() {
   if [ -f "$record" ]; then jq -n --arg p "$record" '$p'; else printf 'null'; fi
 }
 
-# The stage a task stands at, one of scope, research, design, implementation, review, completion.
+# task_is_open, the one reading of a task's open state.
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/task-state.sh"
+
+# The stage a task stands at, one of scope, research, design, implement, review, completion.
+# Each word is the stage's skill name, so `/aida:<stage>` is the command to run.
 # Derived from the records in the task folder every time, never stored: each stage writes one
 # record when it closes, and the stage is the first whose record is absent. Scope's is the
 # distill sidecar, records/scope-distill.json, which approve and distill both need before they
@@ -931,7 +955,7 @@ task_stage() {
   elif [ ! -f "$task_folder/design-closed.json" ]; then
     echo "design"
   elif [ ! -f "$task_folder/implementation/finished.json" ]; then
-    echo "implementation"
+    echo "implement"
   elif [ "$review" != "passed" ] && [ "$review" != "failed" ] || task_review_outdated "$task_folder" >/dev/null; then
     echo "review"
   else

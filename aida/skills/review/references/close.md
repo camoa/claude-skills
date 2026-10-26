@@ -58,10 +58,11 @@ then waits for the person, the way a lens check with low findings only does.
 
 The person answers met or unmet per criterion, from its rows. When a criterion's verify clause
 names a command, wait until the person says the step before that check is done. Then run the
-command, and show its output with the question. Their answer becomes one flag below. Autonomous, there is
-nobody to ask: each such criterion reads unanswered, and the task gets no sign off. A run with
-nobody present cannot sign off a task carrying one person verified criterion. `close` names each
-one and its route. When the person answers, `close` runs again at the same commit with the rows.
+command, and show its output with the question. Their answer becomes one flag below.
+Autonomous, there is nobody to ask: with no person-answer file, each such criterion reads
+unanswered, and the task gets no sign off. A run with nobody present and no person-answer file
+cannot sign off a task carrying one person verified criterion. `close` names each one and its
+route. When the person answers, `close` runs again at the same commit with the rows.
 On a light or autonomous run, a row passes only through `review/person-answer.json` with step
 `close`, which only the main session writes.
 
@@ -84,9 +85,12 @@ finding the person ruled:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh close "<task_folder>" \
   --row <criterion>=met|unmet --row <check id>=met|unmet \
-  --row <decision id>=wrong|deferred|load-bearing|test-wrong|keep|rebuild \
+  --row <decision id>=wrong|deferred|load-bearing|test-wrong|keep|rebuild|accept|reject \
   --row <finding id>=wrong|deferred
 ```
+A close with no row, or with a row it refuses, prints every row that waits and the words each
+takes. Ask the person those rows in one go.
+
 On a record that already holds a verdict, it archives that record alone and writes the new
 verdict in its place. The brief, the findings and every check stay, because the commit has not
 moved. So a person who gave a wrong row, or left one out, runs `close` again. After a fix commit,
@@ -118,9 +122,9 @@ order that owns its file through the implement skill's `reopen`. Its `next:` lin
 `close` writes one field back into the contract, each criterion's `verdict` in `alignment.json`, which
 that schema reserves for review. Nothing else in the contract is touched.
 
-**That write moves the contract hash.** The hash covers the whole file, so the next `start` reports
-the contract as changed, and it halts no order. Say in the report that review made that write, and
-that the drift is review's own. A reader who is not told reads it as a contract somebody edited.
+**That write changes the file, not the contract.** The implement stage's `start` compares the
+contract without verdicts, so it reports no change and halts no order. Say in the report that
+review wrote the verdicts. A reader of the file's history who is not told reads it as an edit.
 
 Close the report with the three things SKILL.md requires: the checks reading undeclared or unknown,
 the count of criteria reading unanswered, and the count of catalog notes.

@@ -33,7 +33,7 @@ unanswered | a criterion nobody answered | unresolved
 decline | a dispose verdict: a candidate weighed and set aside, with the reason. Also a person's no to an offer |
 # The other closed sets scripts/review-record-schema.json enumerates.
 severity | high, medium, low, on a finding | major, minor, blocker
-status | open, addressed, ruled, on a finding |
+status | open, addressed, ruled, pending, on a finding |
 ruling | wrong, deferred, load-bearing, test-wrong, on a ruled finding |
 #
 # The unit of work, and the words version 5 used for it. story and ticket are off the list: in this
@@ -45,6 +45,8 @@ work order | the unit of work: one build, one review, one commit | epic, epics, 
 # 2026-09-14 (live-run row 65): it is now the proof kind of a configuration order, its own row below.
 check | one blocking validation a stage runs | validate, validates, validated, validating, validation
 gate | the proof kind of a configuration order: the recipe's own lines decide it, not a test |
+tests | the proof kind of a code order, the default: tests frozen before the code is written |
+confirm | the proof kind of a code order on a task with no automated tests: the person answers its done-when rows at review |
 observe | the proof kind of a page order: a model looks through a browser after the build and judges each done-when row |
 # record as a proof kind is the same word as the record below, a file a stage writes. No synonym
 # is banned for either sense; the two are told apart by the field they sit in.

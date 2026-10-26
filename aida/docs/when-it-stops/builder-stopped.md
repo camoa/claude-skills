@@ -1,7 +1,7 @@
 # A builder stopped, or returned no report
 
 The agent that writes the code stops rather than working around a problem. A stop is not an
-attempt: nothing is recorded and no attempt is spent (exit 105). Only you may change what it
+attempt: no attempt is recorded or spent (exit 105). Only you may change what it
 stopped on. The stop rules are on [write the code](../stages/implement/build.md).
 
 ## What you see
@@ -22,8 +22,9 @@ You rule on it; a model never does. When you agree the test is wrong:
 4. The builder's stop left its code uncommitted on purpose. Say whether to keep it for the next
    attempt or clean the tree. Then the build goes on.
 
-This works only while the order is still at its tests step, which a stop leaves it at. With
-nobody present, the stop halted the order, and the freeze refuses (exit 35) until the halt is
+This works only while the order is still at its tests step, before any attempt is recorded. After
+an attempt, the freeze refuses (exit 76). Then AIDA runs `retake-tests --because` with your ruling,
+as [an attempt failed its checks](checks-failed.md) says. With nobody present, the stop halted the order, and the freeze refuses (exit 35) until the halt is
 cleared. Set the task interactive, or give your answer as a record, then clear the halt. See
 [a run with nobody present](person-must-answer.md).
 
@@ -42,7 +43,8 @@ When you say the test stands, the next attempt builds against it as it is.
 ## A role came back without its report
 
 - **Exit 106.** The report holds no stop line, or more than one. A builder stopped at its turn
-  limit writes none.
+  limit writes none. build-record refuses a stop line with no cause and reason, such as
+  `Stop: pending`, the same way. It halts nothing, so the corrected report records.
 - **A role stopped at its turn limit.** AIDA sends the same agent one message to finish. When it
   returns with no report again, the order halts (exit 110). Clear the halt, then let AIDA run
   `start` to keep or set aside its files.

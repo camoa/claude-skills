@@ -639,8 +639,11 @@ A research `--run` never runs until a person approves it at the close. Without t
 reviewer judges it as a check.
 Give `--criterion` when the command's output alone proves a machine criterion the order owns,
 such as a linter run. A `tests` order then owes no test for that criterion, so the criterion
-stays on it. The freeze runs the line over the test author's files, and the row-checker judges
-whether the line proves the whole clause. A clause that names two tools needs a line for each.
+stays on it. The order still declares at least one test of its own. The check refuses a `tests`
+order with no test, and the freeze refuses one with no row (exit 74). Give a criterion that only
+tool output proves to an order that has a test. The freeze runs the line over the test author's
+files, and the row-checker judges whether the line proves the whole clause. A clause that names
+two tools needs a line for each.
 A line runs unattended when it equals, word for word, an `argv` in the project's check recipe
 `check_commands`. Any other research line needs the person's approval at the close.
 `--clear` empties the list, and `--recipe` replaces it.

@@ -31,6 +31,10 @@ A high severity finding left with no task refuses the close below. Interactive, 
 why through `--leave <finding id>=<reason>`; leaving a queued security fault ships it, so the
 record keeps the reason. A finding below high severity may be left with no reason.
 
+A finding that fails a criterion is no follow up, so `--leave` refuses it. The person rules it
+at review close instead: `--row <finding>=deferred` makes it a follow up, and `--row
+<finding>=wrong` says the reviewer was mistaken.
+
 ## Take the grounds
 
 `read` printed the review verdict. `passed` closes the task with nothing asked.

@@ -34,7 +34,7 @@ from the "Not called" column for the thing in that row.
 | unanswered | a criterion nobody answered | `unresolved` |
 | decline | a dispose verdict: a candidate weighed and set aside, with the reason. Also a person's no to an offer | |
 | severity | high, medium, low, on a finding | `major`, `minor`, `blocker` |
-| status | open, addressed, ruled, on a finding | |
+| status | open, addressed, ruled, pending, on a finding | |
 | ruling | wrong, deferred, load-bearing, test-wrong, on a ruled finding | |
 
 ## The unit of work and its proof
@@ -44,6 +44,8 @@ from the "Not called" column for the thing in that row.
 | work order | the unit of work: one build, one review, one commit | `epic`, `epics`, `slice`, `slices`, `batch`, `batches` |
 | check | one blocking check a stage runs | `validate`, `validates`, `validated`, `validating`, `validation` |
 | gate | the proof kind of a configuration order: the recipe's own lines decide it, not a test | |
+| tests | the proof kind of a code order, the default: tests frozen before the code is written | |
+| confirm | the proof kind of a code order on a task with no automated tests: the person answers its done-when rows at review | |
 | observe | the proof kind of a page order: a model looks through a browser after the build and judges each done-when row | |
 
 ## Records and sources
