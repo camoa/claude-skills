@@ -295,8 +295,8 @@ finding, and `clear-halt` is the person's way past. Its reason may not hold the 
 `; earlier: `, the same refusal every halt reason applies: that text is how one halt is joined to
 another, and a reason carrying it would forge one.
 
-The commit the round began from is `fix-brief`'s own `headNow`. Equal to the current commit, or
-not an ancestor of it, refuses (exit 71), the same rule `build-record` applies. One case is
+The commit the round began from is `fix-brief`'s own `headNow`. Equal to the current commit
+refuses (exit 71), and not an ancestor of it (exit 3), the rule `build-record` applies. One case is
 recorded with no commit: `fix-brief` handed the round to a fixer, and every open finding is named
 by `--scope-insufficient` or by a line `Outcome: <id>: already-correct` in the report. The round is spent, and the checks run at HEAD.
 The message for exit 71 names the findings that are neither. `fix-record` marks each

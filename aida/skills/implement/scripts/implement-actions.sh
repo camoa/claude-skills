@@ -104,8 +104,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh dispatch-close <task_folder> [--no-report | --not-sent]
 #   implement-actions.sh step <name>
 #
-# A value flag refuses no value, an empty value where a value must have text, and a value that is
-# itself the next option, such as `--reason --leave`. `-h` prints this block.
+# A value flag refuses no value, and an empty value where a value must have text. A flag that takes
+# a name or a path also refuses a value that is itself the next option, such as `--allow --leave`.
+# A flag that takes free words, such as --reason, takes one that opens with "--". `-h` prints this
+# block.
 #
 # `dispatch-open` checks <role> against the agent definitions this plugin ships and refuses a name
 # that matches none of them. For the four roles that read or write the code, it also derives the
@@ -217,7 +219,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                        hooks/require-stop-lines.sh both read.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/baseline-schema.json   the shape `preconditions` writes to
 #                                                        baseline.json, which `start` compares a
-#                                                        resumed run's copy against (exit 83)
+#                                                        resumed run's copy against (exit 3)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/snapshot-schema.json   the shape `start` writes to snapshot.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-schema.json     the shape `start` writes to ledger.json
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/dispatch-schema.json   the shape `dispatch-open` writes to
@@ -230,7 +232,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # a stale or hand-edited file already on disk before this script's first call on it is a fact this
 # script reports (present-but-unreadable, or a hash mismatch), not one it repairs. The one record
 # it does compare is baseline.json, on a resumed `start`, because an earlier version wrote that
-# file in a shape `build-record` cannot subtract from (exit 83).
+# file in a shape `build-record` cannot subtract from (exit 3).
 #
 # Freezing (ideal/implementation.md, "Freezing, and what a freeze is for"). A new run re-derives
 # the design-closed hash from the live files and refuses when the two disagree. Once a snapshot
@@ -248,7 +250,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      For `start`, this includes a resumed run that halted one or more drifted orders (that is
 #      the run continuing correctly, not a failure) and a trunk check that could not look.
 #   3  an error: the action has nothing valid to act on, so no work can go on. It is never a
-#      judgement on the work. The message reads "<action>: <what is wrong>. <what to do>".
+#      judgement on the work. Every error exits 3 through die3, and the message names the action
+#      first. A message that does not explain itself also says what to do.
 #      These are the errors:
 #      - The call: a missing or unrecognized argument, a flag with no value or with another
 #        option as its value, a path that does not exist or lies outside the code root, a test
@@ -886,7 +889,8 @@ die() { printf 'implement-actions: %s\n' "$2" >&2; exit "$1"; }
 # carry.
 
 # An error refuses through die3, always exit 3: the action has nothing valid to act on. Its one
-# argument reads "<action>: <what is wrong>. <what to do>". task-helpers.sh takes die1, die3 and
+# argument names the action first, then what is wrong, and what to do where that is not
+# self-evident. task-helpers.sh takes die1, die3 and
 # die79 from its caller, so a refusal still says which script refused. Its die1, a folder that holds
 # no task, is an error here too.
 die3() { die 3 "$1"; }
@@ -5256,7 +5260,7 @@ do_tests_freeze() {
 "
         shift 2 ;;
       --absence)
-        need_value "tests-freeze" "--absence" "$#" "${2:-}" non-empty
+        need_value "tests-freeze" "--absence" "$#" "${2:-}" text
         # Collected as a JSON array and not as one value per line, the way every other repeatable
         # flag here is. A doneWhen clause is prose design wrote, and nothing refuses a newline in
         # one (scripts/check-design.sh). Split on newlines, such a clause would match no doneWhen
@@ -8134,7 +8138,7 @@ BR_FILL_GATE
   rf_fill_from_record "$who" "--implement-recipe" "$given" "$gate_recorded" "$pre_file" "$4" ""
 }
 
-# Refuses at 103, before any check runs, when the task's site is down (gap row 212). A site
+# Refuses at 3, before any check runs, when the task's site is down (gap row 212). A site
 # command such as `ddev drush` starts a stopped site and prints its start-up text. So every
 # `stdout empty` line would fail for a reason that is not the check. The test runs when the task
 # records an environment address and the order has verify run lines or holds the configuration
@@ -8867,7 +8871,7 @@ do_build_record() {
     cr_take_flag "build-record" "--test-recipe=test_recipes --check-recipe=check_recipes --implement-recipe=gate_recipes --value=values" "$@" || { shift "$?"; continue; }
     case "$1" in
       --accept-deviation)
-        need_value "build-record" "--accept-deviation" "$#" "${2:-}" non-empty
+        need_value "build-record" "--accept-deviation" "$#" "${2:-}" text
         accept="$2"; shift 2 ;;
       --interface)
         need_value "build-record" "--interface" "$#" "${2:-}" non-empty
@@ -8882,7 +8886,7 @@ do_build_record() {
         need_value "build-record" "--started-at" "$#" "${2:-}" non-empty
         started_at="$2"; shift 2 ;;
       --nothing-ran)
-        need_value "build-record" "--nothing-ran" "$#" "${2:-}" non-empty
+        need_value "build-record" "--nothing-ran" "$#" "${2:-}" text
         have_nothing_ran=true
         nothing_ran="$2"
         shift 2 ;;
@@ -9304,7 +9308,7 @@ do_build_recheck() {
         need_value "build-recheck" "--interface" "$#" "${2:-}" non-empty
         interface_path="$2"; shift 2 ;;
       --nothing-ran)
-        need_value "build-recheck" "--nothing-ran" "$#" "${2:-}" non-empty
+        need_value "build-recheck" "--nothing-ran" "$#" "${2:-}" text
         have_nothing_ran=true
         nothing_ran="$2"
         shift 2 ;;
@@ -10381,7 +10385,7 @@ do_review_record() {
         need_value "review-record" "--findings" "$#" "${2:-}"
         findings_path="$2"; shift 2 ;;
       --accept-deviation)
-        need_value "review-record" "--accept-deviation" "$#" "${2:-}" non-empty
+        need_value "review-record" "--accept-deviation" "$#" "${2:-}" text
         accept="$2"; shift 2 ;;
       -*) die3 "review-record: unrecognized argument: $1" ;;
       *)
@@ -11069,7 +11073,7 @@ do_fix_record() {
         need_value "fix-record" "--started-at" "$#" "${2:-}" non-empty
         started_at="$2"; shift 2 ;;
       --nothing-ran)
-        need_value "fix-record" "--nothing-ran" "$#" "${2:-}" non-empty
+        need_value "fix-record" "--nothing-ran" "$#" "${2:-}" text
         have_nothing_ran=true
         nothing_ran="$2"
         shift 2 ;;
@@ -12321,7 +12325,7 @@ do_finish() {
     cr_take_flag "finish" "--value=values" "$@" || { shift "$?"; continue; }
     case "$1" in
       --accept-warnings)
-        need_value "finish" "--accept-warnings" "$#" "${2:-}" non-empty
+        need_value "finish" "--accept-warnings" "$#" "${2:-}" text
         accept_warnings="$2"; shift 2 ;;
       *) die3 "finish: unrecognized extra argument: $1" ;;
     esac
@@ -12696,7 +12700,7 @@ do_grant_attempt() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --reason)
-        need_value "grant-attempt" "--reason" "$#" "${2:-}" non-empty
+        need_value "grant-attempt" "--reason" "$#" "${2:-}" text
         halt_refuse_separator "grant-attempt" "--reason" "$2"
         reason="$2"; shift 2 ;;
       -*) die3 "grant-attempt: unrecognized argument: $1" ;;
@@ -12804,7 +12808,7 @@ do_clear_halt() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --because)
-        need_value "clear-halt" "--because" "$#" "${2:-}" non-empty
+        need_value "clear-halt" "--because" "$#" "${2:-}" text
         halt_refuse_separator "clear-halt" "--because" "$2"
         because="$2"; shift 2 ;;
       -*) die3 "clear-halt: unrecognized argument: $1" ;;
@@ -12923,7 +12927,7 @@ do_retake_tests() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --because)
-        need_value "retake-tests" "--because" "$#" "${2:-}" non-empty
+        need_value "retake-tests" "--because" "$#" "${2:-}" text
         halt_refuse_separator "retake-tests" "--because" "$2"
         because="$2"; shift 2 ;;
       -*) die3 "retake-tests: unrecognized argument: $1" ;;
@@ -13340,7 +13344,7 @@ do_restart() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --reason)
-        need_value "restart" "--reason" "$#" "${2:-}" non-empty
+        need_value "restart" "--reason" "$#" "${2:-}" text
         halt_refuse_separator "restart" "--reason" "$2"
         reason="$2"; shift 2 ;;
       --split)

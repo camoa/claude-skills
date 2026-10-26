@@ -13,9 +13,10 @@
 #
 #   resolve_task_folder <path> <action>   prints the canonical task folder, or dies
 #   looks_like_flag <value>               true when the value is another option, not data
-#   need_value <action> <flag> <count> <value> [non-empty]
+#   need_value <action> <flag> <count> <value> [non-empty|text]
 #                                         refuses at 3 a flag with no value, or with another
-#                                         option as its value; with non-empty, an empty value too
+#                                         option as its value; with non-empty, an empty value too;
+#                                         text is non-empty for a value of free words
 #   is_blank <value>                      true when the value is empty or only whitespace
 #   text_args <arg>...                    sets TEXT_ARGS to the arguments, each @/<path> read
 #   parse_finding_ref <action> <ref> <research folder>
@@ -258,12 +259,15 @@ looks_like_flag() {
 }
 
 # Every flag that takes a value refuses the same ways: no value at all, and a value that is itself
-# the next option, as in `--reason --leave`. $1 the action, $2 the flag, $3 what is left of "$#",
+# the next option, as in `--id --leave`. $1 the action, $2 the flag, $3 what is left of "$#",
 # $4 the value. A fifth argument refuses an empty value as well. A flag that takes a list keeps
-# the empty value, because an empty list is how design clears one.
+# the empty value, because an empty list is how design clears one. A fifth argument of text marks
+# a value of free words, such as a reason: words may open with "--", and a file read through
+# @/<path> may open with a "---" rule, so the next-option test is skipped for it.
 need_value() {
   [ "$3" -ge 2 ] || die3 "$1: $2 needs a value. Pass it after the flag; --help shows its form."
-  looks_like_flag "$4" && die3 "$1: $2 needs a value, got the option $4 instead. Pass the value after the flag; --help shows its form."
+  [ "${5:-}" = text ] || ! looks_like_flag "$4" \
+    || die3 "$1: $2 needs a value, got the option $4 instead. Pass the value after the flag; --help shows its form."
   [ -z "${5:-}" ] || [ -n "$4" ] || die3 "$1: $2 was given an empty value. Pass a value."
   return 0
 }

@@ -318,7 +318,7 @@ recorded on any of these.
 
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
-Equal to the code repository's own current commit, or not an ancestor of it, refuses (exit 71):
+Equal to the code repository's own current commit (exit 71), or not an ancestor of it (exit 3):
 either makes the range this attempt claims false. The build record keeps this attempt's range
 only. Review and close read the order's range from the freeze, so a second attempt that changes
 one line is reviewed with the code the first attempt wrote.

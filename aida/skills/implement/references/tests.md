@@ -291,9 +291,9 @@ the order's own, which the author may not read, and no interface record of this 
 the author gives `--locks-in` one of the build or fix commits the brief carries under `treeHolds`,
 written `commit:<id>`. The prefix is what marks a commit, so a reason without it stays prose
 whatever it looks like. The freeze checks the commit is this order's own and is on the branch, and
-refuses anything else (exit 101). The author reads no source. It names a commit the brief already
-printed. This is honest. The code is on the branch because a retake kept the build and corrected
-only the test.
+refuses another commit (exit 101) or a malformed id (exit 3). The author reads no source. It names
+a commit the brief already printed. This is honest. The code is on the branch because a retake
+kept the build and corrected only the test.
 
 **A done-when clause that asserts an absence gets no test, and goes to review.** Such a clause says
 the change added nothing of a named kind. No second engine for one job. No new dependency. No
@@ -316,8 +316,8 @@ not its wording, and route only what nothing can run. The row checker asks the s
 before the freeze, below, and review asks it again. The reviewer says whether a test could have
 watched each routed clause fail, and a yes fails the review.
 
-The freeze refuses the flag (exit 81) on two facts. The clause is not, verbatim, one of the order's
-frozen done-when entries. Or the clause carries no negation word at all. A contraction such as
+The freeze refuses the flag on two facts. The clause is not, verbatim, one of the order's
+frozen done-when entries (exit 3). Or the clause carries no negation word at all (exit 81). A contraction such as
 doesn't counts, with a straight or a curly apostrophe. That second refusal is a floor and not the
 whole rule. A script cannot read meaning, so it catches a clause plainly asserting a presence and
 leaves the rest to the judgement above. **This route relaxes nothing else.** Every `--test` still
