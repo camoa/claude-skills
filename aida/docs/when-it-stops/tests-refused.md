@@ -27,6 +27,7 @@ the tests. A few come to you. How the tests are written is on
 | exit 109 | a failing run is older than the test it claims to show |
 | exit 121 | a command that proves a criterion in place of a test does not pass |
 | exit 122 | the coding-standards check fails on the new test files |
+| exit 124 | the build's own test command does not run what the failing runs show |
 | exit 64 | the confirmations and the tests do not match one to one; confirmed ones are kept |
 | exit 118 | the order owns only test files, so its tests are the deliverable and freeze as they pass |
 

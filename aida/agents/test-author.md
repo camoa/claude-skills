@@ -103,7 +103,9 @@ claims the order id instead, and names no criterion.
 Run every test and record what the run printed, to one file per test under the task folder's
 `implementation/` folder. Run it with the command the test-execution recipe
 declares. Run each test on its own, with the recipe's filter, so that each red file holds only
-that test's run. When `testRecipePath` is null, no recipe declares a runner: name the command you ran and
+that test's run. The build runs your test files whole, with the recipe's order-tests command and
+no argument. So every test must also run that way. The freeze runs that command. It refuses when
+the run fails and shows no line of your red file. When `testRecipePath` is null, no recipe declares a runner: name the command you ran and
 why you chose it in your report. **A test must fail for the reason it names.** The test-execution
 recipe's `failure_signal` block names two markers. One is what the harness prints when an assertion
 did not hold. The other is what it prints when it never reached the behaviour. A red must hold the
