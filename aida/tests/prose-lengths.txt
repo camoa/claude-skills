@@ -15,7 +15,7 @@ agents/row-checker.md 122
 agents/test-author.md 167
 skills/completion/SKILL.md 114
 skills/completion/references/close.md 141
-skills/design/SKILL.md 974
+skills/design/SKILL.md 978
 skills/implement/SKILL.md 289
 skills/implement/references/build.md 603
 skills/implement/references/finish.md 317
