@@ -230,7 +230,6 @@ DELETE='--de(l(e(t(e)?)?)?)?'
 MIRROR='--mi(r(r(o(r)?)?)?)?'
 # A heredoc opening line whose body goes to a file or to a commit message, never to a shell.
 HD_TO_FILE='(^|[;&])[[:space:]]*(cat|tee)[[:space:]][^|;&]*<<[^|;&]*$|(^|[;&])[[:space:]]*git[[:space:]][^|;&]*commit[[:space:]][^|;&]*(-F[[:space:]]*-|--file[=[:space:]]-)[[:space:]][^|;&]*<<[^|;&]*$|\$\(cat[[:space:]]*<<'
-BSNL=$'\\\n'
 MAX_BYTES=262144
 MAX_DEPTH=3
 
@@ -630,7 +629,7 @@ GHAPI
 # Checks command text $1, read $2 files deep. Sets REASON and returns 0 when it is refused.
 check_text() {
   local text="$1" raw="$1" depth="$2" stripped n n0="" line val f p runs runs0="" need_x code mode=code a
-  text="${text//"$BSNL"/}"
+  text="${text//"${BSNL:-}"/}"
   # Without the library no segment is read, so no line is known to start no shell.
   SHELL_WORD=true
   if [ "$HAVE_TEXT" = true ]; then
@@ -642,7 +641,7 @@ check_text() {
   [ "$SHELL_WORD" = false ] || mode="strip"
   # The comments go before the lines join, because a comment ends at its line.
   code="$(quoted_words "$raw" "$mode")"
-  code="${code//"$BSNL"/}"
+  code="${code//"${BSNL:-}"/}"
   [ "$HAVE_TEXT" = false ] || [ "$SHELLISH" = true ] || { text="$stripped"; code="$(strip_heredocs "$code" "$HD_TO_FILE")"; }
   n="$(normalise "$text")"
   # The joined text is read only when git and push both appear, which saves its pass on most calls.

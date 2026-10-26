@@ -14,6 +14,14 @@
 #                              the bodies whose opening line matches the extended regex pattern
 #   read_words <line>          fills array w with the whitespace-separated words of the line
 #   split_segments <command>   prints the command with one segment per line, split outside quotes
+#
+# Public value:
+#
+#   BSNL                       a backslash then a newline, the line continuation a door removes
+#                              before it reads a command
+
+# shellcheck disable=SC2034 # read by the sourcing hooks
+BSNL=$'\\\n'
 
 # Drops every heredoc body from command $1 before a door reads it. The line holding `<<WORD`,
 # `<<-WORD`, `<<'WORD'` or `<<"WORD"` is kept, with its operator and word, so a redirect on it is

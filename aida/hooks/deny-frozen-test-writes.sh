@@ -173,19 +173,21 @@ answer_write_signal() {
 # person's approval, ruling or answer, the same as the answer above. This list is the one copy.
 # Each line is a script, its action as an extended regex, then the words that make the call a
 # person's. A line with no words refuses the action itself. The list holds the actions whose script
-# asks for a person and that cannot be undone, and scope's update --author, which promotes a
-# criterion to owner. A step that can be undone is left out: environment up and not-applicable,
+# asks for a person and that cannot be undone, and scope's update and add --author, which make a
+# criterion the owner's. A step that can be undone is left out: environment up and not-applicable,
 # surfaces --viewport and --enable, tool install. prune's regex also reads its operands, because
 # only a task id or --all removes a tree; the form with --project alone only lists.
 PERSON_ACTIONS='task-actions.sh set-run-mode|set-budget|decline-recipe|defer-surface
 task-actions.sh prune([[:space:]]+--project[[:space:]=]+[^[:space:]]+)*[[:space:]]+([^-[:space:]][^[:space:]]*|--all)
 scope-actions.sh approve|retire
-scope-actions.sh update --author
+scope-actions.sh update|add --author
 design-actions.sh close --approve-runs
 design-actions.sh dispose --confirmed
 implement-actions.sh grant-attempt|clear-halt|retake-tests|restart
 implement-actions.sh build-record|review-record --accept-deviation
 implement-actions.sh finish --accept-warnings
+implement-actions.sh fix-brief --allow
+implement-actions.sh verify-record --ruling
 review-actions.sh surfaces --accept-baseline --walked
 review-actions.sh close --row
 completion-actions.sh close --reason --leave --captures-offered --observed-accepted
@@ -225,7 +227,7 @@ deny_named_segment() {
     "$3" "$seg" && deny_own_record "$4"
     names="$names $(printf '%s' "$seg" | grep -oE "[A-Za-z_][A-Za-z0-9_]*=[^[:space:];]*$2" | sed 's/=.*//' | tr '\n' ' ')"
     alt="$(printf '%s' "$names" | sed -E 's/^ +//; s/ +$//; s/ +/|/g')"
-  done < <(split_segments "$(strip_heredocs "$ROLE_CMD")")
+  done < <(split_segments "$(strip_heredocs "${ROLE_CMD//"$BSNL"/}")")
 }
 if [ -n "$AGENT" ]; then
   if [ "$TOOL" = Bash ]; then
