@@ -14,7 +14,10 @@
 #     Windows. AIDA_MANAGED_SETTINGS_DIR replaces it, for a fixture. An MDM profile or a registry
 #     value is not a file, so it is not read, and docs/start/install.md names that limit.
 #   - The user file ${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json, then <dir>/.claude/settings.json,
-#     then <dir>/.claude/settings.local.json. A later one wins for a single value.
+#     then the local file. Claude Code reads the local file at the repository root, and in a
+#     worktree at the main checkout's root. It stays in <dir> outside a repository, or when the root
+#     is the home directory. A local file an older version left in <dir> is read too, below the
+#     root's. A later file wins for a single value.
 #
 # Three findings:
 #   - allowManagedHooksOnly true in the managed tier, and managed enabledPlugins does not set AIDA's
@@ -22,16 +25,19 @@
 #   - disableAllHooks true. In the managed tier it stops every hook. Elsewhere, after precedence, it
 #     stops plugin hooks unless managed enabledPlugins force-enables AIDA.
 #   - a permissions.deny rule that removes WebFetch or WebSearch, in any file, since a deny at any
-#     level holds. A bare tool name, a tool glob such as `*`, and `WebFetch(domain:*)` remove it.
+#     level holds. A bare tool name and a tool glob such as `*` remove the tool. `WebFetch(domain:*)`
+#     keeps the tool and refuses every fetch.
 #
 # Public:
 #
 #   ccs_findings <dir>
-#     Prints one compact JSON object per finding, {setting, file, stops, still, unchecked, fix}, and
-#     nothing on a clean machine. still and unchecked are empty for a web finding.
+#     Prints one compact JSON object per finding, {kind, setting, file, stops, still, unchecked,
+#     fix}, and nothing on a clean machine. kind is hooks or web. still and unchecked are empty for
+#     a web finding.
 #
-#   ccs_print <dir>
-#     Prints each finding as five advisory lines, and nothing on a clean machine.
+#   ccs_print <dir> [<kind>]
+#     Prints each finding as up to five advisory lines, and nothing on a clean machine. A kind keeps
+#     the findings of that kind only: research names the web findings alone.
 #
 # Portability: bash 3.2+ and zsh. This file is a library. Source it; do not run it.
 if [ -n "${ZSH_VERSION:-}" ]; then
@@ -73,7 +79,7 @@ ccs__plugin_id() {
 # One {file, scope, doc} line per readable settings file, highest-ranked managed source first, then
 # user, project and local, in the order the precedence rules read them.
 ccs__sources() {
-  local dir="$1" cfg mdir f
+  local dir="$1" cfg mdir f root
   cfg="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
   mdir="$(ccs__managed_dir)"
   ccs__one "$cfg/remote-settings.json" remote
@@ -83,7 +89,22 @@ ccs__sources() {
   done
   ccs__one "$cfg/settings.json" user
   ccs__one "$dir/.claude/settings.json" project
-  ccs__one "$dir/.claude/settings.local.json" local
+  root="$(ccs__local_root "$dir")"
+  [ "$root" = "$(cd "$dir" 2>/dev/null && pwd -P)" ] || [ "$root" = "$dir" ] || ccs__one "$dir/.claude/settings.local.json" local
+  ccs__one "$root/.claude/settings.local.json" local
+}
+
+# The folder that holds the local file: the main checkout's root, or <dir> itself outside a
+# repository or where that root is the home directory.
+ccs__local_root() {
+  local common root
+  common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+  root="$(cd "$common/.." 2>/dev/null && pwd -P)"
+  if [ -z "$common" ] || [ -z "$root" ] || [ "$root" = "$(cd "$HOME" 2>/dev/null && pwd -P)" ]; then
+    printf '%s' "$1"
+  else
+    printf '%s' "$root"
+  fi
 }
 
 ccs__one() {
@@ -102,9 +123,9 @@ ccs_findings() {
     | [ .[] | select(.scope == "user" or .scope == "project" or .scope == "local") ] as $mine
     | ($id != "" and ([ $managed[] | select((.doc.enabledPlugins // {}) | has($id)) ] | last | .doc.enabledPlugins[$id]) == true) as $forced
     | (if $id == "" then "AIDA (the install record names no plugin@marketplace id for this copy)" else $id end) as $name
-    | {stops: "AIDA'"'"'s hooks do not run. No hook refuses an edit to a frozen test, a write outside an order'"'"'s owned files, or a destructive command.",
+    | {kind: "hooks", stops: "AIDA'"'"'s hooks do not run. No hook refuses an edit to a frozen test, a write outside an order'"'"'s owned files, or a destructive command.",
        still: "build-record checks the frozen tests'"'"' hashes, the owned files and the builder'"'"'s stop lines, after each build.",
-       unchecked: "Nothing else checks destructive commands, reads of denied source, writes to the main checkout, a forged person-answer.json, or a compact with unsaved work while hooks are off."} as $hooks
+       unchecked: "While hooks are off, nothing checks destructive commands, reads of denied source, or writes to the main checkout. Nothing checks a forged person-answer.json or a compact with unsaved work."} as $hooks
     | ($managed | last_with("allowManagedHooksOnly")) as $amho
     | ($managed | last_with("disableAllHooks")) as $mdah
     | ($mine | last_with("disableAllHooks")) as $udah
@@ -128,9 +149,13 @@ ccs_findings() {
        | ("^" + ($r.n | gsub("(?<c>[.+?^$|{}\\[\\]\\\\])"; "\\\(.c)") | gsub("\\*"; ".*")) + "$") as $re
        | ["WebFetch", "WebSearch"][] as $tool
        | select(($tool | test($re)) and ($r.p == null or ($tool == "WebFetch" and $r.p == "domain:*")))
-       | {setting: ("permissions.deny holds \"" + $rule + "\", which removes " + $tool),
+       | (["WebFetch", "WebSearch"] - [$tool])[0] as $other
+       | {kind: "web",
+          setting: ("permissions.deny holds \"" + $rule + "\", which "
+                    + (if $r.p == null then "removes " + $tool else "refuses every " + $tool + " request" end)),
           file: $s.file,
-          stops: ("The outward searcher that research, design and review dispatch cannot use " + $tool + ", so its outward search cannot run."),
+          stops: ("The outward searcher that research, design and review dispatch cannot use " + $tool
+                  + ". It keeps " + $other + ", unless another line here names it."),
           still: "", unchecked: "",
           fix: (if $s.scope == "remote" or $s.scope == "managed" then "Only the admin can remove a managed rule."
                 else "Remove the rule from that file." end)})
@@ -138,7 +163,7 @@ ccs_findings() {
 }
 
 ccs_print() {
-  ccs_findings "$1" | jq -r '
+  ccs_findings "$1" | jq -r --arg kind "${2:-}" 'select($kind == "" or .kind == $kind) |
     "Claude Code setting: " + .setting + ", in " + .file + ".",
     "  What stops: " + .stops,
     (if .still == "" then empty else "  Still checked: " + .still end),

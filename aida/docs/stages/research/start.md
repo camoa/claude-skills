@@ -11,6 +11,10 @@ holds: the material you captured, earlier searches, a parent task's research and
 Research checks that a contract exists, not that you approved it. It lists any criterion that no
 person approved, and names `/aida:scope` as the place to approve or change it. Then it goes on.
 
+When a Claude Code deny rule takes WebFetch or WebSearch, research names the rule and its file
+when it starts. The outward searcher needs both tools. See
+[Check this machine](../../project/check-machine.md).
+
 Every step after the first read runs in the task's worktree. See
 [The window is outside the task's worktree](../../when-it-stops/wrong-folder.md).
 

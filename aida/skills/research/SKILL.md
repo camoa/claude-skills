@@ -125,6 +125,10 @@ Run:
 This creates the task's `research` folder and prints the criterion ids again, for reference
 while planning searches. It is safe to run more than once; it never overwrites anything.
 
+A `Claude Code setting:` block names a deny rule that takes WebFetch or WebSearch from the
+outward searcher. Read it to the person before the first outward search. The settings files are
+theirs, so change none of them.
+
 `subscriptions:` names the catalog playbook sets this project subscribes to, or says `none`.
 When it names any, dispatch `playbook-loader` once, with the message this file names: the role,
 the run mode, the task folder and those ids. It writes `records/playbooks-catalog.json`. Then, in

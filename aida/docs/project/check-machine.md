@@ -26,21 +26,24 @@ no project, and the task lines are then absent.
     force-enable AIDA's own `plugin@marketplace` id. The id comes from the plugin install record.
   - `disableAllHooks`, in managed settings or in your own files after precedence.
   - A `permissions.deny` rule that removes WebFetch or WebSearch, which the outward searcher needs.
+    `WebFetch(domain:*)` keeps the tool and refuses every fetch, which stops the searcher the same
+    way. Research names these rules too, when it starts.
 
   Each one names the file that set it, what stops, and the repair. For the hook settings it also
   says what still checks the work: build-record checks frozen tests, owned files and the stop
-  lines. Nothing else checks destructive commands, reads of denied source, writes to the main
-  checkout, a forged answer file, or a compact with unsaved work.
+  lines. Nothing else checks destructive commands, reads of denied source, or writes to the main
+  checkout. Nothing checks a forged answer file or a compact with unsaved work.
 
 Each finding carries its repair on the next line. The check performs none of them. It always exits
 0, so read the lines, not the exit code.
 
 ## What the settings lines do not see
 
-The check reads files. It reads the server-managed cache at `~/.claude/remote-settings.json`,
-`managed-settings.json` and `managed-settings.d/` in the system folder, your
-`~/.claude/settings.json`, and the two `.claude/` files in the directory it ran in. Some sources
-it does not read:
+The check reads files. It reads the server-managed cache at `~/.claude/remote-settings.json`. It
+reads `managed-settings.json` and `managed-settings.d/` in the system folder, and your
+`~/.claude/settings.json`. It reads `.claude/settings.json` in the directory it ran in. It reads
+`.claude/settings.local.json` at the repository root, the main checkout's root in a worktree, as
+Claude Code does. Some sources it does not read:
 
 - An MDM profile on macOS, and a registry value on Windows. They are not files. Where one applies,
   Claude Code can skip the managed files the check read.
@@ -50,8 +53,10 @@ it does not read:
 - `allowManagedPermissionRulesOnly`. A deny rule in your own files can then be ignored, and the
   check still names it.
 
-A server-managed cache can be older than the policy now in force. `/status` names the managed
-source Claude Code uses.
+A server-managed cache counts only where Claude Code fetches it: a session that authenticates to
+Anthropic's API directly. On another provider, Claude Code skips the cache, but the check still
+reads it. A stale cache can then hide the managed files from the check. A cache can also be older
+than the policy now in force. `/status` names the managed source Claude Code uses.
 
 ## The version warnings in other scripts
 
