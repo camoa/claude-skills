@@ -186,6 +186,12 @@ none applies. Read all three to the person. Each is a line of its own, so the 24
 a long command never takes the cause. A token's reason ends in what its block printed, so the cut
 never takes its `--value` instruction.
 
+**A Claude Code setting that stops AIDA prints on a `claudeSettings` line.** One line prints per
+setting, and none on a clean machine. Each line names the setting and the file that set it. It
+says what stops, what still checks the work, and the repair. Read each line to the person. It does
+not change the verdict, so the person may build on. The settings files are the person's or the
+admin's, so change none of them.
+
 ## Supply a value where a command needs one
 
 A framework's cheapest test command may carry a placeholder, such as the runner a Python project

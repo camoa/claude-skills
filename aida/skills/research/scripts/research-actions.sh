@@ -343,6 +343,13 @@ do_start() {
     echo "outward-search: skipped, light run"
     log_compromise "$TASK_PATH" research "the outward search: prior art, recommendations and assumptions on the web" \
       "dispatch one outward searcher per subject outside this project"
+  elif [ -n "$project_folder" ] && [ -n "$(project_code_path_value "$project_folder")" ]; then
+    # A deny rule on WebFetch or WebSearch takes the outward searcher's tool, and the searcher
+    # would fail with no word before this (gap row 434). The project files sit at the code path.
+    # shellcheck source=/dev/null
+    source "$PLUGIN_ROOT/scripts/lib/claude-settings.sh" \
+      || die3 "start: the settings library failed to load: $PLUGIN_ROOT/scripts/lib/claude-settings.sh"
+    ccs_print "$(project_code_path_value "$project_folder")" web
   fi
   exit 0
 }

@@ -591,8 +591,8 @@ To change a scalar or an id list on an order already created, `update` takes the
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
   --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
   [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
-  [--interface <text>] [--reasoning <text>] [--strike-reasoning <n>] \
-  [--append-reasoning <text>] [--diff-budget <text>] \
+  [--interface <text>] [--reasoning <text>] [--strike-reasoning <n>]... \
+  [--append-reasoning <text>]... [--diff-budget <text>] \
   [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 ```
 `--reasoning` replaces the whole field, the paragraphs `dispose` wrote included. To keep them,
@@ -602,6 +602,10 @@ When a critique or a person changes a rule that a reasoning paragraph states, st
 paragraph. Pass `--strike-reasoning <n>` with the new rule in `--append-reasoning`. Count n
 from 1 in the order's `.md`. The old paragraph stays, marked `[struck]`, and no brief
 carries it. Do not leave both rules live: the builder reads every live paragraph.
+To strike several paragraphs, repeat `--strike-reasoning` in one call. Count each n before the
+call. One n that names no live paragraph refuses the whole call, and nothing is written.
+`update` prints `struck:` with the paragraphs it struck. A repeated `--append-reasoning` adds
+each text as its own paragraph, in the order given.
 When `--proof` becomes `gate`, `record`, `observe` or `confirm`, `update` prints
 `stillNamesATest:` naming each of `interface`, `reasoning` and `diffBudget` that still names a
 test file.
@@ -732,10 +736,10 @@ absence to a behaviour, remove it with `remove-done-when`. Then add each clause 
 `add-done-when` call. When a row does not join the two, mark it reviewed:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
-  --id <woId> --absence-reviewed <row>
+  --id <woId> --absence-reviewed <row>...
 ```
 The order keeps the row's text, and `check` stops naming that row. A row whose text changes is
-named again.
+named again. Repeat `--absence-reviewed` to mark several rows of one order in one call.
 
 `check` also prints `interfaceUnquoted:`, at every exit code. It names each order whose interface
 holds no name in backticks. A script cannot tell whether prose names a code element, so the line

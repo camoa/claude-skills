@@ -1538,6 +1538,13 @@ do_check_machine() {
     printf 'This check ran inside a worktree: no. %s is the main checkout.\n' "$cwd"
   fi
 
+  # A setting that stops AIDA's hooks or its web search. Claude Code reads the project files from
+  # the session's directory, and this check reads them from the directory it ran in.
+  # shellcheck source=/dev/null
+  source "${PLUGIN_ROOT}/scripts/lib/claude-settings.sh" \
+    || die3 "check-machine: the library failed to load: claude-settings.sh"
+  ccs_print "$cwd"
+
   if ! match="$(registry_resolve_by_directory "$cwd")"; then
     printf 'Project: none registered for this directory.\n'
     printf '  Repair: run this check again from the code path, for the task lines.\n'

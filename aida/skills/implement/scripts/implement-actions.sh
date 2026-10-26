@@ -609,6 +609,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      declaring neither a marker nor a selector records the red unchecked instead of refusing.
 #      The same exit when two tests of one file have reds that print the same places in it: they
 #      failed on a shared precondition, not on their own assertions (live-run row 207).
+#      The same exit when build-record's order-tests check, run over the frozen files, fails and
+#      prints no line of any red file: it runs something other than the reds (gap row 436).
 #  81  `tests-freeze` was given an --absence the order cannot route to review. Two facts, one
 #      refusal, because both say the same thing: the flag names something that is not an absence
 #      clause of this order. The clause is not, verbatim, one of the order's frozen `doneWhen`
@@ -3680,7 +3682,7 @@ do_preconditions() {
   local harness_needed harness_reason env_asked=no env_owner="" tooling_entries
   local tooling="" tooling_json end_absent_json pc_no_recipe check_path build_tools build_rc build_json build_entries unchecked_json review_tools smoke_state catalog_recipes="" pc_stale="" pc_line pc_catalog
   local pc_folder_gap="" pc_held pc_holders pc_where pc_missing
-  local pc_build_doc tool_rows_json pc_row_id pc_row_json pc_orders_json pc_head pc_uncommitted_json
+  local pc_build_doc tool_rows_json pc_row_id pc_row_json pc_orders_json pc_head pc_uncommitted_json pc_settings
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -4389,7 +4391,15 @@ PC_TOOL_ROWS
         || pc_advice="No folder holds a tooling recipe for $pc_no_recipe. Dispatch catalog-identifier with tooling: <tool> per tool, then run preconditions again with --tooling <tool>=<path>"
       ;;
   esac
+  # A setting that stops AIDA's hooks or its web search is told before the first order, and never
+  # refuses: a person may build without them (gap row 434). The project files are read from the
+  # code path, where the session runs.
+  # shellcheck source=/dev/null
+  source "$PLUGIN_ROOT/scripts/lib/claude-settings.sh" \
+    || die 3 "preconditions: the settings library failed to load: $PLUGIN_ROOT/scripts/lib/claude-settings.sh"
+  pc_settings="$(ccs_findings "$(project_code_path_value "$project_folder")" | jq -sc 'map({setting, file, stops, still, unchecked, fix} | with_entries(select(.value != "")))')"
   im_print_summary "preconditions" "$(jq -n --arg verdict "$run_verdict" --arg record "$record_file" \
+        --argjson claudeSettings "$pc_settings" \
         --argjson report "$record_json" --arg freeze "$im_freeze" --arg notLookedUp "$im_unlooked" \
         --arg freezeAdvice "$im_advice" --arg reviewNotResolved "$rv_unresolved" \
         --arg baselineFile "$BASELINE_FILE" --arg baselineStatus "$baseline_status" \
@@ -4442,7 +4452,7 @@ PC_TOOL_ROWS
                            else $folderRecipeMissing + " Add the file to that folder, or confirm the catalog recipe fits." end),
      failedOutput: $failedOutput,
      nextAdvice: $nextAdvice,
-     next: $next}')"
+     next: $next} + (if $claudeSettings == [] then {} else {claudeSettings: $claudeSettings} end)')"
 
   # `met` and `undeclared` both go on. A recipe that says this framework needs nothing before a
   # test runs, or nothing before a smoke command proves one, has answered, and refusing on it
@@ -6709,6 +6719,42 @@ The test author repairs these files and runs each test again, and this freeze ru
             "$(printf '%s' "$tf_cs_group" | jq -r 'join(", ")')" "$tf_cs_verdict" "$(printf '%s' "$tf_cs_json" | jq -r '.detail')" >&2 ;;
       esac
     done
+  fi
+
+  # --- 80: build-record's order-tests check runs what the reds show (gap row 436) -----------------
+  # The author runs each test on its own, and the build runs the frozen files whole, with the
+  # recipe's order-tests command. A spec that ran a case only when named froze with a red per case,
+  # then printed usage when run whole, so a correct build read unmet and spent an attempt. So the
+  # freeze runs that check itself, through br_test_check. When it fails and prints something, at
+  # least one red file must share a line with it, compared through br_line_keys so a duration or a
+  # count does not differ. One is enough: a file that stops at its first failing case shows only
+  # that red. A run that printed nothing, passed or read unknown is left to the build. A line that
+  # differs only in a random name, such as a temporary path, does not match; that is the limit.
+  local tf_ot_paths tf_ot_json tf_ot_out tf_ot_keys tf_ot_red_keys tf_ot_names
+  tf_ot_paths="$(br_frozen_test_paths "$rows_json")"
+  if [ "$red_count" -gt 0 ] && [ "$BR_ORDER_SLOT" = "order-tests" ] && [ "$tf_ot_paths" != "[]" ]; then
+    CR_WHO="tests-freeze"; CR_TEST_RECIPES="$test_recipes"; CR_CHECK_RECIPES=""
+    cr_resolve
+    BRC_WHO="tests-freeze"; BRC_CODEPATH="$codepath"; BRC_RECIPES="$CR_DOC"; BRC_VALUES=""
+    BRC_SELECTED_JSON="$tf_ot_paths"; BRC_TESTS_DOC="$(jq -cn --argjson rows "$rows_json" '{rows: $rows}')"
+    tf_ot_json="$(br_test_check "order-tests" "orderTests" "order-tests")" || exit "$?"
+    tf_ot_out="$(mktemp)" || die 3 "tests-freeze: could not create a temporary file"
+    tf_ot_keys="$(mktemp)" || { rm -f "$tf_ot_out"; die 3 "tests-freeze: could not create a temporary file"; }
+    tf_ot_red_keys="$(mktemp)" || { rm -f "$tf_ot_out" "$tf_ot_keys"; die 3 "tests-freeze: could not create a temporary file"; }
+    printf '%s' "$tf_ot_json" | jq -r '.output // ""' >"$tf_ot_out"
+    br_line_keys "$tf_ot_out" | grep -v '^$' | sort -u >"$tf_ot_keys"
+    printf '%s' "$reds_json" | jq -r '.[].path' | while IFS= read -r red_path; do
+      br_line_keys "$red_path"
+    done | grep -v '^$' | sort -u >"$tf_ot_red_keys"
+    if [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" = "unmet" ] && [ -s "$tf_ot_keys" ] \
+      && ! grep -a -F -x -q -f "$tf_ot_red_keys" "$tf_ot_keys"; then
+      tf_ot_names="$(printf '%s' "$reds_json" | jq -r 'map(.name) | unique | join(", ")')"
+      cp "$tf_ot_out" "$IMPL_DIR/order-tests-$unit_id-freeze.txt"
+      rm -f "$tf_ot_out" "$tf_ot_keys" "$tf_ot_red_keys"
+      die 80 "tests-freeze: the order-tests command build-record runs, $(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | (.orderTests.argv // []) | join(" ") ] | join("; ")'), over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), fails, and its output holds no line of any red file of these tests: $tf_ot_names. It printed: $(head -n 5 "$IMPL_DIR/order-tests-$unit_id-freeze.txt" | tr '\n' ' ')
+So the build check does not run what these reds show, and it would read a correct build unmet. Every test must run when that command runs its file, with no argument. The test author repairs the files and runs each test again, and this freeze runs again. Nothing is frozen. The output is in $IMPL_DIR/order-tests-$unit_id-freeze.txt."
+    fi
+    rm -f "$tf_ot_out" "$tf_ot_keys" "$tf_ot_red_keys"
   fi
 
   # --- the test files go into a commit before anything is measured against them --------------------

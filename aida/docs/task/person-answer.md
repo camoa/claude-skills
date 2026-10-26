@@ -44,9 +44,11 @@ call again, and the call passes with the run mode unchanged.
 A dispatched agent never answers for you. A hook refuses every dispatched agent a write of
 `person-answer.json` with the file tools. It also refuses a shell command part that names the file
 beside a write: a redirect, a copy, move or delete, `sed -i`, or an interpreter such as python. A
-grep or a read of the file passes. An agent never runs `set-run-mode`. An agent that meets a person's call
-reports it once to the coordinating session and stops. That session puts the question to you,
-then makes the call or writes the record itself.
+grep or a read of the file passes. The hook also refuses an agent, in every run mode, the steps
+that record your approval, ruling or answer and cannot be undone. Examples are `set-run-mode`,
+scope `approve`, and `prune` of a tree. An agent that meets a person's call reports it once to the
+coordinating session and stops. That session puts the question to you, then makes the call or
+writes the record itself.
 
 ## Coming back to an autonomous run
 

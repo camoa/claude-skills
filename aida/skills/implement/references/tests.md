@@ -341,6 +341,14 @@ Then nothing checks those files: say so to the person when you report this step.
 This is the one place the tests' own standards are judged. The build and review leave the frozen
 tests out of their tool rows, because no role after the freeze may write them.
 
+**The freeze runs the build's order-tests command when a test has a red.** It is the command
+build-record runs over the frozen files whole, with no argument. When that run fails and prints
+something, at least one red file must share a line with what it printed. Numbers in a line are
+not compared. Otherwise the freeze refuses (exit 80): the build would run something other than
+what the reds show, and read a correct build unmet. The message names the command and the
+output. Send it back to the author. A test file that runs a case only when the case is named is
+the usual cause.
+
 Do not run the static-analysis row here. The tests name code that does not exist yet, so an
 analyser reports each missing name. Once the code exists, an analyser can read a test's guard as
 always true. No role may then change the test. So review runs the row over the frozen tests once

@@ -563,7 +563,8 @@ Show the whole output. It prints the Claude Code version, and whether that versi
 the plugin version on disk, and whether that version changed since this session started. The
 session-start hook exports the version it loaded, so a session that hook never ran in reads
 `not known`. It prints whether the check itself ran inside a worktree, which is where entry
-refuses. Then, per task in progress, whether the recorded tree is on disk and whether git lists
+refuses. It prints a `Claude Code setting:` block for each setting that stops AIDA's hooks or
+removes WebFetch or WebSearch, and nothing when none applies. Then, per task in progress, whether the recorded tree is on disk and whether git lists
 it. Last, the trees git lists that are gone from disk, and the trees git holds that no task
 record names.
 
@@ -574,7 +575,9 @@ window elsewhere resolves no project, and the task lines are then absent.
 ## Reading the check's report
 
 Every path above that touches a project ends by running the check and showing what it printed.
-The check also writes its report to `records/check-project.json` in the project folder.
+The check also writes its report to `records/check-project.json` in the project folder. A
+`Claude Code setting:` block is advice outside the exit code and the record. Show it, and change
+no settings file for the person.
 Read its exit code to decide what happens next, never its text alone:
 
 | Exit code | What it means | What this skill does |

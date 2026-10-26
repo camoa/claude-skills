@@ -32,6 +32,9 @@ fields" line names a field the project file no longer uses; `/aida:project drop-
 removes it, and AIDA offers to run it. A `Task rule: version 5` line means your `CLAUDE.md` holds the
 old block; see [Install the task rule](task-rule.md). A `Surfaces:` line names a test kind that is on
 with no surface file, and its repair. The check writes the same report to `records/check-project.json`.
+A `Claude Code setting:` line names a setting that stops AIDA's hooks or its web search, as
+[Check this machine](check-machine.md) lists. It is advice only: it does not change the exit code,
+and the record does not hold it.
 
 ## What each finding asks of you
 

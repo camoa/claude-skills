@@ -53,8 +53,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Rule four, added for gap row 293, holds three roles to their own records. Since gap row 357 it
 # also keeps a person's answer record to the main session: no agent writes it through a file tool,
-# and since gap row 422 no agent runs a shell segment that names it beside a write signal. It is
-# stated where it runs, before the others.
+# and since gap row 422 no agent runs a shell segment that names it beside a write signal. Since gap
+# row 438 no agent runs an action that records a person's approval, ruling or answer either, and no
+# agent writes a task's task.json. It is stated where it runs, before the others.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -155,6 +156,10 @@ deny_own_record() {
 # write is a forged answer, while a refused read costs one turn. A copy out of the record is refused
 # too. A name built at run time passes the Bash test.
 ANSWER_REFUSAL="person-answer.json holds a person's answer, and only the main session writes it. This write's agent_type is $AGENT. Report the halt to the main session and stop."
+# Gap row 438. task.json holds the run mode a person check reads, and only the task scripts write
+# it, so an agent is refused a write of it the same way. A role's call to an actions script does
+# not name the file.
+TASK_REFUSAL="task.json holds the run mode a person's check reads, and only the task scripts write it. This write's agent_type is $AGENT. Report the halt to the main session and stop."
 # Returns 0 when segment $1 holds a write signal: a redirect other than 2> or one to /dev/null, a
 # write verb, sed -i, find -delete, or an interpreter word.
 answer_write_signal() {
@@ -167,29 +172,79 @@ answer_write_signal() {
     && printf '%s' "$s" | grep -Eq '[[:space:]](-[A-Za-z]*i|--in-place)' && return 0
   return 1
 }
+# Gap row 438. A person check trusts the run mode, often the mode the caller declares, so an agent
+# that leaves out --run-mode autonomous passes it. So no agent runs an action that records a
+# person's approval, ruling or answer, the same as the answer above. This list is the one copy.
+# Each line is a script, its action as an extended regex, then the words that make the call a
+# person's. A line with no words refuses the action itself. The list holds the actions whose script
+# asks for a person and that cannot be undone, and scope's update and add --author, which make a
+# criterion the owner's. A step that can be undone is left out: environment up and not-applicable,
+# surfaces --viewport and --enable, tool install. prune's regex also reads its operands, because
+# only a task id or --all removes a tree; the form with --project alone only lists.
+PERSON_ACTIONS='task-actions.sh set-run-mode|set-budget|decline-recipe|defer-surface
+task-actions.sh prune([[:space:]]+--project[[:space:]=]+[^[:space:]]+)*[[:space:]]+([^-[:space:]][^[:space:]]*|--all)
+scope-actions.sh approve|retire
+scope-actions.sh update|add --author
+design-actions.sh close --approve-runs
+design-actions.sh dispose --confirmed
+implement-actions.sh grant-attempt|clear-halt|retake-tests|restart
+implement-actions.sh build-record|review-record --accept-deviation
+implement-actions.sh finish --accept-warnings
+implement-actions.sh fix-brief --allow
+implement-actions.sh verify-record --ruling
+review-actions.sh surfaces --accept-baseline --walked
+review-actions.sh close --row
+completion-actions.sh close --reason --leave --captures-offered --observed-accepted
+surfaces-actions.sh baseline --confirmed
+surfaces-actions.sh decline
+project-actions.sh unregister|task-rule|task-rule-remove|uninstall|record-declined'
+PERSON_REFUSAL="This command runs an action that records a person's approval, ruling or answer, and only the main session runs one. This command's agent_type is $AGENT. Report the halt to the main session and stop."
+# Returns 0 when segment $1 runs a PERSON_ACTIONS line of script PA_SCRIPT: the script's name, or a
+# `$NAME` set to it, then any `--option value` pairs, then the action, then one of the words. A grep
+# for an action's name passes, because the script's name comes after it.
+person_action_signal() {
+  local n script acts words re
+  n="$(printf '%s' "$PA_SCRIPT" | sed 's/\./\\./g')"
+  [ -z "$alt" ] || n="$n|\\\$\\{?($alt)\\}?"
+  while read -r script acts words; do
+    [ "$script" = "$PA_SCRIPT" ] || continue
+    re="($n)[\"']?([[:space:]]+--[a-z-]+[[:space:]=]+[^[:space:]]+)*[[:space:]]+[\"']?($acts)[\"']?"
+    if [ -z "$words" ]; then re="$re([[:space:]]|\$)"
+    else re="${re}[[:space:]](.*[[:space:]])?[\"']?($(printf '%s' "$words" | tr ' ' '|'))([\"'=[:space:]]|\$)"; fi
+    printf '%s' "$1" | grep -Eq "$re" && return 0
+  done <<<"$PERSON_ACTIONS"
+  return 1
+}
+# Refuses with reason $4 the first segment of ROLE_CMD that names $1, or a `$NAME` an earlier
+# segment set to a value matching the extended regex $2, and for which function $3 returns 0.
+deny_named_segment() {
+  case "$ROLE_CMD" in *"$1"*) ;; *) return 0 ;; esac
+  # Without the command library the segments cannot be read, so the whole command is refused.
+  # shellcheck source=/dev/null
+  source "$PLUGIN_ROOT/scripts/lib/command-text.sh" 2>/dev/null || deny_own_record "$4"
+  local seg named names="" alt=""
+  while IFS= read -r seg; do
+    named=false
+    case "$seg" in *"$1"*) named=true ;; esac
+    [ -z "$alt" ] || ! printf '%s' "$seg" | grep -Eq "\\\$\\{?($alt)([^A-Za-z0-9_]|$)" || named=true
+    [ "$named" = true ] || continue
+    "$3" "$seg" && deny_own_record "$4"
+    names="$names $(printf '%s' "$seg" | grep -oE "[A-Za-z_][A-Za-z0-9_]*=[^[:space:];]*$2" | sed 's/=.*//' | tr '\n' ' ')"
+    alt="$(printf '%s' "$names" | sed -E 's/^ +//; s/ +$//; s/ +/|/g')"
+  done < <(split_segments "$(strip_heredocs "${ROLE_CMD//"$BSNL"/}")")
+}
 if [ -n "$AGENT" ]; then
   if [ "$TOOL" = Bash ]; then
-    ANSWER_CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
-    case "$ANSWER_CMD" in
-      *person-answer.json*)
-        # Without the command library the segments cannot be read, so the whole command is refused.
-        # shellcheck source=/dev/null
-        source "$PLUGIN_ROOT/scripts/lib/command-text.sh" 2>/dev/null || deny_own_record "$ANSWER_REFUSAL"
-        names=""
-        while IFS= read -r seg; do
-          named=false
-          case "$seg" in *person-answer.json*) named=true ;; esac
-          [ -z "${names// /}" ] || ! printf '%s' "$seg" \
-            | grep -Eq "\\\$\\{?($(printf '%s' "$names" | sed -E 's/^ +//; s/ +$//; s/ +/|/g'))([^A-Za-z0-9_]|$)" || named=true
-          [ "$named" = true ] || continue
-          answer_write_signal "$seg" && deny_own_record "$ANSWER_REFUSAL"
-          names="$names $(printf '%s' "$seg" | grep -oE '[A-Za-z_][A-Za-z0-9_]*=[^[:space:];]*person-answer\.json' | sed 's/=.*//' | tr '\n' ' ')"
-        done < <(split_segments "$(strip_heredocs "$ANSWER_CMD")")
-        ;;
-    esac
+    ROLE_CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
+    deny_named_segment person-answer.json 'person-answer\.json' answer_write_signal "$ANSWER_REFUSAL"
+    deny_named_segment task.json 'task\.json' answer_write_signal "$TASK_REFUSAL"
+    while read -r PA_SCRIPT; do
+      deny_named_segment "$PA_SCRIPT" "$(printf '%s' "$PA_SCRIPT" | sed 's/\./\\./g')" person_action_signal "$PERSON_REFUSAL"
+    done < <(printf '%s\n' "$PERSON_ACTIONS" | cut -d' ' -f1 | sort -u)
   else
     case "$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" in
       *person-answer.json*) deny_own_record "$ANSWER_REFUSAL" ;;
+      */task.json) deny_own_record "$TASK_REFUSAL" ;;
     esac
   fi
 fi

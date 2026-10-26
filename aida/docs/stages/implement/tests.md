@@ -49,6 +49,9 @@ selects nothing, so a mistyped test name looks like success.
   so the freeze refuses them.
 - A recipe that declares no markers cannot be read. The test is frozen, and the record says
   `redSignal: unchecked`.
+- The build runs the test files whole, with the stack's own test command. The freeze runs that
+  command too. When it fails, its output must show a line of at least one failing run, or
+  nothing is frozen. A test file that runs a case only when the case is named fails this.
 
 ## A test that passes on its first run
 

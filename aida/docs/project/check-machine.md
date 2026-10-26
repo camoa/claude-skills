@@ -21,9 +21,42 @@ no project, and the task lines are then absent.
 - **Each task in progress.** Whether its recorded worktree is on disk, and whether git lists it.
 - **Leftovers.** Worktrees git lists that are gone from disk, and worktrees git holds that no task
   names.
+- **A Claude Code setting that stops AIDA.** These lines print only when a setting applies:
+  - `allowManagedHooksOnly` in managed settings, when managed `enabledPlugins` does not
+    force-enable AIDA's own `plugin@marketplace` id. The id comes from the plugin install record.
+  - `disableAllHooks`, in managed settings or in your own files after precedence.
+  - A `permissions.deny` rule that removes WebFetch or WebSearch, which the outward searcher needs.
+    `WebFetch(domain:*)` keeps the tool and refuses every fetch, which stops the searcher the same
+    way. Research names these rules too, when it starts.
+
+  Each one names the file that set it, what stops, and the repair. For the hook settings it also
+  says what still checks the work: build-record checks frozen tests, owned files and the stop
+  lines. Nothing else checks destructive commands, reads of denied source, or writes to the main
+  checkout. Nothing checks a forged answer file or a compact with unsaved work.
 
 Each finding carries its repair on the next line. The check performs none of them. It always exits
 0, so read the lines, not the exit code.
+
+## What the settings lines do not see
+
+The check reads files. It reads the server-managed cache at `~/.claude/remote-settings.json`. It
+reads `managed-settings.json` and `managed-settings.d/` in the system folder, and your
+`~/.claude/settings.json`. It reads `.claude/settings.json` in the directory it ran in. It reads
+`.claude/settings.local.json` at the repository root, the main checkout's root in a worktree, as
+Claude Code does. Some sources it does not read:
+
+- An MDM profile on macOS, and a registry value on Windows. They are not files. Where one applies,
+  Claude Code can skip the managed files the check read.
+- A setting passed on the command line with `--settings` or `--disallowedTools`.
+- `managedSourcesBehavior: "merge"`. The check uses the default, where the highest managed source
+  that sets a policy wins.
+- `allowManagedPermissionRulesOnly`. A deny rule in your own files can then be ignored, and the
+  check still names it.
+
+A server-managed cache counts only where Claude Code fetches it: a session that authenticates to
+Anthropic's API directly. On another provider, Claude Code skips the cache, but the check still
+reads it. A stale cache can then hide the managed files from the check. A cache can also be older
+than the policy now in force. `/status` names the managed source Claude Code uses.
 
 ## The version warnings in other scripts
 
@@ -44,4 +77,7 @@ warning. Run this check to see the change again.
   session can reach it. This check answers that before a task needs it.
 - It only reports. Each repair touches your machine or your git state, so a person runs it.
 
-Source: skills/project/SKILL.md, skills/project/scripts/project-actions.sh, scripts/lib/task-helpers.sh
+- A hook cannot say that hooks are off, because a blocked hook never runs. So the scripts you run
+  read the settings files: this check, the project check, and the build's preconditions.
+
+Source: skills/project/SKILL.md, skills/project/scripts/project-actions.sh, scripts/lib/task-helpers.sh, scripts/lib/claude-settings.sh

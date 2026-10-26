@@ -39,7 +39,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] [--keep-choices] \
+#                        [--strike-reasoning <n>]... [--append-reasoning <text>]... [--absence-reviewed <n>]... [--keep-choices] \
 #                        [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path> [--shared]
@@ -292,7 +292,7 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--strike-reasoning <n>] [--append-reasoning <text>] [--absence-reviewed <n>] [--keep-choices] \
+                                         [--strike-reasoning <n>]... [--append-reasoning <text>]... [--absence-reviewed <n>]... [--keep-choices] \
                                          [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path> [--shared]
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
@@ -340,6 +340,20 @@ source "$RECIPES_LIB" || die3 "the recipes library failed to load: $RECIPES_LIB"
 need_value() {
   [ "$3" -ge 2 ] || die3 "$1: $2 needs a value"
   looks_like_flag "$4" && die3 "$1: $2 needs a value, got the option $4 instead"
+  return 0
+}
+
+# Prints the JSON array $1 with $2 added at its end. A flag a person can repeat collects each
+# value this way, so a second one never replaces the first (gap row 435).
+json_appended() {
+  printf '%s' "$1" | jq -c --arg v "$2" '. + [$v]'
+}
+
+# Dies unless $3 is a whole number from 1. $1 the action and flag, $2 what the number counts.
+need_count() {
+  case "$3" in
+    ''|0*|*[!0-9]*) die3 "$1 takes a $2 number from 1, got '$3'" ;;
+  esac
   return 0
 }
 
@@ -916,7 +930,7 @@ do_create() {
         proof="$2"; shift 2 ;;
       --surface)
         need_value "create" "--surface" "$#" "${2:-}"
-        surfaces_json="$(printf '%s' "$surfaces_json" | jq --arg id "$2" '. + [$id]')"; shift 2 ;;
+        surfaces_json="$(json_appended "$surfaces_json" "$2")"; shift 2 ;;
       *) die3 "create: unrecognized argument: $1" ;;
     esac
   done
@@ -968,6 +982,9 @@ do_create() {
 # paragraph stays in the record and the rendered design; no brief carries it (gap row 215). It
 # runs before --append-reasoning, so n counts the paragraphs already there. With --reasoning it
 # is refused, since the replaced text has no paragraph n.
+# --strike-reasoning, --append-reasoning and --absence-reviewed can repeat, and every value
+# applies, appends in the order given. One value that names no live paragraph or no row refuses
+# the call before anything is written (gap row 435).
 # --absence-reviewed <n> stores the text of done-when row n, counted from 1, in `absenceReviewed`.
 # `check` stops printing that row under `absenceJoined:` (gap row 237). The text is the key, so a
 # row whose text changes flags again. Each write drops the entries no row holds any more.
@@ -979,7 +996,7 @@ do_create() {
 
 do_update() {
   local id="" title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
-  local interface="" reasoning="" append_reasoning="" strike_n="" absence_n="" diff_budget="" surfaces_json='[]' proof=""
+  local interface="" reasoning="" appends_json='[]' strikes_json='[]' absences_json='[]' diff_budget="" surfaces_json='[]' proof=""
   local set_keep=false set_absence=false set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
   local set_interface=false set_reasoning=false set_append=false set_strike=false set_diffbudget=false set_surfaces=false set_proof=false
   while [ "$#" -gt 0 ]; do
@@ -1010,13 +1027,16 @@ do_update() {
         reasoning="$2"; set_reasoning=true; shift 2 ;;
       --append-reasoning)
         need_value "update" "--append-reasoning" "$#" "${2:-}"
-        append_reasoning="$2"; set_append=true; shift 2 ;;
+        is_blank "$2" && die3 "update: --append-reasoning must not be blank"
+        appends_json="$(json_appended "$appends_json" "$2")"; set_append=true; shift 2 ;;
       --strike-reasoning)
         need_value "update" "--strike-reasoning" "$#" "${2:-}"
-        strike_n="$2"; set_strike=true; shift 2 ;;
+        need_count "update: --strike-reasoning" "paragraph" "$2"
+        strikes_json="$(json_appended "$strikes_json" "$2")"; set_strike=true; shift 2 ;;
       --absence-reviewed)
         need_value "update" "--absence-reviewed" "$#" "${2:-}"
-        absence_n="$2"; set_absence=true; shift 2 ;;
+        need_count "update: --absence-reviewed" "done-when row" "$2"
+        absences_json="$(json_appended "$absences_json" "$2")"; set_absence=true; shift 2 ;;
       --keep-choices) set_keep=true; shift ;;
       --diff-budget)
         need_value "update" "--diff-budget" "$#" "${2:-}"
@@ -1027,7 +1047,7 @@ do_update() {
         proof="$2"; set_proof=true; shift 2 ;;
       --surface)
         need_value "update" "--surface" "$#" "${2:-}"
-        surfaces_json="$(printf '%s' "$surfaces_json" | jq --arg id "$2" '. + [$id]')"; set_surfaces=true; shift 2 ;;
+        surfaces_json="$(json_appended "$surfaces_json" "$2")"; set_surfaces=true; shift 2 ;;
       *) die3 "update: unrecognized argument: $1" ;;
     esac
   done
@@ -1035,16 +1055,14 @@ do_update() {
   is_blank "$id" && die3 "update: --id is required and must not be blank"
   id_shape_ok "$id" wo || die3 "update: --id '$id' is not a valid wo<n> id shape"
   if [ "$set_append" = "true" ]; then
-    is_blank "$append_reasoning" && die3 "update: --append-reasoning must not be blank"
     [ "$set_reasoning" != "true" ] \
       || die3 "update: --reasoning replaces the field and --append-reasoning adds to it. Pass one"
   fi
+  local struck_list=""
   if [ "$set_strike" = "true" ]; then
-    case "$strike_n" in
-      ''|0*|*[!0-9]*) die3 "update: --strike-reasoning takes a paragraph number from 1, got '$strike_n'" ;;
-    esac
+    struck_list="$(printf '%s' "$strikes_json" | jq -r 'map(tonumber) | unique | map(tostring) | join(", ")')"
     [ "$set_reasoning" != "true" ] \
-      || die3 "update: --reasoning replaces the field, so it has no paragraph $strike_n to strike. Pass one"
+      || die3 "update: --reasoning replaces the field, so it has no paragraph $struck_list to strike. Pass one"
   fi
   local file
   file="$(wo_file_for "$id")"
@@ -1086,25 +1104,31 @@ do_update() {
     doc="$(printf '%s' "$doc" | jq "$CHOICE_PAIRS_JQ"'.choicesKept = choicePairs')"
   fi
   if [ "$set_strike" = "true" ]; then
-    local live
-    live="$(printf '%s' "$doc" | jq -r --argjson n "$strike_n" "$REASONING_JQ"'
-      (.reasoning // "") | split("\n\n") | .[$n - 1] // "" | . != "" and (startswith(struckMark) | not)')"
-    [ "$live" = "true" ] \
-      || die3 "update: $id's reasoning has no live paragraph $strike_n. Read $id.md and count its paragraphs"
-    doc="$(printf '%s' "$doc" | jq --argjson n "$strike_n" "$REASONING_JQ"'
-      .reasoning = ((.reasoning | split("\n\n")) | .[$n - 1] = struckMark + .[$n - 1] | join("\n\n"))')"
+    local dead
+    dead="$(printf '%s' "$doc" | jq -r --argjson ns "$strikes_json" "$REASONING_JQ"'
+      ((.reasoning // "") | split("\n\n")) as $p
+      | [ $ns[] | tonumber | select(($p[. - 1] // "") | . == "" or startswith(struckMark)) ]
+      | unique | map(tostring) | join(", ")')"
+    [ -z "$dead" ] \
+      || die3 "update: $id's reasoning has no live paragraph $dead. Read $id.md and count its paragraphs"
+    doc="$(printf '%s' "$doc" | jq --argjson ns "$strikes_json" "$REASONING_JQ"'
+      .reasoning = ((.reasoning | split("\n\n"))
+        | reduce ($ns | map(tonumber) | unique)[] as $n (.; .[$n - 1] = struckMark + .[$n - 1])
+        | join("\n\n"))')"
   fi
   if [ "$set_append" = "true" ]; then
-    doc="$(reasoning_appended "$doc" "$append_reasoning")"
+    local i
+    for ((i = 0; i < $(printf '%s' "$appends_json" | jq length); i++)); do
+      doc="$(reasoning_appended "$doc" "$(printf '%s' "$appends_json" | jq -r --argjson i "$i" '.[$i]')")"
+    done
   fi
   if [ "$set_absence" = "true" ]; then
-    case "$absence_n" in
-      ''|0*|*[!0-9]*) die3 "update: --absence-reviewed takes a done-when row number from 1, got '$absence_n'" ;;
-    esac
-    printf '%s' "$doc" | jq -e --argjson n "$absence_n" '((.doneWhen // [])[$n - 1] | type) == "string"' >/dev/null \
-      || die3 "update: $id has no done-when row $absence_n. Read $id.md and count its rows"
-    doc="$(printf '%s' "$doc" | jq --argjson n "$absence_n" '(.doneWhen // []) as $d
-      | .absenceReviewed = ([ (.absenceReviewed // [])[] | select(. as $t | any($d[]; . == $t)) ] + [$d[$n - 1]] | unique)')"
+    local missing
+    missing="$(printf '%s' "$doc" | jq -r --argjson ns "$absences_json" '(.doneWhen // []) as $d
+      | [ $ns[] | tonumber | select(($d[. - 1] | type) != "string") ] | unique | map(tostring) | join(", ")')"
+    [ -z "$missing" ] || die3 "update: $id has no done-when row $missing. Read $id.md and count its rows"
+    doc="$(printf '%s' "$doc" | jq --argjson ns "$absences_json" '(.doneWhen // []) as $d
+      | .absenceReviewed = ([ (.absenceReviewed // [])[] | select(. as $t | any($d[]; . == $t)) ] + [ $ns[] | tonumber | $d[. - 1] ] | unique)')"
   fi
   if [ "$set_diffbudget" = "true" ]; then
     doc="$(printf '%s' "$doc" | jq --arg v "$diff_budget" '.diffBudget = $v')"
@@ -1118,6 +1142,7 @@ do_update() {
 
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
+  [ -z "$struck_list" ] || echo "struck: $struck_list"
   wo_summary "$doc"
   implied_proof_line "$doc" "$id"
 
