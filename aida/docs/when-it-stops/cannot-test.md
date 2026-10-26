@@ -19,7 +19,7 @@ checked." Then it names the condition, the stack, and the owner: the action that
 - **A value is missing.** A test command holds a placeholder that nothing fills, so the run reads
   `unknown`. Bring the environment up, or give the value when AIDA asks. A configuration order's
   gate line with no value refuses at exit 3 for the same reason.
-- **A stack has no recipe answer** (exit 18). Every stack the project records needs a recipe
+- **A stack has no recipe answer** (exit 3). Every stack the project records needs a recipe
   answer, or the word for why there is none. AIDA asks the catalog again.
 
 Lines such as `endOfTaskAbsent:`, `baselineRed:`, `freeze:` and `staleRecipe:` do not stop the

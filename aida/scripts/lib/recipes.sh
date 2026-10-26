@@ -35,6 +35,8 @@
 #   cc_silent_pass_markers <recipe>           the same, from the file-level key of a test recipe
 #   cc_unit_declaration_globs <recipe>        the globs under ## Unit declaration of an implement recipe
 #   cr_recipe_pair <action> <flag> <value>    parses <framework>=<path> into CR_PAIR
+#   cr_take_flag <action> <flag>=<variable>... <arg>...  takes one recipe flag a verb names off
+#                                             the arguments; returns how many it took, 2 or 0
 #   cr_resolve                                resolves the recipes into CR_DOC
 #   cr_lookup <tab list> <name>               the value that name was given, as whole text
 #   cr_row_command <rows> <row id> <label>    one row's argv, or why there is none
@@ -651,6 +653,32 @@ cr_catalog_pair() {
     no-recipe|listing-unreachable|fetch-failed) cr_lookup_failure_pair "$1" "${3:---catalog-recipe}" "$2" ;;
     *) cr_recipe_pair "$1" "${3:---catalog-recipe}" "$2" ;;
   esac
+}
+
+# The one reader of the recipe flags. $1 the action, $2 the flags this verb takes, as space-separated
+# <flag>=<variable> words, then the arguments still to parse. When the first of them is one of the
+# verb's flags, it parses the value the way that flag reads and appends one line to the caller's
+# variable, then returns 2. Otherwise it returns 0 and takes nothing. One flag fills a different
+# variable per verb, so the verb names the variable. Call it as a plain statement in the verb's own
+# argument loop: its refusals must end the action, and the append must reach the caller's shell.
+cr_take_flag() {
+  local who="$1" targets=" $2 " flag="${3:-}" var
+  case "$targets" in *" $flag="*) ;; *) return 0 ;; esac
+  var="${targets#*" $flag="}"; var="${var%% *}"
+  need_value "$who" "$flag" "$(($# - 2))" "${4:-}"
+  case "$flag" in
+    --lookup-failed|--check-lookup-failed) cr_lookup_failure_pair "$who" "$flag" "$4" ;;
+    --catalog-recipe|--catalog-check-recipe|--implement-lookup) cr_catalog_pair "$who" "$4" "$flag" ;;
+    --value)
+      case "$4" in *=*) ;; *) die 3 "$who: --value takes <name>=<value>, got: $4" ;; esac
+      pc_refuse_forged_value "$who" "$4"
+      CR_PAIR="$(printf '%s' "$4" | sed 's/=/\t/')" ;;
+    --tooling) CR_PAIR="$4" ;;
+    *) cr_recipe_pair "$who" "$flag" "$4" ;;
+  esac
+  eval "$var=\"\${$var}\$CR_PAIR
+\""
+  return 2
 }
 
 # Resolves the recipes into the commands the checks run. The caller sets these globals first,

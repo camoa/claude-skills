@@ -13,6 +13,9 @@
 #
 #   resolve_task_folder <path> <action>   prints the canonical task folder, or dies
 #   looks_like_flag <value>               true when the value is another option, not data
+#   need_value <action> <flag> <count> <value> [non-empty]
+#                                         refuses at 3 a flag with no value, or with another
+#                                         option as its value; with non-empty, an empty value too
 #   is_blank <value>                      true when the value is empty or only whitespace
 #   text_args <arg>...                    sets TEXT_ARGS to the arguments, each @/<path> read
 #   parse_finding_ref <action> <ref> <research folder>
@@ -252,6 +255,17 @@ looks_like_flag() {
     --*) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Every flag that takes a value refuses the same ways: no value at all, and a value that is itself
+# the next option, as in `--reason --leave`. $1 the action, $2 the flag, $3 what is left of "$#",
+# $4 the value. A fifth argument refuses an empty value as well. A flag that takes a list keeps
+# the empty value, because an empty list is how design clears one.
+need_value() {
+  [ "$3" -ge 2 ] || die3 "$1: $2 needs a value. Pass it after the flag; --help shows its form."
+  looks_like_flag "$4" && die3 "$1: $2 needs a value, got the option $4 instead. Pass the value after the flag; --help shows its form."
+  [ -z "${5:-}" ] || [ -n "$4" ] || die3 "$1: $2 was given an empty value. Pass a value."
+  return 0
 }
 
 # True (exit 0) when $1 is empty, or holds only whitespace. This is a value with no characters in

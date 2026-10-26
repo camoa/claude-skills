@@ -496,7 +496,7 @@ writes the tests into that file and takes a new red run for each. Then freeze ag
 
 `--test-recipe` is a path only, one per framework, read from `implementation/preconditions.json`
 at `frameworks[].recipePath`, the same way the build step reads it. It must be the record's path:
-a different one refuses (exit 91), naming both. When the catalog republished the recipe, run
+a different one refuses (exit 3), naming both. When the catalog republished the recipe, run
 `recipe-refresh` first (`references/preconditions.md`). With no flag, the freeze reads the record's
 path itself, and the record names what it read under `testRecipePath`. The script reads the recipe's
 `failure_signal` block itself. Do not read the body here. `--implement-recipe` is the path
@@ -527,8 +527,8 @@ that would hold no row refuses (exit 74).
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
 place. A test with neither refuses (exit 33). A `--locks-in` reason written `commit:<id>` must
 name one of this order's own build or fix commits on the branch. An id that is not hexadecimal,
-is shorter than seven characters, or is not this order's own refuses (exit 101). A reason with no
-`commit:` prefix is prose and names the existing code.
+or is shorter than seven characters, refuses (exit 3). An id that is not this order's own refuses
+(exit 101). A reason with no `commit:` prefix is prose and names the existing code.
 A `--red` file written before the brief's `roundStartedAt` refuses (exit 109). So does one written
 before its test file last changed. Either is the run of an earlier test, for example one a restart
 moved aside. The message names each file and both times. Its last line, `redAgain:`, holds the
@@ -593,8 +593,8 @@ froze it.
 Pass each support file the author returned as `--support`. The freeze hashes it with the tests,
 records it under `support`, and the hook guards it the same way. Without this, the implementer,
 which owns the file, may rewrite the setup the tests stand on and the frozen-tests check stays
-met. The freeze refuses a support path that does not exist (exit 89). It also refuses one a test
-glob matches (exit 89), because that file is a test: pass it as `--test`.
+met. The freeze refuses a support path that does not exist (exit 3). It also refuses one a test
+glob matches (exit 3), because that file is a test: pass it as `--test`.
 
 Then it commits the test files it hashed, and the support files, on the task branch, and only
 those paths. The implementer starts from a tree that already holds the tests, and the record's

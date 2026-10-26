@@ -39,7 +39,7 @@ See [a run with nobody present](person-must-answer.md).
 
 ## Other refusals
 
-- **Exit 108.** The reviewer did not answer every recipe in its brief. AIDA writes the brief again
+- **Exit 3.** The reviewer did not answer every recipe in its brief. AIDA writes the brief again
   and sends the reviewer again.
 - **Exit 50.** An order gets one review, ever. After finish, a pending departure is answered at
   the task review.

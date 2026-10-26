@@ -335,14 +335,6 @@ RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 # shellcheck source=/dev/null
 source "$RECIPES_LIB" || die3 "the recipes library failed to load: $RECIPES_LIB"
 
-# Every flag that takes a value refuses the same two ways: no value at all, and a value that is
-# itself the next option. $1 the action, $2 the flag, $3 what is left of "$#", $4 the value.
-need_value() {
-  [ "$3" -ge 2 ] || die3 "$1: $2 needs a value"
-  looks_like_flag "$4" && die3 "$1: $2 needs a value, got the option $4 instead"
-  return 0
-}
-
 # Prints the JSON array $1 with $2 added at its end. A flag a person can repeat collects each
 # value this way, so a second one never replaces the first (gap row 435).
 json_appended() {

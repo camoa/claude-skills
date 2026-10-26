@@ -5,7 +5,7 @@ once per build, not once per work order.
 
 ## Resolve one recipe per framework
 
-Read the project's own `frameworks`. A `project.json` recording none refuses outright (exit 77):
+Read the project's own `frameworks`. A `project.json` recording none refuses outright (exit 3):
 no recipe can be chosen for a project the run cannot name a framework for. For each framework,
 dispatch `catalog-identifier` to ask the navigator's process-recipe lookup, with the lines
 `point: test-execution`, that framework, and the project folder. It answers whether one is
@@ -107,7 +107,7 @@ declared nothing. `no-recipe` records the framework `undeclared`: the catalog lo
 nothing for it, so the build goes on. `listing-unreachable` and `fetch-failed` record it
 `unknown`, and stop: nobody looked. Every framework prints its own line on every run.
 Every framework also needs a `--check-recipe` or a `--check-lookup-failed <framework>=<word>`.
-The script refuses either way missing (exit 18). With no review recipe on record, no tool row
+The script refuses either way missing (exit 3). With no review recipe on record, no tool row
 runs, and the freeze cannot judge the standards of a test file no role may change later. The record keeps each framework's answer as
 `reviewLookup`. The `reviewNotResolved:` line names each framework with no review recipe, and
 `none` when every framework has one. Read that line to the person. A light run asks every point
@@ -298,8 +298,8 @@ and that framework, never a cached copy. Then run, with one flag per framework t
 It replaces the path for the named frameworks only, and records what changed under
 `recipeRefreshes`. It re-runs nothing: the verdict stands, because a recipe's preconditions
 heading changes more rarely than its markers, and the person who refreshes knows why. It refuses
-a framework with no resolved recipe on record, and a path that does not exist (exit 90). The
-freeze refuses a `--test-recipe` that is not the record's path (exit 91), so run this first.
+a framework with no resolved recipe on record, and a path that does not exist (exit 3). The
+freeze refuses a `--test-recipe` that is not the record's path (exit 3), so run this first.
 
 The review recipe is pinned by the baseline, with its sha256. The build refuses a body the
 baseline did not read (exit 73). A baseline reads the tree before the task. Each tool runs where

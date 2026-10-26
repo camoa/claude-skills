@@ -40,10 +40,10 @@ build. The re-check's refusals are on [the eight checks](../stages/implement/che
 
 ## Other refusals at the record step
 
-- **Exit 103: the site is down.** See [the site is down](site-down.md). No attempt is spent.
+- **Exit 3: the site is down.** See [the site is down](site-down.md). No attempt is spent.
 - **Exit 61: uncommitted work.** See [the code repository is not ready](repository.md).
-- **Exit 84: a check is missing from the record.** Nothing is written and no attempt is spent.
-- **Exit 48: the order is past its review.** One order gets one review, so later code comes from
+- **Exit 3: a check is missing from the record.** Nothing is written and no attempt is spent.
+- **Exit 3: the order is past its review.** One order gets one review, so later code comes from
   a fix round.
 
 ## Why it works this way

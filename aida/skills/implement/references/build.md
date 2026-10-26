@@ -90,7 +90,7 @@ forward and none of them did; `build-brief` is what actually forwards it now.
 
 It refuses when the tests for this order were never frozen, when an order this one depends on has
 no completion record, and when the attempts are already spent. It also refuses an order past its
-build: a build starts only from `tests-frozen` or `code-written` (exit 116). It refuses an order
+build: a build starts only from `tests-frozen` or `code-written` (exit 3). It refuses an order
 whose done-when gained rows after the freeze until a freeze judges them (exit 120). Read a refusal
 and act on it.
 
@@ -171,7 +171,7 @@ halt a started order. `build-record` refuses while the order's owned or shared f
 design differ from the snapshot (exit 117), and spends no attempt. Run `start` first. Unattended, run `build-record` as after any return. It halts the order
 itself, so do not halt it again. A halted order records no attempt: `build-record` refuses it
 (exit 49) until the halt is cleared, except the deviation halt `--accept-deviation` answers. The next `start` sets aside what was left.
-An order past its review records no attempt either: `build-record` refuses it (exit 48). One order
+An order past its review records no attempt either: `build-record` refuses it (exit 3). One order
 gets one review, so code after it comes from a fix round.
 
 **A defect in a closed order's file has its own route.** The stop line reads
@@ -342,7 +342,7 @@ The range, the empty-range refusal (exit 71), the unchanged refusal (exit 45) an
 refusal (exit 61) all read the project folder's history. That is where the deliverable
 landed, and the code repository may hold no commit at all for it. The tree read is the owned
 files alone, since this stage keeps the rest of that folder uncommitted until it finishes. A
-project folder with no history refuses (exit 87).
+project folder with no history refuses (exit 3).
 
 **A `record` order's diff is the project folder's.** Its deliverable may sit beside earlier
 reports outside the task folder. So the owned-files check, the review diff and the fix patch
@@ -383,7 +383,7 @@ nothing here two answers to choose between.
 different file than the baseline read refuses (exit 73), naming both: a tool's own result is
 compared against the baseline it ran against, and a changed recipe makes that comparison false.
 
-**The record holds exactly eight checks.** Fewer refuses (exit 84), naming the absent check, and
+**The record holds exactly eight checks.** Fewer refuses (exit 3), naming the absent check, and
 no attempt is spent.
 
 Pass `--value <name>=<value>` for a placeholder a command carries, the same as
@@ -421,7 +421,7 @@ The site must be up before the verify lines run. A site command such as `ddev dr
 stopped site and prints its start-up text. A `stdout empty` line then fails for a reason that is
 not the check. So before any check runs, the script runs the `## Status` line of the task's
 environment recipe in the worktree. It does this when the task records an environment and the
-order has verify run lines or a configuration gate. A non-zero exit refuses (exit 103) in both run
+order has verify run lines or a configuration gate. A non-zero exit refuses (exit 3) in both run
 modes, because `up` is a person's answer. The message quotes the line's first output. No check
 runs and no attempt is spent. Say that the site is down, and show the message. Offer
 `task environment <task-id> up`, then run the same step again. A recipe with no `## Status`
@@ -455,7 +455,7 @@ The recipe flags and `--interface` are `build-record`'s. The range and the repor
 from the build record, so neither is passed. A recipe flag left out is taken from its record:
 the test-execution recipe and a gate order's implement recipe from `preconditions.json`, the
 review recipe from `baseline.json`. The `filledFromRecords:` line names each flag taken. A flag
-that names another path than its record refuses (exit 91), and nothing runs. Pass the recorded
+that names another path than its record refuses (exit 3), and nothing runs. Pass the recorded
 path, or leave the flag out. The interface record is read again from its file,
 so an amended record is what the check reads. No implementer is dispatched and no attempt is
 spent. The `next:` line offers this route beside `build` when the last attempt was stopped by
@@ -474,7 +474,7 @@ retry, and the route is `build`. Or no check stopped the attempt, so it passed a
 past the build. Or a path the interface check named does not exist at the recorded commit, so
 no amended record can answer it. A halted order refuses (exit 49), and `references/finish.md`
 names the grant. The clean-tree rule applies (exit 61). A missing interface record refuses as at `build-record`
-(exit 44). A person's fix after a finding ruled load-bearing passes the moved HEAD and the passed
+(exit 3). A person's fix after a finding ruled load-bearing passes the moved HEAD and the passed
 record once, under "Clear any other halt" in `references/finish.md`.
 
 It rewrites the record with the new checks and the interface record's text. When that text

@@ -3,7 +3,7 @@
 A task's worktree can run its own site, from the stack's environment recipe. Steps that reach the
 site refuse while it is down. A bring-up that fails says why and undoes what it wrote.
 
-## A step refuses because the site is down (exit 103)
+## A step refuses because the site is down (exit 3)
 
 Before a work order's site checks run, the build runs the recipe's status line in the worktree.
 When the line fails, the record step refuses in both run modes. The message quotes the line's

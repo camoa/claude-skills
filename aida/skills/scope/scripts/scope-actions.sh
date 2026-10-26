@@ -201,14 +201,6 @@ TASK_HELPERS_LIB="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 # shellcheck source=/dev/null
 source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TASK_HELPERS_LIB"
 
-# Every flag that takes a value refuses the same two ways: no value at all, and a value that is
-# itself the next option. $1 the action, $2 the flag, $3 what is left of "$#", $4 the value.
-need_value() {
-  [ "$3" -ge 2 ] || die3 "$1: $2 needs a value"
-  looks_like_flag "$4" && die3 "$1: $2 needs a value, got the option $4 instead"
-  return 0
-}
-
 # Every action past read/init needs a contract that already exists, parses, and actually is a
 # contract: an object carrying schemaVersion, goal, expectedResult, and criteria/nonGoals as
 # arrays. A file that merely parses as JSON is not enough; jq's own `+= []` on a missing field

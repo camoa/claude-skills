@@ -44,7 +44,7 @@ When AIDA cannot work out the trunk, it says so and goes on. See
 - **Exit 82.** A rebase or an amend rewrote the branch under the build. Run
   `start --rebased-onto <commit>`, then retake the baseline by hand. Until then the record steps
   and `finish` refuse with exit 21.
-- **Exit 83.** The baseline was written by an earlier version of AIDA. Retake it the same way.
+- **Exit 3.** The baseline was written by an earlier version of AIDA. Retake it the same way.
 
 The steps, and when the flag refuses, are on [come back to a build](../stages/implement/resume.md).
 

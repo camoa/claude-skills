@@ -13,7 +13,7 @@ it wrote. There is no skip. Run the stage the message names, then run this one a
 | `/aida:implement` | no contract, or design has not started; it names the missing stage | that stage |
 | `/aida:implement` | design never closed (exit 11), or its check fails (exit 4) | `/aida:design` close |
 | `/aida:implement` | design changed after it closed (exit 13); the message names each order | `/aida:design` close again |
-| `/aida:implement` | design left no work orders (exit 7) | `/aida:design` |
+| `/aida:implement` | design left no work orders (exit 3) | `/aida:design` |
 | `/aida:review` | implementation has not finished: no finish record (exit 66) | the finish step of `/aida:implement` |
 | `/aida:completion` | the review verdict reads `none` | `/aida:review` |
 

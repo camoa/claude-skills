@@ -1466,44 +1466,8 @@ do_checks() {
   local upstream empty_range unread
 
   while [ "$#" -gt 0 ]; do
+    cr_take_flag "checks" "--recipe=recipes --check-recipe=check_recipes --lookup-failed=failures --catalog-recipe=catalog_recipes --catalog-check-recipe=catalog_check_recipes --value=values" "$@" || { shift "$?"; continue; }
     case "$1" in
-      --recipe)
-        [ "$#" -ge 2 ] || die 3 "checks: --recipe needs <framework>=<path>"
-        cr_recipe_pair "checks" "--recipe" "$2"
-        recipes="$recipes$CR_PAIR
-"
-        shift 2 ;;
-      --check-recipe)
-        [ "$#" -ge 2 ] || die 3 "checks: --check-recipe needs <framework>=<path>"
-        cr_recipe_pair "checks" "--check-recipe" "$2"
-        check_recipes="$check_recipes$CR_PAIR
-"
-        shift 2 ;;
-      --lookup-failed)
-        [ "$#" -ge 2 ] || die 3 "checks: --lookup-failed needs <framework>=<reason>"
-        cr_lookup_failure_pair "checks" "--lookup-failed" "$2"
-        failures="$failures$CR_PAIR
-"
-        shift 2 ;;
-      --catalog-recipe)
-        [ "$#" -ge 2 ] || die 3 "checks: --catalog-recipe needs <framework>=<path>"
-        cr_catalog_pair "checks" "$2"
-        catalog_recipes="$catalog_recipes$CR_PAIR
-"
-        shift 2 ;;
-      --catalog-check-recipe)
-        [ "$#" -ge 2 ] || die 3 "checks: --catalog-check-recipe needs <framework>=<path>"
-        cr_catalog_pair "checks" "$2" "--catalog-check-recipe"
-        catalog_check_recipes="$catalog_check_recipes$CR_PAIR
-"
-        shift 2 ;;
-      --value)
-        [ "$#" -ge 2 ] || die 3 "checks: --value needs <name>=<value>"
-        case "$2" in *=*) ;; *) die 3 "checks: --value takes <name>=<value>, got: $2" ;; esac
-        pc_refuse_forged_value "checks" "$2"
-        values="$values$(printf '%s' "$2" | sed 's/=/\t/')
-"
-        shift 2 ;;
       -*) die 3 "checks: unrecognized argument: $1" ;;
       *)
         [ -z "$task_arg" ] || die 3 "checks: more than one task folder given"
@@ -2766,14 +2730,8 @@ do_surfaces() {
   local task_arg="" walked="" accepted=""
   RW_VALUES=""
   while [ "$#" -gt 0 ]; do
+    cr_take_flag "surfaces" "--value=RW_VALUES" "$@" || { shift "$?"; continue; }
     case "$1" in
-      --value)
-        [ "$#" -ge 2 ] || die 3 "surfaces: --value needs <name>=<value>"
-        case "$2" in *=*) ;; *) die 3 "surfaces: --value takes <name>=<value>, got: $2" ;; esac
-        pc_refuse_forged_value "surfaces" "$2"
-        RW_VALUES="$RW_VALUES$(printf '%s' "$2" | sed 's/=/\t/')
-"
-        shift 2 ;;
       --walked)
         [ "$#" -ge 2 ] || die 3 "surfaces: --walked needs a surface id"
         looks_like_flag "$2" && die 3 "surfaces: --walked was given another flag, not a surface id: $2"

@@ -107,7 +107,7 @@ answers `departureCured`, and a `no` waits for the person. With no `finding`, th
 one such finding on a file the evidence names, and prints a `paired:` line. Exit 52 refuses a
 `finding` on another verdict, or one that names no finding in the file. It also refuses a finding
 on a file the evidence does not name, and two candidates for one answer. The findings file answers each item of the brief's
-`recipes` once. Otherwise the script refuses (exit 108): run `review-brief` again for this order,
+`recipes` once. Otherwise the script refuses (exit 3): run `review-brief` again for this order,
 then dispatch the reviewer again. On a hit it refuses (exit 107), writes no review record, and
 halts the order for design drift. The halt names the file and the line number, or the recipe.
 What is wrong is the design, or a recipe it relies on, so no fixer can repair it. Put it to the
@@ -310,7 +310,7 @@ an unattended order halts. Each `--scope-insufficient` needs a line
 addressed in that round (exit 52). A round with no commit addresses no check finding. With a person
 present, a finding the verifier read not-addressed at the cap goes to the repair round above.
 There the fixer can report it already correct with its run.
-A task site that is down refuses (exit 103) before any check runs, as build.md says for `build-record`.
+A task site that is down refuses (exit 3) before any check runs, as build.md says for `build-record`.
 
 **`fix-record` refuses when the code repository's tree is not clean.** The fixer commits its own
 work before it returns. A dirty tree means that commit did not happen. This round is not recorded.
