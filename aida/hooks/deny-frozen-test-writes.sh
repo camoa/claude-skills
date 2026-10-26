@@ -54,8 +54,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Rule four, added for gap row 293, holds three roles to their own records. Since gap row 357 it
 # also keeps a person's answer record to the main session: no agent writes it through a file tool,
 # and since gap row 422 no agent runs a shell segment that names it beside a write signal. Since gap
-# row 438 no agent runs task-actions.sh set-run-mode either. It is stated where it runs, before the
-# others.
+# row 438 no agent runs an action that records a person's approval, ruling or answer either. It is
+# stated where it runs, before the others.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -168,15 +168,46 @@ answer_write_signal() {
     && printf '%s' "$s" | grep -Eq '[[:space:]](-[A-Za-z]*i|--in-place)' && return 0
   return 1
 }
-# Gap row 438. The run mode decides whether a person check passes (scripts/lib/recipes.sh,
-# cr_require_person), so only the main session changes it, the same as the answer above. An agent is
-# refused a segment that names task-actions.sh, or a `$NAME` set to it, with the word set-run-mode
-# after that name. A grep for the action's name passes, because the script's name comes after it.
-RUN_MODE_REFUSAL="set-run-mode decides whether a person's check passes, and only the main session runs it. This command's agent_type is $AGENT. Report the halt to the main session and stop."
-run_mode_signal() {
-  local n='task-actions\.sh'
+# Gap row 438. A person check trusts the run mode, often the mode the caller declares, so an agent
+# that leaves out --run-mode autonomous passes it. So no agent runs an action that records a
+# person's approval, ruling or answer, the same as the answer above. This list is the one copy.
+# Each line is a script, its action as an extended regex, then the words that make the call a
+# person's. A line with no words refuses the action itself. The list holds every action whose
+# script asks for a person, and scope's update --author, which promotes a criterion to owner.
+PERSON_ACTIONS='task-actions.sh set-run-mode|set-budget|decline-recipe|defer-surface|prune
+task-actions.sh environment up not-applicable
+scope-actions.sh approve|retire
+scope-actions.sh update --author
+design-actions.sh close --approve-runs
+design-actions.sh dispose --confirmed
+implement-actions.sh grant-attempt|clear-halt|retake-tests|restart
+implement-actions.sh build-record|review-record --accept-deviation
+implement-actions.sh finish --accept-warnings
+review-actions.sh surfaces --accept-baseline --walked
+review-actions.sh close --row
+completion-actions.sh close --reason --leave --captures-offered --observed-accepted
+surfaces-actions.sh show|install --viewport
+surfaces-actions.sh register --enable
+surfaces-actions.sh baseline --confirmed
+surfaces-actions.sh decline
+tool-actions.sh install
+project-actions.sh unregister|task-rule|task-rule-remove|uninstall|record-declined'
+PERSON_REFUSAL="This command runs an action that records a person's approval, ruling or answer, and only the main session runs one. This command's agent_type is $AGENT. Report the halt to the main session and stop."
+# Returns 0 when segment $1 runs a PERSON_ACTIONS line of script PA_SCRIPT: the script's name, or a
+# `$NAME` set to it, then any `--option value` pairs, then the action, then one of the words. A grep
+# for an action's name passes, because the script's name comes after it.
+person_action_signal() {
+  local n script acts words re
+  n="$(printf '%s' "$PA_SCRIPT" | sed 's/\./\\./g')"
   [ -z "$alt" ] || n="$n|\\\$\\{?($alt)\\}?"
-  printf '%s' "$1" | grep -Eq "($n)[\"']?[[:space:]](.*[[:space:]])?[\"']?set-run-mode[\"']?([[:space:]]|\$)"
+  while read -r script acts words; do
+    [ "$script" = "$PA_SCRIPT" ] || continue
+    re="($n)[\"']?([[:space:]]+--[a-z-]+[[:space:]=]+[^[:space:]]+)*[[:space:]]+[\"']?($acts)[\"']?"
+    if [ -z "$words" ]; then re="$re([[:space:]]|\$)"
+    else re="${re}[[:space:]](.*[[:space:]])?[\"']?($(printf '%s' "$words" | tr ' ' '|'))([\"'=[:space:]]|\$)"; fi
+    printf '%s' "$1" | grep -Eq "$re" && return 0
+  done <<<"$PERSON_ACTIONS"
+  return 1
 }
 # Refuses with reason $4 the first segment of ROLE_CMD that names $1, or a `$NAME` an earlier
 # segment set to a value matching the extended regex $2, and for which function $3 returns 0.
@@ -200,7 +231,9 @@ if [ -n "$AGENT" ]; then
   if [ "$TOOL" = Bash ]; then
     ROLE_CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
     deny_named_segment person-answer.json 'person-answer\.json' answer_write_signal "$ANSWER_REFUSAL"
-    deny_named_segment task-actions.sh 'task-actions\.sh' run_mode_signal "$RUN_MODE_REFUSAL"
+    while read -r PA_SCRIPT; do
+      deny_named_segment "$PA_SCRIPT" "$(printf '%s' "$PA_SCRIPT" | sed 's/\./\\./g')" person_action_signal "$PERSON_REFUSAL"
+    done < <(printf '%s\n' "$PERSON_ACTIONS" | cut -d' ' -f1 | sort -u)
   else
     case "$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" in
       *person-answer.json*) deny_own_record "$ANSWER_REFUSAL" ;;
