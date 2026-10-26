@@ -4,6 +4,46 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.22] - 2026-10-26
+
+Changes from the periplus run, the camoa_skills run on
+aida-multi-client, the review of the AI-native SDLC playbook, and the
+control audit. A dispatched role can no longer stand in for the person,
+and the freeze runs the tests the way the build check does.
+
+### Fixed
+
+- A dispatched role could run `set-run-mode`, approve scope, close
+  review or completion, or pass any other person-only step, so every
+  check for the person's answer passed with no person. The guard hook
+  now refuses a dispatched role each step that records the person's
+  approval, ruling or answer and cannot be undone, in every run mode.
+  This covers `fix-brief --allow`, `verify-record --ruling` and the
+  `--author` flag of scope `add` and `update`. A command split across
+  lines with a backslash is joined before the check. The main session
+  is never refused.
+- A dispatched role could change the run mode by writing `task.json`
+  itself. The guard hook now refuses a role's write of `task.json`,
+  from Bash or from the file tools. Reads still pass.
+- `tests-freeze` checked each named case red, but never the command the
+  build check runs, so a spec that printed usage when run bare froze,
+  and the correct build was then stopped. The freeze now runs the
+  order's tests the way the build check does. It refuses at exit 80
+  when no red run shares a line with that output, and keeps the output
+  in the task folder only when it refuses.
+- `design update` with repeated `--strike-reasoning`,
+  `--append-reasoning` or `--absence-reviewed` flags applied only the
+  last one. Each repeated flag now applies, and the update prints what
+  it struck.
+
+### Added
+
+- The machine check, the project check, preconditions and research
+  start name a Claude Code setting that stops AIDA's hooks or denies
+  WebFetch or WebSearch. These are warnings. They read the managed,
+  user, project and local settings files, and the server-managed cache,
+  which counts only with direct Anthropic authentication.
+
 ## [6.0.21] - 2026-10-25
 
 Changes from the periplus run, the dev_guides_site run, the camoa_skills
