@@ -172,10 +172,13 @@ answer_write_signal() {
 # that leaves out --run-mode autonomous passes it. So no agent runs an action that records a
 # person's approval, ruling or answer, the same as the answer above. This list is the one copy.
 # Each line is a script, its action as an extended regex, then the words that make the call a
-# person's. A line with no words refuses the action itself. The list holds every action whose
-# script asks for a person, and scope's update --author, which promotes a criterion to owner.
-PERSON_ACTIONS='task-actions.sh set-run-mode|set-budget|decline-recipe|defer-surface|prune
-task-actions.sh environment up not-applicable
+# person's. A line with no words refuses the action itself. The list holds the actions whose script
+# asks for a person and that cannot be undone, and scope's update --author, which promotes a
+# criterion to owner. A step that can be undone is left out: environment up and not-applicable,
+# surfaces --viewport and --enable, tool install. prune's regex also reads its operands, because
+# only a task id or --all removes a tree; the form with --project alone only lists.
+PERSON_ACTIONS='task-actions.sh set-run-mode|set-budget|decline-recipe|defer-surface
+task-actions.sh prune([[:space:]]+--project[[:space:]=]+[^[:space:]]+)*[[:space:]]+([^-[:space:]][^[:space:]]*|--all)
 scope-actions.sh approve|retire
 scope-actions.sh update --author
 design-actions.sh close --approve-runs
@@ -186,11 +189,8 @@ implement-actions.sh finish --accept-warnings
 review-actions.sh surfaces --accept-baseline --walked
 review-actions.sh close --row
 completion-actions.sh close --reason --leave --captures-offered --observed-accepted
-surfaces-actions.sh show|install --viewport
-surfaces-actions.sh register --enable
 surfaces-actions.sh baseline --confirmed
 surfaces-actions.sh decline
-tool-actions.sh install
 project-actions.sh unregister|task-rule|task-rule-remove|uninstall|record-declined'
 PERSON_REFUSAL="This command runs an action that records a person's approval, ruling or answer, and only the main session runs one. This command's agent_type is $AGENT. Report the halt to the main session and stop."
 # Returns 0 when segment $1 runs a PERSON_ACTIONS line of script PA_SCRIPT: the script's name, or a
