@@ -9175,7 +9175,9 @@ do_build_record() {
   # The record holds the last attempt, so the earlier attempts' lists move to commitsBefore, which
   # the review reads too. So do the commits a person kept after a builder's stop: they sit after
   # the last record, or the freeze, and before this attempt's start, in no other order's list.
-  local br_before='[]' br_last br_kept
+  # Only a commit that changes a file of this order is kept, read by im_commit_claim. A trunk
+  # commit, a merge commit and an unrelated hand commit change none, so they drop out.
+  local br_before='[]' br_last br_kept br_taken c
   BRC_COMMITS="$(im_role_commits "$codepath" "$started_at_full" "$current_commit" "$unit_id")"
   br_last="$(jq -r '.commit // ""' "$tests_file" 2>/dev/null)"
   if [ -n "${existing_doc:-}" ]; then
@@ -9187,6 +9189,13 @@ do_build_record() {
   [ -z "$br_last" ] || [ "$br_last" = "$started_at_full" ] \
     || ! git -C "$codepath" merge-base --is-ancestor "$br_last" "$started_at_full" 2>/dev/null \
     || br_kept="$(im_role_commits "$codepath" "$br_last" "$started_at_full" "$unit_id")"
+  if [ "$br_kept" != "[]" ]; then
+    br_taken="$(im_taken_commits "$codepath" "$unit_id")"
+    br_kept="$(printf '%s' "$br_kept" | jq -r '.[]' | while IFS= read -r c; do
+        [ "$(im_commit_claim "$(git -C "$codepath" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)" \
+          "$UNIT_JSON" "$c" "$br_taken")" = "none" ] || printf '%s\n' "$c"
+      done | jq -Rsc 'split("\n") | map(select(. != ""))')"
+  fi
   BRC_COMMITS_BEFORE="$(jq -cn --argjson b "$br_before" --argjson k "$br_kept" --argjson new "$BRC_COMMITS" \
     '($b + $k | unique) - $new')"
   br_before="$BRC_COMMITS_BEFORE"
