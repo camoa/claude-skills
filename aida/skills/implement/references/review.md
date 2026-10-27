@@ -116,34 +116,22 @@ person, opening with: "What was built departs from the design of this unit of wo
 say which one stands. Change the design and the unit is built again. Keep the departure and the
 review goes on." Then say what that line or that recipe answer says. To
 change the design, amend the order in design and close design, then offer the redo in
-`references/finish.md`. To keep the departure, run `review-record` again with
-`--accept-deviation <their reason>`. The review record and `stopsCleared` in the ledger hold the
-reason, and the order goes on as below. The flag refuses without the person's answer on record (exit 68).
-Unattended, nothing stops: `review-record` writes the record with the departure as `deviationPending`, prints a
-`departurePending:` line, and the order goes on as below. A finding the reviewer marks
-`declaredDeparture` is that same departure. It goes `pending` and waits with the departure, so no
-fixer undoes it. The task review lists it in the departure's decision. A `rebuild` answer there
-answers it too. The other findings take the fix round. When a person keeps the departure, with
-`--accept-deviation` here or at `build-record`, each marked finding is ruled `wrong` with their
-reason.
-
-A departure that waits as `deviationPending` has its review record already. A person who keeps
-it before `finish` does not wait for the task review. Record the person's answer with the task skill's
-`person-answer.sh`, then run `review-record` again with the same `--findings` and `--accept-deviation <their reason>`. The
-script writes the keep into that record and rules each marked finding `wrong`. Nothing is reviewed
-again. A finding the reviewer did not mark stays open. Once the record holds the keep, the person
-may rule any open finding with `verify-record --ruling`, before any fix round. That ruling
+`references/finish.md`. To keep the departure, go on with `keep`
+("Leave a stop" in `references/finish.md`), then run `review-record` again with the same
+`--findings`. The review record holds the person's words, and the order goes on as below. The
+order stops in both run modes. A finding the reviewer marks `declaredDeparture` is that same
+departure. When a person keeps the departure, here or at `build-record`, each marked finding is
+ruled `wrong` with their words. The other findings take the fix round. Once the record holds the
+keep, the person may rule any open finding with `verify-record --ruling`, before any fix round. That ruling
 refuses without the person's answer on record (exit 55). Without a kept departure, it refuses a finding that has a fix scope
-(exit 3). After `finish`, the keep refuses (exit 50), and the task review takes the answer.
+(exit 3).
 
 An information item the reviewer marks `departsFromDesign` true is a note, not a finding. It never
 stops the order or the orders after it, in either run mode. `review-record` holds it as
 `deviationPending` and prints a `departurePending:` line. The person decides it at the task
 review: keep it or rebuild. It waits only when no departure above was found, so it never hides one.
 The record holds one departure. So when a departure above was found, the item is not put to the
-person; it stays in the record's `information` list only. A person present may keep the item at
-once, by the route above. The review record and `stopsCleared` in the ledger hold the reason,
-though the order never stopped.
+person; it stays in the record's `information` list only.
 
 Unattended, a finding that hits a non-goal stops the order there, naming the non-goal. A person
 goes on with `fix` or `close` once they have ruled, under "Leave a stop" in
@@ -292,7 +280,7 @@ the files with `fix-brief --allow`, and the next round can fix it. Or rule on it
 Rulings below.
 That is for a finding no round can reach. A frozen test, a check only you can make, or a
 change the order's done-when does not allow." Then say the finding in plain words and name the files
-it asked for. Unattended stops the order, naming the finding. The person goes on with `fix`, and
+it asked for. The order stops in both run modes, naming the finding. The person goes on with `fix`, and
 `go-on --owns` gives the order the file the fixer needed, under "Leave a stop" in
 `references/finish.md`.
 

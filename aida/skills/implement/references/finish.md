@@ -129,11 +129,15 @@ choose." Then say each reason in plain words, and offer the ways out the next se
   the order stopped. It takes the recipe flags `build-record` takes, and `--interface`.
 - `close`: the order closes with its open findings listed. Each open finding is ruled `deferred`
   with the person's words, so `close` closes and `finish` carries each one to the task review.
+- `keep`: the change stays. A builder's deviation or a departure is kept with the person's words,
+  and the next `build-record` or `review-record` reads them. A changed design file of the order is
+  taken into the snapshot with no revert, so the order builds on the new design. It needs design
+  closed on the live files (exit 13).
 
 Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh go-on "<task_folder>" <order id> \
-  --continue <build|fix|check|close> --because <the person's words> [--owns <path>]...
+  --continue <build|fix|check|close|keep> --because <the person's words> [--owns <path>]...
 ```
 The answer's step is `implement go-on <choice>`, so a yes to one choice passes no other. It refuses
 a choice a reason does not allow (exit 67), and names the choices every reason allows. A reason that
@@ -147,16 +151,18 @@ Which choices a reason allows:
 | The reason | The choices |
 |---|---|
 | `attempts spent`, at `build-record` | `build`; and `check` when only the tool rows, owned-files or the interface record stopped the attempt |
-| a builder's stop, or commits by a stopped builder, unattended | `build` |
+| a builder's stop, or commits by a stopped builder | `build` |
+| a builder's deviation | `build` or `keep` |
 | uncommitted changes, unattended | `build`, or `fix` after a fix round; commit the tree first |
 | a rejected row, unattended, at `tests-freeze` | `build`, once the person judged the row at a second freeze |
 | `budget spent`, at `dispatch-open` | `build`, or `fix` in review; raise the budget first |
 | `turn cap`, at `dispatch-close` | `build`, or `fix` in review; `start` then keeps or sets aside the role's files |
 | a finding on a non-goal, or a disputed already-correct claim, unattended | `fix` or `close` |
-| a fixer short of scope, unattended | `fix`, often with `--owns` |
+| a fixer short of scope | `fix`, often with `--owns` |
 | the fix round cap with findings open, unattended | `fix` or `close`; and `check` when every open finding is a check finding |
 | a finding ruled load-bearing | `check`, over the fix the person committed, or `close` |
-| `test wrong`, a departure, or `design drift` | none: redo or drop |
+| a departure, or `design drift` naming the order's own design file | `keep` |
+| `test wrong`, or any other `design drift` | none: redo or drop |
 
 **Budget spent.** The spend is recomputed at every dispatch, so going on alone brings the stop
 straight back. Put the numbers to the person, opening with: "The build reached the limit you set on
@@ -229,8 +235,7 @@ clearing is recorded under `stopsCleared`, with the reasons as they stood.
 ## A person's answer
 
 Some calls are a person's decision only. In implement they are `go-on`, `redo`, `drop`,
-`start --leftovers keep`, `finish --accept-warnings`, and the two `--accept-deviation` keeps
-(exit 68). They are also `verify-record --ruling` (exit 55),
+`start --leftovers keep` and `finish --accept-warnings` (exit 68). They are also `verify-record --ruling` (exit 55),
 `fix-brief --allow` (exit 100), and `tests-freeze` with a row a person judged (exit 70). Each one
 refuses without the person's answer on record, in every run mode. The run mode does not decide
 whether a person answered.

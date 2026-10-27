@@ -13,10 +13,9 @@ from the design of this unit of work. Only you can say which one stands."
 
 - **Change the design.** Amend the order in design, close design, then redo the order. See
   [a work order stopped](stopped.md).
-- **Keep the departure.** AIDA records your reason with `--accept-deviation`, and the review goes
-  on.
+- **Keep the departure.** AIDA records your reason with go-on `keep`, and the review goes on.
 
-With nobody present, nothing stops. The departure waits as pending, and the task review asks you.
+The order stops with nobody present too, and waits for your answer.
 
 ## The fix rounds cannot repair a finding
 

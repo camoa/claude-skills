@@ -2,7 +2,8 @@
 
 When design changes during a build, the next `start` compares the live design with the snapshot.
 A work order not yet started takes the new design quietly. A started order whose change touches
-what was built stops, and you choose: redo it against the new design, or put the design back.
+what was built stops, and you choose: keep the new design, redo the order against it, or put the
+design back.
 
 Design must close again on the live files before the build takes any change. Otherwise `start`
 refuses and says to close design again. A changed criterion that only stops orders is not taken,
@@ -46,6 +47,14 @@ A stop about an order's own design file clears itself. Put the file back to what
 holds, then run `start`. The `driftCleared:` line names each order it cleared. A stop for a changed
 criterion clears the same way: put the criterion's text back word for word, then run `start`.
 
+## Keep the new design
+
+A stop about an order's own design file can be kept. AIDA asks you whether the order builds on the
+new design as it stands. Say yes, give the reason, and AIDA goes on with `keep`. Design must have
+closed on the live files. The snapshot takes the order's live copy, nothing is reverted, and the
+order goes on from its own step. A changed criterion, or an order the design removed, has no keep:
+the criterion's frozen text is shared by every order that serves it.
+
 ## Redo the order
 
 AIDA asks you whether the new design is the one to build. Say yes, give the reason, and AIDA runs
@@ -59,8 +68,9 @@ AIDA asks you whether the new design is the one to build. Say yes, give the reas
   what it has. The next `start` refreshes the frozen contract.
 - Its tests are written again from the new design, and they fail first, because its code is gone.
 
-When the order's records list a commit the branch no longer holds, as after a rebase, or a merge,
-redo reverts nothing and says so. Revert that work yourself, then redo again. A revert that meets
+When the order's records list a commit the branch no longer holds, as after a rebase, redo skips
+it and lists it under `skipped`. It skips a commit the branch already reverts the same way. A merge
+commit refuses: revert it with `git revert -m 1`, then redo again. A revert that meets
 a conflict is taken back, with the reverts before it.
 
 `implementation/finished.json` stands only while every order is closed or dropped. When a change

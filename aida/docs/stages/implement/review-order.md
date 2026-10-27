@@ -37,12 +37,10 @@ fixer can repair it. AIDA asks you which one stands:
 
 - **Change the design.** Amend the order in design, close design, and redo the order. See
   [Change the design mid-build](drift.md).
-- **Keep the departure.** AIDA records your reason, and the review goes on. Each finding the
-  reviewer marked as part of that departure is ruled `wrong` with your reason.
+- **Keep the departure.** AIDA records your reason with go-on `keep`, and the review goes on.
+  Each finding the reviewer marked as part of that departure is ruled `wrong` with your reason.
 
-Unattended, nothing stops. The departure waits as pending, and the order goes on to close. The
-task review asks you before its verdict. You can keep it sooner: set the task interactive and give
-your reason before finish. After finish, the task review takes the answer.
+The order stops in both run modes, and waits for your answer.
 
 The reviewer can also note a departure as an information item. That is a note, not a finding. It
 never stops the build, and it waits for you at the task review.

@@ -14,13 +14,14 @@ Each reason names the go-on choices it allows. AIDA offers only a choice every r
 | `attempts spent` | see [an attempt failed its checks](checks-failed.md) | go on with `build`, or `check` when only a tool check, the owned files or the interface record failed; redo for a wrong test or a wrong order |
 | `budget spent` | the run reached the limit you set, in dispatches or minutes | raise the limit, then go on |
 | `turn cap` | a role returned no report after it was resumed | go on, then `start` keeps or sets aside its files |
-| the builder stopped, or a role left the tree dirty, with nobody present | something only you can settle | settle it, then go on |
+| the builder stopped, or a role left the tree dirty with nobody present | something only you can settle | settle it, then go on |
 | a row the checker rejected, with nobody present | the tests may not prove the criterion | judge the row, then go on; or redo with new tests |
 | a finding on a non-goal, a fixer short of scope, or the fix rounds spent | the review needs your ruling | go on with `fix` or `close`; a fixer short of scope may get the file it needs |
 | a finding ruled load-bearing | the finding is real and stays | commit the fix, then go on with `check`; or go on with `close` |
 | `test wrong` | you ruled a frozen test wrong at review | redo |
-| `design drift: the builder declared a departure` or `design drift: the reviewer answered` | what was built departs from the design | keep it with `--accept-deviation`, or change the design and redo |
-| any other `design drift` | the design changed after this order started; the changes that stop nothing are on [the design check](design-check.md) | put the design back and run `start`, or redo; drop an order the design removed |
+| `design drift: the builder declared a departure` or `design drift: the reviewer answered` | what was built departs from the design | keep it with go-on `keep`, or change the design and redo |
+| `design drift: the design file for` an order | the order's design changed after it started | keep the new design with go-on `keep`, with no revert; or put the design back and run `start`; or redo |
+| any other `design drift` | a criterion or an order this one depends on changed, or the design removed the order; the changes that stop nothing are on [the design check](design-check.md) | put the design back and run `start`, or redo; drop an order the design removed |
 
 A builder's own "test is wrong" stop is not a `test wrong` stop. Its route is on
 [a builder stopped](builder-stopped.md).

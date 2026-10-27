@@ -158,8 +158,8 @@ same refusal applies. The builder writes each line alone, and puts any note on i
 A deviation other than none, or a heading that starts with "Deviation", in
 the report or the interface record, is a stop. A cause is a stop even
 when code was committed after it. `build-record` refuses it (exit 105), records nothing and spends no
-attempt. It names each commit made after the attempt began, and the person reverts or keeps them
-before the next build. Interactive puts the stop to the person,
+attempt. It names each commit made after the attempt began and records them on the order, so redo and
+drop revert them. The order stops in both run modes. Interactive puts the stop to the person,
 opening with: "The builder stopped instead of working around something, and only you may change
 it. It says a test is wrong, a done-when row is wrong, the interface does not fit, it needs a file
 it does not own, or its attempts ran out.
@@ -168,11 +168,10 @@ say in plain words
 what the builder's report names. The person, or design, adds a file the unit needs:
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
 stop a started order. `build-record` refuses while the order's owned or shared files in the
-design differ from the snapshot (exit 117), and spends no attempt. Run `start` first. Unattended,
-run `build-record` as after any return. It stops the order itself, so do not stop it again. A
+design differ from the snapshot (exit 117), and spends no attempt. Run `start` first. In both run
+modes, `build-record` stops the order itself, so do not stop it again. A
 stopped order records no attempt: `build-record` refuses it (exit 49) until a person takes a way
-out, except the deviation reason `--accept-deviation` answers. The next `start` sets aside what was
-left.
+out. The next `start` sets aside what was left.
 An order past its review records no attempt either: `build-record` refuses it (exit 3). One order
 gets one review, so code after it comes from a fix round.
 
@@ -185,7 +184,7 @@ review step and adds one fix round to its allowance, so no counter goes down. Th
 keeps the repair under `repairs`, with the range the order closed with. `finished.json` carries
 that range beside the new one. The script exits 0 and prints a `repair:` line. The stopped order
 spends no attempt. Commits it made after it began are named, as at any stop, and recorded on the
-repair entry. Unattended, they stop the stopped order for a person. The owner's fixer works in the owner's files, and the
+repair entry. They stop the stopped order for a person, in both run modes. The owner's fixer works in the owner's files, and the
 reviewer verifies the round. The verifier also answers whether the failure arises in that file.
 A `no` makes the finding pending, and the person rules on it at the task review. So the route
 runs unattended too. Follow the `next:` line to the reopened order. Run `start` first when the
@@ -204,17 +203,14 @@ reads `Stop: row-wrong: <row number>: <the evidence>`. `build-record` stops as a
 (exit 105), and its message quotes that row from the snapshot. The person rules on the row. A
 wrong row is reworded in design, and design closes again. Then `start` stops the order for
 design drift, and a redo answers that stop. A row that stands goes back to the builder.
-Unattended, the order stops, and the stop reason quotes the row. Each way out refuses without the
+The order stops in both run modes, and the stop reason quotes the row. Each way out refuses without the
 person's answer on record (exit 68), as "A person's answer" in `references/finish.md` says.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
-kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
-`build-record` again with the same flags and `--accept-deviation <their reason>`. The build record
-and `stopsCleared` in the ledger hold the reason, and the flag clears the deviation's stop reason. Review
-carries the answer and does not ask again about that line. A stop line other than `Stop: none`
-has no such route. The flag refuses without the person's answer on record (exit 68). Unattended, a deviation is
-no stop:
-`build-record` records the attempt, and `review-record` keeps the line for the task review.
+kind that a script can read, so a person sees each one. The order stops in both run modes. The person may keep a deviation with
+go-on `keep` ("Leave a stop" in `references/finish.md`). Then run `build-record` again with the
+same flags. The build record holds the person's words, and review does not ask again about that
+line. A stop line other than `Stop: none` has no keep.
 
 The interface record is prose about what this unit exposes, and it is what the next order's
 tests are written against.
@@ -230,8 +226,8 @@ allowed only while the order is still at `tests-frozen`. Once `build-record` has
 attempt, it refuses (exit 76). Then a redo with the person's ruling sends the order back to
 planned, under "Redo the order" in `references/finish.md`. Other orders may have committed since
 the first freeze. The freeze still takes the new tests, because the report holds the
-`Stop: test-wrong` line. Unattended, the stop stopped the order, and an order still stopped
-refuses (exit 35) until a person goes on with `build`. The second
+`Stop: test-wrong` line. The stop stopped the order in both run modes, so the freeze refuses
+(exit 35) until a person goes on with `build`. The second
 freeze prints `retaken:` with the earlier commit and the new one, and the record names the
 earlier one under `retakenFrom`. No attempt is spent, because none was recorded. The builder's
 stop left the tree dirty on purpose. The freeze commits only the test paths, and the next
