@@ -1054,6 +1054,12 @@ stop_text() {
   printf '%s' "$1" | jq -r "$STOP_JQ"' stop_text' 2>/dev/null
 }
 
+# Adds JSON array $c, the commits a stopped builder made, to the stoppedCommits of order $id, for a
+# caller's jq program. No record lists them, because a stop records no attempt; redo and drop read
+# them from here, and no other order counts them as its own.
+IM_STOPPED_COMMITS_JQ='.orders = (.orders | map(if .id == $id and ($c | length) > 0
+  then .stoppedCommits = ((.stoppedCommits // []) + $c | unique) else . end))'
+
 # Exit 49: a stopped order refuses every step after the stop, until a person takes one of the
 # three ways out. The message carries the reasons, so a reader never has to open the ledger.
 # $1 the action's own name, $2 the order, $3 its ledger entry.
@@ -8451,15 +8457,14 @@ im_reopen_in() {
 # next line, until the owner closes. Fixing one fatal error often shows the next, so another repair
 # at the same attempt opens once every earlier one reads addressed. The stopped order's attempt
 # allowance caps them, so a builder that stops on every run stops the order as before. Commits the builder
-# made after it began are handled as at any stop: named, and unattended the order stops.
+# made after it began are handled as at any stop: named, and the order stops in both run modes.
 # Exits 0 once the route opens. Returns 1 when it does not apply, and BR_REPAIR_NOTE then says why
 # when the line named the kind. $1 the stopped order, $2 the stop line's value, $3 the report,
-# $4 the attempt it did not spend, $5 the ledger file, $6 its document, $7 the commits after start,
-# $8 the run mode.
+# $4 the attempt it did not spend, $5 the ledger file, $6 its document, $7 the commits after start.
 BR_REPAIR_KIND="closed-order-defect"
 BR_REPAIR_NOTE=""
 br_open_repair() {
-  local unit_id="$1" value="$2" report="$3" attempt="$4" ledger_file="$5" ledger_doc="$6" commits="$7" run_mode="$8"
+  local unit_id="$1" value="$2" report="$3" attempt="$4" ledger_file="$5" ledger_doc="$6" commits="$7"
   local rest file defect abs rel owner="" owner_glob="" one g owner_entry linked review_file review_doc raw built new_id new_ledger
   local earlier allowed repair_state commit_count commit_text="" rounds_allowed
   case "$value" in "$BR_REPAIR_KIND:"*) ;; *) return 1 ;; esac
@@ -8534,11 +8539,9 @@ BR_EARLIER
   if [ -n "$commits" ]; then
     commit_count="$(printf '%s' "$commits" | wc -w | tr -d ' ')"
     commit_text="It committed $commit_count after it began: $commits."
-    if [ "$run_mode" = "autonomous" ]; then
-      new_ledger="$(stop_order_in "$new_ledger" "$unit_id" build-record "$BR_STOP_PREFIX a Stop: line says so, at $report. $commit_text" '["build"]')"
-      [ -n "$new_ledger" ] || die3 "build-record: the stop on $unit_id could not be written."
-    fi
-    commit_text="$commit_text Revert them, or have the person keep them, before the next build."
+    new_ledger="$(stop_order_in "$new_ledger" "$unit_id" build-record "$BR_STOP_PREFIX a Stop: line says so, at $report. $commit_text" '["build"]')"
+    [ -n "$new_ledger" ] || die3 "build-record: the stop on $unit_id could not be written."
+    commit_text="$commit_text A person keeps them with go-on, or redo and drop revert them."
   fi
   rounds_allowed="$(order_fix_rounds_allowed "$(printf '%s' "$new_ledger" | jq -c --arg id "$owner" '[ .orders[] | select(.id == $id) ][0]')")"
   write_atomic "$review_file" "$review_doc"
@@ -8563,9 +8566,6 @@ do_build_record() {
   while [ "$#" -gt 0 ]; do
     cr_take_flag "build-record" "--test-recipe=test_recipes --check-recipe=check_recipes --implement-recipe=gate_recipes --value=values" "$@" || { shift "$?"; continue; }
     case "$1" in
-      --accept-deviation)
-        need_value "build-record" "--accept-deviation" "$#" "${2:-}" text
-        accept="$2"; shift 2 ;;
       --interface)
         need_value "build-record" "--interface" "$#" "${2:-}" non-empty
         interface_path="$2"; shift 2 ;;
@@ -8604,7 +8604,6 @@ do_build_record() {
 
   im_load_task "$task_arg" "build-record"
   im_refuse_open_dispatch "build-record" "$unit_id"
-  [ -z "$accept" ] || fn_require_answer "build-record" "keeping a deviation the builder declared" "$unit_id" "$accept"
 
   tt_load_snapshot "build-record"
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "build-record"
@@ -8633,10 +8632,9 @@ do_build_record() {
   local attempts_allowed
   attempts_allowed="$(attempts_allowed_for "$order_entry")"
   # Exit 49. A stopped order records no attempt, or a build after a builder's stop records over it.
-  # --accept-deviation answers the deviation's own reason, so only that reason lets the step through.
-  [ -z "$accept" ] || order_entry="$(printf '%s' "$order_entry" | jq -c --arg p "$BR_DEVIATION_PREFIX" \
-    '.stopped = [ (.stopped // [])[] | select(.reason | startswith($p) | not) ]')"
   im_refuse_stopped "build-record" "$unit_id" "$order_entry"
+  # A deviation a person kept with go-on --continue keep, read once by the attempt it lets through.
+  accept="$(printf '%s' "$order_entry" | jq -r '.deviationKept.because // ""')"
   # Exit 48. One order gets one review, so an attempt after it could reach neither a review nor a
   # close (gap row 339).
   local br_step br_route="Code for it comes from a fix round, for an open finding: fix-brief, then fix-record."
@@ -8690,8 +8688,9 @@ do_build_record() {
   # that starts with "Deviation" in either file, checked before the count. A stop recorded as an
   # attempt spends the budget on work the rule forbade. The stop reason names the file and the
   # commits.
-  # A person may keep a deviation, never a stop line: --accept-deviation records the attempt with
-  # the first deviation line and the reason, the way review-record keeps a departure (gap row 266).
+  # A person may keep a deviation, never a stop line: go-on --continue keep writes deviationKept on
+  # the order's ledger entry, and the next run records the attempt with the first deviation line and
+  # the person's words, the way review-record keeps a departure (gap row 266).
   # A deviation from a play stops too. The line has no kind a script can read, and a kind the
   # builder writes itself would let it mark any deviation as a play. So a person sees each one.
   local ledger_run_mode stop_lines stop_value stop_file="$report_path"
@@ -8719,12 +8718,7 @@ do_build_record() {
         stop_file="$interface_path"
         stop_lines="$(br_deviations "$interface_path")"
       fi
-      if [ -z "$stop_lines" ]; then
-        [ -z "$accept" ] \
-          || die3 "build-record: --accept-deviation was given, and neither the report nor the interface record of $unit_id names a deviation. Nothing is written."
-      else
-        is_deviation=true
-      fi
+      [ -z "$stop_lines" ] || is_deviation=true
       ;;
   esac
   if $is_deviation && [ -n "$accept" ]; then
@@ -8732,15 +8726,18 @@ do_build_record() {
       '{departure: $d, file: $f, because: $b}')"
     stop_lines=""
   fi
-  # Gap row 279. Unattended, a deviation stops nothing: the attempt is recorded, and review-record
-  # finds the same line and keeps it for the person at the task review.
-  if $is_deviation && [ "$ledger_run_mode" = "autonomous" ]; then
-    stop_lines=""
-  fi
+  # A builder's stop and a named deviation stop the order in both run modes (the owner's ruling of
+  # 2026-10-26): about 35 catches came from them, and most were lost when only an unattended run
+  # stopped. The commits the builder made are written on the order's ledger entry, in no record
+  # otherwise, so redo and drop revert them and no other order counts them as its own.
   if [ -n "$stop_lines" ]; then
+    local stopped_json
+    stopped_json="$(im_role_commits "$codepath" "$started_at_full" "$current_commit" "$unit_id")"
+    ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --argjson c "$stopped_json" "$IM_STOPPED_COMMITS_JQ")"
+    [ -n "$ledger_doc" ] || die3 "build-record: the builder's commits on $unit_id could not be written."
     $is_deviation \
-      || br_open_repair "$unit_id" "$stop_value" "$report_path" "$attempt_number" "$ledger_file" "$ledger_doc" "$stop_commits" "$ledger_run_mode"
-    local keep_route="" halt_front="$BR_STOP_PREFIX a Stop: line says so" row_n row_text row_note=""
+      || br_open_repair "$unit_id" "$stop_value" "$report_path" "$attempt_number" "$ledger_file" "$ledger_doc" "$stop_commits"
+    local keep_route="" halt_front="$BR_STOP_PREFIX a Stop: line says so" row_n row_text row_note="" stop_allows='["build"]'
     case "$stop_value" in
       "$BR_ROW_KIND:"*)
         row_n="$(printf '%s' "${stop_value#*:}" | sed -e 's/:.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
@@ -8759,20 +8756,17 @@ do_build_record() {
         fi ;;
     esac
     if $is_deviation; then
-      keep_route=" Or a person keeps the deviation: record their answer with person-answer.sh, then run build-record again with --accept-deviation <their reason>."
+      keep_route=" Or a person keeps the deviation with go-on --continue keep, and build-record runs again."
       halt_front="$BR_DEVIATION_PREFIX a Deviation: line or heading says so"
+      stop_allows='["build","keep"]'
     fi
-    local stop_halt_text=""
-    if [ "$ledger_run_mode" = "autonomous" ]; then
-      local stop_ledger_doc
-      stop_ledger_doc="$(stop_order_in "$ledger_doc" "$unit_id" build-record "$halt_front, at $stop_file.$stop_commit_text$keep_route" '["build"]')"
-      [ -n "$stop_ledger_doc" ] || die3 "build-record: the stop on $unit_id could not be written."
-      write_atomic "$ledger_file" "$stop_ledger_doc"
-      stop_halt_text=" Nobody is present, so $unit_id is stopped on this."
-    fi
+    local stop_ledger_doc
+    stop_ledger_doc="$(stop_order_in "$ledger_doc" "$unit_id" build-record "$halt_front, at $stop_file.$stop_commit_text" "$stop_allows")"
+    [ -n "$stop_ledger_doc" ] || die3 "build-record: the stop on $unit_id could not be written."
+    write_atomic "$ledger_file" "$stop_ledger_doc"
     [ -z "$stop_commit_text" ] \
-      || stop_commit_text="$stop_commit_text Revert them, or have the person keep them, before the next build."
-    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so no attempt is recorded or spent.$stop_halt_text$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route$BR_REPAIR_NOTE$row_note"
+      || stop_commit_text="$stop_commit_text A person keeps them with go-on, or redo and drop revert them."
+    die 105 "build-record: the builder's file at $stop_file says it stopped: $stop_lines. A stop is not an attempt, so no attempt is recorded or spent. $unit_id is stopped on it.$stop_commit_text Put the stop to the person as the builder's stop in references/build.md.$keep_route$BR_REPAIR_NOTE$row_note"
   fi
   if [ "$started_at_full" = "$current_commit" ]; then
     local br_freeze_parent
@@ -8963,13 +8957,9 @@ do_build_record() {
   new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger_doc" ] || die3 "build-record: the ledger update for $unit_id failed."
-  # A kept deviation clears the deviation's own stop reason, and records the reason in stopsCleared
-  # whether or not the order carried that reason, as review-record does.
-  if [ -n "$accepted_json" ]; then
-    new_ledger_doc="$(accept_deviation_in "$new_ledger_doc" "$unit_id" "$(jq -cn --arg p "$BR_DEVIATION_PREFIX" '[$p]')" \
-      "$BR_DEVIATION_PREFIX a Deviation: line or heading says so, at $stop_file." "$accept")"
-    [ -n "$new_ledger_doc" ] || die3 "build-record: the ledger update for $unit_id failed."
-  fi
+  # The kept deviation served this attempt, which now holds it as deviationAccepted.
+  [ -z "$accepted_json" ] || new_ledger_doc="$(printf '%s' "$new_ledger_doc" | jq -c --arg id "$unit_id" \
+    '.orders = (.orders | map(if .id == $id then del(.deviationKept) else . end))')"
   if [ -n "$halt_why" ]; then
     new_ledger_doc="$(stop_order_in "$new_ledger_doc" "$unit_id" build-record "$halt_why" "$halt_allows")"
     [ -n "$new_ledger_doc" ] || die3 "build-record: the stop on $unit_id could not be written."
@@ -9335,24 +9325,34 @@ IPC_OWNED
 # earlier attempts' lists, and their freezes, which are AIDA's own commits of that order's tests.
 # Every folder under the task folder a record can sit in is read, a redo's or a drop's included.
 # So is every commit a redo or a drop reverted, with its revert, which the ledger lists: neither is
-# code the tree holds, and both sit inside the range of an order built around them.
+# code the tree holds, and both sit inside the range of an order built around them. And so are the
+# commits another order's stopped builder made, which its ledger entry lists. A record written
+# before the lists (6.1.0 batch 2a) names its own range instead, read in the repository $2: the
+# lists are new, and that range is the one thing such a record knows.
 im_others_listed() {
-  local f
+  local f repo="${2:-$RV_CODEPATH}"
   find "$TASK_PATH" -mindepth 2 -maxdepth 3 -type f \( -name 'build-wo*.json' -o -name 'fix-wo*-*.json' -o -name 'tests-wo*.json' \) 2>/dev/null \
     | while IFS= read -r f; do
         case "$(basename "$f")" in
           "build-$1.json"|"fix-$1-"*|"tests-$1.json") ;;
           tests-*) tf_freeze_commits "$f" | jq -r '.[]' ;;
-          *) jq -r '(.commits // []) + (.commitsBefore // []) | .[]' "$f" 2>/dev/null ;;
+          *)
+            if jq -e 'has("commits")' "$f" >/dev/null 2>&1; then
+              jq -r '(.commits // []) + (.commitsBefore // []) | .[]' "$f" 2>/dev/null
+            else
+              git -C "$repo" rev-list "$(jq -r '(.startedAt // "") + ".." + (.commit // "")' "$f" 2>/dev/null)" 2>/dev/null
+            fi ;;
         esac
       done
-  jq -r '(.orders // [])[] | ((.redos // []) + [ .dropped // empty ])[] | (.reverted // [])[] | .commit, .revert' \
-    "$IMPL_DIR/ledger.json" 2>/dev/null
+  jq -r --arg id "$1" '(.orders // [])[]
+    | (((.redos // []) + [ .dropped // empty ])[] | (.reverted // [])[] | .commit, .revert),
+      (select(.id != $id) | (.stoppedCommits // [])[])' "$IMPL_DIR/ledger.json" 2>/dev/null
 }
 
 # The commits order $1's own records in the implementation folder list, one per line, sorted: its
-# freezes, its build and fix lists and the earlier attempts' lists. $2 the repository, for a record
-# written before the lists, whose list is read from its own range.
+# freezes, its build and fix lists, the earlier attempts' lists, and the commits its stopped builder
+# made, which its ledger entry lists. $2 the repository, for a record written before the lists,
+# whose list is read from its own range.
 im_own_listed() {
   local f
   { tf_freeze_commits "$IMPL_DIR/tests-$1.json" | jq -r '.[]'
@@ -9360,7 +9360,9 @@ im_own_listed() {
       [ -f "$f" ] || continue
       im_record_commits "$f" "$2" "$1" | jq -r '.[]'
       jq -r '(.commitsBefore // [])[]' "$f" 2>/dev/null
-    done; } | LC_ALL=C sort -u | grep -v '^$'
+    done
+    jq -r --arg id "$1" '(.orders // [])[] | select(.id == $id) | (.stoppedCommits // [])[]' "$IMPL_DIR/ledger.json" 2>/dev/null
+  } | LC_ALL=C sort -u | grep -v '^$'
 }
 
 # The commits order $4's role made after $2 up to $3 in the repository $1, a JSON array, oldest
@@ -9375,7 +9377,7 @@ im_own_listed() {
 # which ran before this one, already listed it.
 im_role_commits() {
   local taken c
-  taken="$(im_others_listed "$4")"
+  taken="$(im_others_listed "$4" "$1")"
   git -C "$1" rev-list --reverse "$2..$3" 2>/dev/null | while IFS= read -r c; do
     printf '%s\n' "$taken" | grep -Fqx -- "$c" || printf '%s\n' "$c"
   done | jq -Rsc 'split("\n") | map(select(. != ""))'
@@ -9460,7 +9462,7 @@ ILD_COMMITS
 im_moved_for_others() {
   local others c n=0
   git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
-  others="$(im_others_listed "$4")"
+  others="$(im_others_listed "$4" "$1")"
   for c in $(git -C "$1" rev-list "$2..$3" 2>/dev/null); do
     printf '%s\n' "$others" | grep -Fqx -- "$c" || return 1
     n=$((n + 1))
@@ -10553,7 +10555,7 @@ FB_ALLOW
   # the round, as before. A task review's reopen has no stopped order, so only the records count
   # (gap row 390).
   fb_reopen="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '[ (.repairs // [])[] | select(.by or .review) ] | last // {}')"
-  fb_taken="$(im_others_listed "$unit_id"; printf '%s' "$fb_reopen" | jq -r '(.commits // [])[]')"
+  fb_taken="$(im_others_listed "$unit_id" "$RV_RANGE_REPO"; printf '%s' "$fb_reopen" | jq -r '(.commits // [])[]')"
   if [ -n "$fb_last" ] && [ "$fb_last" = "$(printf '%s' "$fb_reopen" | jq -r '.closedRange // "" | split("..") | .[1] // ""')" ]; then
     for c in $(git -C "$RV_RANGE_REPO" rev-list "$fb_last..$fb_head" 2>/dev/null); do
       printf '%s\n' "$fb_taken" | grep -Fqx -- "$c" || { fb_reopen=""; break; }
@@ -12279,40 +12281,42 @@ RO_ONE
 # are the only ones.
 # ------------------------------------------------------------------------------------------------
 
-# The commits order $1 made, newest first, one per line, as im_own_listed reads them from the
-# records in the implementation folder, so a redo before it reads only the order's own work since
-# then. $2 the repository the lists live in. Refuses (exit 3) when a listed commit is
-# not in the history of HEAD, as after a rebase: a revert by guess could undo another order's
-# work, so a person reverts those by hand. Refuses (exit 113) on a merge, whose revert needs a
-# person to choose the parent.
-im_order_commits_newest_first() {
-  local unit_id="$1" repo="$2" listed gone merges f
-  listed="$(im_own_listed "$unit_id" "$repo")"
-  [ -n "$listed" ] || return 0
-  gone="$(printf '%s\n' "$listed" | while IFS= read -r f; do
-      git -C "$repo" merge-base --is-ancestor "$f" HEAD 2>/dev/null || printf '%s ' "${f:0:7}"; done)"
-  [ -z "$gone" ] \
-    || die3 "$WAY_WHO: the records of $unit_id list commits that HEAD in $repo does not hold, as after a rebase: ${gone% }. Nothing was reverted or moved. A person reverts the order's work by hand, then runs $WAY_WHO again."
-  merges="$(printf '%s\n' "$listed" | while IFS= read -r f; do
-      ! git -C "$repo" rev-parse --verify --quiet "$f^2" >/dev/null 2>&1 || printf '%s ' "${f:0:7}"; done)"
-  [ -z "$merges" ] \
-    || die 113 "$WAY_WHO: the records of $unit_id list merge commits: ${merges% }. A revert of a merge needs a person to choose the parent. Nothing was reverted or moved. A person reverts them by hand, then runs $WAY_WHO again."
-  git -C "$repo" rev-list --topo-order HEAD 2>/dev/null | grep -Fx -f <(printf '%s\n' "$listed")
-}
-
 # Reverts every commit order $1 made in repository $2, newest first, one revert commit each, so
 # each revert applies to the tree its commit left. A revert keeps the history, and AIDA's own
 # command hook refuses the hard reset that would drop it. A revert that stops on a conflict is
 # taken back, and so is every revert this run committed before it, so the branch is where it was
 # (gap row 348). `reset --keep` refuses to touch a changed file, and it runs only when the commits
 # since the start are this run's reverts alone, so a commit a hook or a person made meanwhile is
-# never dropped. Sets WAY_REVERTED, a JSON array of {commit, revert}.
-WAY_WHO=""; WAY_REVERTED='[]'
+# never dropped. The commits are the ones im_own_listed reads from the records in the implementation
+# folder, so a redo before this one reads only the order's work since then. Two kinds are skipped
+# and named, so a second run after a person's own repair has a defined end: a commit HEAD does not
+# hold, as after a rebase, and a commit a later commit on the branch already reverts, by a person
+# or an earlier run. A merge that remains refuses (exit 113), because its revert needs a person to
+# choose the parent. Sets WAY_REVERTED, a JSON array of {commit, revert}, and WAY_SKIPPED, one of
+# {commit, why}.
+WAY_WHO=""; WAY_REVERTED='[]'; WAY_SKIPPED='[]'
 im_revert_order() {
-  local unit_id="$1" repo="$2" commits c said orig made failed
-  WAY_REVERTED='[]'
-  commits="$(im_order_commits_newest_first "$unit_id" "$repo")" || exit $?
+  local unit_id="$1" repo="$2" listed commits="" c said orig made failed by merges=""
+  WAY_REVERTED='[]'; WAY_SKIPPED='[]'
+  listed="$(im_own_listed "$unit_id" "$repo")"
+  for c in $(printf '%s\n' "$listed"); do
+    if ! git -C "$repo" merge-base --is-ancestor "$c" HEAD 2>/dev/null; then
+      WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" '. + [{commit: $c, why: "HEAD does not hold it, as after a rebase"}]')"
+      continue
+    fi
+    by="$(git -C "$repo" log --format=%H --grep="This reverts commit $c" "$c..HEAD" 2>/dev/null | head -n 1)"
+    if [ -n "$by" ]; then
+      WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" --arg by "$by" '. + [{commit: $c, why: ("already reverted by " + $by)}]')"
+      continue
+    fi
+    ! git -C "$repo" rev-parse --verify --quiet "$c^2" >/dev/null 2>&1 || merges="$merges ${c:0:7}"
+    commits="$commits$c
+"
+  done
+  [ -z "$merges" ] \
+    || die 113 "$WAY_WHO: the records of $unit_id list merge commits:$merges. A revert of a merge needs a person to choose the parent. Nothing was reverted or moved. A person reverts each one with git revert -m 1 <commit>, then runs $WAY_WHO again: a commit the branch already reverts is skipped."
   [ -n "$commits" ] || return 0
+  commits="$(git -C "$repo" rev-list --topo-order HEAD 2>/dev/null | grep -Fx -f <(printf '%s' "$commits"))"
   orig="$(git -C "$repo" rev-parse HEAD)"
   for c in $(printf '%s\n' "$commits"); do
     said="$(git -C "$repo" revert --no-edit "$c" 2>&1)" && {
@@ -12474,10 +12478,11 @@ do_go_on() {
   rv_load_codepath "go-on"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
-    case "$WAY_BECAUSE" in
-      *"$p"*) ;;
-      *) die3 "go-on: --owns $p is a file the order would now own, and the person's words do not name it. The answer covers what the person read, so their words name each file. Nothing is written." ;;
-    esac
+    # The path counts only as a whole word: a.php is not named by words that say data.php.
+    jq -en --arg w "$WAY_BECAUSE" --arg p "$p" '
+      ($p | gsub("(?<c>[\\\\^$.|?*+()\\[\\]{}-])"; "\\\(.c)")) as $e
+      | $w | test("(^|[^A-Za-z0-9_./-])" + $e + "($|[^A-Za-z0-9_/-]|\\.($|\\s))")' >/dev/null \
+      || die3 "go-on: --owns $p is a file the order would now own, and the person's words do not name it as a whole word. The answer covers what the person read, so their words name each file. Nothing is written."
     abs="$(normalize_abs "$(resolve_against "$p" "$RV_CODEPATH")")"
     rel="${abs#"$RV_CODEPATH"/}"
     owner="$(im_file_owners "$abs" "$rel" "$WAY_UNIT" | head -n 1 | cut -f1)"
@@ -12598,8 +12603,9 @@ do_redo() {
 
   im_revert_order "$WAY_UNIT" "$RV_RANGE_REPO"
   im_move_order_records "$WAY_UNIT" redone.json "$(jq -n --arg at "$(date -u +%Y-%m-%d)" --arg order "$WAY_UNIT" \
-    --arg because "$WAY_BECAUSE" --argjson reverted "$WAY_REVERTED" \
-    '{schemaVersion: 1, at: $at, order: $order, because: $because, reverted: $reverted}')"
+    --arg because "$WAY_BECAUSE" --argjson reverted "$WAY_REVERTED" --argjson skipped "$WAY_SKIPPED" \
+    '{schemaVersion: 1, at: $at, order: $order, because: $because, reverted: $reverted}
+     + (if $skipped == [] then {} else {skipped: $skipped} end)')"
 
   # The entry goes back to what start opens it as, and keeps the list of its redos. The judgements
   # its freeze wrote go, and every criterion it serves goes back to not judged, since close
@@ -12608,12 +12614,13 @@ do_redo() {
   new_ledger="$(im_clear_stop_in "$RV_LEDGER_DOC" "$WAY_UNIT" redo "$(jq -cn --arg f "$WAY_FOLDER" '{movedTo: $f}')" \
     | jq_files -c --arg id "$WAY_UNIT" --argjson snap "$SNAPSHOT_DOC" --arg from "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash')" \
       --arg to "$new_hash" --arg at "$(date -u +%Y-%m-%d)" --arg because "$WAY_BECAUSE" --arg folder "$WAY_FOLDER" \
-      --argjson reverted "$WAY_REVERTED" '
+      --argjson reverted "$WAY_REVERTED" --argjson skipped "$WAY_SKIPPED" '
     ([ ($snap.workOrders // [])[] | select(.id == $id) | ((.criteriaServed // []) + (.criteriaOwned // []))[] ] | unique) as $touched
     | .snapshotHash = $to
     | .orders = (.orders | map(if .id == $id
         then {id: $id, lastStep: null, attemptsUsed: 0, roundsUsed: 0,
-              redos: ((.redos // []) + [{at: $at, because: $because, movedTo: $folder, reverted: $reverted}])}
+              redos: ((.redos // []) + [{at: $at, because: $because, movedTo: $folder, reverted: $reverted}
+                + (if $skipped == [] then {} else {skipped: $skipped} end)])}
         else . end))
     | .criteria = (.criteria | map(. as $c
         | if (($touched | index($c.id)) == null) then $c
@@ -12625,9 +12632,11 @@ do_redo() {
   write_atomic "$IMPL_DIR/snapshot.json" "$new_snapshot"
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
   im_print_summary "redo" "$(jq -cn --arg id "$WAY_UNIT" --argjson reverted "$WAY_REVERTED" --arg folder "$WAY_FOLDER" \
-    --arg ledger "$RV_LEDGER_FILE" '
+    --arg ledger "$RV_LEDGER_FILE" --argjson skipped "$WAY_SKIPPED" '
     {order: $id,
-     reverted: (if $reverted == [] then "none, no commit of the order is in the tree" else [ $reverted[] | .commit[0:7] + " by " + .revert[0:7] ] end),
+     reverted: (if $reverted == [] then "none, no commit of the order is in the tree" else [ $reverted[] | .commit[0:7] + " by " + .revert[0:7] ] end)}
+    + (if $skipped == [] then {} else {skipped: [ $skipped[] | .commit[0:7] + ": " + .why ]} end)
+    + {
      movedTo: $folder,
      state: "planned: the snapshot holds its live copy, and its tests are written again and must fail first",
      ledger: $ledger,
@@ -12649,15 +12658,17 @@ do_drop() {
   br_require_clean_tree "drop" "$RV_RANGE_REPO"
   im_revert_order "$WAY_UNIT" "$RV_RANGE_REPO"
   im_move_order_records "$WAY_UNIT" dropped.json "$(jq -n --arg at "$(date -u +%Y-%m-%d)" --arg order "$WAY_UNIT" \
-    --arg because "$WAY_BECAUSE" --argjson reverted "$WAY_REVERTED" \
-    '{schemaVersion: 1, at: $at, order: $order, because: $because, reverted: $reverted}')"
+    --arg because "$WAY_BECAUSE" --argjson reverted "$WAY_REVERTED" --argjson skipped "$WAY_SKIPPED" \
+    '{schemaVersion: 1, at: $at, order: $order, because: $because, reverted: $reverted}
+     + (if $skipped == [] then {} else {skipped: $skipped} end)')"
 
   local new_ledger waiting
   new_ledger="$(im_clear_stop_in "$RV_LEDGER_DOC" "$WAY_UNIT" drop "$(jq -cn --arg f "$WAY_FOLDER" '{movedTo: $f}')" \
     | jq -c --arg id "$WAY_UNIT" --arg at "$(date -u +%Y-%m-%d)" --arg because "$WAY_BECAUSE" --arg folder "$WAY_FOLDER" \
-      --argjson reverted "$WAY_REVERTED" '
+      --argjson reverted "$WAY_REVERTED" --argjson skipped "$WAY_SKIPPED" '
     .orders = (.orders | map(if .id == $id
-      then .lastStep = "dropped" | .dropped = {at: $at, because: $because, movedTo: $folder, reverted: $reverted}
+      then .lastStep = "dropped" | .dropped = ({at: $at, because: $because, movedTo: $folder, reverted: $reverted}
+        + (if $skipped == [] then {} else {skipped: $skipped} end))
       else . end))')"
   [ -n "$new_ledger" ] || die3 "drop: the ledger update for $WAY_UNIT failed. Its commits were reverted and its records moved to $WAY_FOLDER; repair the ledger by hand."
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
@@ -12668,10 +12679,12 @@ do_drop() {
         else (needs($f[0]) - $seen) as $n | reach($f[1:] + $n; $seen + $n) end;
     reach([$id]; []) | join(", ")')"
   im_print_summary "drop" "$(jq -cn --arg id "$WAY_UNIT" --argjson reverted "$WAY_REVERTED" --arg folder "$WAY_FOLDER" \
-    --arg waiting "$waiting" --arg ledger "$RV_LEDGER_FILE" \
+    --arg waiting "$waiting" --arg ledger "$RV_LEDGER_FILE" --argjson skipped "$WAY_SKIPPED" \
     --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     {order: $id,
-     reverted: (if $reverted == [] then "none, no commit of the order is in the tree" else [ $reverted[] | .commit[0:7] + " by " + .revert[0:7] ] end),
+     reverted: (if $reverted == [] then "none, no commit of the order is in the tree" else [ $reverted[] | .commit[0:7] + " by " + .revert[0:7] ] end)}
+    + (if $skipped == [] then {} else {skipped: [ $skipped[] | .commit[0:7] + ": " + .why ]} end)
+    + {
      movedTo: $folder,
      state: "dropped: it ended without code",
      cannotStart: (if $waiting == "" then "none: no order depends on it" else $waiting + ", which depend on it; redo each through design, or drop it" end),
@@ -12697,7 +12710,7 @@ do_unattributed() {
   started="$(printf '%s' "$FN_LEDGER_DOC" | jq -r '.startedFrom // ""')"
   [ -n "$started" ] || die3 "unattributed: $FN_LEDGER_FILE holds no startedFrom, though start writes it."
   known="$(
-    im_others_listed ""
+    im_others_listed "" "$RV_CODEPATH"
     printf '%s' "$FN_LEDGER_DOC" | jq -r '(.orders // [])[] | (.repairs // [])[] | (.commits // [])[]'
     printf '%s' "$FN_LEDGER_DOC" | jq -r '(.orders // [])[] | select(.lastStep == "closed") | .commitRange // empty' \
       | while IFS= read -r c; do [ -z "$c" ] || git -C "$RV_CODEPATH" rev-list "$c" 2>/dev/null; done)"

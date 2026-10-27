@@ -207,6 +207,14 @@
           },
           "description": "The files a person's `go-on --owns` gave this order, beside the ownedFiles the snapshot holds. Present only when one was given. The build brief, the dispatch record, the fix scope and the owned-files check read them as owned. The snapshot keeps design's own list, so `start` compares design with it alone. No other order owns one of these, and none is a frozen test."
         },
+        "stoppedCommits": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "description": "The commits this order's builder made before it stopped, written by `build-record` on every builder's stop, in both run modes. A stop records no attempt, so no record lists them. `redo` and `drop` revert them, and no other order counts them as its own. Present only when one was made."
+        },
         "redos": {
           "type": "array",
           "items": {
@@ -496,6 +504,19 @@
             }
           },
           "description": "The order's own commits, newest first, each with the commit that reverted it. Empty when the tree held none."
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["commit", "why"],
+            "properties": {
+              "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$", "description": "One of the order's own listed commits that was not reverted."},
+              "why": {"type": "string", "minLength": 1, "description": "HEAD does not hold it, as after a rebase, or a later commit on the branch already reverts it."}
+            }
+          },
+          "description": "The order's listed commits left alone, each with why. Present only when one was."
         }
       }
     },
