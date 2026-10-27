@@ -10916,7 +10916,7 @@ RV_AC
   all_met="$(br_checks_pass "$checks_json" "")"
   first_stopper="$(br_first_stopper "$checks_json" "")"
   if [ -n "$scope_list" ]; then
-    halt_why="a fixer reported its scope too small, and a person decides whether the order owns more: ${scope_list%, }"
+    halt_why="$(printf '%s' "$RV_SCOPE_STOP" | jq -r '.[0]'), and a person decides whether the order owns more: ${scope_list%, }"
   fi
   # A check that stopped the round, at the cap too, does not stop the order here. verify-record
   # opens a finding for it, and the cap rules there decide: a ruling, a stop, or pending (gap row
@@ -10984,7 +10984,7 @@ do_verify_brief() {
   local unit_id="$2"
   im_load_task "$1" "verify-brief"
 
-  rv_load_state "verify-brief" "$unit_id"
+  rv_load_state "verify-brief" "$unit_id" "$RV_SCOPE_STOP"
   rv_require_step "verify-brief" "$unit_id" "fixed"
   rv_load_review_record "verify-brief" "$unit_id"
   rv_load_codepath "verify-brief"
@@ -11108,9 +11108,9 @@ do_verify_record() {
 
   # A ruling answers the stops that wait on a ruling: the fix round cap and a finding on a
   # non-goal, so rulings pass those reasons and they clear once no actionable finding is open.
-  # Every other reason still refuses.
-  local rule_answers='[]'
-  [ -z "$rulings_raw" ] || rule_answers="$RV_RULE_ANSWERS"
+  # The scope stop passes too, uncleared. Every other reason still refuses.
+  local rule_answers="$RV_SCOPE_STOP"
+  [ -z "$rulings_raw" ] || rule_answers="$(jq -cn --argjson a "$RV_RULE_ANSWERS" --argjson b "$RV_SCOPE_STOP" '$a + $b')"
   rv_load_state "verify-record" "$unit_id" "$rule_answers"
   # Rulings alone also follow `reviewed`, before any round, for a finding with an empty fix scope
   # (gap row 265), or any finding once a person kept the departure (gap row 318).
@@ -11427,6 +11427,10 @@ RV_RULED_FINDINGS=""; RV_RULING_HALT=""; RV_RULING_ALLOWS='[]'
 # non-goal, each of which waits on a person's ruling. A disputed already-correct claim is not one:
 # its finding is pending, not open, so no ruling lands on it, and go-on fix or close answers it.
 RV_RULE_ANSWERS='["a fix round cap reached with findings still open","a finding hits a non-goal"]'
+# The stop fix-record writes when a fixer reports its scope too small. It blocks the next fix round
+# alone: verify-brief and verify-record pass it, so the round is verified and the reported finding
+# may be ruled, and go-on fix still opens the next round. No ruling clears it.
+RV_SCOPE_STOP='["a fixer reported its scope too small"]'
 rv_apply_rulings() {
   local unit_id="$1" updated_findings="$2" rounds_used="$3" rulings_raw="$4"
   local open_now ruling_halt="" rulings_json="[]"
