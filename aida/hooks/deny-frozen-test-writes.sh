@@ -431,22 +431,30 @@ allow_end() {
 # With no record, the main session's relative targets resolve where it stands, and rules two and
 # three stay off.
 ROLE=""; UNIT=""; CODE_CANON="$CWD_CANON"; MAIN_CANON=""
-if [ -n "$DISPATCH_FILE" ]; then
+# Reads the record into ROLE, UNIT and CODE_CANON. Returns 1 with the reason in RECORD_NOTE when
+# it cannot be used.
+load_record() {
+  local task_id code_path
   jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
-    || not_enforced "$DISPATCH_FILE could not be read as JSON"
-  TASK_ID="$(jq -r '.task // empty' "$DISPATCH_FILE" 2>/dev/null)"
+    || { RECORD_NOTE="$DISPATCH_FILE could not be read as JSON"; return 1; }
+  task_id="$(jq -r '.task // empty' "$DISPATCH_FILE" 2>/dev/null)"
   # The role is read to report the exception below, never to gate this rule: a frozen test is
   # protected from every role, so a record naming no role still enforces the freeze.
   ROLE="$(jq -r '.role // empty' "$DISPATCH_FILE" 2>/dev/null)"
   UNIT="$(jq -r '.unit // empty' "$DISPATCH_FILE" 2>/dev/null)"
-  CODE_PATH="$(jq -r '.codePath // empty' "$DISPATCH_FILE" 2>/dev/null)"
-  [ -n "$TASK_ID" ] && [ -n "$UNIT" ] && [ -n "$CODE_PATH" ] \
-    || not_enforced "$DISPATCH_FILE is missing task, unit or codePath"
-
-  CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
+  code_path="$(jq -r '.codePath // empty' "$DISPATCH_FILE" 2>/dev/null)"
+  [ -n "$task_id" ] && [ -n "$UNIT" ] && [ -n "$code_path" ] \
+    || { RECORD_NOTE="$DISPATCH_FILE is missing task, unit or codePath"; return 1; }
+  CODE_CANON="$(cd "$code_path" 2>/dev/null && pwd -P)"
   [ -n "$CODE_CANON" ] \
-    || not_enforced "codePath recorded in $DISPATCH_FILE does not exist on disk: $CODE_PATH"
-
+    || { RECORD_NOTE="codePath recorded in $DISPATCH_FILE does not exist on disk: $code_path"; return 1; }
+}
+# A record that cannot be used is no record for the main session, which goes on to rule one.
+if [ -n "$DISPATCH_FILE" ] && ! load_record; then
+  [ "$MAIN_SESSION" = true ] || not_enforced "$RECORD_NOTE"
+  DISPATCH_FILE=""; ROLE=""; UNIT=""; CODE_CANON="$CWD_CANON"
+fi
+if [ -n "$DISPATCH_FILE" ]; then
   # Rule three, added for gap row 230: the role the record names writes nothing in the project's
   # main checkout. It works in the worktree, and a file it leaves in the checkout lands on the
   # branch the person is on. The person, and any other agent type, is not this rule's.
@@ -481,18 +489,26 @@ FROZEN_EOF
 }
 # The main session's frozen paths: every task of the project that is not complete, each resolved
 # against its own tree. That tree is the codePath of the task's open dispatch record, else the
-# worktree task.json records, else the project's codePath. A complete task's tests belong to the
-# code. Each label is the unit, a space, and the task folder.
+# worktree task.json records, else, when it records none, the project's codePath. A recorded
+# worktree that is gone holds nothing to write, so its task is skipped. A complete task's tests
+# belong to the code. Each label is the unit, a space, and the task folder.
 main_frozen() {
-  local t root
+  local t root wt
   [ -z "${ZSH_VERSION:-}" ] || setopt LOCAL_OPTIONS NULL_GLOB
   for t in "$PROJECT_PATH"/tasks/*; do
     set -- "$t"/implementation/tests-*.json
     [ -e "${1:-}" ] || continue
     [ "$(jq -r '.state // empty' "$t/task.json" 2>/dev/null)" != complete ] || continue
     root="$(jq -r '.codePath // empty' "$t/implementation/dispatch.json" 2>/dev/null)"
-    [ -n "$root" ] && [ -d "$root" ] || root="$(jq -r '.worktree | objects | .path // empty' "$t/task.json" 2>/dev/null)"
-    [ -n "$root" ] && [ -d "$root" ] || root="$(project_code_path_value "$PROJECT_PATH")"
+    if [ -z "$root" ] || [ ! -d "$root" ]; then
+      wt="$(jq -r '.worktree | objects | .path // empty' "$t/task.json" 2>/dev/null)"
+      if [ -n "$wt" ]; then
+        [ -d "$wt" ] || continue
+        root="$wt"
+      else
+        root="$(project_code_path_value "$PROJECT_PATH")"
+      fi
+    fi
     [ -n "$root" ] || continue
     root="$(cd "$root" 2>/dev/null && pwd -P)" || continue
     collect_frozen "$t/implementation" "$root" " $t"
@@ -676,8 +692,15 @@ deny() {
 }
 # Rule one's refusal to the main session. $1 is the path, $2 the label main_frozen gave it: the
 # unit, a space, and the task folder. The refusal names the person's route.
+# The route named is the order's step's, read from its task's ledger.
 deny_main() {
-  deny "$1: this test is frozen for unit ${2%% *} of task ${2#* }. The main session does not change a frozen test, with or without a dispatch open. If the test is wrong, a person rules it so: run implement-actions.sh retake-tests ${2#* } ${2%% *} --because <the person's reason>, which asks for the person's answer. Then the order's test author writes the change, and tests-freeze freezes it again."
+  local route
+  case "$(jq -r --arg id "${2%% *}" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""' "${2#* }/implementation/ledger.json" 2>/dev/null)" in
+    tests-frozen) route="If the test is wrong, dispatch the order's test author for the change, then run tests-freeze again." ;;
+    code-written) route="If the test is wrong, a person rules it so: run implement-actions.sh retake-tests ${2#* } ${2%% *} --because <the person's reason>, which asks for the person's answer. Then the order's test author writes the change." ;;
+    *) route="AIDA has no route to change it at this step. A person puts the file back as its freeze commit holds it." ;;
+  esac
+  deny "$1: this test is frozen for unit ${2%% *} of task ${2#* }. The main session does not change a frozen test, with or without a dispatch open. $route"
 }
 # The exception is the record's, so an agent type the record does not name is allowed and reported.
 # Denying it instead would be a new refusal this rule never made, and the write is this unit's own

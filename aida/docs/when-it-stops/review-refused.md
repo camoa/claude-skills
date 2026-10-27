@@ -17,7 +17,7 @@ it fails while a criterion you verify is unanswered.
 | 3 | a criterion changed after the build froze it | put the frozen text back with `/aida:scope`, or restart the build |
 | 73 | the check recipe changed after the baseline | see [the build cannot start](cannot-test.md) |
 | 77 | the project records no stack | set it with `/aida:project set-frameworks` |
-| 124 | a frozen test changed after its freeze | put the file back as its freeze commit holds it, or rule the test wrong with `retake-tests`; AIDA will not edit it for you |
+| 124 | a frozen test changed after its freeze | put the file back as its freeze commit holds it and commit it, then run finish and review again; AIDA will not edit it for you |
 
 ## The code moved past the build
 

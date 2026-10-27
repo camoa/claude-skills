@@ -1641,7 +1641,7 @@ RW_REVIEWS
 $(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort)
 RW_TESTS_RECORDS
   [ -z "$frozen_changed" ] \
-    || die 124 "checks: these frozen test or support files no longer match the hash their order's freeze recorded: ${frozen_changed%; }. Nobody changes a frozen test, so review stops here. Nothing was written. A person puts each file back as its freeze commit holds it, or rules the test wrong through implement-actions.sh retake-tests on its order. The main session may not write a frozen file."
+    || die 124 "checks: these frozen test or support files no longer match the hash their order's freeze recorded: ${frozen_changed%; }. Nobody changes a frozen test, so review stops here. Nothing was written. A person puts each file back as its freeze commit holds it, commits that, and runs finish and review again. The main session may not write a frozen file."
 
   # A task marked complete by hand before its review is reviewed as it stands. Review moves no
   # task state, so the task stays complete and close names no completion (gap row 324).

@@ -14,7 +14,8 @@ written down for a later reader. This page says which is which.
 - **Frozen tests.** Every dispatched role is refused a write to a frozen test or support file,
   except the test author of the order that froze it. The main session is refused too, with or
   without a dispatch open, for every task in the project that is not complete. To change a frozen
-  test, you rule it wrong with `retake-tests`, and the order's test author writes the change.
+  test after a build, you rule it wrong with `retake-tests` at code-written, and the order's test
+  author writes the change.
   Review hashes every frozen file again at the final commit and stops on a change, exit 124.
 - **Owned files.** The implementer is refused a write in the code outside its order's files. The
   fixer is held to the order's files plus the paths you allowed for the round. A `mkdir` of a

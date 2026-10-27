@@ -14109,6 +14109,18 @@ do_dispatch_open() {
     [ "$unit_present" = "0" ] \
       && die3 "dispatch-open: $unit_id is not a work order in $IMPL_DIR/snapshot.json. The snapshot is what the build is frozen against, so an order added to design after start is not in it."
     im_refuse_unneeded_role "$role_bare" "$unit_id"
+    # The hook lets an order's own test author write its frozen tests, so it is sent only before the
+    # build: before the freeze, or at tests-frozen for a re-freeze or after a retake. This is the
+    # error build-brief gives an implementer at the wrong step.
+    if [ "$role_bare" = "test-author" ]; then
+      local ta_step
+      ta_step="$(jq -r --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // "not started"' \
+        "$IMPL_DIR/ledger.json" 2>/dev/null)"
+      case "${ta_step:-not started}" in
+        "not started"|tests-frozen) ;;
+        *) die3 "dispatch-open: $unit_id is at step $ta_step, and a test author is sent only before the build, at tests-frozen at the latest. To change a frozen test after a build, a person runs retake-tests at code-written. Nothing was dispatched." ;;
+      esac
+    fi
     # The row-checker's whole job is reading the named tests, and design lists an order's tests under
     # ownedFiles. Without the globs the derivation below cannot tell an owned test from owned source,
     # so it denied the checker the very files it was dispatched to read (live-run row 106). The
