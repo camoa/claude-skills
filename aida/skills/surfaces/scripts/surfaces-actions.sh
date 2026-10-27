@@ -278,6 +278,7 @@ do_baseline() {
                       : >"$rows_file.one"; cc_parse_recipe "$rp" "Surface commands" "surface_commands" "$rows_file.one"
                       jq -c --arg fw "$fw" '. + {framework: $fw}' "$rows_file.one" >>"$rows_file" 2>/dev/null; rm -f "$rows_file.one"; shift 2 ;;
       --value)        [ "$#" -ge 2 ] || die 3 "baseline: --value needs <name>=<value>"; pc_refuse_forged_value baseline "$2"
+                      case "$2" in *=*) ;; *) die 3 "baseline: --value takes <name>=<value>, got: $2" ;; esac
                       VALUES="$VALUES${2%%=*}$TAB${2#*=}
 "; shift 2 ;;
       --confirmed)    confirmed=true; shift ;;

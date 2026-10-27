@@ -335,8 +335,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      while it ran: the baseline would measure that work, not the commit (gap row 431).
 #      `tests-brief` and `dispatch-open` of a writing role refuse at 21 while that run is live.
 #  24  `tests-brief` found the given unit, proved by tests, owns a criterion whose verifiedBy is
-#      machine while its own frozen tests field is empty. check-design.sh should already have refused this at design
-#      close; this is a second reading against the frozen copy, never a live one.
+#      machine while its own frozen tests field is empty. check-design.sh should already have
+#      refused this at design close; this is a second reading against the frozen copy, never a
+#      live one.
 #  27  `tests-freeze` was given a --test whose path matches none of the given --test-glob patterns.
 #      A test written outside the framework's own pattern is not protected by anything later.
 #      Or its path is not a file the order owns (gap row 249); the refusal names the owned one.

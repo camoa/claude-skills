@@ -251,8 +251,10 @@ DRR_PROJECTS
 
 # True when agent type $2 names one of the roles of the plugin at $1: agents/<name>.md exists, and
 # a prefix, when the type has one, is that plugin's name. Another plugin's role or a person's own
-# agent of the same bare name is then not this plugin's.
+# agent of the same bare name is then not this plugin's. Two colons or a slash name no role:
+# role_matches never matches the first, and the second reaches a file outside agents/.
 plugin_role() {
+  case "$2" in *:*:*|*/*) return 1 ;; esac
   [ -n "$2" ] && [ -f "$1/agents/${2##*:}.md" ] || return 1
   case "$2" in
     *:*) [ "${2%%:*}" = "$(jq -r '.name // empty' "$1/.claude-plugin/plugin.json" 2>/dev/null)" ] ;;
