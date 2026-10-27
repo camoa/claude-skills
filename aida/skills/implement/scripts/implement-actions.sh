@@ -949,8 +949,11 @@ order_fix_rounds_allowed() {
 # The files go-on --owns gave order $1, as a JSON array, read from the ledger: they count as owned
 # beside the snapshot's list, for the build brief, the dispatch record, the fix scope and the
 # owned-files check. The snapshot keeps design's list, so start compares design with it alone.
+# IM_OWNS_LEDGER, when set, is read in place of the file: go-on check's grant before it is written.
+IM_OWNS_LEDGER=""
 im_owns_of() {
-  jq -c --arg u "$1" '[ (.orders // [])[] | select(.id == $u) | (.owns // [])[] ]' "$IMPL_DIR/ledger.json" 2>/dev/null || printf '[]'
+  if [ -n "$IM_OWNS_LEDGER" ]; then printf '%s' "$IM_OWNS_LEDGER"; else cat "$IMPL_DIR/ledger.json" 2>/dev/null; fi \
+    | jq -c --arg u "$1" '[ (.orders // [])[] | select(.id == $u) | (.owns // [])[] ]' 2>/dev/null || printf '[]'
 }
 
 # The last line a fixer and a test author write in the report their brief pins, as their last act
@@ -1048,11 +1051,14 @@ stop_text() {
   printf '%s' "$1" | jq -r "$STOP_JQ"' stop_text' 2>/dev/null
 }
 
-# Adds JSON array $c, the commits a stopped builder made, to the stoppedCommits of order $id, for a
-# caller's jq program. No record lists them, because a stop records no attempt; redo and drop read
-# them from here, and no other order counts them as its own.
-IM_STOPPED_COMMITS_JQ='.orders = (.orders | map(if .id == $id and ($c | length) > 0
-  then .stoppedCommits = ((.stoppedCommits // []) + $c | unique) else . end))'
+# Prints ledger document $1 with the commits the role on order $2 made in repository $3 after
+# commit $4 up to $5 added to the order's stoppedCommits. No record lists them, because a stop
+# records no attempt; redo and drop read them from here, and no other order counts them as its own.
+im_stopped_commits_in() {
+  printf '%s' "$1" | jq -c --arg id "$2" --argjson c "$(im_role_commits "$3" "$4" "$5" "$2")" '
+    .orders = (.orders | map(if .id == $id and ($c | length) > 0
+      then .stoppedCommits = ((.stoppedCommits // []) + $c | unique) else . end))'
+}
 
 # Exit 49: a stopped order refuses every step after the stop, until a person takes one of the
 # three ways out. The message carries the reasons, so a reader never has to open the ledger.
@@ -8711,9 +8717,7 @@ do_build_record() {
   # stopped. The commits the builder made are written on the order's ledger entry, in no record
   # otherwise, so redo and drop revert them and no other order counts them as its own.
   if [ -n "$stop_lines" ]; then
-    local stopped_json
-    stopped_json="$(im_role_commits "$codepath" "$started_at_full" "$current_commit" "$unit_id")"
-    ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --argjson c "$stopped_json" "$IM_STOPPED_COMMITS_JQ")"
+    ledger_doc="$(im_stopped_commits_in "$ledger_doc" "$unit_id" "$codepath" "$started_at_full" "$current_commit")"
     [ -n "$ledger_doc" ] || die3 "build-record: the builder's commits on $unit_id could not be written."
     $is_deviation \
       || br_open_repair "$unit_id" "$stop_value" "$report_path" "$attempt_number" "$ledger_file" "$ledger_doc" "$stop_commits"
@@ -8815,7 +8819,9 @@ do_build_record() {
     check_recipes="$RF_LIST"
   fi
 
-  br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" "$ledger_doc" "$RV_RANGE_PATHS"
+  # The ledger an unattended stop here writes carries the builder's commits, as any stop does.
+  br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" \
+    "$(im_stopped_commits_in "$ledger_doc" "$unit_id" "$codepath" "$started_at_full" HEAD)" "$RV_RANGE_PATHS"
 
   # --- the eight deciding checks ---------------------------------------------------------------------
   # Seven of them are computable by the same function a fix round calls, so the two steps can never
@@ -10804,7 +10810,8 @@ RV_AC
     check_recipes="$RF_LIST"
   fi
 
-  br_require_clean_tree "fix-record" "$RV_RANGE_REPO" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" "$RV_LEDGER_DOC" "$RV_RANGE_PATHS"
+  br_require_clean_tree "fix-record" "$RV_RANGE_REPO" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" \
+    "$(im_stopped_commits_in "$RV_LEDGER_DOC" "$unit_id" "$RV_RANGE_REPO" "$started_at_full" HEAD)" "$RV_RANGE_PATHS"
 
   BRC_WHO="fix-record"
   BRC_CODEPATH="$RV_RANGE_REPO"
@@ -12255,13 +12262,24 @@ RO_ONE
 # commit as its own.
 WAY_WHO=""; WAY_REVERTED='[]'; WAY_SKIPPED='[]'
 # The full id the line `git revert` writes, "This reverts commit <id>.", names in commit $2 of the
-# repository $1, or nothing. A person's revert line can carry a short id, and every reader compares
-# full ids, so the id is resolved first. A short id git cannot resolve to one commit names nothing
-# (gap row 348).
+# repository $1, or nothing. A merge's revert writes "<id>, reversing", so a comma ends the id too.
+# A person's revert line can carry a short id, and every reader compares full ids, so the id is
+# resolved first. A short id git cannot resolve to one commit names nothing (gap row 348). A revert
+# that a later commit reverts puts the change back, so it names nothing either. $3, when set, skips
+# that last test, for the inner call.
 im_revert_target() {
-  local t
-  t="$(git -C "$1" log -1 --format=%B "$2" 2>/dev/null | sed -n 's/^This reverts commit \([0-9a-f][0-9a-f]*\)\.$/\1/p' | head -1)"
-  [ -z "$t" ] || git -C "$1" rev-parse --verify --quiet "$t^{commit}" 2>/dev/null
+  local t r
+  t="$(git -C "$1" log -1 --format=%B "$2" 2>/dev/null | sed -n 's/^This reverts commit \([0-9a-f][0-9a-f]*\)[.,].*$/\1/p' | head -1)"
+  [ -z "$t" ] || t="$(git -C "$1" rev-parse --verify --quiet "$t^{commit}" 2>/dev/null)"
+  [ -n "$t" ] || return 0
+  if [ -z "${3:-}" ]; then
+    while IFS= read -r r; do
+      [ -n "$r" ] && [ "$(im_revert_target "$1" "$r" inner)" = "$2" ] && return 0
+    done <<IRT_REVERTS
+$(git -C "$1" log --format=%H --grep='^This reverts commit ' "$2..HEAD" 2>/dev/null)
+IRT_REVERTS
+  fi
+  printf '%s\n' "$t"
 }
 im_revert_order() {
   local unit_id="$1" repo="$2" listed commits="" c r said orig made failed by merges=""
@@ -12548,14 +12566,18 @@ GO_OWNS
 
   local summary='{}'
   if [ "$choice" = "check" ]; then
-    # The owned-files check reads the files this answer gives the order.
-    write_atomic "$RV_LEDGER_FILE" "$new_ledger"
+    # The owned-files check reads the files this answer gives the order. The ledger holds them only
+    # once the check passes, so a refusal inside leaves no grant.
+    IM_OWNS_LEDGER="$new_ledger"
     RV_LEDGER_DOC="$new_ledger"
     go_on_check "$WAY_UNIT" "$interface_path" "$test_recipes" "$check_recipes" "$gate_recipes" "$values" "$nothing_ran" "$have_nothing_ran"
     new_ledger="$GO_CHECK_LEDGER"
     summary="$GO_CHECK_SUMMARY"
     if [ "$GO_CHECK_PASS" != "true" ]; then
-      # The checks still fail, so the stop stands. The answer was acted on: the checks ran.
+      # The checks still fail, so the stop stands, and the order keeps the files it owned before.
+      # The answer was acted on: the checks ran.
+      new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$WAY_UNIT" --argjson o "$(printf '%s' "$entry" | jq -c '.owns // null')" '
+        .orders = (.orders | map(if .id == $id then (if $o == null then del(.owns) else .owns = $o end) else . end))')"
       write_atomic "$RV_LEDGER_FILE" "$new_ledger"
       im_print_summary "go-on" "$(jq -cn --arg id "$WAY_UNIT" --argjson s "$summary" --arg why "$why" \
         --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
@@ -12600,7 +12622,7 @@ do_redo() {
 
   rv_load_codepath "redo"
   rv_load_range_repo "redo" "$RV_UNIT_JSON"
-  br_require_clean_tree "redo" "$RV_RANGE_REPO"
+  br_require_clean_tree "redo" "$RV_RANGE_REPO" "" "" "" "" "$RV_RANGE_PATHS"
   local new_snapshot new_hash
   new_snapshot="$(snapshot_with_live_orders "$SNAPSHOT_DOC" "$(jq -cn --arg id "$WAY_UNIT" '[$id]')" "$live_workorders_json" \
       "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment')")" \
@@ -12661,7 +12683,7 @@ do_drop() {
 
   rv_load_codepath "drop"
   rv_load_range_repo "drop" "$RV_UNIT_JSON"
-  br_require_clean_tree "drop" "$RV_RANGE_REPO"
+  br_require_clean_tree "drop" "$RV_RANGE_REPO" "" "" "" "" "$RV_RANGE_PATHS"
   im_revert_order "$WAY_UNIT" "$RV_RANGE_REPO"
   im_move_order_records "$WAY_UNIT" dropped.json "$(jq -n --arg at "$(date -u +%Y-%m-%d)" --arg order "$WAY_UNIT" \
     --arg because "$WAY_BECAUSE" --argjson reverted "$WAY_REVERTED" --argjson skipped "$WAY_SKIPPED" \
@@ -13731,8 +13753,7 @@ do_dispatch_close() {
     esac
     nr_head="$(jq -r '.headNow // ""' "$nr_brief" 2>/dev/null)"
     if [ -n "$nr_brief" ] && git -C "$nr_code" rev-parse --verify --quiet "$nr_head^{commit}" >/dev/null 2>&1; then
-      nr_ledger="$(printf '%s' "$nr_ledger" | jq -c --arg id "$nr_unit" \
-        --argjson c "$(im_role_commits "$nr_code" "$nr_head" HEAD "$nr_unit")" "$IM_STOPPED_COMMITS_JQ")"
+      nr_ledger="$(im_stopped_commits_in "$nr_ledger" "$nr_unit" "$nr_code" "$nr_head" HEAD)"
       [ -n "$nr_ledger" ] || die3 "dispatch-close: the capped ${nr_role##*:}'s commits on $nr_unit could not be written."
     fi
     write_atomic "$TASK_PATH/implementation/ledger.json" "$nr_ledger"
