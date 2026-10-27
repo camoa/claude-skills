@@ -144,7 +144,7 @@ CITES_JQ='
     | {search: $s, n: tonumber};'
 
 # A backticked token from an order's interface, read as a repository path (gap row 253). Design's
-# check compares it with the order's owned and known paths, and build-recheck asks git whether it
+# check compares it with the order's owned and known paths, and go-on's check asks git whether it
 # exists, so both read a token alike. A leading ./ goes, and so does everything from the first
 # colon, so `src/Foo.php::bar()` and `src/Foo.php:12` read as src/Foo.php. What is left is a path
 # when it holds a slash, and is neither absolute nor a URL. Anything else yields empty.
@@ -537,7 +537,7 @@ task_run_mode() {
 
 # The person's answers, <task>/person-answers.json: a JSON array that
 # skills/task/scripts/person-answer.sh alone appends to. Each entry is {step, order, words, answeredAt}, and usedAt once a step used it.
-# The step is "<skill> <action>", such as "implement clear-halt". The order is "" for a task-wide
+# The step is "<skill> <action>", such as "implement redo". The order is "" for a task-wide
 # step. Final newlines are not words, and empty words never match. The hook makes Claude Code show
 # its permission prompt for that script, and refuses every other write of this file, so an entry is a
 # yes that whoever answers prompts in the session gave. An entry is never removed: the step that

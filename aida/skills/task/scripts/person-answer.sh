@@ -7,7 +7,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   person-answer.sh --project <path> <task-id> --step <step> [--order <id>] -- <words...>
 #
 # It appends one entry to the task's answer record (task_answer_file in task-helpers.sh), and the
-# step refuses without it. The step is "<skill> <action>", such as "implement clear-halt". The
+# step refuses without it. The step is "<skill> <action>", such as "implement redo". The
 # words are the exact text the step carries, after `--`, or @/<file> when they run over one line.
 # Nothing here checks the step's name: an entry no step matches is never used.
 #
@@ -42,7 +42,7 @@ done
 [ -n "$project_path" ] || die3 "--project is required"
 project_path="$(cd "$project_path" 2>/dev/null && pwd -P)" || die3 "--project is not a folder"
 [ -n "$id" ] || die3 "a task id is required"
-is_blank "$step" && die3 "--step is required, such as 'implement clear-halt'"
+is_blank "$step" && die3 "--step is required, such as 'implement redo'"
 is_blank "$*" && die3 "the person's words are required after --"
 task_dir="$project_path/tasks/$id"
 [ -f "$task_dir/task.json" ] || { echo "NOT FOUND: ${id}" >&2; exit 1; }

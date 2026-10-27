@@ -53,7 +53,23 @@
       "items": {
         "$ref": "#/$defs/orderRow"
       },
-      "description": "One entry per work order, in the ledger's own order. Each one is closed, because `finish` refuses while any order is not."
+      "description": "One entry per closed work order, in the ledger's own order. A dropped order is listed under `dropped` instead, and `finish` refuses while any order is neither closed nor dropped."
+    },
+    "dropped": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "because", "at", "criteria"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^wo[1-9][0-9]*$", "description": "The dropped order." },
+          "because": { "type": "string", "description": "The person's words at `drop`." },
+          "at": { "type": "string", "description": "The UTC date of the drop, YYYY-MM-DD." },
+          "criteria": { "type": "array", "items": { "type": "string" }, "description": "The criteria the order served or owned, which it leaves unbuilt. `finish` asks no confirmation of a machine-verified one, and the task review reads each one unanswered." }
+        }
+      },
+      "description": "One entry per order a person dropped: it ended without code. The review brief carries the list to the architecture reviewer."
     },
     "criteria": {
       "type": "array",

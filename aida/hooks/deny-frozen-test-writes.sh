@@ -67,8 +67,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # with a note, and checked only while a dispatch record was open (gap rows 358 and 408). It is
 # Claude, not the person. So rule one now holds it against the frozen records of every task of
 # the project that is not complete, with or without a dispatch open, and no exception applies to
-# it. A person changes a frozen test through implement-actions.sh retake-tests, which asks for the
-# person's answer, and the order's test author then writes the change. Rules two and three still
+# it. A person changes a frozen test through implement-actions.sh redo, which asks for the
+# person's answer, and the order's test author then writes its tests again. Rules two and three still
 # read only the dispatch record.
 #
 # The Bash door carries forward, unmodified in structure, the write-position parsing from
@@ -697,7 +697,7 @@ deny_main() {
   local route
   case "$(jq -r --arg id "${2%% *}" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""' "${2#* }/implementation/ledger.json" 2>/dev/null)" in
     tests-frozen) route="If the test is wrong, dispatch the order's test author for the change, then run tests-freeze again." ;;
-    code-written) route="If the test is wrong, a person rules it so: run implement-actions.sh retake-tests ${2#* } ${2%% *} --because <the person's reason>, which asks for the person's answer. Then the order's test author writes the change." ;;
+    code-written) route="If the test is wrong, a person redoes the order: run implement-actions.sh redo ${2#* } ${2%% *} --because <the person's reason>, which asks for the person's answer. Then the order's test author writes its tests again." ;;
     *) route="AIDA has no route to change it at this step. A person puts the file back as its freeze commit holds it." ;;
   esac
   deny "$1: this test is frozen for unit ${2%% *} of task ${2#* }. The main session does not change a frozen test, with or without a dispatch open. $route"

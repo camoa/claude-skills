@@ -81,7 +81,7 @@
         "file": { "type": "string", "minLength": 1 },
         "because": { "type": "string", "minLength": 1 }
       },
-      "description": "A deviation the builder declared that a person kept (gap row 266). A deviation line is a stop (exit 105). Interactive, `--accept-deviation` records the attempt instead: `departure` is the first deviation line, `file` the report or interface record that holds it, and `because` the person's reason. `haltsCleared` in the ledger records the same reason, and `review-record` carries this object to the review record instead of halting on the same line. Present only when a person kept one."
+      "description": "A deviation the builder declared that a person kept (gap row 266). A deviation line is a stop (exit 105). Interactive, `--accept-deviation` records the attempt instead: `departure` is the first deviation line, `file` the report or interface record that holds it, and `because` the person's reason. `stopsCleared` in the ledger records the same reason, and `review-record` carries this object to the review record instead of stopping on the same line. Present only when a person kept one."
     },
     "checks": {
       "type": "array",
@@ -100,18 +100,16 @@
     "personFix": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cleared", "because", "commitBefore"],
+      "required": ["commitBefore"],
       "properties": {
-        "cleared": { "type": "integer", "description": "The index in the ledger's haltsCleared of the clearing this fix answers. One clearing takes one such run." },
-        "because": { "type": "string", "minLength": 1, "description": "The person's words that clear-halt recorded with the clearing." },
         "commitBefore": { "type": "string", "pattern": "^[0-9a-f]{7,40}$", "description": "The record's commit before this run moved it to HEAD." }
       },
-      "description": "Present only after `build-recheck` ran the checks over the fix a person committed after a finding ruled load-bearing, once clear-halt cleared that halt (live-run row 426). The checks ran from `startedAt` to the new `commit`, and every one passed, so close reads a record at HEAD."
+      "description": "Present only after `go-on --continue check` ran the checks over the fix a person committed after a finding ruled load-bearing stopped the order (live-run row 426). The checks ran from `startedAt` to the new `commit`, and every one passed, so close reads a record at HEAD. The person's words are in the ledger's stopsCleared entry for that go-on."
     },
     "recheckedAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-      "description": "Present only after `build-recheck` ran the eight checks again over this record's own range, with no implementer dispatched and no attempt spent (live-run row 87): the UTC date of that run, YYYY-MM-DD. `checks`, `executed` and `decidingChecks` then hold the re-check's answers; `attempt`, `startedAt`, `commit` and `takenAt` stay the attempt's own."
+      "description": "Present only after `go-on --continue check` ran the eight checks again over this record's own range, with no implementer dispatched and no attempt spent (live-run row 87): the UTC date of that run, YYYY-MM-DD. `checks`, `executed` and `decidingChecks` then hold that run's answers; `attempt`, `startedAt`, `commit` and `takenAt` stay the attempt's own."
     },
     "checksBefore": {
       "type": "array",
@@ -126,7 +124,7 @@
           "verdict": { "type": "string" }
         }
       },
-      "description": "Present with `recheckedAt`: the checks the re-check replaced, id and verdict only, so a reader can see what the re-check answered differently. The replaced outputs are not kept; the tool that refused a path printed nothing worth reading back."
+      "description": "Present with `recheckedAt`: the checks the second run replaced, id and verdict only, so a reader can see what it answered differently. The replaced outputs are not kept; the tool that refused a path printed nothing worth reading back."
     },
     "decidingChecks": {
       "type": "object",

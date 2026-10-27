@@ -1812,7 +1812,7 @@ do_remove() {
   doc_before="$(cat "$file")"
 
   started_orders_json "$TASK_PATH" | jq -e --arg id "$id" 'index($id) == null' >/dev/null \
-    || die3 "remove: implementation started $id: a ledger step, a spent attempt, a frozen test record or a build record. Fold it into the order that takes its work with merge. Implementation's start then halts it for design drift, and implement-actions.sh restart sets its records aside"
+    || die3 "remove: implementation started $id: a ledger step, a spent attempt, a frozen test record or a build record. Fold it into the order that takes its work with merge. Implementation's start then stops it for design drift, and implement-actions.sh drop sets its records aside"
 
   local others f dependents
   others="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \

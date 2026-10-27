@@ -127,7 +127,7 @@
 #                               two frameworks each command one tool, 73 the check recipe is not
 #                               the one the baseline was taken with, and 52 a findings file that
 #                               cannot be read as a findings file.
-#   write_atomic, halt_order_in  read by br_require_clean_tree only on the branch an autonomous
+#   write_atomic, stop_order_in  read by br_require_clean_tree only on the branch an autonomous
 #                               caller asks for by passing its ledger. A caller that passes no
 #                               ledger never reaches them.
 #   scripts/lib/records-hash.sh  sourced by the caller before this file: cr_resolve and
@@ -1442,8 +1442,8 @@ git_diff_of() {
 # $3 the unit id, $4 the run mode, $5 the ledger file and $6 the ledger document are optional, and
 # together they are what an unattended run needs. Interactive, the refusal is enough: a person is
 # there to commit and run the step again. Unattended there is nobody, so the order would sit in
-# flight with no reason on it, which is the halt nobody sees until they ask. So an autonomous run
-# writes haltedBecause first and then refuses. `close` passes none of the four and only refuses,
+# flight with no reason on it, which is the stop nobody sees until they ask. So an autonomous run
+# writes a stop reason first and then refuses. `close` passes none of the four and only refuses,
 # because an order reaching close has already been recorded and judged.
 # $7, optional: pathspecs, one per line. Then only those paths are read. A `record` order lands
 # its deliverable in the project folder, whose tree the running stage keeps dirty on purpose
@@ -1451,25 +1451,25 @@ git_diff_of() {
 # check reads the owned files alone (nyc defect 17).
 br_require_clean_tree() {
   local who="$1" repo="$2" unit_id="${3:-}" run_mode="${4:-}" ledger_file="${5:-}" ledger_doc="${6:-}"
-  local dirty why halted_doc
+  local dirty why halted_doc allows='["build"]'
   # Not --ignored. A gitignored file an implementer wrote can change a test outcome while leaving
   # a clean tree, and that is a real gap, but --ignored lists node_modules and every other build
   # product a repository ignores on purpose, so every record step refused. The gap stands.
   dirty="$(git_status_of "$repo" "${7:-}")"
   [ -z "$dirty" ] && return 0
-  # The reason never carries the filenames. A path holding the text this stage joins halt reasons
-  # with would forge a segment, and the reason is read back by split. The count is the fact a halt
-  # needs; the names go to standard error, where nothing parses them.
+  # The reason carries the count, the fact a stop needs. The names go to standard error.
   local dirty_count
   dirty_count="$(printf '%s' "$dirty" | grep -c '.' 2>/dev/null)"
   case "$dirty_count" in ''|*[!0-9]*) dirty_count=0 ;; esac
   why="uncommitted changes in the repository ($dirty_count paths, listed on stderr)"
   printf '%s: the uncommitted paths in %s are:\n%s\n' "$who" "$repo" "$dirty" >&2
   if [ "$run_mode" = "autonomous" ] && [ -n "$ledger_file" ] && [ -n "$ledger_doc" ] && [ -n "$unit_id" ]; then
-    halted_doc="$(halt_order_in "$ledger_doc" "$unit_id" "$why")"
+    # Once the person commits the tree, the order goes on with the step this one belongs to.
+    [ "$who" != "fix-record" ] || allows='["fix"]'
+    halted_doc="$(stop_order_in "$ledger_doc" "$unit_id" "$who" "$why" "$allows")"
     [ -n "$halted_doc" ] || die 3 "$who: the ledger update for $unit_id failed."
     write_atomic "$ledger_file" "$halted_doc"
-    echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): $unit_id is halted. $why" >&2
+    echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): $unit_id is stopped. $why" >&2
   fi
   # One message for every caller. For the record step the reason is that the owned-files check
   # compares two commits, so an uncommitted change would pass it while staying in the tree; for

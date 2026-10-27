@@ -65,7 +65,7 @@
           "finding": { "type": "string", "minLength": 1 }
         }
       },
-      "description": "The reviewer's answer for each recipe the builder follows, one each (gap row 225). The list is the review brief's `recipes`: the implement recipe preconditions.json holds for each framework. `evidence` is one line. It names the file and the line in the order's diff for a departure, or only the files of the diff for a departure in how files were produced (gap row 280), and gives the reason for not-applicable. `review-record` refuses a list that does not answer the brief's one to one (exit 108), and halts the order for design drift on a departed answer (exit 107), the route a departure the builder declared takes. One exception (gap row 300): when the task has no automated tests and the order froze no test file, a departed answer that names only test files is recorded not-applicable, with the reviewer's evidence kept in `departedAnswer`, and the task review shows it as a catalog note. A departed answer whose `finding` names an actionable finding with a fix scope halts nothing: the fix round cures it, and verify confirms the cure (gap row 303). Present only when the brief lists a recipe, so a record without one reads as it did before the key existed."
+      "description": "The reviewer's answer for each recipe the builder follows, one each (gap row 225). The list is the review brief's `recipes`: the implement recipe preconditions.json holds for each framework. `evidence` is one line. It names the file and the line in the order's diff for a departure, or only the files of the diff for a departure in how files were produced (gap row 280), and gives the reason for not-applicable. `review-record` refuses a list that does not answer the brief's one to one (exit 108), and stops the order for design drift on a departed answer (exit 107), the route a departure the builder declared takes. One exception (gap row 300): when the task has no automated tests and the order froze no test file, a departed answer that names only test files is recorded not-applicable, with the reviewer's evidence kept in `departedAnswer`, and the task review shows it as a catalog note. A departed answer whose `finding` names an actionable finding with a fix scope stops nothing: the fix round cures it, and verify confirms the cure (gap row 303). Present only when the brief lists a recipe, so a record without one reads as it did before the key existed."
     },
     "deviationAccepted": {
       "type": "object",
@@ -76,7 +76,7 @@
         "file": { "type": "string", "minLength": 1 },
         "because": { "type": "string", "minLength": 1 }
       },
-      "description": "A departure the builder declared that a person kept (gap row 224). `review-record` runs build-record's departure scan and halts the order for design drift on a hit, whatever the review holds. Interactive, `--accept-deviation` keeps the departure instead: `departure` is the first line the scan found, `file` where it found it, and `because` the person's reason. `haltsCleared` in the ledger records the same reason. A person who kept the same line at `build-record --accept-deviation` is not asked again: the build record's own object is carried here (gap row 266). A person who keeps a departure that waits as deviationPending runs `review-record --accept-deviation` on the existing record: the departure moves here and deviationPending is removed (gap row 318). Present only when a person accepted one."
+      "description": "A departure the builder declared that a person kept (gap row 224). `review-record` runs build-record's departure scan and stops the order for design drift on a hit, whatever the review holds. Interactive, `--accept-deviation` keeps the departure instead: `departure` is the first line the scan found, `file` where it found it, and `because` the person's reason. `stopsCleared` in the ledger records the same reason. A person who kept the same line at `build-record --accept-deviation` is not asked again: the build record's own object is carried here (gap row 266). A person who keeps a departure that waits as deviationPending runs `review-record --accept-deviation` on the existing record: the departure moves here and deviationPending is removed (gap row 318). Present only when a person accepted one."
     },
     "deviationPending": {
       "type": "object",
@@ -92,7 +92,7 @@
           "description": "Unattended, the ids of the open actionable findings the reviewer marked declaredDeparture. Each one is pending and waits with this departure, not as a ruling of its own, and `finish` names them in the decision's text (gap row 316)."
         }
       },
-      "description": "A departure no person has ruled on yet (gap row 279). Unattended, `review-record` halts nothing on a departure: `departure` is what the scan or the reviewer found, and `file` where. `finish` carries it to finished.json, and the review stage puts it to the person before its verdict. An information item marked departsFromDesign is held here in both modes (gap row 308). Present only on a review that found one and that no person accepted."
+      "description": "A departure no person has ruled on yet (gap row 279). Unattended, `review-record` stops nothing on a departure: `departure` is what the scan or the reviewer found, and `file` where. `finish` carries it to finished.json, and the review stage puts it to the person before its verdict. An information item marked departsFromDesign is held here in both modes (gap row 308). Present only on a review that found one and that no person accepted."
     }
   },
   "$defs": {
@@ -218,12 +218,12 @@
         "scopeInsufficientBecause": {
           "type": "string",
           "minLength": 1,
-          "description": "What the fixer said it would have needed, in its own words. Interactive, the skill puts this to the person, who rules. Unattended, the order halts with this text as the halt's reason, because widening a scope with nobody present is unbounded work. Recorded in both modes, so an interactive run that answers the report still leaves the fact on the finding."
+          "description": "What the fixer said it would have needed, in its own words. Interactive, the skill puts this to the person, who rules. Unattended, the order stops with this text as the stop reason, because widening a scope with nobody present is unbounded work. Recorded in both modes, so an interactive run that answers the report still leaves the fact on the finding."
         },
         "ruling": {
           "type": "string",
           "enum": ["wrong", "deferred", "load-bearing", "test-wrong"],
-          "description": "A person's answer at the round cap, on a finding still open after the last allowed round (ideal/implementation.md, 'The loop stops on a counter'), or before the cap on a finding a fixer reported out of its scope (live-run row 110). `load-bearing` is an escalation and halts the order with this finding as the reason. `test-wrong` says the finding is real and the fix needs a frozen test changed: it halts the order with `test wrong: <id>` as the reason, and `retake-tests` moves this record aside and sends the order back to its tests. `wrong` and `deferred` let the order close with the finding recorded. An unattended run never writes this field: it has no person, so it halts instead (exit 55 and exit 56)."
+          "description": "A person's answer at the round cap, on a finding still open after the last allowed round (ideal/implementation.md, 'The loop stops on a counter'), or before the cap on a finding a fixer reported out of its scope (live-run row 110). `load-bearing` is an escalation and stops the order with this finding as the reason: a person commits the fix and goes on with the checks run again, or closes with it listed. `test-wrong` says the finding is real and the fix needs a frozen test changed: it stops the order with `test wrong: <id>` as the reason, and `redo` moves this record aside and sends the order back to planned. `wrong` and `deferred` let the order close with the finding recorded. `go-on --continue close` rules each open finding `deferred` with the person's words. An unattended run never writes this field: it has no person, so it stops instead (exit 55 and exit 56)."
         },
         "rulingReason": {
           "type": "string",
@@ -257,7 +257,7 @@
         },
         "departsFromDesign": {
           "type": "boolean",
-          "description": "The reviewer's one routed answer: true when the item names a departure from the order's design or interface (gap row 224). `review-record` refuses an item without it (exit 52). True halts nothing in either mode: when no other departure was found, the item is held as deviationPending for the task review (gap row 308)."
+          "description": "The reviewer's one routed answer: true when the item names a departure from the order's design or interface (gap row 224). `review-record` refuses an item without it (exit 52). True stops nothing in either mode: when no other departure was found, the item is held as deviationPending for the task review (gap row 308)."
         }
       }
     },

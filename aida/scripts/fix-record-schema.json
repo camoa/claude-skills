@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA implementation fix record",
-  "description": "What `fix-record` verified for one fix round on one order, at <task folder>/implementation/fix-<unit_id>-<round>.json (ideal/implementation.md, 'The fix rounds re-run the first two checks'). One file per round, so a second round never overwrites the first and a person reading a halted order can see both. The same shape as the build record with `round` in place of `attempt`, because the two steps verify the same code the same way and a reader who knows one must not have to learn another. Seven checks here, not eight: a fix round does not rewrite the interface record, so `interface-record` is never re-run. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "description": "What `fix-record` verified for one fix round on one order, at <task folder>/implementation/fix-<unit_id>-<round>.json (ideal/implementation.md, 'The fix rounds re-run the first two checks'). One file per round, so a second round never overwrites the first and a person reading a stopped order can see both. The same shape as the build record with `round` in place of `attempt`, because the two steps verify the same code the same way and a reader who knows one must not have to learn another. Seven checks here, not eight: a fix round does not rewrite the interface record, so `interface-record` is never re-run. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -107,7 +107,7 @@
     "recheckedAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-      "description": "Present only after `build-recheck` ran this round's seven checks again over its own range, with no fixer dispatched and no round spent (gap row 310): the UTC date of that run, YYYY-MM-DD. `checks`, `executed` and `decidingChecks` then hold the re-check's answers; `round`, `startedAt`, `commit` and `takenAt` stay the round's own."
+      "description": "Present only after `go-on --continue check` ran this round's seven checks again over its own range, with no fixer dispatched and no round spent (gap row 310): the UTC date of that run, YYYY-MM-DD. `checks`, `executed` and `decidingChecks` then hold that run's answers; `round`, `startedAt`, `commit` and `takenAt` stay the round's own."
     },
     "checksBefore": {
       "type": "array",
@@ -122,7 +122,7 @@
           "verdict": { "type": "string" }
         }
       },
-      "description": "Present with `recheckedAt`: the checks the re-check replaced, id and verdict only, as build-record-schema.json keeps them."
+      "description": "Present with `recheckedAt`: the checks the second run replaced, id and verdict only, as build-record-schema.json keeps them."
     }
   },
   "$defs": {

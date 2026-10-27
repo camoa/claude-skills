@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA implementation ledger",
-  "description": "The one store for what an implementation run has done, at <task folder>/implementation/ledger.json (ideal/implementation.md, 'The ledger is the state file, not a status log'). It exists so a person who was not watching can arrive afterwards and decide what to redo, and so a run that died mid-order knows where it got to. Plain JSON, no fences, no markdown. Nothing derivable is stored: which orders depend on which lives in the work orders, and which order is in flight is the one order with a step reached, no halt reason and no close, since orders run one at a time. A field present in a real ledger but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false. This schema holds what exists, never what is planned. The commit range an order produced arrived on 2026-09-11 with `close`, the step that writes it. The checkpoint's own judgements, and the person's grant of another attempt, arrived the same day with `tests-freeze` and `grant-attempt`. foundations.md: a new thing gets the least that works, and a field nobody has asked for is a field nobody can cut back.",
+  "description": "The one store for what an implementation run has done, at <task folder>/implementation/ledger.json (ideal/implementation.md, 'The ledger is the state file, not a status log'). It exists so a person who was not watching can arrive afterwards and decide what to redo, and so a run that died mid-order knows where it got to. Plain JSON, no fences, no markdown. Nothing derivable is stored: which orders depend on which lives in the work orders, and which order is in flight is the one order with a step reached, no stop reason and no close, since orders run one at a time. A field present in a real ledger but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false. This schema holds what exists, never what is planned. The commit range an order produced arrived on 2026-09-11 with `close`, the step that writes it. The checkpoint's own judgements arrived the same day with `tests-freeze`. The stopped state and its three ways out replaced the halts and their five routes in 6.1.0. foundations.md: a new thing gets the least that works, and a field nobody has asked for is a field nobody can cut back.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -36,7 +36,7 @@
         "interactive",
         "autonomous"
       ],
-      "description": "The mode the build started under: the task's own mode for the implement stage, read through task_run_mode and written by every `start`, new or resumed. It is a record, and no step decides from it. Every step reads task_run_mode itself, the producer clear-halt also reads. Two sources disagreed when a person set the task interactive after a halt: clear-halt ran and the ruling after it was refused as unattended (gap row 265). Review reads the task too (nyc defect 20)."
+      "description": "The mode the build started under: the task's own mode for the implement stage, read through task_run_mode and written by every `start`, new or resumed. It is a record, and no step decides from it. Every step reads task_run_mode itself. Two sources disagreed when a person set the task interactive after a stop: the order left its stop and the ruling after it was refused as unattended (gap row 265). Review reads the task too (nyc defect 20)."
     },
     "snapshotHash": {
       "type": "string",
@@ -66,19 +66,19 @@
       },
       "description": "One entry per value startedFrom held before `start --rebased-onto` rewrote it, in the order it happened. Present only when at least one rewrite was. A resumed `start` refuses (exit 82) when HEAD does not descend from startedFrom, because a rebase or an amend left that commit on no branch: `preconditions` would label the baseline with it and `finish` would compute a range git cannot resolve. The rewrite keeps the old value here rather than dropping it, so a reader can tell which commit the baseline on disk was taken at, and why it must be retaken (nyc defect 19)."
     },
-    "haltsCleared": {
+    "stopsCleared": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/haltCleared"
+        "$ref": "#/$defs/stopCleared"
       },
-      "description": "One entry per halt cleared, in the order it happened. Present only when at least one was. Six actions write here. `build-recheck` writes one when a fix round's checks pass again and the order's only halt was the unattended fix round cap on check findings alone (gap row 310). `clear-halt` writes one when a person did what the halt named. `retake-tests` writes one when a test-wrong ruling sent the order back to its tests. `review-record --accept-deviation` writes one when a person kept a departure the builder declared, with the departure halt as the reason, whether or not the order carried it yet (gap row 224). `build-record --accept-deviation` writes one when a person kept a deviation the builder declared, with the deviation halt as the reason, whether or not the order carried it. It leaves a stop-line halt in place (gap row 266). A resumed `start` writes one when its own comparison no longer finds the drift a halt was written for, since `start` is the one action that computes drift (live-run row 143). The grant and the restart clear their own halts and record them in their own fields. The order's haltedBecause is removed at the same moment, so the reason lives on here and nowhere else. A `start` clearing removes only the `design drift` segment, so the order stays halted for any other segment it carried."
+      "description": "One entry per time an order left its stopped state, or lost some of its stop reasons, in the order it happened. Present only when at least one was. `go-on`, `redo` and `drop` write one each, the three ways out, each through a person's answer. `review-record --accept-deviation` and `build-record --accept-deviation` write one when a person kept a departure or a deviation the builder declared, removing that reason alone (gap rows 224 and 266). A resumed `start` writes one when its own comparison no longer finds the drift a reason was written for, since `start` is the one action that computes drift (live-run row 143). The reasons removed live on here and nowhere else."
     },
     "resnapshots": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/resnapshot"
       },
-      "description": "One entry per order the snapshot took a live copy of after the first capture, in the order it happened. Present only when at least one was. `start` writes one for a drifted order that had not started, and one for a started or closed order that only gained owned files, findings or an appended reason, which takes its live copy in place (live-run row 91, gap rows 226 and 227). `restart` writes one for each order it resets. Each is written only after design closed on the live copy (live-run row 72). An order is frozen when it starts, not when the stage starts, and this is the record of which shape each order was built from."
+      "description": "One entry per order the snapshot took a live copy of after the first capture, in the order it happened. Present only when at least one was. `start` writes one for a drifted order that had not started, and one for a started or closed order that only gained owned files, findings or an appended reason, which takes its live copy in place (live-run row 91, gap rows 226 and 227). `redo` writes one for the order it takes fresh. Each is written only after design closed on the live copy (live-run row 72). An order is frozen when it starts, not when the stage starts, and this is the record of which shape each order was built from."
     },
     "setAside": {
       "type": "array",
@@ -146,14 +146,18 @@
             "checks-passed",
             "reviewed",
             "fixed",
-            "closed"
+            "closed",
+            "dropped"
           ],
-          "description": "The last step of this order that finished, or null when none has. A resumed run redoes the step after this one, which is why every step must be safe to run again: the record names what completed, never what was in progress. The order's state derives from this and needs no field of its own. Null is not started, `closed` is done, anything between with a halt reason is halted and without one is in flight."
+          "description": "The last step of this order that finished, or null when none has. A resumed run redoes the step after this one, which is why every step must be safe to run again: the record names what completed, never what was in progress. The order's state derives from this and from `stopped`, and needs no field of its own. Null is planned, `tests-frozen` has its tests frozen, `code-written` and `checks-passed` are built, `reviewed` and `fixed` are in review, `closed` is done, and `dropped` ended without code. An order with a stop reason is stopped, whatever its step."
         },
-        "haltedBecause": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Why this order stopped, in plain words, present only when it is halted. Absent means the order is not halted; it never holds an empty string, because absent and empty would be one value for two facts."
+        "stopped": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/stopReason"
+          },
+          "description": "Why this order stopped, one entry per reason, present only while it is stopped. Absent means the order is not stopped; it is never an empty list, because absent and empty would be one value for two facts. A stopped order refuses every later step (exit 49) until a person takes one of three ways out, `go-on`, `redo` or `drop`, and `finish` refuses while any order is stopped."
         },
         "attemptsUsed": {
           "type": "integer",
@@ -180,14 +184,39 @@
         "attemptsAllowed": {
           "type": "integer",
           "minimum": 1,
-          "description": "How many attempts this order is allowed, present only when a person has granted one beyond the default. Absent means the script's own BUILD_ATTEMPTS_ALLOWED. `grant-attempt` writes it, one higher than it was, and never lowers it. The grant raises the allowance rather than lowering attemptsUsed, so the count of what a builder already spent stays a fact about the past (ideal/implementation.md, 'What a halt at the attempt cap leads to')."
+          "description": "How many attempts this order is allowed, present only when a person has granted one beyond the default. Absent means the script's own BUILD_ATTEMPTS_ALLOWED. `go-on --continue build` writes it, one higher than it was, when the attempts are spent, and never lowers it. The grant raises the allowance rather than lowering attemptsUsed, so the count of what a builder already spent stays a fact about the past (ideal/implementation.md, 'What a halt at the attempt cap leads to')."
         },
         "grants": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/grant"
           },
-          "description": "One entry per attempt a person has granted on this order, in the order they were granted. Present only when at least one was. A grant with no record of who asked for what is a cap nobody can audit afterwards."
+          "description": "One entry per attempt a person has granted on this order through `go-on --continue build`, in the order they were granted. Present only when at least one was. A grant with no record of who asked for what is a cap nobody can audit afterwards."
+        },
+        "roundsGranted": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many fix rounds a person added to this order's allowance through `go-on --continue fix`, one each time the rounds were spent. Present only when at least one was. roundsUsed never goes down, so the allowance rises instead."
+        },
+        "owns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The files a person's `go-on --owns` gave this order, beside the ownedFiles the snapshot holds. Present only when one was given. The build brief, the dispatch record, the fix scope and the owned-files check read them as owned. The snapshot keeps design's own list, so `start` compares design with it alone. No other order owns one of these, and none is a frozen test."
+        },
+        "redos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/wayOutRecord"
+          },
+          "description": "One entry per time a person redid this order with `redo`, in the order it happened. Present only when one was. Each redo sets the entry back to planned and keeps this list. `tests-brief` hands the newest entry's words to the fresh test author."
+        },
+        "dropped": {
+          "$ref": "#/$defs/wayOutRecord",
+          "description": "Present only on an order a person dropped with `drop`: lastStep is `dropped`. `finish` lists the order and the criteria it leaves unbuilt."
         },
         "repairs": {
           "type": "array",
@@ -244,7 +273,7 @@
           "type": "array",
           "minItems": 1,
           "items": {"type": "string", "minLength": 1},
-          "description": "The keys of the rows a checker's rejection sent back to the test author on an unattended run, written by `tests-freeze` beside rowsRejected. A row goes back once: a second rejection of a key here halts the order, because the author could not meet the checker's note and no model settles that (gap row 373). Removed by the next freeze that writes."
+          "description": "The keys of the rows a checker's rejection sent back to the test author on an unattended run, written by `tests-freeze` beside rowsRejected. A row goes back once: a second rejection of a key here stops the order, because the author could not meet the checker's note and no model settles that (gap row 373). Removed by the next freeze that writes."
         },
         "rowsConfirmed": {
           "type": "array",
@@ -270,13 +299,6 @@
             "minLength": 1
           },
           "description": "The doneWhen clauses of this order that assert an absence, each verbatim, written by `tests-freeze --absence` and replaced on every freeze of this order. Present only when the freeze routed at least one. Such a clause cannot be watched failing: the tree is already in the state it asserts, and making a test of it fail means adding the very thing the clause forbids (live-run row 184). It is answered at review instead, where the architecture reviewer judges it against the task's own diff. The list is what makes the route visible: a clause here is owed a verdict, and a clause nobody routed is owed a test."
-        },
-        "retakes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/retake"
-          },
-          "description": "One entry per time `retake-tests` sent this order back to tests-frozen after a person ruled a finding `test-wrong` at `verify-record`, or ruled a frozen test wrong with `--because` at code-written, in the order it happened. Present only when at least one was. The build, review, fix and verify records move aside, the step goes back, and attemptsUsed stays: the attempts were real, against the old test. A spent counter is the grant's to answer, and a `--because` retake at the cap writes that grant itself. roundsUsed goes back to 0, because the review record it counted moved with the rest (live-run row 110)."
         }
       }
     },
@@ -359,73 +381,121 @@
         }
       }
     },
-    "retake": {
+    "stopReason": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["at", "movedTo", "freezeCommit"],
-      "oneOf": [
-        {"type": "object", "additionalProperties": false, "required": ["finding", "at", "movedTo", "freezeCommit"],
-         "properties": {"finding": {"$ref": "#/$defs/retake/properties/finding"}, "at": {"$ref": "#/$defs/retake/properties/at"}, "movedTo": {"$ref": "#/$defs/retake/properties/movedTo"}, "freezeCommit": {"$ref": "#/$defs/retake/properties/freezeCommit"}}},
-        {"type": "object", "additionalProperties": false, "required": ["ruling", "at", "movedTo", "freezeCommit"],
-         "properties": {"ruling": {"$ref": "#/$defs/retake/properties/ruling"}, "at": {"$ref": "#/$defs/retake/properties/at"}, "movedTo": {"$ref": "#/$defs/retake/properties/movedTo"}, "freezeCommit": {"$ref": "#/$defs/retake/properties/freezeCommit"}}}
-      ],
+      "required": ["step", "reason", "allows"],
       "properties": {
-        "finding": {
-          "type": "string",
-          "pattern": "^f[1-9][0-9]*$",
-          "description": "The finding ruled test-wrong, read from the front of the halt reason `verify-record` wrote. A retake holds exactly one of this and `ruling`, which the oneOf above states."
-        },
-        "ruling": {
+        "step": {
           "type": "string",
           "minLength": 1,
-          "description": "The person's --because words, for a retake of an order at code-written that no review reached (live-run row 426). tests-brief hands them to the test author in place of a finding."
-        },
-        "at": {
-          "type": "string",
-          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-          "description": "The UTC date of the retake, YYYY-MM-DD. Set by the script, never typed."
-        },
-        "movedTo": {
-          "type": "string",
-          "minLength": 1,
-          "description": "The folder the records moved to, implementation/retaken-<order>-<n>/, n counting from 1. Nothing is deleted."
-        },
-        "freezeCommit": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{7,40}$",
-          "description": "The commit the frozen test record held at the retake. HEAD is past it by then, so `tests-freeze` reads this to let the one freeze after the retake through its once-per-commit refusal (exit 35) and overwrite the record with retakenFrom."
-        }
-      }
-    },
-    "haltCleared": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "reason", "clearedAt", "because"],
-      "properties": {
-        "commit": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{40}$",
-          "description": "HEAD of the order's repository when clear-halt cleared a halt with a finding ruled load-bearing (live-run row 426). build-recheck records the person's fix only at this commit, so the person's words accept that fix and no later commit."
-        },
-        "id": {
-          "type": "string",
-          "pattern": "^wo[1-9][0-9]*$",
-          "description": "The order whose halt was cleared."
+          "description": "The step that wrote the reason, such as start, build-record or verify-record."
         },
         "reason": {
           "type": "string",
           "minLength": 1,
-          "description": "The haltedBecause text as it stood, every segment, copied before it was removed. A clearing that removes one segment copies the whole text here too, so the entry says what the order was stopped for."
+          "description": "Why the order stopped, in plain words. A step run twice writes no second copy."
+        },
+        "allows": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["build", "fix", "check", "close"]
+          },
+          "description": "The go-on choices this reason allows. `go-on` takes a choice only when every reason of the order allows it. An empty list leaves only redo and drop, as for a design change."
+        }
+      }
+    },
+    "stopCleared": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "by", "reasons", "clearedAt", "because"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^wo[1-9][0-9]*$",
+          "description": "The order whose stop reasons were removed."
+        },
+        "by": {
+          "enum": ["go-on", "redo", "drop", "accept-deviation", "start"],
+          "description": "What removed them: one of the three ways out, a person's keep of a deviation, or a resumed start that no longer finds the drift."
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/stopReason"
+          },
+          "description": "The reasons removed, as they stood."
         },
         "clearedAt": {
           "type": "string",
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-          "description": "The UTC date the halt was cleared, YYYY-MM-DD. Set by the script, never typed."
+          "description": "The UTC date, YYYY-MM-DD. Set by the script, never typed."
         },
         "because": {
           "type": "string",
           "minLength": 1,
-          "description": "What the person did about the halt, in their own words. Required, because a halt cleared with no reason reads as the stop never having meant anything."
+          "description": "The person's words, or the script's own account for a start."
+        },
+        "choice": {
+          "enum": ["build", "fix", "check", "close"],
+          "description": "On a go-on, what continues."
+        },
+        "owns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "On a go-on, the files it gave the order."
+        },
+        "listed": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^f[1-9][0-9]*$"
+          },
+          "description": "On a go-on that closes, the open findings it ruled deferred with the person's words."
+        },
+        "movedTo": {
+          "type": "string",
+          "minLength": 1,
+          "description": "On a redo or a drop, the dated folder the order's records moved to."
+        }
+      }
+    },
+    "wayOutRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "because", "movedTo", "reverted"],
+      "properties": {
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "The UTC date of the redo or the drop, YYYY-MM-DD. Set by the script, never typed."
+        },
+        "because": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The person's words."
+        },
+        "movedTo": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The folder the order's records moved to, implementation-<date>-<HEAD> beside the implementation folder, with -<n> when that name was taken. It holds redone.json or dropped.json with the same words. Nothing is deleted."
+        },
+        "reverted": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["commit", "revert"],
+            "properties": {
+              "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$", "description": "One of the order's own commits, read from its records' commit lists."},
+              "revert": {"type": "string", "pattern": "^[0-9a-f]{40}$", "description": "The commit that reverted it."}
+            }
+          },
+          "description": "The order's own commits, newest first, each with the commit that reverted it. Empty when the tree held none."
         }
       }
     },
@@ -435,11 +505,12 @@
       "required": ["by", "attempt", "finding", "report", "at"],
       "properties": {
         "by": {"type": "string", "pattern": "^wo[1-9][0-9]*$", "description": "The order whose builder stopped on the defect. It builds again only once this order closes."},
-        "attempt": {"type": "integer", "minimum": 1, "description": "The attempt of that order the stop did not spend. Another repair at the same attempt opens only once every earlier one's finding reads addressed, and no more than that order's attempts allowed, so a builder that stops on every run halts as any other stop does."},
+        "attempt": {"type": "integer", "minimum": 1, "description": "The attempt of that order the stop did not spend. Another repair at the same attempt opens only once every earlier one's finding reads addressed, and no more than that order's attempts allowed, so a builder that stops on every run stops the order as any other stop does."},
         "finding": {"type": "string", "pattern": "^f[1-9][0-9]*$", "description": "The finding the repair added to this order's review record, with origin `repair`."},
         "report": {"type": "string", "minLength": 1, "description": "The stopped builder's report, which holds the evidence."},
         "at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date the repair opened. Set by the script, never typed."},
-        "closedRange": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$", "description": "The commitRange this order held when the repair reopened it. `close` writes the range again, so this keeps the first one."}
+        "closedRange": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$", "description": "The commitRange this order held when the repair reopened it. `close` writes the range again, so this keeps the first one."},
+        "commits": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "description": "The commits the stopped builder made after it began. This order's repair round reads them as the stopped order's, not its own, and starts after them (gap row 381)."}
       }
     },
     "reviewRepair": {

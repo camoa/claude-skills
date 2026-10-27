@@ -12,9 +12,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # One completion record, at <task folder>/completion/completed.json (scripts/completed-schema.json),
 # and one body, at <task folder>/completion/pr-body.md. Both live in their own folder beside
-# review/, for the reason review's record does: implementation's own `restart` moves records out
-# of implementation/ into an archive folder, and neither file has anything to do with a build
-# restart.
+# review/, for the reason review's record does: implementation's `redo` and `drop` move an
+# order's records out of implementation/ into an archive folder, and neither file has anything to
+# do with them.
 #
 # Usage:
 #   completion-actions.sh read       <task_folder>

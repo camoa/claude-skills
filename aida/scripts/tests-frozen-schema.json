@@ -54,7 +54,7 @@
     "freezeCommits": {
       "type": "array",
       "items": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
-      "description": "Every commit a freeze of this unit made: this one when it committed, and each one the record it replaced held. `commit` is HEAD whether or not the freeze committed, so a restart reads this list to tell a freeze from another commit. The freeze subject names no AIDA term, so no reader rests on it (live-run row 374). Absent on a record written before this field existed, which reads as `commit` and the retakenFrom commit when `proof` is tests, and as empty otherwise."
+      "description": "Every commit a freeze of this unit made: this one when it committed, and each one the record it replaced held. `commit` is HEAD whether or not the freeze committed, so a redo or a drop reads this list to tell a freeze from another commit. The freeze subject names no AIDA term, so no reader rests on it (live-run row 374). Absent on a record written before this field existed, which reads as `commit` and the retakenFrom commit when `proof` is tests, and as empty otherwise."
     },
     "retakenFrom": {
       "type": "object",
