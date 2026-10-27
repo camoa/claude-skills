@@ -1,23 +1,21 @@
-# Finish the task, grant an attempt, restart the build, or clear a halt
+# Finish the task, or leave a stop
 
-This step covers five actions that act on the task rather than on one order. `finish` runs when
-every order is closed. `reopen` follows a failed task review. `grant-attempt` answers a spent
-attempt counter, when a person wants to grant one more, and a spent run budget, once the person has
-raised it. `restart` follows a mid-build design change: it halted one or more orders, and a person
-wants a fresh build against the new design. `clear-halt` answers every other halt, once the person
-has acted on what it names.
+This step covers `finish`, which runs when every order is closed or dropped, and `reopen`, which
+follows a failed task review. It also covers the three ways a person leaves a stopped order:
+`go-on`, `redo` and `drop`.
 
 ## Finish
 
-Every order closed, none halted, and no `implementation/finished.json` on disk means the
-implementation stage is done and waiting to be recorded. Run:
+Every order closed or dropped, none stopped, and no `implementation/finished.json` on disk means
+the implementation stage is done and waiting to be recorded. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh finish "<task_folder>" \
   [--value <name>=<value>]...
 ```
-It refuses unless every order in the ledger is closed, naming whichever is not. It also refuses
-when any order carries a halt reason, closed or not, naming the order and the reason. It refuses
-unless every machine-verified criterion reads confirmed too, naming whichever is not. It refuses a
+It refuses unless every order in the ledger is closed or dropped, naming whichever is not. It also
+refuses when any order is stopped, closed or not, naming the order and its reasons. It refuses
+unless every machine-verified criterion reads confirmed too, naming whichever is not. A criterion
+a dropped order serves or owns is not asked: nothing built it. It refuses a
 dirty code repository as well, because the commit range it records is a claim about what that
 repository holds.
 
@@ -61,7 +59,9 @@ project does not declare yet is declared first, with the project skill's `add-so
 `--accept-warnings` does not pass. An `unknown` suite can hide a failure that prints no test line.
 
 On success it writes `implementation/finished.json`: the commit range this stage produced, and
-each order's own range and rounds used. The suite's verdict is under `suite`, with its output in
+each order's own range and rounds used. Each dropped order is under `dropped`, with the person's
+words and the criteria it leaves unbuilt. The review brief carries that list, and review's close
+reads each such criterion unanswered. The suite's verdict is under `suite`, with its output in
 the sidecar. The record is committed when the stage closes: `finish` commits
 the task folder, in the project folder and never in the code repository. It also records each criterion's row state and who judged it.
 The checklists for the criteria a person verifies are copied in too, from the frozen test records.
@@ -106,189 +106,131 @@ id, and stop if it refuses. Invoke it only when the mode covers review too; othe
 interactive does, naming the command. Each stage refuses to start without the previous stage's
 record, so a stage cannot run out of order. That is why this chain is safe.
 
-## Offer the grant, when a halt reads "attempts spent"
+## Leave a stop
 
-An order halted with a reason beginning `attempts spent` has used every attempt it was allowed and
-still failed a check. Interactive, with a person present, open with: "The builder used every
-attempt it was allowed on this unit of work and still failed a check. You decide which of three
-things is true; a model choosing would let the test describe the code. The test is
-wrong: it is corrected, and one more attempt is granted. The unit of work is wrong, too big or
-its interface does not fit. Then design changes it, and the build takes it fresh. The code is hard:
-you write it, and the same checks judge it. If you want one more attempt as it stands, say so."
-Then name the two recorded attempts by
-path. SKILL.md's "One order halting" section is where the three things are stated.
+A stopped order carries its reasons as a list. Each names the step that wrote it, its words, and the
+go-on choices it allows. `read` prints them on the order's line, and `next:` names the choices every
+reason allows. A person leaves the stop one of three ways. Each one is a person's answer, recorded
+first as "A person's answer" below says. None runs on a person's behalf because an order is
+stopped: put the reasons and the recorded attempts to them first.
 
-When the person rules the test wrong, a grant alone does not help: the frozen-tests check refuses
-an edited test. Run the retake, with the person's own words:
+Open with: "This unit of work stopped, and only you can say how it goes on. It waits until you
+choose." Then say each reason in plain words, and offer the ways out the next sections name.
+
+### Go on
+
+`go-on` takes the order out of its stop and says what continues. It takes one choice:
+
+- `build`: one more build attempt. When the attempts are spent, it raises the order's allowance by
+  one, and the attempts used never go down.
+- `fix`: one more fix round. When the rounds are spent, it raises the allowance by one.
+- `check`: the checks run again over the last record's range, with no new build and no attempt or
+  round spent. A pass moves the order on and clears the stop. A fail records the checks and leaves
+  the order stopped. It takes the recipe flags `build-record` takes, and `--interface`.
+- `close`: the order closes with its open findings listed. Each open finding is ruled `deferred`
+  with the person's words, so `close` closes and `finish` carries each one to the task review.
+
+Run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh retake-tests "<task_folder>" <order id> \
-  --because <which test is wrong, and why>
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh go-on "<task_folder>" <order id> \
+  --continue <build|fix|check|close> --because <the person's words> [--owns <path>]...
 ```
-It moves the order's build records into `implementation/retaken-<order id>-<n>/` and sets the
-order back to `tests-frozen`. It grants the one more attempt and records the grant with the same
-words. It clears the halt. The tests brief gives the words to the test author in place of a
-finding. Then follow the retake route under Rulings in `references/review.md`: the author
-corrects the test, the checker reads the affected rows, `tests-freeze` retakes the record, and
-the build runs again. The same call takes an order at `code-written` that is not halted, and
-grants nothing there. It refuses any other halt (exit 99). It refuses without the person's answer
-on record (exit 68).
+The answer's step is `implement go-on <choice>`, so a yes to one choice passes no other. It refuses
+a choice a reason does not allow (exit 67), and names the choices every reason allows. A reason that
+allows none, such as a design change, leaves only redo and drop. `--owns` names a file the order now
+owns, such as the file the owned-files check refused, or one a fixer reported out of its scope. The
+person's words name each such file. It refuses a file another order owns, or a frozen test. The
+build brief, the dispatch record, the fix scope and the owned-files check then read it as owned.
 
-If they decide the order needs one more attempt as it stands, run:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh grant-attempt "<task_folder>" <order id> \
-  --reason <why this order gets another attempt>
-```
-It raises the order's own allowed count by one, and records the reason and the date. It clears the
-halt only when the halt began with `attempts spent`; any other halt refuses, naming it. It never
-touches the attempts already used, so the counter still never goes down. It refuses without the
-person's answer on record (exit 68), because the grant is a person's judgement. "A person's
-answer" below says how to record it. The reason may not hold the text
-`; earlier: `, the text this stage joins one halt reason to another with; a reason carrying it
-would forge a segment nobody wrote.
+Which choices a reason allows:
 
-The grant is the person's to offer and the person's to take. Do not run it on their own behalf
-because an order is halted; put the halt and its recorded attempts to them first.
+| The reason | The choices |
+|---|---|
+| `attempts spent`, at `build-record` | `build`; and `check` when only the tool rows, owned-files or the interface record stopped the attempt |
+| a builder's stop, or commits by a stopped builder, unattended | `build` |
+| uncommitted changes, unattended | `build`, or `fix` after a fix round; commit the tree first |
+| a rejected row, unattended, at `tests-freeze` | `build`, once the person judged the row at a second freeze |
+| `budget spent`, at `dispatch-open` | `build`, or `fix` in review; raise the budget first |
+| `turn cap`, at `dispatch-close` | `build`, or `fix` in review; `start` then keeps or sets aside the role's files |
+| a finding on a non-goal, or a disputed already-correct claim, unattended | `fix` or `close` |
+| a fixer short of scope, unattended | `fix`, often with `--owns` |
+| the fix round cap with findings open, unattended | `fix` or `close`; and `check` when every open finding is a check finding |
+| a finding ruled load-bearing | `check`, over the fix the person committed, or `close` |
+| `test wrong`, a departure, or `design drift` | none: redo or drop |
 
-## Offer the grant, when a halt reads "budget spent"
-
-An order halted with a reason beginning `budget spent` was about to be dispatched when the run
-reached its ceiling. `budget` in `task.json` sets that ceiling, and the halt names the numbers.
-Put them to the person, opening with: "The build reached the limit you set on this task, in
-dispatches or in minutes, and stopped. Only you can raise it. Raise the limit in the task's
-record and the build can continue. Leave it and the build stays stopped." Then name the two
-numbers the halt holds. The spend is recomputed at every dispatch, so a grant alone brings the
-halt straight back. The person raises the ceiling first, with the task skill:
+**Budget spent.** The spend is recomputed at every dispatch, so going on alone brings the stop
+straight back. Put the numbers to the person, opening with: "The build reached the limit you set on
+this task, in dispatches or in minutes, and stopped. Only you can raise it." The person raises the
+ceiling first, with the task skill:
 ```
 /aida:task set-budget <task-id> --dispatches <n>
 ```
-`--minutes <n>` raises the other ceiling, and both may be given. A number they do not name keeps
-the value it had. Name the command and let them run it; nothing here runs it for them. Then
-`grant-attempt` clears the halt as it clears `attempts spent`. It also raises that order's attempts
-by one; say so.
+`--minutes <n>` raises the other ceiling. Name the command and let them run it. Then go on.
 
-## Offer the restart, when a halt reads "design drift"
+**A finding ruled load-bearing** leaves no fix round, so the person commits the fix on the task
+branch, in the order's own files. Then go on with `check`. It runs the checks over the last
+record's range, extended to HEAD. Every check must pass. Then it moves the record's commit to HEAD,
+under `personFix`, so `close` takes the commits. A failed check records nothing (exit 123), the
+order stays stopped, and `close` still refuses (exit 63). Repair the fix, and go on with `check`
+again, with a new answer.
 
-A halt beginning `design drift: the builder declared a departure` comes from review, not from
-`start`. Put it to the person as `references/review.md` says, with both ways out.
+**A dirty tree.** An unattended start may have moved the files a role left into a `setAside`
+folder. Copy them back from the folder the ledger names, and commit them first.
 
-A halt beginning `design drift` means `start` found the live design changed after this order
-started. That can be direct, or through a started order it depends on. The halted orders start
-over; every other order keeps what it has.
+### Redo the order
 
-A halt about an order's own design file clears itself when the drift does. Put the design back
-to what the snapshot holds, then run `start` again: it compares, finds no drift for that order,
-and removes that segment. A segment that names another order that drifted clears in the same run,
-once no order it names holds a drift of its own. This holds for a closed order too. Any other
-segment stays and the order stays halted with it. The clearing is recorded under `haltsCleared`
-in the ledger, with the halt text as it stood. A segment about the live text of a criterion clears
-the same way. The snapshot keeps that criterion's frozen copy, so put the text back word for word
-with scope's `update`, then run `start`. A segment that reads `criterion <id>, which <order>
-serves, changed since the snapshot was taken` was written by 6.0.20. That run replaced the
-snapshot's copy, so it always takes the restart. One reopen that changed the design file and a
-criterion together writes both segments. The criterion one then holds the order when only the
-file goes back. Offer the restart when the new design or the new criterion is the one to build.
-
-Put that to the person, opening with: "The design changed after this unit of work was started, so
-what was built no longer matches it. Only you can say the new design is the one to build.
-Rebuild it and its tests and code are written again; every other unit keeps what it has. A unit
-the design removed is dropped. Leave it and it stays stopped." Then name the halted
-orders and what changed in each. If they want to rebuild the halted orders against the new
-design, run:
+A redo is the route for a wrong test, a wrong order, a design change and a departure. The person
+changes the order's design or its tests first, through design, and design closes again. Open with:
+"The order is built again from its design. Its own commits are reverted, and its tests are written
+again and must fail first. Every other unit keeps what it has." Then run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh restart "<task_folder>" \
-  --reason <what changed and why these orders start over>
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh redo "<task_folder>" <order id> \
+  --because <what changed and why the order is built again>
 ```
-It refuses when no order is halted for design drift, or when the code repository's tree is not
-clean. It refuses on an autonomous implement stage too: a restart is a person's judgement. The
-reason may not hold `; earlier: `, the same refusal the grant's own reason takes, for the same
-cause. Design has to close again on the live files first. The restart takes the halted orders'
-live copies into the snapshot, and refuses with exit 13 until `design-closed.json` records a
-close over them.
+It reverts the order's own commits, newest first, each with `git revert --no-edit`. It reads them
+from its records' commit lists: its freezes, its build attempts and its fix rounds. No other order's
+commit is touched, and the history keeps every one. It moves the order's records to a dated folder,
+`implementation-<date>-<commit>/`, or `-<n>` after it when that name is taken, with `redone.json`
+holding the person's words. The ledger entry goes back to planned and keeps the list of its redos.
+The criteria it serves go back to not judged. The snapshot takes the order's live copy, so design
+must have closed on the live files (exit 13). Then run `start`, which refreshes the frozen contract
+and takes in an order design added, as before. The tests brief carries the person's words under
+`redo`.
 
-On success it moves only the halted orders' records to `implementation-<date>-<commit>/`. An
-earlier restart on the same day at the same commit can hold that name. Then the folder takes
-the next free number, `implementation-<date>-<commit>-<n>/`, starting at 2. A record is the
-order's when its name carries the order id, the way every record the script writes does. A folder counts
-too, such as the test author's `<order id>-red-runs/` and a retake's `retaken-<order id>-<n>/`. So a red run of a test that no longer exists leaves with its
-order. It writes the reason and the halted orders there as `restarted.json`, and prints that
-path. It keeps every other order's records, and the snapshot and the ledger, in place. In
-the ledger the halted orders go back to not started, and their judgements are dropped. The
-criteria they serve go back to not judged. A finished order is never redone for a change it never
-depended on. A halted order the live design no longer holds is dropped from the snapshot and the
-ledger. Its records move aside with the rest, and the summary names it. The next `start` is a
-resumed run.
+It takes any order that is not closed, and a closed order only while it is stopped. It refuses an
+order the live design no longer holds: drop it instead (exit 67). It refuses a dirty tree (exit 61).
+It refuses when the records list a commit HEAD does not hold, as after a rebase, and on a merge
+commit (exit 113). Then a person reverts that work by hand. A revert that stops on a conflict is
+taken back, with every revert before it, so the branch is where it was.
 
-The records move, and the code of the halted orders leaves the tree. The restart reads the
-branch after each halted order's first freeze commit. A retake supersedes one freeze commit and
-records it, so the first freeze can be an earlier one. An order with no freeze is read from the
-ledger's `startedFrom`. A commit that changes the order's owned files is the order's, whether or
-not a build record names it. A commit that a build or fix record names is the order's too. The
-freeze commits stay, because they hold the tests, and the next test author rewrites them. A
-commit that a later commit reverts is skipped, and so is that revert, whoever ran it.
+### Drop the order
 
-When each such commit changes only the order's owned files, the script reverts each one with
-`git revert --no-edit`, newest first. Each revert is a commit of its own. It prints one
-`reverted:` line per commit, with the order and the revert commit, and writes them into
-`restarted.json`. `reverted: none` means that no commit of a halted order was in the tree. Tell
-the person which commits were reverted. The history keeps them, so no hard reset is needed. A
-test file that a superseded freeze created, and that no later freeze touched, gets one
-`staleTest:` line with its path and that freeze. The restart reverts nothing for it. Tell the
-person that a test ruled wrong may still sit at that path.
-
-When a commit also changes a file the order does not own, the restart stops with exit 113. It
-names the commit, the order and the other files. A merge that changes the order's files stops it
-the same way, because a revert of a merge needs a person to choose its parent. Nothing is reverted, moved or written. Put it
-to the person, opening with: "This unit's code sits in a commit that also changes other files.
-A revert would undo that other work too, so only you can separate them." Offer `--split
-<commit>` for each named commit that is no merge. Run restart again with it when they agree.
-The restart then reverts only the halted order's files in that commit, in one commit, and the
-other files stay. The `reverted:` line for it ends with `its files only:` and those files, and
-`restarted.json` lists it under `split`. Or the person separates the commit by hand. When they
-say it is done, run restart again. A revert that stops on a conflict is taken back, and the restart stops.
-The reverts it committed before that are taken back too, so the branch is where it was.
-
-## Clear any other halt, once the person has acted on it
-
-A halt that reads none of `attempts spent`, `budget spent`, `design drift` or `test wrong` names
-something a person does outside this script. That is a rejected row, a finding on a non-goal, a
-fixer's scope, a finding ruled load-bearing, or a tree a role left dirty. Fix rounds spent with
-findings open halt the same way. So do a builder's stop and a role that returned no report after
-its resume. A `test wrong` halt is cleared by `retake-tests`, under Rulings
-in `references/review.md`, and `clear-halt` refuses it. Put the halt and its reason to the person, opening with: "This unit of
-work stopped on something only you can do. It waits until you say you have done it. Do what
-the reason names, then say so, and the build resumes where it stopped." Then say the reason in
-plain words. A dirty-tree halt may be followed by a `setAside` entry in the ledger, written by an
-unattended start. Then copy those files back from the folder it names, and commit them first.
-When they have repaired the test, ruled on the finding, or committed the tree, run:
+`drop` ends the order without code. Open with: "This unit of work is dropped. Its commits are
+reverted, and nothing that depends on it can start. The criteria it served stay unbuilt, and the
+task review reads them unanswered." Then run:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh clear-halt "<task_folder>" <order id> \
-  --because <what the person did about it>
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh drop "<task_folder>" <order id> \
+  --because <why the order is dropped>
 ```
-It removes the halt from the order and records the reason and the date under `haltsCleared` in
-the ledger. It prints the step the order resumes at; nothing moves the order. It refuses a halt
-the grant, the restart or the retake answers (exit 85), naming that action, and a closed order
-(exit 67). For a drift halt the refusal also names `start`, which clears a segment about the
-order's own design file once the design no longer differs. It
-refuses without the person's answer on record (exit 68), because clearing a halt is a person's
-judgement. The next section says how to record it. The reason may not hold
-`; earlier: `, for the same cause as the grant's. Then run `start` again and take the `next:`
-line.
+It reverts the order's own commits the same way, and moves its records to a dated folder with
+`dropped.json`. The order stays in the snapshot, at `dropped`. Its summary names each order that
+depends on it, directly or through another order. Each one cannot start: redo it through design,
+or drop it too. An order the design removed takes this route, so its frozen test record stops
+guarding the files a surviving order took over.
 
-A finding ruled load-bearing leaves no fix round, so the person commits the fix on the task
-branch. Put the commits in the order's own files. Clear the halt with the person's words, then
-run `build-recheck` on the order, as `references/build.md` shows. It runs the checks over the
-last record's range, extended to HEAD. Every check must pass. Then it moves the record's commit
-to HEAD and keeps the clear-halt words under `personFix`, so `close` takes the commits. The
-clearing keeps HEAD as it stood, and `build-recheck` takes only that commit. A later commit
-refuses (exit 88) and needs a new clearing: run `clear-halt` again at the new commit, with the
-person's words. A failed check records nothing (exit 123), and `close` still refuses (exit 63).
-Repair the fix, clear the halt again, and run `build-recheck` again.
+### A design change clears itself when it goes back
+
+A stop about an order's own design file, or the live text of a criterion, clears when the drift
+does. Put the design or the criterion text back to what the snapshot holds, then run `start` again.
+It compares, finds no drift for that order, and removes those reasons. A reason that names another
+order that drifted clears in the same run, once no order it names holds a drift of its own. Each
+clearing is recorded under `stopsCleared`, with the reasons as they stood.
 
 ## A person's answer
 
-Some calls are a person's decision only. In implement they are `grant-attempt`, `clear-halt`,
-`restart`, `retake-tests --because`, `start --leftovers keep`, `finish --accept-warnings`, and
-the two `--accept-deviation` keeps (exit 68). They are also `verify-record --ruling` (exit 55),
+Some calls are a person's decision only. In implement they are `go-on`, `redo`, `drop`,
+`start --leftovers keep`, `finish --accept-warnings`, and the two `--accept-deviation` keeps
+(exit 68). They are also `verify-record --ruling` (exit 55),
 `fix-brief --allow` (exit 100), and `tests-freeze` with a row a person judged (exit 70). Each one
 refuses without the person's answer on record, in every run mode. The run mode does not decide
 whether a person answered.
@@ -302,7 +244,8 @@ Claude Code shows its permission prompt for this action, and the person approves
 denied prompt records nothing, so the call still refuses. In bypassPermissions or dontAsk mode the
 hook refuses the action, because no prompt can show there. Then stop and report the step.
 
-The words are the exact value of the call's flag. For a repeated flag, `--ruling` or `--allow`,
+The step of a go-on names its choice, such as `implement go-on build`. The words are the exact
+value of the call's flag. For a repeated flag, `--ruling` or `--allow`,
 they are every value in the call's order, one per line, passed as `@/<file>`. For `tests-freeze`
 they are each `--row` a person judged, one per line. For `start` they are `keep`. A final newline
 does not count. Each refusal prints the command with the words to use.

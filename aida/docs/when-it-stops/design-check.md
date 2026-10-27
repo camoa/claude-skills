@@ -51,14 +51,14 @@ These changes are taken in place, and the order keeps its tests and attempts:
   with no done-when row takes them until its review;
 - a changed verify clause on a criterion whose frozen tests and records never named it.
 
-Any other change halts a started order for design drift. See
-[change the design mid-build](../stages/implement/drift.md) and [a work order halted](halts.md).
+Any other change stops a started order for design drift. See
+[change the design mid-build](../stages/implement/drift.md) and [a work order stopped](stopped.md).
 
 ## Why it works this way
 
 - **Each criterion has one owner.** Exactly one order's tests can prove it, so nothing is proved
   twice or not at all.
-- **A change the frozen tests never read halts nothing.** The build only stops for a change that
+- **A change the frozen tests never read stops nothing.** The build only stops for a change that
   would make what is built disagree with what is frozen.
 
 Source: skills/design/SKILL.md, skills/design/scripts/design-actions.sh, scripts/check-design.sh, skills/implement/scripts/implement-actions.sh, skills/implement/references/start.md

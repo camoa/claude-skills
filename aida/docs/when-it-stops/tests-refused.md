@@ -12,7 +12,7 @@ the tests. A few come to you. How the tests are written is on
 - **The checker doubts a test** (exit 65). AIDA asks: "The checker doubts that one new test
   proves what its criterion asks." Confirm it and it is kept. Reject it and it goes back to its
   writer. AIDA records the rejection on the order before it refuses. With nobody present, the
-  test goes back to its writer once, or the order halts. See
+  test goes back to its writer once, or the order stops. See
   [the row check](../stages/implement/row-check.md).
 - **A work order owns no test file** (exit 47). The order owns no file that the stack's test
   pattern matches, so every test would be refused. Add an owned test file in design, close design,

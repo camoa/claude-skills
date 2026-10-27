@@ -21,21 +21,21 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh review-brief "<task_folder>" <order id>
 ```
-It refuses when the order is not at `checks-passed`, when the order is halted, or when a review
+It refuses when the order is not at `checks-passed`, when the order is stopped, or when a review
 record already exists for it. **One order gets one review, ever.** Read a refusal and act on it.
 
 It writes `implementation/brief-<order id>-review.json`:
 
 - the criteria this order serves and owns, and the non-goals;
 - the order record;
-- the diff as a path. It holds the commits the order's build and fix records list, and those
-  of the records a retake moved aside. So every build attempt is in it, and another order's
-  commit stays out. A record written before the lists has its list read from its own range;
+- the diff as a path. It holds the commits the order's build and fix records list, the earlier
+  attempts' lists included. So every build attempt is in it, and another order's commit stays
+  out. A record written before the lists has its list read from its own range;
 - the frozen tests, and the builder's report path; on an order whose proof
   is `record` the diff is the project folder's whole, and `deliverables` names
   each owned file by path. The reviewer reads the document whole rather than a patch;
 - the eight check results;
-- both interface texts, and `recordBefore` when a re-check read an amended record;
+- both interface texts, and `recordBefore` when go-on's check read an amended record;
 - the path the reviewer's findings go to;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null;
 - `recipes`, the implement recipe for each framework, which the reviewer answers one by one.
@@ -51,7 +51,7 @@ cites the criterion." The brief carries both texts, unchanged, and the reviewer 
 nothing else. A person shown the two texts would be making the comparison the reviewer is about
 to make, from the same texts (live-run row 88).
 
-After a re-check read an amended interface record, the brief's `interface` also holds
+After go-on's check read an amended interface record, the brief's `interface` also holds
 `recordBefore`, the text the attempt recorded. The reviewer reads both records beside the
 declaration. An amendment that names an element the diff does not expose is a finding.
 
@@ -109,16 +109,17 @@ one such finding on a file the evidence names, and prints a `paired:` line. Exit
 on a file the evidence does not name, and two candidates for one answer. The findings file answers each item of the brief's
 `recipes` once. Otherwise the script refuses (exit 3): run `review-brief` again for this order,
 then dispatch the reviewer again. On a hit it refuses (exit 107), writes no review record, and
-halts the order for design drift. The halt names the file and the line number, or the recipe.
+stops the order for design drift. The stop reason names the file and the line number, or the
+recipe.
 What is wrong is the design, or a recipe it relies on, so no fixer can repair it. Put it to the
 person, opening with: "What was built departs from the design of this unit of work. Only you can
 say which one stands. Change the design and the unit is built again. Keep the departure and the
 review goes on." Then say what that line or that recipe answer says. To
-change the design, amend the order in design and close design, then offer the
-restart in `references/finish.md`. To keep the departure, run `review-record` again with
-`--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger hold the
+change the design, amend the order in design and close design, then offer the redo in
+`references/finish.md`. To keep the departure, run `review-record` again with
+`--accept-deviation <their reason>`. The review record and `stopsCleared` in the ledger hold the
 reason, and the order goes on as below. The flag refuses without the person's answer on record (exit 68).
-Unattended, nothing halts: `review-record` writes the record with the departure as `deviationPending`, prints a
+Unattended, nothing stops: `review-record` writes the record with the departure as `deviationPending`, prints a
 `departurePending:` line, and the order goes on as below. A finding the reviewer marks
 `declaredDeparture` is that same departure. It goes `pending` and waits with the departure, so no
 fixer undoes it. The task review lists it in the departure's decision. A `rebuild` answer there
@@ -136,16 +137,17 @@ refuses without the person's answer on record (exit 55). Without a kept departur
 (exit 3). After `finish`, the keep refuses (exit 50), and the task review takes the answer.
 
 An information item the reviewer marks `departsFromDesign` true is a note, not a finding. It never
-halts the order or the orders after it, in either run mode. `review-record` holds it as
+stops the order or the orders after it, in either run mode. `review-record` holds it as
 `deviationPending` and prints a `departurePending:` line. The person decides it at the task
 review: keep it or rebuild. It waits only when no departure above was found, so it never hides one.
 The record holds one departure. So when a departure above was found, the item is not put to the
 person; it stays in the record's `information` list only. A person present may keep the item at
-once, by the route above. The review record and `haltsCleared` in the ledger hold the reason,
-though the order never halted.
+once, by the route above. The review record and `stopsCleared` in the ledger hold the reason,
+though the order never stopped.
 
-Unattended, a finding that hits a non-goal halts the order there, naming the non-goal. A person
-clears that halt with `clear-halt`, in `references/finish.md`, once they have ruled. Interactive,
+Unattended, a finding that hits a non-goal stops the order there, naming the non-goal. A person
+goes on with `fix` or `close` once they have ruled, under "Leave a stop" in
+`references/finish.md`. Interactive,
 it is actionable like any other finding, and it goes to the person with the rest. No open
 actionable finding: the order is reviewed and clean, so go to Close.
 
@@ -180,7 +182,7 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh fix-brief "<task_folder>" <order id> \
   [--allow <path relative to codePath>]...
 ```
-It refuses when nothing is open, when the rounds are spent, when the order is halted, or when the
+It refuses when nothing is open, when the rounds are spent, when the order is stopped, or when the
 last fix round has not been verified yet. A resumed run hits that last refusal most. A round
 recorded but never carried through `verify-record` still counts as open, so the next round may not
 start over it. It also refuses (exit 53) when every open finding has an empty fix scope. Such a
@@ -290,10 +292,9 @@ the files with `fix-brief --allow`, and the next round can fix it. Or rule on it
 Rulings below.
 That is for a finding no round can reach. A frozen test, a check only you can make, or a
 change the order's done-when does not allow." Then say the finding in plain words and name the files
-it asked for. Unattended halts the order, naming the
-finding, and `clear-halt` is the person's way past. Its reason may not hold the text
-`; earlier: `, the same refusal every halt reason applies: that text is how one halt is joined to
-another, and a reason carrying it would forge one.
+it asked for. Unattended stops the order, naming the finding. The person goes on with `fix`, and
+`go-on --owns` gives the order the file the fixer needed, under "Leave a stop" in
+`references/finish.md`.
 
 The commit the round began from is `fix-brief`'s own `headNow`. Equal to the current commit
 refuses (exit 71), and not an ancestor of it (exit 3), the rule `build-record` applies. One case is
@@ -305,7 +306,7 @@ The cited file must exist at HEAD. When it changed since the review, the verifie
 cited code at HEAD and the report's run for it, and addressed closes the finding. So no ruling is
 needed for a finding that is real and already fixed. When it is unchanged since the review, the
 claim disputes the reviewer. An addressed reading then makes the finding pending for a person, and
-an unattended order halts. Each `--scope-insufficient` needs a line
+an unattended order stops. Each `--scope-insufficient` needs a line
 `Outcome: <id>: scope-insufficient` in the report, and the verifier may not read that finding
 addressed in that round (exit 52). A round with no commit addresses no check finding. With a person
 present, a finding the verifier read not-addressed at the cap goes to the repair round above.
@@ -319,7 +320,7 @@ did not commit, so this round cannot be recorded. Only you can say whether they 
 Commit them and the round is recorded and checked. Discard them and the round starts over." Then
 name the repository and the files git
 lists. Unattended
-halts the order with that reason.
+stops the order with that reason.
 
 This re-runs seven of the eight checks, with the same order-tests floor build.md names. On a
 `gate` order the floor is `configuration-gate`, and on a `record` order `done-when`. A `record`
@@ -331,15 +332,15 @@ spends the round and leaves every finding open. `review-brief` is never run agai
 criterion and its owned files. It reads low when coding-standards alone stopped the round, and
 medium otherwise. The verifier does not see it. The next round's checks decide it: all met
 addresses it, and a failure keeps it open. At the cap it follows the same rules as any other
-finding: a ruling, a halt, or pending on a light task.
+finding: a ruling, a stop, or pending on a light task.
 
 A check can stop the round for a cause outside the fix range. Examples are a broken environment,
-or a file the design later gave the order. Repair that cause, then run `build-recheck` with
-`fix-record`'s recipe flags. It runs the round's checks again over the unchanged range, as
-references/build.md says. The `next:` line offers it when only those rows stopped the round.
-Run it before `verify-brief` when you can, so no check finding opens. After `verify-record`, a
-pass addresses the check finding, open or pending. When the cap halt names only check findings,
-a pass also clears that halt. A check that fails again leaves both in place.
+or a file the order should own. The next round answers it while rounds remain. At the cap,
+unattended, the order stops, and when every open finding is a check finding the stop allows
+`go-on --continue check`. Repair the cause first, or give the order the file with `--owns`. It
+runs the round's checks again over the unchanged range, as references/build.md says. A pass
+addresses the check finding, open or pending, and clears the stop. A check that fails again
+leaves both in place.
 
 A repeat call at a commit this round already recorded finishes the write when the ledger never
 moved past it, a crash between the two, rather than spending a round twice; otherwise it refuses
@@ -354,10 +355,9 @@ reads the round, so later code is not that round. Run `verify-record` with the r
 person present, the repair round above begins at the last record and holds the later code.
 Unattended, the cap holds, and `close` refuses that code (exit 63).
 
-**When `fix-record` halted the order, stop here.** Do not dispatch the reviewer in verify
-mode: `verify-record` refuses on a halted order. Report the halt instead, the same way a halt at
-the build step is reported. A person clears it with
-`clear-halt` and then rules on the open findings through `verify-record`.
+**When `fix-record` stopped the order, stop here.** Do not dispatch the reviewer in verify
+mode: `verify-record` refuses on a stopped order. Report the stop instead, the same way a stop
+at the build step is reported. A person goes on with `fix`, and the round is verified after.
 
 Open a dispatch record for the reviewer again, the same way review mode did, with nothing denied
 and nothing allowed:
@@ -372,7 +372,7 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh verify-brief "<task_folder>" <order id>
 ```
-It refuses when the order is not at `fixed`, when it is halted, when nothing is open, or when this
+It refuses when the order is not at `fixed`, when it is stopped, when nothing is open, or when this
 round is already verified. It refuses when HEAD is not where the fix record left it (exit 63). It writes `implementation/brief-<order id>-verify-<round>.json`. The
 brief holds the open findings the fixer received, the scope the fixer was given, the fix diff as a
 path, and the fixer's report as a path. It names the path the verdicts go to, `implementation/verify-<order id>-<round>.json`.
@@ -404,7 +404,7 @@ rounds are spent, `verify-record` above refuses when a finding is still open and
 it. Nothing is written yet, so this is a retry of that same call, not a new one, and each open
 finding needs a ruling. Once that round is on the record, the ruling is the same call with the
 rulings and no verdicts file. A finding the repair round above may take needs no ruling yet, and
-never halts the order. `verify-record` records the round and prints a line that names it. Put
+never stops the order. `verify-record` records the round and prints a line that names it. Put
 it to the person: run the repair round, or rule the finding. Before the cap: a finding the last fixer reported under
 `--scope-insufficient` may be ruled at that round's `verify-record`. The fixer's own report is
 the evidence that no round can reach it. When the round was verified first, the ruling is the
@@ -421,12 +421,13 @@ the fix rounds cannot repair. You decide what each one is. Wrong: the reviewer w
 and the work is accepted as it is. Deferred: the problem is real but put off to a later task,
 and the work is accepted. Load-bearing: the work cannot be accepted with it, so this unit of
 work stops until you act. Test-wrong: the problem is real and the fix needs a frozen test
-changed, so the tests are retaken. A model may not make these calls with nobody watching." Then
+changed, so the order is built again with new tests. A model may not make these calls with nobody
+watching." Then
 say each finding in plain words, with what it cites. At the cap, unattended, `verify-record`
-marks each open finding with an empty fix scope pending, as `fix-brief` does. It halts the order
+marks each open finding with an empty fix scope pending, as `fix-brief` does. It stops the order
 only for an open finding that has a fix scope. On a light task it also marks each open low
-finding pending, and the person rules it at the task review. A medium or high finding halts the
-order. A light order keeps its one round when a person later sets the task interactive, so the
+finding pending, and the person rules it at the task review. A medium or high finding stops the
+order. A person goes on with `fix` or `close`, under "Leave a stop" in `references/finish.md`. A light order keeps its one round when a person later sets the task interactive, so the
 ruling is taken at once.
 
 Run the same call again, with one `--ruling` flag added per finding ruled:
@@ -444,45 +445,24 @@ When the round is already on the record, or no round ran, leave the verdicts fil
 The round's verdicts stand and no second round is recorded. A verdicts file given anyway is
 ignored, and the summary says so in its `verdicts:` line.
 
-`wrong` and `deferred` let the order close with the finding recorded. `load-bearing` halts the
-order, the finding named as the reason, and `clear-halt` is what follows once the person has
-acted on it. A fix the person commits then goes through `build-recheck` before `close`, under
-"Clear any other halt" in `references/finish.md`. Interactive, this reaches the person as an escalation, not
-a question with an obvious answer. A ruling missing for an open finding at the cap refuses. A
-ruling's own reason may not hold `; earlier: `, the same refusal `--scope-insufficient` above
-takes, for the same reason.
+`wrong` and `deferred` let the order close with the finding recorded. `load-bearing` stops the
+order, the finding named as the reason. The person commits the fix in the order's own files. Then
+they go on with `check`, under "Go on" in `references/finish.md`. It runs the checks over those
+commits before `close`. Or the person goes on with `close`, and the finding stays listed.
+Interactive, this reaches the person as an escalation, not a question with an obvious answer. A
+ruling missing for an open finding at the cap refuses.
 
-`test-wrong` halts the order with `test wrong: <finding id>` as the reason, and `clear-halt`
-refuses that halt (exit 85). A `test-wrong` and a `load-bearing` ruling in one call halt on the
-test-wrong text. The load-bearing ruling moves aside with the review record, and the review
-after the rebuild raises the finding again or not. Once the round is on the record, the person
-reaches the retake with that same call, the `test-wrong` ruling and no verdicts file. The route
-is the retake:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh retake-tests "<task_folder>" <order id>
-```
-It moves the order's build, review, fix and verify records into
-`implementation/retaken-<order id>-<n>/`, nothing deleted, and sets the order back to
-`tests-frozen`. The attempt counter stays: the attempts were real, against the old test. The
-fix rounds go back to zero, because the review record they counted moved. It
-records the retake under `retakes` on the ledger entry, clears the halt with the finding as the
-reason, and prints `next: tests <order id>`. It refuses an order not halted for a test ruled
-wrong (exit 99), unless a person rules at `code-written` with `--because`, under "Offer the
-grant" in `references/finish.md`. From there the route is the wrong-test route under the builder's stop in
-`references/build.md`. Open the author's dispatch again for this order. It corrects the test
-the finding names and nothing else. Run the coding-standards row, then the checker over the
-affected rows, then `tests-freeze` with every flag the first freeze took. That freeze prints `retaken:`; the
-order is at `tests-frozen`, so exit 76 does not fire. Then build again. When the attempts are
-already spent, `build-brief` refuses (exit 41) and the grant in `references/finish.md` answers it.
-
-The retake's own brief carries the ruled finding, the criterion it names, its evidence and its
-severity. It carries the file and lines it cites, the ruling reason, and the rows the order
-already froze. The dispatch stays the role, the run mode and the two paths.
+`test-wrong` stops the order with `test wrong: <finding id>` as the reason, and that reason allows
+no go-on. A `test-wrong` and a `load-bearing` ruling in one call stop on the test-wrong text. Once
+the round is on the record, the person reaches it with that same call, the `test-wrong` ruling and
+no verdicts file. The route is a redo, under "Redo the order" in `references/finish.md`. The person
+changes the test through design, and design closes again. Redo reverts the order's commits, moves
+its records aside and sets it back to planned. The tests brief carries the person's words. The test
+author writes the tests again, the checker reads them, and `tests-freeze` freezes them, failing
+first. Then build again.
 
 When the finding's cause is the done-when row's own wording, the design is wrong and not only the
-test. Rule the finding, correct the design, then take the restart in `references/finish.md`. A
-retake would correct a test against a row that is still wrong, because the tests were frozen
-against the old wording.
+test. Rule the finding, correct the design, then redo the order.
 
 ## Close
 
@@ -495,7 +475,8 @@ verified. It also refuses when the code repository's tree is not clean, or when 
 the last record left it. Another order's commits, as review-record reads them, do not count, and
 the range then ends at the last record. Nothing is open then, so no round or ruling can take the
 later commits.
-A person moves the branch back, and that work goes to a follow-up task, or runs `restart`. On success it writes `lastStep = "closed"` and the commit range the
+A person moves the branch back, and that work goes to a follow-up task, or redoes the order. On
+success it writes `lastStep = "closed"` and the commit range the
 order produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
 order the tree, HEAD and the range are the project folder's, from the last attempt. The

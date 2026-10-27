@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Fixture db: the restart reverts the halted orders' commits, and start and
-# tests-brief then say nothing of them (live-run row 94, gap row 252).
+# Fixture db: a redo reverts the order's own commits, read from its records' commit lists, and
+# the tests brief then carries the person's words (live-run row 94, gap row 252, 6.1.0 batch 3a).
 # Builds a project and two tasks, each with two work orders (wo1 proved by tests and owning
-# a.php, wo2 a gate order owning b.php), freezes and builds wo1, changes wo1's design, halts it,
-# and restarts. Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup
+# a.php, wo2 a gate order owning b.php), freezes and builds wo1, changes wo1's design, which stops
+# it, and redoes it. Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup
 # lives in functions, copied from run-cy-fixture.sh and run-cs-fixture.sh.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
@@ -103,7 +103,7 @@ research_task() {
 close_design() { must "$DESIGN" account "$TASK" --id wo1 --finding prior#1; must "$DESIGN" --run-mode interactive close "$TASK" --no-recipe; }
 
 # wo1 is proved by tests and owns a.php; wo2 is a gate order owning b.php. Neither depends on
-# the other, so a change to wo1 halts wo1 alone.
+# the other, so a change to wo1 stops wo1 alone.
 design_task() {
   must "$DESIGN" start "$TASK"
   must "$DESIGN" create "$TASK" --title "change a" --criteria-served c1 --criteria-owned c1 \
@@ -252,21 +252,21 @@ freeze_and_build_wo1() {
     --started-at "$FREEZE" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "fake=$RECIPES/checks.md"
 }
 
-# halt_wo1: wo1's interface changes, design closes again, and the resumed start halts wo1.
-halt_wo1() {
+# stop_wo1: wo1's interface changes, design closes again, and the resumed start stops wo1.
+stop_wo1() {
   must "$DESIGN" update "$TASK" --id wo1 --interface "a new one"
   close_design
   must "$IMPLEMENT" start "$TASK"
-  [ "$(ledger_halt wo1)" = "design drift: the design file for wo1 has changed since the snapshot was taken" ] \
-    || { printf 'setup failed: wo1 did not halt for drift\n'; exit 1; }
+  [ "$(ledger_stop wo1)" = "design drift: the design file for wo1 has changed since the snapshot was taken" ] \
+    || { printf 'setup failed: wo1 did not stop for drift\n'; exit 1; }
 }
 
 # line <file> <key>: the summary line for one key, with its parenthesised order when any.
 line() { grep "^$2[:(]" "$1" | head -1; }
-# ledger_halt <unit>: the order's halt reason from the ledger.
-ledger_halt() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | .haltedBecause // "none"' "$TASK/implementation/ledger.json"; }
-# restarted <jq filter>: one field of the newest restart record, the path the restart printed last.
-restarted() { jq -r "$1" "$RESTARTED"; }
+# ledger_stop <unit>: the order's stop reasons from the ledger, joined by "; ", or none.
+ledger_stop() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | (.stopped // []) | if length == 0 then "none" else map(.reason) | join("; ") end' "$TASK/implementation/ledger.json"; }
+# redone <jq filter>: one field of the order's newest redo entry in the ledger.
+redone() { jq -r --arg id wo1 ".orders[] | select(.id == \$id) | .redos | last | $1" "$TASK/implementation/ledger.json"; }
 # short <sha>: the first seven characters.
 short() { printf '%s' "$1" | cut -c1-7; }
 
@@ -274,30 +274,31 @@ make_code_repo
 make_project
 write_recipes
 
-echo "--- wo1 frozen and built, then halted for drift: the restart reverts the build"
+echo "--- wo1 frozen and built, then stopped for drift: the redo reverts the build and the freeze"
 build_task t1
 freeze_and_build_wo1
-halt_wo1
-pa "$TASK" "implement restart" "" "wo1 interface changed"
-rc="$(try "$ROOT/restart-t1.txt" "$IMPLEMENT" restart "$TASK" --reason "wo1 interface changed")"
-expect "restart exits 0" "$rc" "0"
-RESTARTED="$(tail -1 "$ROOT/restart-t1.txt")/restarted.json"
-REVERT="$(git -C "$WT" rev-parse HEAD)"
-expect "the record lists the build commit and its revert" "$(restarted '[.reverted[] | .order + " " + .commit + " " + .revert] | join(",")')" "wo1 $BUILD $REVERT"
-expect "one reverted: line names the build" "$(grep '^reverted: ' "$ROOT/restart-t1.txt")" "reverted: $(short "$BUILD") wo1 by $(short "$REVERT")"
-expect "HEAD is the revert of the build" "$(git -C "$WT" log -1 --format=%B | grep -c "This reverts commit $BUILD.")" "1"
-expect "a.php is back, and the freeze stays" "$(cat "$WT/a.php") $(git -C "$WT" merge-base --is-ancestor "$FREEZE" HEAD && echo held)" "a held"
+stop_wo1
+pa "$TASK" "implement redo" wo1 "wo1 interface changed"
+rc="$(try "$ROOT/redo-t1.txt" "$IMPLEMENT" redo "$TASK" wo1 --because "wo1 interface changed")"
+expect "redo exits 0" "$rc" "0"
+REVERT_FREEZE="$(git -C "$WT" rev-parse HEAD)"
+REVERT_BUILD="$(git -C "$WT" rev-parse HEAD~1)"
+expect "the ledger lists the build and the freeze, newest first, with their reverts" \
+  "$(redone '[.reverted[] | .commit + " " + .revert] | join(",")')" "$BUILD $REVERT_BUILD,$FREEZE $REVERT_FREEZE"
+expect "the reverted: line names both" "$(grep '^reverted: ' "$ROOT/redo-t1.txt")" \
+  "reverted: $(short "$BUILD") by $(short "$REVERT_BUILD"), $(short "$FREEZE") by $(short "$REVERT_FREEZE")"
+expect "HEAD is the revert of the freeze" "$(git -C "$WT" log -1 --format=%B | grep -c "This reverts commit $FREEZE.")" "1"
+expect "a.php is back, and the test file is gone" "$(cat "$WT/a.php") $([ -e "$WT/tests/ATest.sh" ] && echo held || echo gone)" "a gone"
+expect "redone.json holds the person's words" "$(jq -r '.because' "$(redone '.movedTo')/redone.json")" "wo1 interface changed"
 
-echo "--- start and tests-brief after the restart say nothing"
+echo "--- start and tests-brief after the redo"
 rc="$(try "$ROOT/start-t1.txt" "$IMPLEMENT" start "$TASK")"
 expect "start exits 0" "$rc" "0"
-expect "no partialBuild line" "$(grep -c '^partialBuild' "$ROOT/start-t1.txt")" "0"
 rc="$(try "$ROOT/brief-t1.txt" "$IMPLEMENT" tests-brief "$TASK" wo1)"
 expect "tests-brief exits 0" "$rc" "0"
-expect "the brief carries no treeHolds" "$(jq -r 'has("treeHolds")' "$TASK/implementation/brief-wo1-tests.json")" "false"
-expect "the summary prints no treeHolds line" "$(grep -c '^treeHolds' "$ROOT/brief-t1.txt")" "0"
+expect "the brief carries the redo" "$(jq -r '.redo.because' "$TASK/implementation/brief-wo1-tests.json")" "wo1 interface changed"
 
-echo "--- another order's commit follows wo1's: the restart reverts wo1's alone"
+echo "--- another order's commit follows wo1's: the redo reverts wo1's alone"
 build_task t2
 freeze_and_build_wo1
 must "$IMPLEMENT" tests-freeze "$TASK" wo2 --test-recipe "$TEST_RECIPE_FLAG" --checklist "c2=look"
@@ -305,12 +306,11 @@ must "$IMPLEMENT" tests-freeze "$TASK" wo2 --test-recipe "$TEST_RECIPE_FLAG" --c
 must "$IMPLEMENT" build-record "$TASK" wo2 --interface "$ROOT/iface.md" --report "$ROOT/report.md" \
   --started-at "$BUILD" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "fake=$RECIPES/checks.md" \
   --implement-recipe "fake=$RECIPES/implement.md"
-halt_wo1
-pa "$TASK" "implement restart" "" "wo1 interface changed"
-rc="$(try "$ROOT/restart-t2.txt" "$IMPLEMENT" restart "$TASK" --reason "wo1 interface changed")"
-expect "restart exits 0" "$rc" "0"
-RESTARTED="$(tail -1 "$ROOT/restart-t2.txt")/restarted.json"
-expect "the record lists wo1's build alone" "$(restarted '[.reverted[] | .order + " " + .commit] | join(",")')" "wo1 $BUILD"
+stop_wo1
+pa "$TASK" "implement redo" wo1 "wo1 interface changed"
+rc="$(try "$ROOT/redo-t2.txt" "$IMPLEMENT" redo "$TASK" wo1 --because "wo1 interface changed")"
+expect "redo exits 0" "$rc" "0"
+expect "the ledger lists wo1's build and freeze alone" "$(redone '[.reverted[] | .commit] | join(",")')" "$BUILD,$FREEZE"
 expect "a.php is back and wo2's b.php stays" "$(cat "$WT/a.php") $(cat "$WT/b.php")" "a b2"
 
 printf 'passed %s of %s\n' "$PASS" "$TOTAL"

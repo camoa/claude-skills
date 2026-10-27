@@ -137,24 +137,10 @@ It reads the frozen copy and never the live files. It writes exactly eight thing
   summary says the author has no runner to read;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null.
 
-A ninth, `treeHolds`, only after a restart or a retake left this order's build or fix commits on the
-branch. It holds those commits and two sentences. The tree holds this unit's own earlier code, so a
-test that passes on arrival is suspect. And the author may give one of those commits to
-`--locks-in`, below, written `commit:<id>`. The summary prints the commits on a `treeHolds:` line.
-After a rebase, `notFound` names each commit with no copy here that can be cited, and why. The
-author cannot cite one. If a test arrives green on that code, the author reports it green on arrival
-and names the commit.
-
-A tenth, `retake`, only while a `test-wrong` ruling is still unanswered by a freeze. It holds
-the ruled finding, the criterion it names, its evidence, its severity, and the file and lines it
-cites. It holds the ruling reason too, read from the review record the retake moved. It holds
-the rows and the test globs the order already froze, and those rows are keyed by criterion. So
-the criterion the finding names says which rows to correct.
-And it says what the author must do: correct the tests the finding names,
-and leave every other frozen row alone. Its `redAgain` list names each frozen test with a red run
-in a file that holds a test of the finding's criterion, the same way `rowsRejected` does below. A
-record a person removed is named under `absent`, and the brief carries what is left. The summary
-prints a `retake:` line.
+A ninth, `redo`, only on an order a person redid that has not frozen again. It holds the person's
+words, the date, and the folder the order's records moved to. Redo reverted the order's own
+commits, so no earlier test or code of it is in the tree. Its `whatToDo` asks for the tests
+written fresh from the brief. The summary prints a `redo:` line.
 
 `rowsRejected`, only while a row rejected at the checkpoint below stands. It holds each row's
 key, the checker's note, and the person's words verbatim when a person rejected it. Its `redAgain` list names each
@@ -168,11 +154,11 @@ below. Pass the same globs the freeze takes. Without them the key is never writt
 at the freeze is the only check left. The summary prints a `deliverableIsTests:` line.
 
 One more key is for the freeze, not the author. `roundStartedAt` is the time this order's test
-round began. A brief written again for a retake or a rejected row keeps the earlier time, because
+round began. A brief written again for a rejected row keeps the earlier time, because
 a test file that the repair does not edit keeps its red runs. A test in an edited file does not,
 because the freeze compares each red with its file. It keeps the time only while the order and
-its criteria are unchanged. A design change, or a restart that moves the brief aside, starts a
-new round.
+its criteria are unchanged. A design change, or a redo that moves the brief aside, starts a new
+round.
 
 It prints the brief's path and counts, never the brief.
 
@@ -284,16 +270,6 @@ every owned file is a test file or a `--support` file (exit 118), before anythin
 the author with `dispatch-open --resume`, as for exit 27. An owned directory leaves the implementer
 a file to write, so it refuses nothing. The build step then dispatches no implementer, as
 `references/build.md` says.
-
-**A test of the order's own work names a commit, not code.** After a retake the tree still holds
-this order's earlier build, so a test of its done-when arrives green. The code that satisfies it is
-the order's own, which the author may not read, and no interface record of this order exists yet. So
-the author gives `--locks-in` one of the build or fix commits the brief carries under `treeHolds`,
-written `commit:<id>`. The prefix is what marks a commit, so a reason without it stays prose
-whatever it looks like. The freeze checks the commit is this order's own and is on the branch, and
-refuses another commit (exit 101) or a malformed id (exit 3). The author reads no source. It names
-a commit the brief already printed. This is honest. The code is on the branch because a retake
-kept the build and corrected only the test.
 
 **A done-when clause that asserts an absence gets no test, and goes to review.** Such a clause says
 the change added nothing of a named kind. No second engine for one job. No new dependency. No
@@ -449,9 +425,7 @@ carries each recorded row itself and names them on a `rowsCarried:` line (gap ro
 not carry a recorded row whose test file changed after the verdict file was written. Exit 64 then
 names that row, and it goes to the checker again. Exit 64 for a missing row also records the confirmed rows it was given.
 Their notes then survive the next checker's verdict file. Freeze once every row for this order
-reads confirmed; that freeze clears both records. A note may not hold the text
-`; earlier: `. This stage joins one halt reason to another with that text, so a note
-carrying it would forge a halt nobody wrote. `tests-freeze` refuses the flag rather than write it.
+reads confirmed; that freeze clears both records.
 
 **Unattended, there is nobody to ask.** A rejected row becomes
 `--row <criterion id>=rejected::model::<its note>`. `tests-freeze` reads the checker's verdict file
@@ -460,12 +434,13 @@ test author once, the way a person's rejection does. The refusal (exit 65) recor
 `rowsRejected` with the checker's note, and adds its key to `rowsSentBack`. Run `tests-brief`,
 dispatch the test author fresh, then put the `checkAgain` rows to a fresh checker. The author
 rewrites the tests and never answers the rejection. Only the checker's next verdict confirms the row.
-Every other rejection halts the order, with the checker's note as the reason. That is a row
+Every other rejection stops the order, with the checker's note as the reason. That is a row
 marked `"repair": "row"`, a row in `rowsSentBack` already, or an order with no test author.
 A rejection that says the requirement is wrong needs design or a person, and no model may settle
-it. A second rejection of one row means the author could not meet the note. Report the halt, and
-take the next ready order instead. A person clears it with `clear-halt` once the test or the
-design is repaired, in `references/finish.md`.
+it. A second rejection of one row means the author could not meet the note. Report the stop, and
+take the next ready order instead. A person who judges the row at a second freeze then goes on
+with `build`. A person who changes the tests or the row redoes the order, under "Leave a stop" in
+`references/finish.md`.
 
 **A person's row needs a person.** A row judged `person` on an autonomous run refuses, because
 nobody was there to say it. A row judged `model` is accepted on both runs, because the checker runs
@@ -482,7 +457,6 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
   --test-recipe <framework>=<path to the test-execution recipe> \
   --implement-recipe <framework>=<path to the implement recipe> \
   --locks-in <test name>=<one sentence naming the existing code that satisfies it> \
-  --locks-in <test name>=commit:<id of this order's own build or fix commit> \
   --test-glob <pattern from the implement recipe> \
   --checklist <criterion id>=<the verification sentence> \
   --row <criterion id>=<confirmed|rejected>::<person|model>::<note> \
@@ -513,8 +487,8 @@ step. A `gate`, `record` or `observe` order freezes with no test row, and each r
 An `observe` order owes no row but its absence rows: the freeze accepts it with nothing else.
 It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
 would rewind the step and leave a spent attempt counter and a stale build record for tests that no
-longer exist. Use `references/finish.md`'s restart when the design moved; this order goes forward
-from here, not back.
+longer exist. Use `references/finish.md`'s redo when the design or a test is wrong; otherwise
+this order goes forward from here, not back.
 
 The script checks the file exists, sits inside the code repository, and matches the framework's own
 declared pattern. It checks every machine-verified criterion this order owns has a test (a `gate`
@@ -528,12 +502,9 @@ different: each order that serves it needs its checklist line, owned or not (exi
 names neither a criterion this order serves or owns nor this order's id refuses (exit 31). A record
 that would hold no row refuses (exit 74).
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
-place. A test with neither refuses (exit 33). A `--locks-in` reason written `commit:<id>` must
-name one of this order's own build or fix commits on the branch. An id that is not hexadecimal,
-or is shorter than seven characters, refuses (exit 3). An id that is not this order's own refuses
-(exit 101). A reason with no `commit:` prefix is prose and names the existing code.
+place. A test with neither refuses (exit 33). A `--locks-in` reason names the existing code.
 A `--red` file written before the brief's `roundStartedAt` refuses (exit 109). So does one written
-before its test file last changed. Either is the run of an earlier test, for example one a restart
+before its test file last changed. Either is the run of an earlier test, for example one a redo
 moved aside. The message names each file and both times. Its last line, `redAgain:`, holds the
 names of those tests as a JSON list. Run each test again and pass the new output. The comparison is
 per file, not per test. Many frameworks keep several tests in one file, so an edit to one test

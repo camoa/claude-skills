@@ -18,9 +18,9 @@ When AIDA cannot work out the trunk, it says so and goes on. See
 
 ## Uncommitted files
 
-- **Exit 61.** The tree holds uncommitted work. A record step, `close`, `finish`, a restart, and
-  review's checks all refuse it. Commit the work, then run the step again. On an unattended run
-  the record step also halts the order; clear the halt after you commit.
+- **Exit 61.** The tree holds uncommitted work. A record step, `close`, `finish`, a redo, a drop,
+  and review's checks all refuse it. Commit the work, then run the step again. On an unattended
+  run the record step also stops the order; AIDA goes on after you commit.
 - **Exit 104 at `start`.** A role stopped mid-run left files, or an install changed one, such as
   `package-lock.json`. Commit a file to keep it, keep the files for this run only, or set them
   aside. The choices, and where set-aside files go, are on
@@ -33,11 +33,10 @@ When AIDA cannot work out the trunk, it says so and goes on. See
   verifier has read the round yet, AIDA records the round again at the new commit, and no round
   is spent.
 - **At an order's close, exit 63.** Commits landed after the order's last record, and nothing is
-  open to take them. When they are your fix after a finding you ruled load-bearing, clear the
-  halt, then let AIDA run `build-recheck`. See [the review of one work order](order-review.md).
-  Otherwise move the branch back to the commit the message names, and put that later work in a
-  follow-up task. Or run the restart, which sets every order's records aside. See
-  [a work order halted](halts.md).
+  open to take them. When they are your fix after a finding you ruled load-bearing, AIDA goes on
+  with the checks over them. See [the review of one work order](order-review.md). Otherwise move
+  the branch back to the commit the message names, and put that later work in a follow-up task.
+  Or redo the order. See [a work order stopped](stopped.md).
 
 ## The branch was rewritten
 

@@ -214,7 +214,7 @@ expect "the summary names both" \
   "$(grep -cxF "deniedReads: $EVIDENCE, src/engine" "$OUT")" "1"
 expect "next asks a person to rule first" "$(grep -cF "next: $RULE" "$OUT")" "1"
 expect "next names the design route" \
-  "$(grep -c 'To change it, design update on wo2, close design, start, then restart$' "$OUT")" "1"
+  "$(grep -c 'To change it, design update on wo2, close design, then redo the order$' "$OUT")" "1"
 
 echo "--- deny: wo1's records are readable to wo2, the rest stays denied"
 (cd "$WT" && env -u CLAUDE_PLUGIN_ROOT "$SH" "$IMPLEMENT" dispatch-open "$TASK" implementer wo2) >"$OUT" 2>&1

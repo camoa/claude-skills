@@ -96,12 +96,12 @@ takes the cheap route above. Once implementation has a snapshot, an order `creat
 the build at the next `start`, after this close. A defect that a review found is fixed on the
 task branch, and implementation's `finish` runs again.
 
-Four changes do not halt an order that implementation already started: an added owned file, an
+Four changes do not stop an order that implementation already started: an added owned file, an
 `account` call, a reason added with `update --append-reasoning`, and a row marked with
 `update --absence-reviewed`. Once design closes again,
 the next `start` takes that order's live copy in place, even when the order closed. Any other
-change to a started order halts it for design drift at the next `start`. Two routes lead back.
-Restore the design and `start` clears the halt. Or take the restart in the implement skill's
+change to a started order stops it for design drift at the next `start`. Two routes lead back.
+Restore the design and `start` clears the stop. Or take the redo in the implement skill's
 `references/finish.md`, which rebuilds the order against the new design. The cheap reopen stays cheap for an order that has not started.
 
 Then start design:
@@ -434,8 +434,8 @@ through the script with its reason:
 The script deletes the order's files and records the id and the reason in
 `design-removed.json`. The close copies that list into `design-closed.json`. A removed id is
 never minted again. The script refuses an order that implementation started. Fold that order
-into the order that takes its work with `merge`, and implementation's `restart` sets its
-records aside. It also refuses an order that another order depends on. It also refuses the only
+into the order that takes its work with `merge`, and implementation's `drop` sets its records
+aside. It also refuses an order that another order depends on. It also refuses the only
 order that serves or owns a criterion of the contract. Move the dependency or the criterion
 with `update` first. A finding that the removed order accounted for shows in `check`. Account
 for it again.
@@ -447,7 +447,7 @@ numbers. Record it with the survivor and a reason:
   --id <woId> --merged-into <woId> --reason "<why the order was folded>"
 ```
 The script refuses an id that is still an order, and an id the record already holds. `check`
-lists each such id under `unrecordedIds:`. Recording changes no order, so it halts nothing. Then
+lists each such id under `unrecordedIds:`. Recording changes no order, so it stops nothing. Then
 run `check`, `close` with the verdict the last `design-closed.json` records, and `distill`, as for
 an owned-file reopen. The close copies the entry into its record.
 
@@ -549,7 +549,7 @@ the field files alone and leaves the displays to other orders cannot import on i
 same rule holds for code. An order that changes a class owns every file the recipe couples to
 that class. A constructor change, for one, rewrites the service definition. A file added here
 to an order the build already started is taken in place at the next `start`, once design has
-closed again on the live files. Nothing halts when nothing else on the order changed.
+closed again on the live files. Nothing stops when nothing else on the order changed.
 
 A file that several orders only add to may have more than one owner. A list of enabled modules
 and a dependency manifest are examples. Each order that adds to it passes `--shared` with that
@@ -873,7 +873,7 @@ why it matters and what would fix it. Take one answer per finding: change the or
 it. A change is one of the `update`, `add-owned-file`, `add-done-when` or `add-test` calls above,
 then `check` again. A leave needs a reason from the person. Write it into that order's
 `reasoning` with `update --append-reasoning`, so the reason outlives this conversation.
-Closed orders are not critiqued, and a leave reason on a started or closed order does not halt it.
+Closed orders are not critiqued, and a leave reason on a started or closed order does not stop it.
 A finding on `contract` is a scope question: ask, and use the scope skill's own update path when
 the contract has to change.
 

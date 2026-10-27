@@ -15,7 +15,8 @@ The freeze refuses, and freezes nothing, when one of these is true:
 - A test that should fail did not fail for the right reason. See [Write the tests](tests.md).
 - A criterion the order owns has no test, or a criterion a person verifies has no checklist line.
 - The order serves and owns no criterion at all. The repair is the work order, in design.
-- The order has already left its tests step. A changed design takes the restart instead.
+- The order has already left its tests step. A changed design or a wrong test takes a redo
+  instead.
 
 **A verify command can stand in for a test.** When the order's own verify list names a criterion,
 the freeze runs that command over the test files. It refuses while the command fails, and the test

@@ -9,12 +9,12 @@ goes on.
 - **Exit 70.** A person's answer was passed with nobody present: a review row, a completion
   reason, a site action, a test confirmation, a tool install, or a project write such as the task
   rule.
-- **Exit 68.** A person's judgement in the build: `grant-attempt`, `restart`, `clear-halt`,
-  `retake-tests --because`, `start --leftovers keep`, `--accept-warnings` or `--accept-deviation`.
-  These refuse in every run mode until your answer is on record.
+- **Exit 68.** A person's judgement in the build: the three ways out of a stop, `go-on`, `redo`
+  and `drop`, and `start --leftovers keep`, `--accept-warnings` or `--accept-deviation`. These
+  refuse in every run mode until your answer is on record.
 - **Exit 55 or 100.** A ruling on a finding, or an `--allow` for a fix round, in every run mode.
 - **Exit 70 from `set-run-mode`.** A change of run mode needs your answer, in every run mode.
-- **A halt.** The order halts with its reason, and the run ends with a report.
+- **A stop.** The order stops with its reasons, and the run ends with a report.
 - **"The offer waits for a person".** A site offer, a project setup, a split or a recipe offer
   that nobody was there to answer. Nothing is recorded, so it comes back.
 
@@ -29,9 +29,9 @@ goes on.
 - **Run it yourself with a person present.** A tool install and a project write such as the task
   rule take no recorded answer.
 
-## What does not halt
+## What does not stop
 
-Two decisions never halt an unattended build: a finding that names no file to change, and a
+Two decisions never stop an unattended build: a finding that names no file to change, and a
 departure from the design. Each waits as pending. The order closes and the build goes on. The task
 review asks you each one before its verdict.
 

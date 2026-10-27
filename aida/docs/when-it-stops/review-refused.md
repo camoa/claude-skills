@@ -14,7 +14,7 @@ it fails while a criterion you verify is unanswered.
 | 61 | the code repository has uncommitted work | commit it, then run the step again |
 | 51 | the code moved, or went dirty, since `checks` ran | run `checks` again |
 | 3 | the code is not at the commit the build ended at | see "The code moved past the build" below |
-| 3 | a criterion changed after the build froze it | put the frozen text back with `/aida:scope`, or restart the build |
+| 3 | a criterion changed after the build froze it | put the frozen text back with `/aida:scope`, or redo the orders that serve it |
 | 73 | the check recipe changed after the baseline | see [the build cannot start](cannot-test.md) |
 | 77 | the project records no stack | set it with `/aida:project set-frameworks` |
 | 124 | a frozen test changed after its freeze | put the file back as its freeze commit holds it and commit it, then run finish and review again; AIDA will not edit it for you |

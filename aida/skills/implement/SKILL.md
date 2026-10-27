@@ -44,7 +44,7 @@ This prints summary lines, one `key: value` each:
 - the task's own run mode for this stage, from `task.json`;
 - the snapshot's path and hash, the ledger's path, and whether a preconditions record and a
   finished record exist;
-- one `order(...)` line per work order: its last step, its halt reason, its counters, its review
+- one `order(...)` line per work order: its last step, its stop reasons, its counters, its review
   state, and the `roles=` and `lookups=` its proof kind needs;
 - the criteria counted by row state;
 - a `next:` line naming the step the table below would choose.
@@ -68,59 +68,62 @@ derivation, kept here so a person can check the line against the state the other
 | `snapshot: none`, or a snapshot with `ledger: none` | Start the build | `start` |
 | A ledger, `preconditions: none`, and an order that could move | Check the preconditions | `preconditions` |
 | Preconditions recorded, and an `order(...)` line reading `not started` whose dependencies are all `closed` | Write the tests for one work order | `tests` |
-| An `order(...)` line at `tests-frozen`, or `code-written` with attempts remaining and `halt: none` | Write the code for one work order | `build` |
+| An `order(...)` line at `tests-frozen`, or `code-written` with attempts remaining and `stopped: none` | Write the code for one work order | `build` |
 | An `order(...)` line at `checks-passed` | Review the order | `review` |
 | An `order(...)` line at `reviewed` or `fixed`, with `review: open=` above zero and a fix round left | Fix, then verify | `review` |
 | An `order(...)` line at `reviewed` or `fixed`, with `review: open=0` | Close the order | `review` |
 | An `order(...)` line at `closed` | Nothing left to do on it. Take the next ready order | |
-| Every order `closed`, `finished: none` | Finish the task | `finish` |
+| Every order `closed` or `dropped`, none stopped, `finished: none` | Finish the task | `finish` |
 | `finished: recorded` | The review stage is next. After a failed review, `next:` names `reopen`, which sends its findings back to their orders | `finish` |
-| An `order(...)` line whose halt says `the design removed` it, and an order `not started` that could move | Offer the restart before those tests are written: the removed order's frozen record still guards its test files | `finish` |
-| An `order(...)` line whose only drift segments begin `design drift: the builder declared a departure` or `design drift: the reviewer answered`, a person present | Offer `review-record --accept-deviation` to keep the departure, or the restart once design amends the order | `review` |
-| An `order(...)` line whose halt holds any other `design drift...` segment, a person present | Offer the restart. A segment about the order's own design file also clears when the design is put back and `start` runs again | `finish` |
-| An `order(...)` line whose halt holds an `attempts spent...` or a `budget spent...` segment and no `design drift...` one, a person present | Offer the grant | `finish` |
-| An `order(...)` line whose halt begins `test wrong`, a person present | Offer `retake-tests`, which sends the order back to its tests | `review` |
-| An `order(...)` line at `fixed` whose only halt is the fix round cap, naming only check findings | Repair the cause outside the fix range, then run `build-recheck`, which clears the halt on a pass. Or offer `clear-halt` | `review` |
-| An `order(...)` line whose halt holds none of those segments, a person present | Offer `clear-halt`, once they have acted on the reason | `finish` |
+| An `order(...)` line whose stop says `the design removed` it, and an order `not started` that could move | Offer `drop` before those tests are written: the removed order's frozen record still guards its test files | `finish` |
+| An `order(...)` line with `stopped:` other than `none`, and nothing else can move | Offer the three ways out. `next:` names the go-on choices every reason allows | `finish` |
+| An `order(...)` line not started whose dependency is `dropped` | Nothing starts it. Offer `redo` through design, or `drop` | `finish` |
 
-A refusal writes no halt, so no row above routes it. Its message names the route. Take that route.
+A refusal writes no stop, so no row above routes it. Its message names the route. Take that route.
 
 A recipe the catalog republished after `preconditions` ran is not a step the table derives. Run
 `recipe-refresh` before the next freeze, as `references/preconditions.md` says.
 
-An order in flight comes before a new one, and a halted order is named only when nothing else can
+An order in flight comes before a new one, and a stopped order is named only when nothing else can
 move. The one exception is the order the design removed: it comes before a new order, for the
 reason its row gives. A resumed run starts at `start` regardless, because that is where drift since the snapshot is
-checked, and it says which orders halted. Its own `next:` line then applies.
+checked, and it says which orders stopped. Its own `next:` line then applies.
 
-## One order halting does not stop the run
+## One order stopping does not stop the run
 
-When an order halts, at its attempt cap or for drift, only the orders that depend on it wait.
-Everything else that is ready still builds. Run `start` again. It reports which orders are ready,
-which halted and why, and which are in flight. Unattended, it also sets aside the files a stopped
-role left uncommitted (`references/start.md`). Take the next ready
-order and apply the table. Stop only when nothing is ready.
+When an order stops, only the orders that depend on it wait. Everything else that is ready still
+builds. A stopped order carries its reasons as a list: each names the step that wrote it, its
+words, and the go-on choices it allows. Run `start` again. It reports which orders are ready,
+which stopped and why, and which are in flight. Unattended, it also sets aside the files a stopped
+role left uncommitted (`references/start.md`). Take the next ready order and apply the table. Stop
+only when nothing is ready.
 
-Then report what halted, with the reason the ledger holds, and what is waiting on it. Interactive
-puts that to the person, who decides from the recorded attempts which of three things is true: the
-test is wrong, the order is wrong, or the code is hard and a person writes it. The route for a
-wrong test is under the builder's stop in `references/build.md`, and it says how long the freeze
-can still be retaken. After an attempt is recorded, the route is `retake-tests --because`
-under "Offer the grant" in `references/finish.md`. After review, it is `retake-tests` under
-Rulings in `references/review.md`. Unattended, the run
-ends there with the report, and decides none of the three. A model ruling that a test is wrong,
-with nobody watching, is the test describing the code again.
+Then report each stop, with the reasons the ledger holds, and what is waiting on it. A person
+leaves a stop one of three ways, and each one is a person's answer, recorded through
+`person-answer.sh` (`references/finish.md`, "Leave a stop"):
 
-Two decisions do not halt an unattended run: a finding with an empty fix scope, and a departure
+- **Go on**, saying what continues. That is one more build attempt or one more fix round. It can
+  also be the checks run again with no new build, or a close with the open findings listed. It may
+  name a file the order now owns. The script takes only a choice every stop reason allows.
+- **Redo the order.** The person changes its design or its tests first, through design. Redo
+  reverts the order's own commits, moves its records to a dated folder with the person's words,
+  and sets it back to planned. Its tests are written and frozen again, and they fail first.
+- **Drop the order.** It ends without code. Its commits are reverted the same way, and nothing that
+  depends on it can start.
+
+Interactive puts the choice to the person, who decides from the recorded attempts which of three
+things is true: the test is wrong, the order is wrong, or the code is hard and a person writes it.
+A wrong test or a wrong order is a redo. Unattended, the run ends there with the report, and decides
+none of the three. A model ruling that a test is wrong, with nobody watching, is the test describing
+the code again.
+
+Two decisions do not stop an unattended run: a finding with an empty fix scope, and a departure
 from the design. Each is recorded as pending on the order's review record, and the order goes on
 to its close. Later orders start, and `finish` runs. The review stage puts each one to the person
 before its verdict, and it cannot pass while one is unanswered. A model still decides neither.
 
-Each halt takes the route of its row in the table above, and the `next:` line from `read` names
-it. Offer any of them only when a person is present to decide it.
-
 A run has a ceiling when the task sets `budget` in its own record, in dispatches or in minutes.
-`dispatch-open` recomputes what was spent from the ledger before every dispatch and halts the
+`dispatch-open` recomputes what was spent from the ledger before every dispatch and stops the
 order at the ceiling. Absent budget means no ceiling, and the per-order caps still hold.
 
 Open the step file through the script, not through the Read tool:
@@ -186,8 +189,6 @@ about the framework. Pass the one that happened, in its own word.
 **A test green on its first run has four outcomes.** Wrong test: corrected once. Still green, and
 the author names the existing code that satisfies it: frozen, and the reason recorded. Still
 green with nothing to name: reported, and the step stops. Failed: frozen with its red run.
-For a test of the order's own work the author names a commit in place of code, written
-`commit:<id>`. It is one of this order's build or fix commits, which the brief carries.
 `references/tests.md` holds the flags.
 
 **The script reads a recipe's command blocks, never you.** Pass a recipe path straight through to
@@ -240,9 +241,9 @@ write the report. Do not
 dispatch a fresh role. The brief is unchanged and the work is unfinished, and a fresh role meets
 the half-written files. This differs from a row a person rejects, where the brief changes and the
 role is dispatched fresh. When the resumed role returns, close again, with `--no-report` if it
-stopped again. The `--no-report` after the last resume halts the order (exit 110) with a reason
-that names the role and its turn cap. Report the halt. A person runs `clear-halt`, then `start` to
-keep or set aside the role's files, then dispatches again.
+stopped again. The `--no-report` after the last resume stops the order (exit 110) with a reason
+that names the role and its turn cap. Report the stop. A person goes on with `go-on`, then `start`
+keeps or sets aside the role's files, then the role is dispatched again.
 
 A record already closed takes the same route. Run `dispatch-open` with the same role and unit and
 `--resume`, then resume the same agent by message. When that agent cannot be reached, as from

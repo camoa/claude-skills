@@ -1,13 +1,13 @@
 # The person's answer
 
-Some steps are yours alone: a grant, a ruling, a kept deviation, the run-mode switch. AIDA records
+Some steps are yours alone: a way out of a stop, a ruling, a kept deviation, the run-mode switch. AIDA records
 each answer through one script, and Claude Code shows you its permission prompt before the script
 runs. The step refuses until your answer is on record. This page says what that guarantees, and
 what it does not.
 
 ## The steps that need your answer, in every run mode
 
-- In implementation: `grant-attempt`, `clear-halt`, `restart`, `retake-tests --because`,
+- In implementation: the three ways out of a stop, `go-on`, `redo` and `drop`,
   `start --leftovers keep`, `finish --accept-warnings`, the keeps of a deviation or a design
   departure, `verify-record --ruling`, `fix-brief --allow`, and a test row you judged at the freeze.
 - In the task skill: `set-run-mode`, to any mode.
@@ -78,11 +78,11 @@ sentence, and your yes endorses it. Read it before you approve.
 1. Read the session start lines. In the session that works the task, they name the task, its
    stage and `Run mode: autonomous`. See [sessions](sessions.md).
 2. Run `/aida:next <task-id>`. It names the stage command. Each stage prints a summary of its
-   records first. Implementation's summary names each halted order and why it halted.
+   records first. Implementation's summary names each stopped order and why it stopped.
 3. Look for the decisions made without you. Each stage marks them in its own record;
    [run modes](run-modes.md#where-each-stage-stops-or-decides) lists where, stage by stage.
 
-A halt is not a failure. It says the next step is yours.
+A stop is not a failure. It says the next step is yours.
 
 ## Why it works this way
 

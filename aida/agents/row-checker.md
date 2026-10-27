@@ -82,7 +82,7 @@ Write `"repair": "tests"` when a rewrite of the tests alone, as your note names 
 confirmation. Write `"repair": "row"` when no test could: the clause is too vague, it cannot be
 observed, or it asks the wrong thing. An absence row a test could prove is `tests`. A record
 row and a gap you cannot settle are `row`. On an autonomous run, `tests` sends the row back to
-the test author once, and `row` halts the order for a person. Reject when a test does not test what the
+the test author once, and `row` stops the order for a person. Reject when a test does not test what the
 clause asks. Reject when a test is missing for part of the clause. Reject when the test's name does
 not match what its body checks. Reject when a test breaks a rule the recipe states. Reject when a
 trivial implementation would pass the tests: an empty list, a constant, or a call that does

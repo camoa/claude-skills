@@ -25,7 +25,7 @@ holds for light too.
   version that links the input, the logic and the output along the demo path. Every other order
   comes after it.
 - **Implement** gives each order one fix round. An open low finding waits for you at review. An
-  open medium or high finding halts the order. One repair round can follow, once, for breakage the
+  open medium or high finding stops the order. One repair round can follow, once, for breakage the
   fix round made, and with you present for a few other findings. The builder may build a fake off
   the demo path, marked in the code with `AIDA-FAKE:`.
 - **Review** runs no visual regression.
@@ -62,7 +62,7 @@ a reason.
   line says so.
 - The contract still says the task has no automated tests. The `light-contract:` line names the
   steps to change it: scope's `set-tests --automated yes`, then design's `update --proof tests` on
-  each code order, then implement's `restart`.
+  each code order, then implement's `redo` on each started order.
 
 ## Why it works this way
 

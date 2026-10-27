@@ -70,8 +70,8 @@ It reads the frozen copy and the frozen tests. It writes twelve things to
   order this one depends on owns is never denied, so a record it reads is not listed.
 
 It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
-and counts, never the brief. The allowed count is two unless a person has granted this order one more; see
-`references/finish.md`. It is the order's own recorded allowance, never the constant alone.
+and counts, never the brief. The allowed count is two unless a person's go-on granted this order
+one more; see `references/finish.md`. It is the order's own recorded allowance, never the constant alone.
 
 **An order with nothing left to write gets no implementer.** Every file it owns is a frozen test or
 support file, and every frozen test locks in, so its freeze commit holds the work. A fixture repair
@@ -167,10 +167,12 @@ Repair that and the next attempt continues. Leave it and this unit of work stays
 say in plain words
 what the builder's report names. The person, or design, adds a file the unit needs:
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
-halt a started order. `build-record` refuses while the order's owned or shared files in the
-design differ from the snapshot (exit 117), and spends no attempt. Run `start` first. Unattended, run `build-record` as after any return. It halts the order
-itself, so do not halt it again. A halted order records no attempt: `build-record` refuses it
-(exit 49) until the halt is cleared, except the deviation halt `--accept-deviation` answers. The next `start` sets aside what was left.
+stop a started order. `build-record` refuses while the order's owned or shared files in the
+design differ from the snapshot (exit 117), and spends no attempt. Run `start` first. Unattended,
+run `build-record` as after any return. It stops the order itself, so do not stop it again. A
+stopped order records no attempt: `build-record` refuses it (exit 49) until a person takes a way
+out, except the deviation reason `--accept-deviation` answers. The next `start` sets aside what was
+left.
 An order past its review records no attempt either: `build-record` refuses it (exit 3). One order
 gets one review, so code after it comes from a fix round.
 
@@ -182,8 +184,8 @@ cites the owner's first criterion by position, and says so. The script sends the
 review step and adds one fix round to its allowance, so no counter goes down. The ledger entry
 keeps the repair under `repairs`, with the range the order closed with. `finished.json` carries
 that range beside the new one. The script exits 0 and prints a `repair:` line. The stopped order
-spends no attempt. Commits it made after it began are named, as at any stop. Unattended, they
-halt the stopped order for a person. The owner's fixer works in the owner's files, and the
+spends no attempt. Commits it made after it began are named, as at any stop, and recorded on the
+repair entry. Unattended, they stop the stopped order for a person. The owner's fixer works in the owner's files, and the
 reviewer verifies the round. The verifier also answers whether the failure arises in that file.
 A `no` makes the finding pending, and the person rules on it at the task review. So the route
 runs unattended too. Follow the `next:` line to the reopened order. Run `start` first when the
@@ -191,7 +193,7 @@ builder left files uncommitted. Then fix, verify and close that order under
 `references/review.md`. Until it closes, `build-brief` refuses the stopped order (exit 40). Then
 build the stopped order again. Its next stop of this kind at the same attempt opens another repair
 once every earlier one reads addressed. The stopped order's attempt allowance caps how many. A
-file no closed order owns, or a stop past that cap, halts as any other stop does. Interactive,
+file no closed order owns, or a stop past that cap, stops the order as any other stop does. Interactive,
 open with: "A finished unit of work had a defect, and the next unit found it. Its own fixer
 repairs it, and a reviewer checks the repair and where the defect lies. Nothing needs your
 decision unless the reviewer finds the defect elsewhere." Then name the file and the reopened
@@ -200,15 +202,15 @@ order.
 **A done-when row that cannot hold is no defect, so it never reopens an order.** The stop line
 reads `Stop: row-wrong: <row number>: <the evidence>`. `build-record` stops as at any stop
 (exit 105), and its message quotes that row from the snapshot. The person rules on the row. A
-wrong row is reworded in design, and design closes again. Then `start` halts the order for
-design drift, and `restart` answers that halt. A row that stands goes back to the builder.
-Unattended, the order halts, and the halt quotes the row. `clear-halt` and `restart` refuse
-without the person's answer on record (exit 68), as "A person's answer" in `references/finish.md` says.
+wrong row is reworded in design, and design closes again. Then `start` stops the order for
+design drift, and a redo answers that stop. A row that stands goes back to the builder.
+Unattended, the order stops, and the stop reason quotes the row. Each way out refuses without the
+person's answer on record (exit 68), as "A person's answer" in `references/finish.md` says.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
 `build-record` again with the same flags and `--accept-deviation <their reason>`. The build record
-and `haltsCleared` in the ledger hold the reason, and the flag clears the deviation's halt. Review
+and `stopsCleared` in the ledger hold the reason, and the flag clears the deviation's stop reason. Review
 carries the answer and does not ask again about that line. A stop line other than `Stop: none`
 has no such route. The flag refuses without the person's answer on record (exit 68). Unattended, a deviation is
 no stop:
@@ -225,19 +227,18 @@ returned. Open the row-checker's dispatch again and put the affected rows to it.
 `tests-freeze` again, with every flag the first freeze took, the new red run, and the rows the
 checker returned. That freeze is
 allowed only while the order is still at `tests-frozen`. Once `build-record` has recorded an
-attempt, it refuses (exit 76). Then `retake-tests --because` with the person's ruling sends the
-order back, under "Offer the grant" in `references/finish.md`. Other orders may have committed since the first freeze. The freeze
-still retakes, because the report holds the `Stop: test-wrong` line. Unattended, the stop halted
-the order, and a halt still standing refuses (exit 35). `clear-halt` refuses without the person's answer on record
-(exit 68). The
-retake prints `retaken:` with the earlier commit and the new one, and the record names the
+attempt, it refuses (exit 76). Then a redo with the person's ruling sends the order back to
+planned, under "Redo the order" in `references/finish.md`. Other orders may have committed since
+the first freeze. The freeze still takes the new tests, because the report holds the
+`Stop: test-wrong` line. Unattended, the stop stopped the order, and an order still stopped
+refuses (exit 35) until a person goes on with `build`. The second
+freeze prints `retaken:` with the earlier commit and the new one, and the record names the
 earlier one under `retakenFrom`. No attempt is spent, because none was recorded. The builder's
 stop left the tree dirty on purpose. The freeze commits only the test paths, and the next
 attempt continues over that uncommitted build. So the person either keeps it or cleans the tree
 before the re-freeze, and says which. Then build again from "Open the dispatch record" above.
-After the build, a frozen test found wrong at review is ruled `test-wrong`, and `retake-tests`
-brings the order back here, under Rulings in `references/review.md`. There the attempt counter
-stays.
+After the build, a frozen test found wrong at review is ruled `test-wrong`, and a redo brings the
+order back to planned, under Rulings in `references/review.md`.
 
 Close the dispatch record as soon as the role returns, per SKILL.md.
 
@@ -339,8 +340,8 @@ recorded. Interactive puts that to the person, opening with: "The builder left c
 code that it did not commit, so this attempt cannot be recorded. Only you can say whether they
 are wanted. Commit them and the attempt is recorded and checked. Discard them and the attempt
 starts over." Then name the repository and
-the files git lists. Unattended halts the order with that reason, and
-a person clears it with `clear-halt` once the tree is committed, in `references/finish.md`.
+the files git lists. Unattended stops the order with that reason, and a person goes on once the
+tree is committed, under "Leave a stop" in `references/finish.md`.
 
 **On an order whose proof is `record`, every one of those reads the project folder instead.**
 The range, the empty-range refusal (exit 71), the unchanged refusal (exit 45) and the clean-tree
@@ -405,7 +406,7 @@ Pass `--value <name>=<value>` for a placeholder a command carries, the same as
 
 A name with no `--value` is read from the tokens preconditions recorded. It is then read from
 the keys of the task's environment record, such as `project`. A check that reads unknown for a
-placeholder with no value refuses at 3. `build-record`, `build-recheck` and `fix-record` then
+placeholder with no value refuses at 3. `build-record`, `go-on --continue check` and `fix-record` then
 write nothing, and no attempt or round is spent. A `## Configuration gate` line of a `gate` order
 refuses at 3 before any check runs. The message names the token. Supply the value, then run the
 same step again.
@@ -437,65 +438,23 @@ Pass `--nothing-ran <literal substring>` only when the
 framework's own recipe names no `silent_pass` marker of its own; where it does, the script reads
 that marker and this flag is not read.
 
-## Re-run the checks
+## Run the checks again with no new build
 
-An attempt can fail on the three tool rows alone: coding-standards, static-analysis and
-security. A tool refusing a path it was handed is the plugin's fault, not the implementer's.
-An attempt can also fail on interface-record, alone or with the tool rows. The fix is a line in
-the interface record, which is a record file and not code. Amend the record first, with each
-element the check names. Such an attempt needs no second build. `build-brief` would hand over
-a brief with nothing to build. `build-record` would refuse the empty range (exit 71) or the
-unmoved head (exit 45).
-Run the checks again over the recorded range instead:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-recheck "<task_folder>" <order id> \
-  [--interface <path to the interface record>] \
-  [--test-recipe <framework>=<path to the test-execution recipe>]... \
-  [--check-recipe <framework>=<path to the review recipe>]... \
-  [--implement-recipe <framework>=<path to the implement recipe>]... \
-  [--value <name>=<value>]... \
-  [--nothing-ran <literal substring>]
-```
-The recipe flags and `--interface` are `build-record`'s. The range and the report path are read
-from the build record, so neither is passed. A recipe flag left out is taken from its record:
-the test-execution recipe and a gate order's implement recipe from `preconditions.json`, the
-review recipe from `baseline.json`. The `filledFromRecords:` line names each flag taken. A flag
-that names another path than its record refuses (exit 3), and nothing runs. Pass the recorded
-path, or leave the flag out. The interface record is read again from its file,
-so an amended record is what the check reads. No implementer is dispatched and no attempt is
-spent. The `next:` line offers this route beside `build` when the last attempt was stopped by
-the tool rows, owned-files or interface-record alone. When interface-record is among them, the
-line names the record's file to amend first. When owned-files is among them, the line names
-the steps still left before the re-check: `add-owned-file`, design `close` and `start`. It drops
-the steps the design or the snapshot already took after the attempt. The re-check reads the order's owned files
-from the snapshot that `start` refreshed. The same code fails again until the design gives the
-order the file.
-
-It refuses (exit 88) in five cases, each with its own message. No build record exists for the
-order. The code repository's HEAD is not the record's own commit, because the code moved, and
-the route is `build`. Or a check outside the three tool rows, owned-files and interface-record
-stopped the attempt. A test or a suite that failed is the implementer's work, so a re-check is not a free
-retry, and the route is `build`. Or no check stopped the attempt, so it passed and the order is
-past the build. Or a path the interface check named does not exist at the recorded commit, so
-no amended record can answer it. A halted order refuses (exit 49), and `references/finish.md`
-names the grant. The clean-tree rule applies (exit 61). A missing interface record refuses as at `build-record`
-(exit 3). A person's fix after a finding ruled load-bearing passes the moved HEAD and the passed
-record once, under "Clear any other halt" in `references/finish.md`.
-
-It rewrites the record with the new checks and the interface record's text. When that text
-changed, the attempt's own text stays under `interfaceRecordBefore`. It keeps the attempt, its
-range and its date. The replaced checks stay under `checksBefore`, id and verdict
-only, beside `recheckedAt`. The
-attempt counter does not move. The order goes to `checks-passed` when the checks pass and stays
-at `code-written` otherwise. The summary has `build-record`'s shape plus a `recheck:` line.
-
-After a fix round, it runs that round's seven checks again over the fix record's range.
-`references/review.md` says when. The same refusals apply to the fix record, with owned-files in
-place of interface-record. A test or a suite that failed is the fixer's work, so the route is the
-next round or a ruling. It rewrites the fix record the same way, and the order stays at `fixed`.
-A pass addresses the check finding, open or pending. An order halted only by the unattended fix
-round cap, on check findings alone, is not refused, and a pass clears that halt. A check that
-fails again stays a finding, and the halt stays.
+An attempt can fail on rows the same code can answer differently: the three tool rows, owned-files
+and interface-record. A tool refusing a path it was handed is the plugin's fault, not the
+implementer's. An interface record missing an element is a record file, amended without moving
+the code. A file the owned-files check refused may be one the order should own. While attempts
+remain, the next attempt answers such a failure. When the last attempt fails on those rows alone,
+the order stops, and its reason allows `go-on --continue check`, under "Go on" in
+`references/finish.md`. Amend the interface record first, or give the order the file with
+`--owns`. The check runs over the recorded range, dispatches no implementer and spends no attempt.
+It takes `build-record`'s recipe flags and `--interface`. A flag left out is taken from its record,
+and the `filledFromRecords:` line names each one. It rewrites the record with the new checks. The
+replaced checks stay under `checksBefore`, beside `recheckedAt`. When the interface record's text
+changed, the attempt's own text stays under `interfaceRecordBefore`. It refuses (exit 88) when no
+build record exists, or when the code moved since the record. It also refuses when a path the
+interface check named does not exist at the recorded commit. After a fix round it runs that round's seven checks
+again over the fix record's range, and a pass addresses the round's check finding.
 
 ## Read the eight checks to the person
 
@@ -570,7 +529,7 @@ reads as new. A finding fixed and reintroduced reads as old. A new finding worde
 one in another file reads as old. A second copy of an old finding on another line reads as old.
 
 A failed check is not a failed order. It is this attempt's result, and the order has as many
-attempts as its own allowed count says, two unless a person has granted more. The summary prints
+attempts as its own allowed count says, two unless a person's go-on granted more. The summary prints
 one line per check with its verdict and a one-line reason. Interactive, open with: "This attempt
 at the work failed one of the checks, and another attempt is allowed. Spending it is your
 call, because each attempt costs a dispatch. Say yes and the builder tries again from this
@@ -603,6 +562,6 @@ by itself say the code was tested.
 The attempt counter lives in the ledger and is incremented here, and the order's state moves with
 it: `checks-passed` when every check but order-tests answered met or undeclared (interface-record's
 own unknown excepted) and order-tests itself answered met, `code-written` otherwise. When the
-failing attempt was the last one allowed, the script writes the halt and its reason into the ledger
-at that moment. It says so. Nothing here un-halts one. Go back to the skill body for what happens
-to the run.
+failing attempt was the last one allowed, the script writes the stop and its reason into the
+ledger at that moment. It says so. Nothing here takes the order out of its stop. Go back to the
+skill body for what happens to the run.

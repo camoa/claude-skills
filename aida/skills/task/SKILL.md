@@ -476,14 +476,14 @@ it, and nothing here proposes one. Only call this when asked. Run:
 `--dispatches` counts the roles implementation dispatches over the whole run. `--minutes` counts
 wall-clock time from the ledger's own start. Either one alone is a ceiling, and both may be given.
 Neither is refused. Each takes a whole number of 1 or more, and the action refuses anything else.
-The task check does not read the schema's minimum, so a zero would pass it and halt the first
+The task check does not read the schema's minimum, so a zero would pass it and stop the first
 dispatch. A number this call does not name keeps the value it had. There is no action that removes
 a budget.
 
-The build halts the order it was about to dispatch when either number is reached, with `budget
-spent`. To answer that halt a person raises the number here first. Then they run `grant-attempt` in
-the implementation skill, which clears the halt segment. The order is the whole point. The spend is
-recomputed from the ledger at every dispatch, so a grant before the raise brings the halt straight
+The build stops the order it was about to dispatch when either number is reached, with `budget
+spent`. To answer that stop a person raises the number here first. Then they go on with `go-on` in
+the implementation skill, which clears the stop. The order is the whole point. The spend is
+recomputed from the ledger at every dispatch, so going on before the raise brings the stop straight
 back. Show the whole output.
 
 ## `save <task-id>`

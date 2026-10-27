@@ -22,20 +22,20 @@ A budget works in every run mode. The per-order limits on attempts still hold ei
 ## What happens when the budget runs out
 
 The build counts its spend again from its own records before every dispatch. When either number
-is reached, the work order it was about to dispatch halts with `budget spent`.
+is reached, the work order it was about to dispatch stops with `budget spent`.
 
 ## How to continue after `budget spent`
 
 Do these two steps in this order:
 
 1. Raise the number: `/aida:task set-budget <task-id> --dispatches <bigger n>`, or `--minutes`.
-2. Grant the order another attempt with `grant-attempt`, in the implementation stage. See
-   [implement](../stages/implement/README.md).
+2. Take the order out of its stop with `go-on`, in the implementation stage. See
+   [a work order stopped](../when-it-stops/stopped.md).
 
-The reverse sequence does not work. A grant before the raise brings the halt straight back, because
-the spend is counted again at the next dispatch.
+The reverse sequence does not work. Going on before the raise brings the stop straight back,
+because the spend is counted again at the next dispatch.
 
-`grant-attempt` is a person's call, in every run mode. See [the person's answer](person-answer.md).
+`go-on` is a person's call, in every run mode. See [the person's answer](person-answer.md).
 
 ## Why it works this way
 

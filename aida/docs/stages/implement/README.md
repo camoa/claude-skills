@@ -33,7 +33,7 @@ What each refusal means is in [When it stops](../../when-it-stops/).
 ## Interactive or autonomous
 
 Interactive, AIDA asks you at each decision that is yours. Autonomous or light, AIDA asks nobody.
-A step that needs a person halts that one work order, and the rest of the build goes on. How to
+A step that needs a person stops that one work order, and the rest of the build goes on. How to
 set a run mode is in [the task pages](../../task/).
 
 ## Pages, in reading order
@@ -46,12 +46,12 @@ set a run mode is in [the task pages](../../task/).
 - [Freeze the tests](freeze.md): what the freeze locks, and what it checks first.
 - [Work orders not proved by tests](proof-kinds.md): configuration, document, page and confirm orders.
 - [Build the code for one work order](build.md): the implementer, its rules and its stops.
-- [The eight checks](checks.md): what runs after each attempt, and a re-check.
+- [The eight checks](checks.md): what runs after each attempt, and running them again.
 - [Review one work order](review-order.md): the reviewer, its findings and a departure.
 - [Fix and verify](fix.md): fix rounds, files you allow, and rulings.
 - [Close orders and finish the stage](finish.md): the close, the final suite and a reopen.
-- [When a work order halts](halts.md): each halt and the action that answers it.
-- [Change the design mid-build](drift.md): what drifts, what is taken in place, and the restart.
+- [When a work order stops](stopped.md): the stopped state and the three ways out.
+- [Change the design mid-build](drift.md): what drifts, what is taken in place, and the redo.
 - [Come back to a build](resume.md): resuming, a rebased branch, and an answer to an unattended run.
 - [What is enforced](enforced.md): what the hooks refuse, and what is only recorded.
 
@@ -59,7 +59,7 @@ set a run mode is in [the task pages](../../task/).
 
 - A reviewer with no reference checks the code against itself and finds something new every
   round. The frozen tests are a reference outside both the writer and the reviewer.
-- One work order at a time keeps each review small, and a halt holds back only the orders that
+- One work order at a time keeps each review small, and a stop holds back only the orders that
   depend on it.
 
 Source: skills/implement/SKILL.md

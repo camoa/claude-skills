@@ -13,8 +13,9 @@
 #             pending (exit 0), the order closes and its close logs the skipped rounds, and finish
 #             carries the finding as a pending decision. Low only: a medium or high finding still
 #             waits for a person.
-#   high      light, a high finding still open after the one round halts (56). The person sets the
-#             task interactive, clears the halt and rules at once, and close logs the skipped rounds.
+#   high      light, a high finding still open after the one round stops the order (56). The person
+#             sets the task interactive and goes on with close, which rules the finding deferred,
+#             and close logs the skipped rounds.
 # Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
 # run-fe-fixture.sh.
 # fix_report <unit>: the report the newest fix brief of that unit pins, the one path fix-record
@@ -321,7 +322,7 @@ fix_round wo1 a.php not-addressed low
 RC="$(try "$OUT" "$IMPLEMENT" verify-record "$TASK" wo1 --verdicts "$IMPL/verify-wo1-1.json")"
 expect "verify-record does not halt the light order" "$RC" "0"
 expect "the low finding with a fix scope is pending" "$(status_of f1)" "pending"
-expect "the order is not halted" "$(jq -r '.orders[0].haltedBecause // "none"' "$IMPL/ledger.json")" "none"
+expect "the order is not stopped" "$(jq -r '.orders[0].stopped // "none"' "$IMPL/ledger.json")" "none"
 expect "the ledger marks the round as light" "$(jq -r '.orders[0].lightRounds // "absent"' "$IMPL/ledger.json")" "true"
 RC="$(try "$OUT" "$IMPLEMENT" close "$TASK" wo1)"
 expect "wo1 closes" "$RC" "0"
@@ -347,11 +348,9 @@ expect "a high finding halts the light order (56)" "$RC" "56"
 expect "the high finding stays open" "$(status_of f1)" "open"
 pa "$PROJECT/tasks/lc" "task set-run-mode" "" "interactive"
 must "$TASKS" set-run-mode --project "$PROJECT" lc interactive
-pa "$TASK" "implement clear-halt" wo1 "a person rules the finding"
-must "$IMPLEMENT" clear-halt "$TASK" wo1 --because "a person rules the finding"
-pa "$TASK" "implement verify-record" wo1 "f1=deferred::a later task fixes it"
-RC="$(try "$OUT" "$IMPLEMENT" verify-record "$TASK" wo1 --ruling "f1=deferred::a later task fixes it")"
-expect "the ruling is taken with no second round" "$RC" "0"
+pa "$TASK" "implement go-on close" wo1 "a later task fixes it"
+RC="$(try "$OUT" "$IMPLEMENT" go-on "$TASK" wo1 --continue close --because "a later task fixes it")"
+expect "go-on close rules the finding deferred with no second round" "$RC $(status_of f1)" "0 ruled"
 RC="$(try "$OUT" "$IMPLEMENT" close "$TASK" wo1)"
 expect "wo1 closes" "$RC" "0"
 expect "close logs the skipped rounds on the interactive task" "$(saw "$CLOG" "| lc | implement | fix rounds after the first on wo1, which left f1 to a ruling")" "yes"

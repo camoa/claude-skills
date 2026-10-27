@@ -23,30 +23,30 @@ rule first. The implementer may still not read that file.
 - It commits its own work before it returns. A dirty tree means the commit did not happen, and
   the attempt is not recorded. AIDA asks you whether to commit or discard what it left.
 
-An order has two attempts unless you grant one more. See [The eight checks](checks.md).
+An order has two attempts unless you go on with one more. See [The eight checks](checks.md).
 
 ## When the builder stops
 
 The report always holds one stop line, `Stop: none` or a cause and its reason. Under `Stop: none`
 it also holds one deviation line, `Deviation: none` or what departed and why. A cause, or a
 deviation, is a stop. A placeholder such as `Stop: pending` is no stop line, and the record step
-refuses it. A stop records no attempt and spends none. With nobody present, it halts the order.
+refuses it. A stop records no attempt and spends none. With nobody present, it stops the order.
 AIDA names any commit made after the attempt began, and you revert or keep it before the next build.
 
 Interactive, AIDA puts the stop to you in plain words. The builder can say a test is wrong, a
 done-when row is wrong, the interface does not fit, it needs a file it does not own, or its
-attempts ran out. Unattended, the order halts.
+attempts ran out. Unattended, the order stops.
 
 - **A file it needs and does not own.** Design adds it with `add-owned-file` and closes again.
   Then run `start`. The build refuses until the snapshot holds the new file.
 - **A test it says is wrong.** You rule on it; a model never does. The test author corrects that
   assertion, the checker reads the row, and the freeze runs again. It prints `retaken:` with both
   commits. That second freeze needs three things: the order is still at `tests-frozen`, it is not
-  halted, and the builder's report holds `Stop: test-wrong`. Unattended, the stop halted the order,
-  so a person clears the halt first. The next attempt continues over the uncommitted build, so you
+  stopped, and the builder's report holds `Stop: test-wrong`. Unattended, the builder's stop
+  stopped the order, so a person goes on first. The next attempt continues over the uncommitted build, so you
   keep that work or clean the tree first.
 - **A done-when row that cannot hold:** `Stop: row-wrong`. AIDA quotes the row, and you rule. A
-  wrong row is reworded in design, and then the restart rebuilds the order. A row that stands goes
+  wrong row is reworded in design, and then a redo rebuilds the order. A row that stands goes
   back to the builder.
 - **A deviation you accept.** AIDA records the attempt again with your reason. Review does not ask
   about that line again. Unattended, a deviation is no stop: the attempt is recorded, and the task

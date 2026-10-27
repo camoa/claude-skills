@@ -25,21 +25,21 @@ say the change is right. See [Approve the contract](approve.md).
 ## A change after the build started
 
 A change is still allowed once implementation has started. It reaches the build through design's
-close, then implementation's start. A change that only halts work orders needs no design close. There, each work order that serves or owns a changed criterion
+close, then implementation's start. A change that only stops work orders needs no design close. There, each work order that serves or owns a changed criterion
 is affected:
 
 - **When no started work order serves the criterion**, each work order takes the new criterion.
-  None halts.
-- **When a started work order serves it**, every work order that serves it halts, closed ones
+  None stops.
+- **When a started work order serves it**, every work order that serves it stops, closed ones
   included, in both run modes. The build keeps the old text. Put the old text back word for word
-  and the halts clear at the next start. With a person present, implementation offers to restart
-  the halted orders instead.
+  and the stops clear at the next start. With a person present, implementation offers to redo
+  the stopped orders instead.
 - **A change to the verify clause alone** spares a started work order whose frozen tests and
   records do not name that criterion. On an unattended run, scope must first record the change as
   a decision for that criterion, or no order is spared. A recorded decision spares nothing when
   the criterion's words changed.
 
-See [A work order halted](../../when-it-stops/halts.md).
+See [A work order stopped](../../when-it-stops/stopped.md).
 
 ## Where you must run it
 

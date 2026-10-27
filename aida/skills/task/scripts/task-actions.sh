@@ -1021,7 +1021,7 @@ do_set_run_mode() {
   # Light scope wrote automatedTests false (gap row 197). Leaving light does not undo it, so the
   # orders keep their confirm or record proofs and finish runs no suite (gap row 362).
   if [ "$was_light" = yes ] && [ "$value" != "light" ] && [ "$(automated_tests "$task_dir")" = "no" ]; then
-    echo "light-contract: the contract still says this task has no automated tests, so each order stays confirm or record and no suite runs. To change it, a person runs scope's set-tests --automated yes, then design's update --proof tests on each code order. A started implementation takes the new orders through restart."
+    echo "light-contract: the contract still says this task has no automated tests, so each order stays confirm or record and no suite runs. To change it, a person runs scope's set-tests --automated yes, then design's update --proof tests on each code order. A started implementation takes the new orders through redo."
   fi
   # Light keeps one script that walks the demo path. It is the project's end to end
   # setup, which a person installs (gap row 197).

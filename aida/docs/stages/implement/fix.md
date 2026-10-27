@@ -18,7 +18,8 @@ answer](../../task/person-answer.md).
 After the round, seven of the eight checks run again, all but the interface record. A check that
 fails spends the round and leaves every finding open. It also opens one finding for that check.
 The next round's checks decide it. When the cause lies outside the fix, such as a broken
-environment, repair it and run `build-recheck`. See [The eight checks](checks.md).
+environment, repair it, and the next round's checks run again. At the cap, AIDA can go on with the
+checks alone. See [The eight checks](checks.md).
 
 The fixer can report a finding as already correct, with the command it ran. That round has no
 commit. The reviewer then reads the cited code and the run.
@@ -41,26 +42,24 @@ word and a reason:
 - **wrong.** The reviewer was mistaken. The order can close.
 - **deferred.** The problem is real and goes to a later task. The order can close, and the review
   stage sees it again.
-- **load-bearing.** The work cannot be accepted with it. The order halts until you act. You
-  commit the fix, clear the halt, and `build-recheck` runs the checks over your commits before
-  the order closes.
-- **test-wrong.** The problem is real, and the fix needs a frozen test changed. The order halts,
-  and `retake-tests` sends it back to its tests.
+- **load-bearing.** The work cannot be accepted with it. The order stops until you act. You
+  commit the fix, and AIDA goes on with the checks over your commits before the order closes. Or
+  it closes with the finding listed.
+- **test-wrong.** The problem is real, and the fix needs a frozen test changed. The order stops,
+  and a redo builds it again with new tests.
 
 A ruling passes only through your recorded answer, in every run mode. See [the person's
-answer](../../task/person-answer.md). Unattended, which findings wait and which halt the order is
-in [When a work order halts](halts.md).
+answer](../../task/person-answer.md). Unattended, which findings wait and which stop the order is
+in [When a work order stops](stopped.md).
 
-## The retake
+## Redo after a wrong test
 
-`retake-tests` moves the order's build, review, fix and verify records into
-`implementation/retaken-<order>-<n>/`, where n counts up with each retake of that order. Nothing is deleted. The order goes back to `tests-frozen`. The test author
-corrects the test the finding names and nothing else. The checker reads its rows, the freeze runs
-again, and the order is built again. The attempts already used stay used, because they were real.
-When none are left, grant one. See [When a work order halts](halts.md).
-
-When the cause is the done-when row's own wording, the design is wrong too. Rule the finding,
-correct the design, and take the restart instead. See [Change the design mid-build](drift.md).
+A redo reverts the order's own commits. It moves its build, review, fix and verify records into a
+dated folder, `implementation-<date>-<commit>/`, with your words. Nothing is deleted. The order goes
+back to planned. The test author writes its tests again, the checker reads its rows, the freeze
+runs again, and the order is built again. Its tests fail first, because its code is gone. When the
+cause is the done-when row's own wording, correct the design before the redo. See
+[Change the design mid-build](drift.md).
 
 ## The light repair round
 

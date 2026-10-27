@@ -6,11 +6,11 @@ changes since the snapshot, then reports where each work order stands and goes o
 ## What to read first
 
 The ledger, `implementation/ledger.json` in the task folder, is the state of the build. It holds
-each order's step, its halt reason, its attempts and rounds, each row with who judged it, and the
-commit range of each order. It survives a compaction. After an unattended run, read the halts and
+each order's step, its stop reasons, its attempts and rounds, each row with who judged it, and the
+commit range of each order. It survives a compaction. After an unattended run, read the stops and
 the rows a model judged, to decide where to look.
 
-`start` names the orders in flight, the halted orders with their reasons, and the ready orders.
+`start` names the orders in flight, the stopped orders with their reasons, and the ready orders.
 When a stopped role left files nobody committed, it lists them first. See [Start the
 build](start.md).
 
@@ -34,12 +34,12 @@ same retake. Neither refusal spends an attempt.
 
 Each task has at most one open dispatch. When a role never returned, the next dispatch refuses and
 names the role, the order, and the record's age. A role stopped at its turn limit is resumed once,
-or twice for an order with a large diff budget. One more stop halts the order. Clear the halt,
-run `start` to keep or set aside the role's files, and the role is sent again.
+or twice for an order with a large diff budget. One more stop stops the order. Go on with your
+answer, run `start` to keep or set aside the role's files, and the role is sent again.
 
 ## Your answer to a person's call
 
-A person's call, such as a grant, a restart, a ruling, a file you allow, or accepted warnings,
+A person's call, such as a way out of a stop, a ruling, a file you allow, or accepted warnings,
 refuses until your answer is on record, in every run mode. Claude Code shows you a permission
 prompt, and your yes records the answer in `person-answers.json` in the task folder. The call
 passes only on an unused answer for this step, this order and your exact words, and marks it used.

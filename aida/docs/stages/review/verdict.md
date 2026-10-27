@@ -59,7 +59,7 @@ the same list in the pull request body.
 ## The one write into the contract
 
 The close writes each criterion's verdict into the contract, `alignment.json`. Nothing else in
-the contract changes. The write halts no order, and the report says that review made it.
+the contract changes. The write stops no order, and the report says that review made it.
 
 ## Why it works this way
 

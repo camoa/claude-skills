@@ -48,10 +48,10 @@ When the checker says the tests can be repaired, the row goes back to the test a
 the checker's note. A fresh checker reads the repair. The author rewrites the tests, and only the
 checker's next verdict confirms the row.
 
-The order halts in three cases: a second rejection of the same row, a rejection that says the
-requirement itself is wrong, and an order with no test author. The halt carries the checker's note,
-and the run takes the next ready order. A person clears the halt once the test or the design is
-repaired. See [When a work order halts](halts.md).
+The order stops in three cases. One is a second rejection of the same row. Another is a
+rejection that says the requirement itself is wrong. The third is an order with no test author. The stop carries the checker's note,
+and the run takes the next ready order. A person who judges the row goes on; one who changes the
+test or the design redoes the order. See [When a work order stops](stopped.md).
 
 A row marked as judged by a person refuses on an unattended run, because nobody was there.
 

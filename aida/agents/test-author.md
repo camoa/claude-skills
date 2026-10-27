@@ -31,17 +31,11 @@ the units it depends on, and what their reviewers recorded for the person under
 thing this unit builds on. Test against that interface text. Do not open the reused source to
 read its shape; the brief is where design put it. A hook refuses that read, and the read of
 any committed test file this unit does not own. It also refuses a search of a folder that holds one. So search
-your own test file by its path, never its folder. Read the brief first. When it holds
-`treeHolds`, the branch still carries an earlier build of this unit. So a test green on arrival
-is suspect: never take it as proof, and answer it the way the green-on-arrival rule below says.
+your own test file by its path, never its folder. Read the brief first.
 
-When the brief holds `retake`, this is a correction and not a first run: a person ruled one
-frozen test wrong. Correct the tests that finding names. Leave every other frozen row alone.
-Write no new test for a criterion the frozen rows already cover. The finding's `linkedTo` names
-a criterion, and the frozen rows are keyed by criterion, so that field says which rows to read.
-A test the correction makes necessary is allowed, and the checker reads the affected rows.
-Then run again each test that `retake.redAgain` names, and write its new run. Each one shares a
-file with a corrected test. The freeze refuses a red run older than its test file.
+When the brief holds `redo`, a person redid this unit: they changed its design or its tests, and
+`redo.because` holds their words. Its earlier tests and code were reverted. Write its tests fresh
+from the brief, and read the person's words for what changed.
 
 When the brief holds `rowsRejected`, those rows were rejected at the checkpoint. Each row holds
 the checker's note, and the person's words when a person rejected it. Repair the tests of those
@@ -132,11 +126,8 @@ Report any test that passed on arrival, and say why you think it did. Do not wea
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,
 and both are worth more than a green line. Correct it once. If it is still green because code
 that already exists satisfies it, return a `locks-in` reason for it: one sentence naming that
-code. The test then locks that behaviour in. When the brief holds `treeHolds`, this unit's earlier
-build is what makes a test of its own work pass. You may not read that build. So return one of the
-build or fix commits the brief lists there, written `commit:<id>`, as the `locks-in` reason. The
-prefix is what marks it a commit, and a reason without it is read as prose. Read no source to
-decide it. If you can name neither existing code nor such a commit, report it as green on arrival.
+code. The test then locks that behaviour in. If you can name no existing code, report it as green
+on arrival.
 
 **When the brief holds `deliverableIsTests`, your tests are the deliverable.** The script wrote
 that key because every file the order owns is a test file. The freeze locks the test file, and the

@@ -45,16 +45,13 @@ next test author is told where the latest copy of each one is.
 
 Start prints one line per fact. It says whether this is a new run or a resumed one, and gives
 the snapshot and ledger paths. It names the order in flight, the orders ready to build, and each
-halted order with its reason. It ends with `next:`, the step that comes after.
+stopped order with its reasons. It ends with `next:`, the step that comes after.
 
 - `drift: not checked` on a first run means nothing was compared yet. It does not mean nothing
   changed.
 - `proofAbsent:` names orders from a design closed before work orders had a proof kind. Each is
   proved by tests unless design sets `gate` on it. A configuration order on that line would go to
   a test author, so check it before the first order.
-- `partialBuild(<order>):` names an order sent back to its tests while its earlier build commits
-  are still on the branch, after a retake or a restart. The tree still holds that order's earlier
-  code, and its test author is told so. The line stops once the order is built again.
 
 What a resumed run reports about a changed design is in [Change the design
 mid-build](drift.md). A rewritten branch is in [Come back to a build](resume.md).

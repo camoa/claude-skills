@@ -50,7 +50,7 @@ review writes no verdict and prints "no verdict yet". Run the close again when y
 The reviewer judged the live text. Review shows you both texts and asks whether you approve the
 live one. `accept` keeps both texts in the record. `reject` fails the review. Put the frozen text
 back with `/aida:scope`, or remove an added non-goal there, then review again. A removed non-goal
-cannot come back that way, so the route is a restart of the build. A standing order never answers
+cannot come back that way, so the route is a redo of the orders it bounds. A standing order never answers
 this question.
 
 ## Correct an answer

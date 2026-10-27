@@ -29,7 +29,7 @@ unset AIDA_SESSION_PLUGIN_VERSION AIDA_SESSION_CHECKED CLAUDE_PLUGIN_ROOT
 
 # The slowest fixtures start first, so the last job ends near the total over JOBS. The order
 # is from measured runs; a fixture not named here runs after these.
-SLOWEST="im-light-mode eh-whole-chain db-restart kg-implement-dispatch mm-records-hash
+SLOWEST="im-light-mode eh-whole-chain db-redo kg-implement-dispatch mm-records-hash
   gj-hook-frozen-tests kh-hook-prior-source ks-snapshot-drift mk-review-tool-rows es-design-close"
 if [ "$#" -gt 0 ]; then
   FIXTURES=("$@")

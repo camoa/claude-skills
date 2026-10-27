@@ -19,7 +19,7 @@ Ask whether any guide covers the task. When none does, the person judges the dif
 
 A check whose id begins `decision-` is a decision a build left. Ask it in the
 words of `references/review.md` under the implement skill, under Rulings for a finding and under
-the departure halt for a departure. A check whose id ends `-non-goal` is a non-goal the live
+the departure stop for a departure. A check whose id ends `-non-goal` is a non-goal the live
 contract changed, removed or added after the freeze. Show both texts from the summary's `nonGoal`
 line, verbatim, and ask whether the person approves the live text. A standing order never answers
 a non-goal `accept`: ask the person each time. On an unattended run the answer passes only through
@@ -34,7 +34,7 @@ The answer decides what happens next:
 - `reject`: the reviewer judged a text the person did not approve, so the review fails. Put the
   frozen text back with `scope update`, then archive the review and run it again. For an added
   non-goal, use `scope remove`. A removed one cannot come back that way, because `scope remove`
-  retires its id, so the route is `restart` in the implement skill.
+  retires its id, so the route is `redo` in the implement skill, for the orders it bounds.
 - `load-bearing`, `test-wrong` or `rebuild`: the check reads unmet, so the review fails. The
   order is closed, so the routes inside implement no longer reach it. The route is a fix
   commit on the task branch, then finish again, per "Finish runs again after a failed review"
@@ -123,7 +123,7 @@ order that owns its file through the implement skill's `reopen`. Its `next:` lin
 that schema reserves for review. Nothing else in the contract is touched.
 
 **That write changes the file, not the contract.** The implement stage's `start` compares the
-contract without verdicts, so it reports no change and halts no order. Say in the report that
+contract without verdicts, so it reports no change and stops no order. Say in the report that
 review wrote the verdicts. A reader of the file's history who is not told reads it as an edit.
 
 Close the report with the three things SKILL.md requires: the checks reading undeclared or unknown,

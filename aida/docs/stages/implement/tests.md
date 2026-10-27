@@ -60,9 +60,8 @@ selects nothing, so a mistyped test name looks like success.
   that reason.
 - It still passes, with nothing to name: the author reports it, and the step stops.
 
-A passing test is never deleted quietly and never weakened until it fails. After a restart or a
-retake, the tree can still hold this order's earlier code. Then the author names one of the
-order's own commits as the reason, written `commit:<id>`. An order that owns only test files,
+A passing test is never deleted quietly and never weakened until it fails. A redo reverts the
+order's own code, so its tests written again fail first. An order that owns only test files,
 such as a fixture repair, has the tests as its deliverable. Each test freezes with its reason,
 and no implementer is sent.
 

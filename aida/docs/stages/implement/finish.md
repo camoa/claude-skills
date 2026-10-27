@@ -7,8 +7,8 @@ runs the whole suite once and records the stage as done, for the review stage to
 
 Close refuses when a finding is still open, when the last fix round was never verified, when the
 tree is dirty, or when the code moved past the last record. Later commits on the branch have no
-round to take them. Move the branch back and send that work to a follow-up task, or take the
-restart.
+round to take them. Move the branch back and send that work to a follow-up task, or redo the
+order.
 
 Close records the commit range the order produced. It also decides each criterion the order serves
 or owns. A criterion a machine verifies reads `confirmed` once every order serving it has closed
@@ -21,8 +21,10 @@ order.
 
 ## Finish the stage
 
-Finish refuses until every order has closed, none is halted, every machine-verified criterion
-reads `confirmed`, and the code tree is clean.
+Finish refuses until every order has closed or been dropped, none is stopped, every
+machine-verified criterion reads `confirmed`, and the code tree is clean. A criterion a dropped
+order served is not asked: the finished record lists the dropped order with it, and the task
+review reads it unanswered.
 
 Then it runs the suite once at the final commit, with the baseline subtracted. A suite row marked
 end-of-task runs here for the first time. When the suite fails or cannot be decided, finish

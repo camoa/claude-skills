@@ -107,7 +107,7 @@ resumed_start() {
   printf '%s' "$?"
 }
 line() { grep "^$2:" "$1" | head -1; }
-ledger_halt() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | .haltedBecause // "none"' "$TASK/implementation/ledger.json"; }
+ledger_halt() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | (.stopped // []) | if length == 0 then "none" else map(.reason) | join("; ") end' "$TASK/implementation/ledger.json"; }
 ledger_step() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | .lastStep // "null"' "$TASK/implementation/ledger.json"; }
 # set_ledger <jq args>: edits the ledger by hand, the way a fixture stands in for an earlier run.
 set_ledger() {
@@ -152,7 +152,7 @@ expect "wo1 is not halted" "$(ledger_halt wo1)" "none"
 expect "wo2 is not halted" "$(ledger_halt wo2)" "none"
 expect "wo1 stays closed" "$(ledger_step wo1)" "closed"
 expect "wo2 stays closed" "$(ledger_step wo2)" "closed"
-expect "nothing is halted" "$(line "$ROOT/start-1.txt" halted)" "halted: none"
+expect "nothing is stopped" "$(line "$ROOT/start-1.txt" stopped)" "stopped: none"
 expect "wo4 is taken in" "$(jq -r '[.workOrders[].id] | join(" ")' "$TASK/implementation/snapshot.json")" "wo1 wo2 wo3 wo4"
 expect "the snapshot takes the owner labels" "$(jq -r '[.alignment.criteria[].author] | unique | join(" ")' "$TASK/implementation/snapshot.json")" "owner"
 

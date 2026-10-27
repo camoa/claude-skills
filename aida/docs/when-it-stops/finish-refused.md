@@ -6,13 +6,14 @@ done, or the suite does not pass. The finish step itself is on [finish](../stage
 
 ## The build is not done (exit 66)
 
-The message names each order that is not closed, each order that carries a halt, and each
-machine-verified criterion that is not confirmed. For an order, close it or answer its halt. See
-[a work order halted](halts.md). For a criterion, the message says which case it is:
+The message names each order that is neither closed nor dropped, each order that is stopped, and
+each machine-verified criterion that is not confirmed. A criterion a dropped order served is not
+asked. For an order, close it, drop it, or take its stop's way out. See
+[a work order stopped](stopped.md). For a criterion, the message says which case it is:
 
 - **Its orders have not all closed.** Close them.
 - **A checker rejected its test.** The test writer repairs the test, and the tests of that order
-  are frozen again. Clear the order's halt first when it halted on the rejection.
+  are frozen again. Take the order out of its stop first when it stopped on the rejection.
 - **No work order serves or owns it.** Nothing will ever judge it. Close design again with an
   order behind it, then run `/aida:implement`, whose `start` takes the added order in.
 

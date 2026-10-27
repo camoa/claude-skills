@@ -381,8 +381,8 @@ rc="$(try "$ROOT/dc-halt2.txt" "$IMPLEMENT" dispatch-close "$TASK")"
 expect "the second close halts: exit 110" "$rc" "110"
 expect "the halt names fix-record" "$(grep -c "then runs fix-record on .*answers-wo1-fix1.md, which is complete" "$ROOT/dc-halt2.txt")" "1"
 (cd "$WT" && git add a.php && git commit -qm "the rest of the fix")
-pa "$TASK" "implement clear-halt" wo1 "the halt row"
-in_wt "$IMPLEMENT" clear-halt "$TASK" wo1 --because "the halt row"
+pa "$TASK" "implement go-on fix" wo1 "the turn cap row"
+in_wt "$IMPLEMENT" go-on "$TASK" wo1 --continue fix --because "the turn cap row"
 rm -f "$(pinned_report)"
 
 reset
