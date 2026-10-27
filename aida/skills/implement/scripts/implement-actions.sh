@@ -12254,8 +12254,17 @@ RO_ONE
 # {commit, why}, with revert naming the commit that already reverts it, so no order counts that
 # commit as its own.
 WAY_WHO=""; WAY_REVERTED='[]'; WAY_SKIPPED='[]'
+# The full id the line `git revert` writes, "This reverts commit <id>.", names in commit $2 of the
+# repository $1, or nothing. A person's revert line can carry a short id, and every reader compares
+# full ids, so the id is resolved first. A short id git cannot resolve to one commit names nothing
+# (gap row 348).
+im_revert_target() {
+  local t
+  t="$(git -C "$1" log -1 --format=%B "$2" 2>/dev/null | sed -n 's/^This reverts commit \([0-9a-f][0-9a-f]*\)\.$/\1/p' | head -1)"
+  [ -z "$t" ] || git -C "$1" rev-parse --verify --quiet "$t^{commit}" 2>/dev/null
+}
 im_revert_order() {
-  local unit_id="$1" repo="$2" listed commits="" c said orig made failed by merges=""
+  local unit_id="$1" repo="$2" listed commits="" c r said orig made failed by merges=""
   WAY_REVERTED='[]'; WAY_SKIPPED='[]'
   listed="$(im_own_listed "$unit_id" "$repo")"
   for c in $(printf '%s\n' "$listed"); do
@@ -12263,7 +12272,12 @@ im_revert_order() {
       WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" '. + [{commit: $c, why: "HEAD does not hold it, as after a rebase"}]')"
       continue
     fi
-    by="$(git -C "$repo" log --format=%H --grep="This reverts commit $c" "$c..HEAD" 2>/dev/null | head -n 1)"
+    by=""
+    while IFS= read -r r; do
+      [ -n "$r" ] && [ "$(im_revert_target "$repo" "$r")" = "$c" ] && { by="$r"; break; }
+    done <<IRO_REVERTS
+$(git -C "$repo" log --format=%H --grep='^This reverts commit ' "$c..HEAD" 2>/dev/null)
+IRO_REVERTS
     if [ -n "$by" ]; then
       WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" --arg by "$by" '. + [{commit: $c, why: ("already reverted by " + $by), revert: $by}]')"
       continue
