@@ -12488,10 +12488,12 @@ GO_OWNS
         *) die3 "go-on: close needs an order in review, and $WAY_UNIT is at $(printf '%s' "$entry" | jq -r '.lastStep // "not started"'). Nothing is written." ;;
       esac
       rv_load_review_record "go-on" "$WAY_UNIT"
-      listed="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.actionable == true and .status == "open") | .id ] | join(", ")')"
+      # A pending finding, such as a disputed already-correct claim, is unresolved too, so the close
+      # lists and defers it with the open ones.
+      listed="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.actionable == true and (.status == "open" or .status == "pending")) | .id ] | join(", ")')"
       write_atomic "$RV_REVIEW_FILE" "$(printf '%s' "$RV_REVIEW_DOC" | jq -c --arg why "$WAY_BECAUSE" '
-        .findings = (.findings | map(if .actionable == true and .status == "open"
-          then . + {status: "ruled", ruling: "deferred", rulingReason: ("closed with this finding open, by a person'"'"'s go-on: " + $why)} else . end))')"
+        .findings = (.findings | map(if .actionable == true and (.status == "open" or .status == "pending")
+          then . + {status: "ruled", ruling: "deferred", rulingReason: ("closed with this finding \(.status), by a person'"'"'s go-on: " + $why)} else . end))')"
       more="$(printf '%s' "$more" | jq -c --arg l "$listed" '. + {listed: ($l | if . == "" then [] else split(", ") end)}')"
       state_note="closes with these findings listed: ${listed:-none}" ;;
     keep)
@@ -13700,15 +13702,20 @@ do_dispatch_close() {
     nr_ledger="$(stop_order_in "$nr_ledger" "$nr_unit" dispatch-close \
       "turn cap: ${nr_role##*:} $nr_what, $nr_after; its cap is ${nr_cap:-unknown} turns" "$(im_dispatch_allows "$nr_ledger" "$nr_unit")")"
     [ -n "$nr_ledger" ] || die3 "dispatch-close: the stop on $nr_unit could not be written."
-    # A capped builder writes no record, and the next build brief prints a new headNow. So its
+    # A capped builder or fixer writes no record, and the next brief prints a new headNow. So its
     # commits since its own brief's headNow go on the ledger here, as build-record does on a stop.
-    local nr_code nr_head
+    local nr_code nr_head nr_brief=""
     nr_code="$(jq -r '.codePath // ""' "$dispatch_file")"
-    nr_head="$(jq -r '.headNow // ""' "$IMPL_DIR/brief-$nr_unit-build.json" 2>/dev/null)"
-    if [ "${nr_role##*:}" = "implementer" ] && git -C "$nr_code" rev-parse --verify --quiet "$nr_head^{commit}" >/dev/null 2>&1; then
+    case "${nr_role##*:}" in
+      implementer) nr_brief="$IMPL_DIR/brief-$nr_unit-build.json" ;;
+      fixer) nr_brief="$IMPL_DIR/brief-$nr_unit-fix-$(( $(printf '%s' "$nr_ledger" | jq -r --arg id "$nr_unit" \
+        '[ .orders[] | select(.id == $id) | .roundsUsed // 0 ][0] // 0') + 1 )).json" ;;
+    esac
+    nr_head="$(jq -r '.headNow // ""' "$nr_brief" 2>/dev/null)"
+    if [ -n "$nr_brief" ] && git -C "$nr_code" rev-parse --verify --quiet "$nr_head^{commit}" >/dev/null 2>&1; then
       nr_ledger="$(printf '%s' "$nr_ledger" | jq -c --arg id "$nr_unit" \
         --argjson c "$(im_role_commits "$nr_code" "$nr_head" HEAD "$nr_unit")" "$IM_STOPPED_COMMITS_JQ")"
-      [ -n "$nr_ledger" ] || die3 "dispatch-close: the capped builder's commits on $nr_unit could not be written."
+      [ -n "$nr_ledger" ] || die3 "dispatch-close: the capped ${nr_role##*:}'s commits on $nr_unit could not be written."
     fi
     write_atomic "$TASK_PATH/implementation/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"

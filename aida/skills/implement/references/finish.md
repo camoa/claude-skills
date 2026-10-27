@@ -127,7 +127,7 @@ choose." Then say each reason in plain words, and offer the ways out the next se
 - `check`: the checks run again over the last record's range, with no new build and no attempt or
   round spent. A pass moves the order on and clears the stop. A fail records the checks and leaves
   the order stopped. It takes the recipe flags `build-record` takes, and `--interface`.
-- `close`: the order closes with its open findings listed. Each open finding is ruled `deferred`
+- `close`: the order closes with its open and pending findings listed. Each one is ruled `deferred`
   with the person's words, so `close` closes and `finish` carries each one to the task review.
 - `keep`: the change stays. A builder's deviation or a departure is kept with the person's words,
   and the next `build-record` or `review-record` reads them. A changed design file of the order is
