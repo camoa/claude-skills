@@ -2442,7 +2442,7 @@ REMOVED_PATHS
             | {o: ($o | without($gone)),
                c: (if $gone == [] then [] else [cleared($o; $gone; "start: this resumed run found no drift for " + $o.id
                      + ", and no order the dependent reason names holds a drift of its own, so that reason cleared")] end)} ] as $two
-          | {orders: ($two | map(.o)), cleared: (($one + $two) | map(.c[])), ids: (($one + $two) | map(select(.c != []) | .o.id) | unique)}')"
+          | {orders: ($two | map(.o)), cleared: (($one + $two) | map(.c[])), ids: (($one + $two) | map(select(.c != []) | .o.id) | reduce .[] as $i ([]; if index($i) then . else . + [$i] end))}')"
       [ -n "$cleared_doc" ] || die3 "start: could not work out which drift stops this run no longer finds."
       final_orders_json="$(printf '%s' "$cleared_doc" | jq -c '.orders')"
       stops_cleared_json="$(jq -cn --argjson a "$stops_cleared_json" --argjson b "$(printf '%s' "$cleared_doc" | jq -c '.cleared')" '$a + $b')"
@@ -10553,8 +10553,8 @@ FB_ALLOW
   # the round, as before. A task review's reopen has no stopped order, so only the records count
   # (gap row 390).
   fb_reopen="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '[ (.repairs // [])[] | select(.by or .review) ] | last // {}')"
+  fb_taken="$(im_others_listed "$unit_id"; printf '%s' "$fb_reopen" | jq -r '(.commits // [])[]')"
   if [ -n "$fb_last" ] && [ "$fb_last" = "$(printf '%s' "$fb_reopen" | jq -r '.closedRange // "" | split("..") | .[1] // ""')" ]; then
-    fb_taken="$(im_others_listed "$unit_id"; printf '%s' "$fb_reopen" | jq -r '(.commits // [])[]')"
     for c in $(git -C "$RV_RANGE_REPO" rev-list "$fb_last..$fb_head" 2>/dev/null); do
       printf '%s\n' "$fb_taken" | grep -Fqx -- "$c" || { fb_reopen=""; break; }
     done
@@ -10562,11 +10562,10 @@ FB_ALLOW
   fi
   [ -z "$fb_last" ] || [ "$fb_last" = "$fb_head" ] \
     || ! git -C "$RV_RANGE_REPO" merge-base --is-ancestor "$fb_last" "$fb_head" 2>/dev/null || fb_head="$fb_last"
-  # Gap row 340. A commit after that record that another order's records list is that order's, so
-  # the round begins after each such commit up to the first that is not. A commit of this order's
-  # after the record stays in the round (row 339).
+  # Gap row 340. A commit after that record that another order's records list, or the repair
+  # entry names, is that order's, so the round begins after each such commit up to the first that
+  # is not. A commit of this order's after the record stays in the round (row 339).
   if [ "$fb_head" != "$fb_now" ] && [ -z "$RV_RANGE_SCOPE" ]; then
-    fb_taken="$(im_others_listed "$unit_id")"
     for c in $(git -C "$RV_RANGE_REPO" rev-list --reverse "$fb_last..$fb_now" 2>/dev/null); do
       printf '%s\n' "$fb_taken" | grep -Fqx -- "$c" || break
       fb_head="$c"
