@@ -238,33 +238,37 @@ deny_named_segment() {
     alt="$(printf '%s' "$names" | sed -E 's/^ +//; s/ +$//; s/ +/|/g')"
   done < <(split_segments "$(strip_heredocs "${ROLE_CMD//"$BSNL"/}")")
 }
-# True when path $1, resolved against the payload's cwd when relative, is a task's own record:
-# <project>/tasks/<id>/<name>, where <project> holds project.json.
+# True when path $1 is a task's own record: <project>/tasks/<id>/<name>, where <project> holds
+# project.json. A leading ~ or ~/ is the home folder, as the shell reads it. Any other relative
+# path is resolved against the payload's cwd.
 is_task_record() {
   local p="$1" dir
+  case "$p" in \~) p="$HOME" ;; \~/*) p="$HOME/${p#\~/}" ;; esac
   case "$p" in /*) ;; *) p="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)/$p" ;; esac
   dir="$(cd "${p%/*}" 2>/dev/null && pwd -P)" || dir="${p%/*}"
   [ "$(basename "$(dirname "$dir")")" = tasks ] && [ -f "$(dirname "$(dirname "$dir")")/project.json" ]
 }
-# True when ROLE_CMD, heredoc bodies included, names a task's own copy of record $1. A word holding a
-# variable counts when it ends in /tasks/<id>/$1, and for person-answers.json, a name only AIDA
-# uses, whatever it holds; the bare name counts for that file too. Any other word counts when
+# True when ROLE_CMD, heredoc bodies included, names a task's own copy of record $1. Any word that
+# ends in person-answers.json counts, since only AIDA uses that name. For task.json, a word holding
+# a variable counts when it ends in /tasks/<id>/task.json. Any other word counts when
 # is_task_record accepts it, read as it stands and, when relative, from each folder the command
 # names with a literal cd or git -C. So `cd <task folder> && echo {} > task.json` counts.
 names_task_record() {
   local w d name_re bases
   case "$ROLE_CMD" in *"$1"*) ;; *) return 1 ;; esac
   name_re="$(printf '%s' "$1" | sed 's/\./\\./g')"
+  if [ "$1" = person-answers.json ]; then
+    printf '%s' "$ROLE_CMD" | grep -Eq "$name_re([^[:alnum:]_.-]|\$)"
+    return
+  fi
   bases="$(printf '%s\n' "${ROLE_CMD//$'\\\n'/}" | grep -oE "(^|[;&|(]|[[:space:]])(cd|-C)[[:space:]]+[^[:space:];&|]+" \
     | sed -E 's/^[;&|([:space:]]*(cd|-C)[[:space:]]+//' | tr -d "\"'" | grep -v '\$')"
   while IFS= read -r w; do
     w="$(printf '%s' "$w" | tr -d "\"'")"
     case "$w" in
       *'$'*)
-        [ "$1" = person-answers.json ] && return 0
         ! printf '%s' "$w" | grep -Eq "/tasks/[^/]+/$name_re\$" || return 0
         continue ;;
-      "$1") [ "$1" != person-answers.json ] || return 0 ;;
     esac
     is_task_record "$w" && return 0
     case "$w" in /*) continue ;; esac
