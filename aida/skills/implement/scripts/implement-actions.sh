@@ -1410,14 +1410,14 @@ im_next_step() {
         (if $bd.lastStep == "tests-frozen" and ($bd.doneWhenGained // null) != null then
            "tests \($bd.id): the done-when gained rows after the freeze, so judge the done-when row again and freeze the same tests"
          else "build \($bd.id)" end)
-      elif $removed != null and $ts != null then "stopped: offer drop \($removed.id), the design removed it, and its frozen test record still guards its test files"
+      elif $removed != null and $ts != null then "finish: offer drop \($removed.id), the design removed it, and its frozen test record still guards its test files"
       elif $ts != null then "tests \($ts.id)"
       elif (($orders | length) > 0 and (($closed + $dropped) | length) == ($orders | length) and $stopped == null) then "finish: run finish <task_folder> [--value <name>=<value>]..., with no recipe flag, because finish reads the recipe paths from preconditions.json"
       elif $stopped != null then
         ($stopped | stop_choices) as $choices
-        | "stopped: \($stopped.id) is stopped, so offer the ways out: "
+        | "finish: \($stopped.id) is stopped, so offer the ways out: "
           + (if ($choices | length) > 0 then "go-on with " + ($choices | join(" or ")) + ", " else "" end) + "redo or drop"
-      elif $orphan != null then "none: \($orphan.id) depends on a dropped order, so redo it through design or drop it"
+      elif $orphan != null then "finish: \($orphan.id) depends on a dropped order, so redo it through design or drop it"
       else "none: nothing is ready, and every remaining order waits on a dependency that is not closed" end'
 }
 
