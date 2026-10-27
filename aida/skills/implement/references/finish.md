@@ -307,10 +307,11 @@ they are every value in the call's order, one per line, passed as `@/<file>`. Fo
 they are each `--row` a person judged, one per line. For `start` they are `keep`. A final newline
 does not count. Each refusal prints the command with the words to use.
 
-Each answer is one entry in `person-answers.json` in the task folder. An entry passes one call. The
-call marks it used once its own writes are done, so a later refusal keeps it. No entry is removed,
-so review can count every answer. A hook refuses every other write of this file, and of
-`task.json`, from any session.
+Each answer is one entry in `person-answers.json` in the task folder. An entry serves one attempt.
+The call marks it used once its own writes are done. A call that refuses after it found the entry
+marks it refused, so the next attempt needs a new answer. An argument fault (exit 3) keeps it. No
+entry is removed, so review can count every answer. A hook refuses every other write of this file,
+and of `task.json`, from any session.
 
 Three other stages still refuse only on an unattended stage (exit 70): review's `close --row`,
 completion's `close` flags, and the task skill's `environment` calls. There the same action records

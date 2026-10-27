@@ -541,19 +541,21 @@ task_run_mode() {
 # step. Final newlines are not words, and empty words never match. The hook makes Claude Code show
 # its permission prompt for that script, and refuses every other write of this file, so an entry is a
 # yes that whoever answers prompts in the session gave. An entry is never removed: the step that
-# used it marks it, so review can count every answer.
+# used it marks it usedAt, and a step that refused after it found the entry marks it refusedAt, so
+# review can count every answer and an answer serves one attempt.
 TASK_ANSWER_HELD=""
 task_answer_file() { printf '%s/person-answers.json' "$1"; }
 
-# True when the task holds an unused entry for this step, order and words. The first such entry is
-# held, not marked, so a later refusal keeps it. task_answer_consume marks it once the action wrote.
+# True when the task holds an unused entry for this step, order and words: neither usedAt nor
+# refusedAt. The first such entry is held. task_answer_consume marks it once the action wrote, and
+# task_answer_refused marks it when the action refuses instead.
 # $1 the task folder, $2 the step, $3 the order or empty, $4 the words.
 task_answer_find() {
   local file index
   file="$(task_answer_file "$1")"
   [ -n "$4" ] && [ -f "$file" ] || return 1
   index="$(jq -r --arg step "$2" --arg order "$3" --arg words "$4" '
-      [ to_entries[] | select((.value.usedAt // null) == null and .value.step == $step
+      [ to_entries[] | select((.value.usedAt // null) == null and (.value.refusedAt // null) == null and .value.step == $step
           and (.value.order // "") == $order
           and ((.value.words // "") | sub("\n+$"; "")) == ($words | sub("\n+$"; ""))) | .key ][0] // empty' \
       "$file" 2>/dev/null)"
@@ -586,6 +588,19 @@ $words" ;;
 task_require_answer() {
   task_answer_find "$4" "$5" "$6" "$7" && return 0
   die "$1" "$2: $3 is a person's answer, and $(task_answer_file "$4") holds no unused answer for step $5${6:+, order $6}, with these words. Nothing is written.$(task_answer_route "$4" "$5" "$6" "$7")"
+}
+
+# Marks the held entry refused, with the exit code, so an answer for an attempt that refused cannot
+# pass a later call nobody was asked about. An argument fault, exit 3, keeps it: the person's answer
+# stands and only the call is retyped. Each script's die calls it. $1 the exit code.
+task_answer_refused() {
+  [ -n "$TASK_ANSWER_HELD" ] && [ "$1" != 3 ] || return 0
+  local file="${TASK_ANSWER_HELD%	*}" index="${TASK_ANSWER_HELD##*	}" written
+  TASK_ANSWER_HELD=""
+  written="$(jq --argjson i "$index" --argjson code "$1" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '.[$i].refusedAt = $at | .[$i].refusedWith = $code' "$file" 2>/dev/null)"
+  [ -n "$written" ] && write_atomic "$file" "$written"
+  printf "task-helpers: the person's answer %s in %s is marked refused, because the step refused. The next attempt needs a new answer.\n" "$index" "$file" >&2
 }
 
 # Marks the entry task_answer_find held as used, so one answer serves one call. Each action calls

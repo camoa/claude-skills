@@ -108,7 +108,8 @@ die3() {
   exit 3
 }
 # The two libraries take these from their caller, so a refusal still says which script refused.
-die() { printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
+# An answer task_answer_find held is marked refused before the exit (task-helpers.sh).
+die() { ! command -v task_answer_refused >/dev/null 2>&1 || task_answer_refused "$1"; printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
 die1() { die 1 "$1"; }
 for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh" \
     "${PLUGIN_ROOT}/scripts/lib/proof.sh"; do

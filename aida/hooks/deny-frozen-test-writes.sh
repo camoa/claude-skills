@@ -121,6 +121,9 @@ not_enforced() {
 }
 
 AGENT="$(jq -r '.agent_type // empty' <<<"$INPUT" 2>/dev/null)"
+# agent_id is present only inside a subagent; agent_type is present for `claude --agent` too, and
+# that session is the main session. The person gate decides "dispatched role" by agent_id.
+AGENT_ID="$(jq -r '.agent_id // empty' <<<"$INPUT" 2>/dev/null)"
 is_test_author() {
   case "$1" in test-author|*:test-author) return 0 ;; esac
   return 1
@@ -148,21 +151,27 @@ deny_own_record() {
 # The person gate. <task>/person-answers.json holds the person's answers, and
 # skills/task/scripts/person-answer.sh alone appends to it, behind the prompt below. task.json
 # holds the run mode, and only the task scripts write it. So every session, the main session
-# included, is refused a write of either: through the file tools, and through a Bash segment that names it and holds a write signal.
-# A segment names it through the name itself, or through a `$NAME` an earlier segment set to a value
-# holding the name. A heredoc is read too when its line holds an interpreter, so `python3 <<EOF`
-# with the name only in the body is refused. The test is wide on purpose: a step trusts the record,
-# so a missed write is a forged answer, while a refused read costs one turn. A name built at run time
-# passes the Bash test, the limit the docs page for the person's answer names.
+# included, is refused a write of a task's own copy of either: <project>/tasks/<id>/<name>, where
+# <project> holds project.json (names_task_record). A file of that name in a code tree is not this
+# rule's. The write is refused through the file tools, and through a Bash segment that names the
+# file and holds a write signal. A segment names it through the name itself, or through a `$NAME`
+# an earlier segment set to a value holding the name. A heredoc is read too when its line holds an
+# interpreter, so `python3 <<EOF` with the name only in the body is refused. The test is wide on
+# purpose: a step trusts the record, so a missed write is a forged answer, while a refused read
+# costs one turn. A name built at run time or a glob passes the Bash test, the limit the docs page
+# for the person's answer names.
 ANSWER_REFUSAL="person-answers.json holds the person's answers, and only person-answer.sh writes it, after Claude Code asks. Run that script, or let the step stand."
 TASK_REFUSAL="task.json holds the run mode a person's check reads, and only the task scripts write it. Change the run mode with task-actions.sh set-run-mode, after a person's answer."
 # Returns 0 when segment $1 holds a write signal: a redirect other than 2> or one to /dev/null, a
-# write verb, sed -i, find -delete, or an interpreter word.
+# write verb, sed -i, awk -i, find -delete, git checkout or restore, or an interpreter word. The
+# answers are committed, so a checkout of an older copy would make a used answer usable again.
 answer_write_signal() {
   local s
   s="$(printf '%s' "$1" | sed -E 's#[0-9]*>&[0-9-]+##g; s#(&|[0-9])?>>?[[:space:]]*/dev/null##g; s#2>>?[[:space:]]*[^[:space:]]*##g')"
   case "$s" in *'>'*) return 0 ;; esac
-  printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])(tee|cp|mv|install|dd|rm|sponge|truncate|ln|rsync|python[0-9.]*|node|perl|ruby|php|sh|bash)([[:space:];&|)`]|$)' && return 0
+  printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])(tee|cp|mv|install|dd|rm|sponge|truncate|ln|rsync|patch|ed|python[0-9.]*|node|perl|ruby|php|sh|bash)([[:space:];&|)`]|$)' && return 0
+  printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+(checkout|restore)([[:space:]]|$)' && return 0
+  printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])g?awk[[:space:]].*(-i[[:space:]]*inplace|--inplace)' && return 0
   printf '%s' "$s" | grep -Eq '(^|[[:space:]])-delete([[:space:]]|$)' && return 0
   printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])sed[[:space:]]' \
     && printf '%s' "$s" | grep -Eq '[[:space:]](-[A-Za-z]*i|--in-place)' && return 0
@@ -190,7 +199,7 @@ completion-actions.sh close --reason --leave --captures-offered --observed-accep
 surfaces-actions.sh baseline --confirmed
 surfaces-actions.sh decline
 project-actions.sh unregister|task-rule|task-rule-remove|uninstall|record-declined'
-PERSON_REFUSAL="This command runs an action that records a person's approval, ruling or answer, and only the main session runs one. This command's agent_type is $AGENT. Report the halt to the main session and stop."
+PERSON_REFUSAL="This command runs an action that records a person's approval, ruling or answer, and only the main session runs one. This command comes from a dispatched agent, type ${AGENT:-unnamed}. Report the halt to the main session and stop."
 # Returns 0 when segment $1 runs a PERSON_ACTIONS line of script PA_SCRIPT: the script's name, or a
 # `$NAME` set to it, then any `--option value` pairs, then the action, then one of the words. A grep
 # for an action's name passes, because the script's name comes after it.
@@ -229,6 +238,42 @@ deny_named_segment() {
     alt="$(printf '%s' "$names" | sed -E 's/^ +//; s/ +$//; s/ +/|/g')"
   done < <(split_segments "$(strip_heredocs "${ROLE_CMD//"$BSNL"/}")")
 }
+# True when path $1, resolved against the payload's cwd when relative, is a task's own record:
+# <project>/tasks/<id>/<name>, where <project> holds project.json.
+is_task_record() {
+  local p="$1" dir
+  case "$p" in /*) ;; *) p="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)/$p" ;; esac
+  dir="$(cd "${p%/*}" 2>/dev/null && pwd -P)" || dir="${p%/*}"
+  [ "$(basename "$(dirname "$dir")")" = tasks ] && [ -f "$(dirname "$(dirname "$dir")")/project.json" ]
+}
+# True when ROLE_CMD, heredoc bodies included, names a task's own copy of record $1. A word holding a
+# variable counts when it ends in /tasks/<id>/$1, and for person-answers.json, a name only AIDA
+# uses, whatever it holds; the bare name counts for that file too. Any other word counts when
+# is_task_record accepts it, read as it stands and, when relative, from each folder the command
+# names with a literal cd or git -C. So `cd <task folder> && echo {} > task.json` counts.
+names_task_record() {
+  local w d name_re bases
+  case "$ROLE_CMD" in *"$1"*) ;; *) return 1 ;; esac
+  name_re="$(printf '%s' "$1" | sed 's/\./\\./g')"
+  bases="$(printf '%s\n' "${ROLE_CMD//$'\\\n'/}" | grep -oE "(^|[;&|(]|[[:space:]])(cd|-C)[[:space:]]+[^[:space:];&|]+" \
+    | sed -E 's/^[;&|([:space:]]*(cd|-C)[[:space:]]+//' | tr -d "\"'" | grep -v '\$')"
+  while IFS= read -r w; do
+    w="$(printf '%s' "$w" | tr -d "\"'")"
+    case "$w" in
+      *'$'*)
+        [ "$1" = person-answers.json ] && return 0
+        ! printf '%s' "$w" | grep -Eq "/tasks/[^/]+/$name_re\$" || return 0
+        continue ;;
+      "$1") [ "$1" != person-answers.json ] || return 0 ;;
+    esac
+    is_task_record "$w" && return 0
+    case "$w" in /*) continue ;; esac
+    while IFS= read -r d; do
+      [ -n "$d" ] && is_task_record "$d/$w" && return 0
+    done <<<"$bases"
+  done < <(printf '%s\n' "${ROLE_CMD//$'\\\n'/}" | grep -oE "[^[:space:];&|()<>=]*$name_re")
+  return 1
+}
 # Refuses with reason $2 a command that names $1 on a heredoc line holding an interpreter, since
 # the segments above are read with every heredoc body dropped.
 deny_interpreter_heredoc() {
@@ -264,11 +309,15 @@ $(head -c 2000 -- "$f")"
 }
 if [ "$TOOL" = Bash ]; then
   ROLE_CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
-  deny_named_segment person-answers.json 'person-answers\.json' answer_write_signal "$ANSWER_REFUSAL"
-  deny_named_segment task.json 'task\.json' answer_write_signal "$TASK_REFUSAL"
-  deny_interpreter_heredoc person-answers.json "$ANSWER_REFUSAL"
-  deny_interpreter_heredoc task.json "$TASK_REFUSAL"
-  if [ -n "$AGENT" ]; then
+  if names_task_record person-answers.json; then
+    deny_named_segment person-answers.json 'person-answers\.json' answer_write_signal "$ANSWER_REFUSAL"
+    deny_interpreter_heredoc person-answers.json "$ANSWER_REFUSAL"
+  fi
+  if names_task_record task.json; then
+    deny_named_segment task.json 'task\.json' answer_write_signal "$TASK_REFUSAL"
+    deny_interpreter_heredoc task.json "$TASK_REFUSAL"
+  fi
+  if [ -n "$AGENT_ID" ]; then
     deny_named_segment person-answer.sh 'person-answer\.sh' names_it "$PERSON_REFUSAL"
     while read -r PA_SCRIPT; do
       deny_named_segment "$PA_SCRIPT" "$(printf '%s' "$PA_SCRIPT" | sed 's/\./\\./g')" person_action_signal "$PERSON_REFUSAL"
@@ -278,10 +327,13 @@ if [ "$TOOL" = Bash ]; then
       "AIDA records a person's answer. Approve only if you, the person, give this answer:" ask_person
   fi
 else
-  case "$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" in
-    */person-answers.json) deny_own_record "$ANSWER_REFUSAL" ;;
-    */task.json) deny_own_record "$TASK_REFUSAL" ;;
-  esac
+  RECORD_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
+  if is_task_record "$RECORD_TARGET"; then
+    case "$RECORD_TARGET" in
+      */person-answers.json) deny_own_record "$ANSWER_REFUSAL" ;;
+      */task.json) deny_own_record "$TASK_REFUSAL" ;;
+    esac
+  fi
 fi
 if [ "$TOOL" != "Bash" ]; then
   OWN_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"

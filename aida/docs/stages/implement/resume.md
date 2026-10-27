@@ -43,6 +43,7 @@ A person's call, such as a grant, a restart, a ruling, a file you allow, or acce
 refuses until your answer is on record, in every run mode. Claude Code shows you a permission
 prompt, and your yes records the answer in `person-answers.json` in the task folder. The call
 passes only on an unused answer for this step, this order and your exact words, and marks it used.
+A call that refuses for another reason marks the answer refused, so the next attempt asks again.
 See [the person's answer](../../task/person-answer.md).
 
 ## A permission prompt partway through

@@ -35,9 +35,11 @@ The run mode does not decide whether you answered. An interactive run asks for y
 4. Claude runs the step again, and it passes.
 
 Each answer is one entry in `person-answers.json` in the task folder, with the step, the work order
-where there is one, your words and the time. The step marks the entry used. No entry is removed, so
-review can count every answer. A hook refuses every other write of that file, and of `task.json`,
-from any session, the main session included.
+where there is one, your words and the time. The step marks the entry used. A step that refuses
+for another reason marks it refused, so the next attempt asks you again. A mistyped call (exit 3)
+keeps it. No entry is removed, so review can count every answer. A hook refuses every other write
+of a task's own copy of that file, and of `task.json`, from any session, the main session
+included. A `task.json` in your code is not touched.
 
 ## Where no prompt can show
 
@@ -63,8 +65,10 @@ The cases where something other than you can answer:
   silences a hook's ask. For this reason, no skill pre-approves the script.
 - **Headless with no host.** With `-p` and no prompt host, a prompt is denied, and Claude keeps
   working on what it can.
-- **A session that works around the hook.** The hook reads the command text, so a file name built
-  at run time passes it. The hook stops the plain forms. It is not a wall.
+- **A session that works around the hook.** The hook reads the command text. A file name built at
+  run time, a glob such as `person-answe?.json`, or a relative name after a `cd` through a variable
+  passes it. The hook stops the plain forms, including a checkout or restore of the record from
+  git. It is not a wall.
 
 The prompt carries a yes or a no on words Claude wrote. For a reason sentence, the prompt shows the
 sentence, and your yes endorses it. Read it before you approve.

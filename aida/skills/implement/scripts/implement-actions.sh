@@ -885,7 +885,8 @@ OBSERVED_SCHEMA_FILE="${PLUGIN_ROOT}/scripts/observed-schema.json"
 
 command -v jq >/dev/null 2>&1 || { printf 'implement-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
-die() { printf 'implement-actions: %s\n' "$2" >&2; exit "$1"; }
+# An answer task_answer_find held is marked refused before the exit (task-helpers.sh).
+die() { ! command -v task_answer_refused >/dev/null 2>&1 || task_answer_refused "$1"; printf 'implement-actions: %s\n' "$2" >&2; exit "$1"; }
 # A control refuses through die, with its own exit code as the first argument. The exit-code table
 # above is the only place a number gets a meaning, and nothing here mints one that table does not
 # carry.

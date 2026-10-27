@@ -151,7 +151,8 @@ REVIEW_SCHEMA="${PLUGIN_ROOT}/scripts/review-schema.json"
 command -v jq >/dev/null 2>&1 || { printf 'review-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 command -v git >/dev/null 2>&1 || { printf 'review-actions: git is required and was not found on PATH\n' >&2; exit 3; }
 
-die() { printf 'review-actions: %s\n' "$2" >&2; exit "$1"; }
+# An answer task_answer_find held is marked refused before the exit (task-helpers.sh).
+die() { ! command -v task_answer_refused >/dev/null 2>&1 || task_answer_refused "$1"; printf 'review-actions: %s\n' "$2" >&2; exit "$1"; }
 # One refusal function, one exit code as its first argument. The table above is the only place a
 # number gets a meaning, and nothing here mints one that table does not carry.
 

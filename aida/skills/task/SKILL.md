@@ -460,7 +460,8 @@ denied prompt records nothing. In bypassPermissions or dontAsk mode the hook ref
 because no prompt can show there. Then stop and report the step to the person.
 
 The script appends one entry to `person-answers.json` in the task folder. The step it serves marks
-the entry used, and no entry is removed. A hook refuses every other write of that file, and of
+the entry used, or refused when the step refuses for a reason other than an argument fault. So
+each attempt needs its own answer. No entry is removed. A hook refuses every other write of that file, and of
 `task.json`, from any session. The implement skill's `references/finish.md` lists the steps and
 their words.
 
