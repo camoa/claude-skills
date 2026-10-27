@@ -400,6 +400,8 @@ same call with the rulings and no verdicts file, and the round's verdicts stand.
 a finding whose fix scope is empty may be ruled at `reviewed`, with the rulings and no verdicts
 file. It asks for no code change, so no round can reach it. No round is recorded. Unattended,
 `fix-brief` marks each such finding pending and exits 0, and its `next:` line names the close.
+A finding that cites a non-goal may be ruled before the cap too, because only the person says
+whether the non-goal holds.
 Any other finding before the cap refuses (exit 3), and the message names the findings that may be
 ruled now. Every ruling refuses without the person's answer on record (exit 55).
 

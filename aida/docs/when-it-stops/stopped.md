@@ -16,7 +16,8 @@ Each reason names the go-on choices it allows. AIDA offers only a choice every r
 | `turn cap` | a role returned no report after it was resumed | go on, then `start` keeps or sets aside its files |
 | the builder stopped, or a role left the tree dirty with nobody present | something only you can settle | settle it, then go on |
 | a row the checker rejected, with nobody present | the tests may not prove the criterion | judge the row, then go on; or redo with new tests |
-| a finding on a non-goal, a fixer short of scope, or the fix rounds spent | the review needs your ruling | go on with `fix` or `close`; a fixer short of scope may get the file it needs |
+| a finding on a non-goal, or the fix rounds spent | the review needs your ruling | rule on each open finding, or go on with `fix` or `close` |
+| a fixer short of scope | the fix needs a file the order does not own | go on with `fix`, and give the order the file it needs with `--owns` |
 | a finding ruled load-bearing | the finding is real and stays | commit the fix, then go on with `check`; or go on with `close` |
 | `test wrong` | you ruled a frozen test wrong at review | redo |
 | `design drift: the builder declared a departure` or `design drift: the reviewer answered` | what was built departs from the design | keep it with go-on `keep`, or change the design and redo |

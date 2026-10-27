@@ -11106,9 +11106,9 @@ do_verify_record() {
 
   im_load_task "$task_arg" "verify-record"
 
-  # A ruling answers the stops that wait on a ruling: the fix round cap, a finding on a non-goal,
-  # and a disputed already-correct claim, so rulings pass those reasons and they clear once no
-  # actionable finding is open. Every other reason still refuses.
+  # A ruling answers the stops that wait on a ruling: the fix round cap and a finding on a
+  # non-goal, so rulings pass those reasons and they clear once no actionable finding is open.
+  # Every other reason still refuses.
   local rule_answers='[]'
   [ -z "$rulings_raw" ] || rule_answers="$RV_RULE_ANSWERS"
   rv_load_state "verify-record" "$unit_id" "$rule_answers"
@@ -11423,9 +11423,10 @@ do_verify_record() {
 # values, one per line. Sets RV_RULED_FINDINGS, and RV_RULING_HALT with RV_RULING_ALLOWS, the
 # stop reason a ruling writes and the go-on choices it allows; the reason is empty when none stops.
 RV_RULED_FINDINGS=""; RV_RULING_HALT=""; RV_RULING_ALLOWS='[]'
-# The fronts of the stop reasons a ruling answers: the unattended fix round cap, a finding on a
-# non-goal, and a disputed already-correct claim, each of which waits on a person's ruling.
-RV_RULE_ANSWERS='["a fix round cap reached with findings still open","a finding hits a non-goal","a fixer reports "]'
+# The fronts of the stop reasons a ruling answers: the unattended fix round cap and a finding on a
+# non-goal, each of which waits on a person's ruling. A disputed already-correct claim is not one:
+# its finding is pending, not open, so no ruling lands on it, and go-on fix or close answers it.
+RV_RULE_ANSWERS='["a fix round cap reached with findings still open","a finding hits a non-goal"]'
 rv_apply_rulings() {
   local unit_id="$1" updated_findings="$2" rounds_used="$3" rulings_raw="$4"
   local open_now ruling_halt="" rulings_json="[]"
@@ -11454,27 +11455,31 @@ rv_apply_rulings() {
 $rulings_raw
 RV_RULINGS
 
-  # Before the cap, a ruling is taken on two kinds of finding alone. One a fixer reported out of
+  # Before the cap, a ruling is taken on these findings alone. One a fixer reported out of
   # its scope, which fix-record marked scopeInsufficientInRound: the fixer's own report is the
   # evidence that no round can reach it, so a second dispatch bought to hear it again is spent on
   # nothing (live-run row 110). And one whose fix scope is empty: it asks for no code change, so
   # no round can reach it either (gap row 265). Any other finding waits for the cap, as before.
   # Gap row 318: once a person kept the departure (deviationAccepted), every open finding may be
   # ruled now, because a finding the reviewer did not mark may be that departure, and a fixer
-  # would undo what the person kept. The caller refuses an unattended ruling (exit 55).
-  local kept
+  # would undo what the person kept. A finding on a non-goal is ruled now too: whether the
+  # non-goal holds is a person's call, and its stop waits on that ruling, not on a round. The
+  # caller refuses an unattended ruling (exit 55).
+  local kept ng rulable
   kept="$(printf '%s' "$RV_REVIEW_DOC" | jq 'has("deviationAccepted")')"
-  rulable_now="$(printf '%s' "$updated_findings" | jq -r --argjson kept "${kept:-false}" \
-    '[ .[] | select(.actionable == true and .status == "open" and ($kept or has("scopeInsufficientInRound") or ((.fixScope // []) | length == 0))) | .id ] | join(", ")')"
+  ng="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.nonGoals // [])[] | .id ]')"
+  rulable='($kept or has("scopeInsufficientInRound") or ((.fixScope // []) | length == 0) or (.linkedTo as $l | $ng | index($l) != null))'
+  rulable_now="$(printf '%s' "$updated_findings" | jq -r --argjson kept "${kept:-false}" --argjson ng "${ng:-[]}" \
+    "[ .[] | select(.actionable == true and .status == \"open\" and $rulable) | .id ] | join(\", \")")"
   if [ -n "$rulings_raw" ] && [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ]; then
     early_ids="$(printf '%s' "$rulings_json" | jq -r '[ .[].id ] | join(", ")')"
-    early_ok="$(printf '%s' "$updated_findings" | jq -r --argjson r "$rulings_json" --argjson kept "${kept:-false}" \
-      '[ $r[].id ] as $ids | [ .[] | select(($kept or has("scopeInsufficientInRound") or ((.fixScope // []) | length == 0)) and (.id as $i | $ids | index($i))) | .id ] | length == ($ids | length)')"
+    early_ok="$(printf '%s' "$updated_findings" | jq -r --argjson r "$rulings_json" --argjson kept "${kept:-false}" --argjson ng "${ng:-[]}" \
+      "[ \$r[].id ] as \$ids | [ .[] | select($rulable and (.id as \$i | \$ids | index(\$i))) | .id ] | length == (\$ids | length)")"
     if [ "$early_ok" != "true" ]; then
       if [ -n "$rulable_now" ]; then
-        die3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. These findings may be ruled now, because a fixer reported them out of its scope, their fix scope is empty, or a person kept the departure: $rulable_now. The ruling named: $early_ids."
+        die3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. These findings may be ruled now, because a fixer reported them out of its scope, their fix scope is empty, they cite a non-goal, or a person kept the departure: $rulable_now. The ruling named: $early_ids."
       fi
-      die3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. No finding may be ruled now: no fixer has reported one out of its scope, none has an empty fix scope, and no person kept a departure with go-on --continue keep."
+      die3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. No finding may be ruled now: no fixer has reported one out of its scope, none has an empty fix scope, none cites a non-goal, and no person kept a departure with go-on --continue keep."
     fi
   fi
   # A ruling with nothing left to rule on is refused rather than dropped. A caller who wrote one
@@ -12432,7 +12437,7 @@ do_go_on() {
     # The path counts only as a whole word: a.php is not named by words that say data.php.
     jq -en --arg w "$WAY_BECAUSE" --arg p "$p" '
       ($p | gsub("(?<c>[\\\\^$.|?*+()\\[\\]{}-])"; "\\\(.c)")) as $e
-      | $w | test("(^|[^A-Za-z0-9_./-])" + $e + "($|[^A-Za-z0-9_/-]|\\.($|\\s))")' >/dev/null \
+      | $w | test("(^|[^A-Za-z0-9_./-])" + $e + "($|[^A-Za-z0-9_./-]|\\.($|\\s))")' >/dev/null \
       || die3 "go-on: --owns $p is a file the order would now own, and the person's words do not name it as a whole word. The answer covers what the person read, so their words name each file. Nothing is written."
     abs="$(normalize_abs "$(resolve_against "$p" "$RV_CODEPATH")")"
     rel="${abs#"$RV_CODEPATH"/}"
@@ -13695,6 +13700,16 @@ do_dispatch_close() {
     nr_ledger="$(stop_order_in "$nr_ledger" "$nr_unit" dispatch-close \
       "turn cap: ${nr_role##*:} $nr_what, $nr_after; its cap is ${nr_cap:-unknown} turns" "$(im_dispatch_allows "$nr_ledger" "$nr_unit")")"
     [ -n "$nr_ledger" ] || die3 "dispatch-close: the stop on $nr_unit could not be written."
+    # A capped builder writes no record, and the next build brief prints a new headNow. So its
+    # commits since its own brief's headNow go on the ledger here, as build-record does on a stop.
+    local nr_code nr_head
+    nr_code="$(jq -r '.codePath // ""' "$dispatch_file")"
+    nr_head="$(jq -r '.headNow // ""' "$IMPL_DIR/brief-$nr_unit-build.json" 2>/dev/null)"
+    if [ "${nr_role##*:}" = "implementer" ] && git -C "$nr_code" rev-parse --verify --quiet "$nr_head^{commit}" >/dev/null 2>&1; then
+      nr_ledger="$(printf '%s' "$nr_ledger" | jq -c --arg id "$nr_unit" \
+        --argjson c "$(im_role_commits "$nr_code" "$nr_head" HEAD "$nr_unit")" "$IM_STOPPED_COMMITS_JQ")"
+      [ -n "$nr_ledger" ] || die3 "dispatch-close: the capped builder's commits on $nr_unit could not be written."
+    fi
     write_atomic "$TASK_PATH/implementation/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
     # A fixer's complete report stops a fresh dispatch-open until fix-record reads it (gap row 343).
