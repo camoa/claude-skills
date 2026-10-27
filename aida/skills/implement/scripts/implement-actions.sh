@@ -334,8 +334,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      owned file is uncommitted before the baseline runs, or when HEAD or an owned file changed
 #      while it ran: the baseline would measure that work, not the commit (gap row 431).
 #      `tests-brief` and `dispatch-open` of a writing role refuse at 21 while that run is live.
-#  24  `tests-brief` found the given unit owns a criterion whose verifiedBy is machine while its
-#      own frozen tests field is empty. check-design.sh should already have refused this at design
+#  24  `tests-brief` found the given unit, proved by tests, owns a criterion whose verifiedBy is
+#      machine while its own frozen tests field is empty. check-design.sh should already have refused this at design
 #      close; this is a second reading against the frozen copy, never a live one.
 #  27  `tests-freeze` was given a --test whose path matches none of the given --test-glob patterns.
 #      A test written outside the framework's own pattern is not protected by anything later.
@@ -4685,9 +4685,11 @@ do_tests_brief() {
   fi
 
   # --- exit 24: an owned, machine-verified criterion with no declared test at all ------------------
+  # Only an order proved by tests owes one, the exemption check-design reads from the same slot.
   local unit_tests_count owned_json owned_machine_unmet
   unit_tests_count="$(printf '%s' "$UNIT_JSON" | jq '(.tests // []) | length')"
-  if [ "$unit_tests_count" -eq 0 ]; then
+  br_order_facts "$UNIT_JSON"
+  if [ "$unit_tests_count" -eq 0 ] && [ "$BR_ORDER_SLOT" = "order-tests" ]; then
     owned_json="$(printf '%s' "$UNIT_JSON" | jq -c '.criteriaOwned // []')"
     owned_machine_unmet="$(printf '%s' "$CRITERIA_JSON" | jq -r --argjson owned "$owned_json" '
         [ .[] | select(.verifiedBy == "machine") | select(.id as $i | $owned | index($i) != null) | .id ]
@@ -5211,6 +5213,10 @@ $recorded
 RF_EOF
 }
 
+# The freeze's temporary files sit in the implementation folder, each named for this process. A
+# refusal exits through die, so the EXIT trap removes them. find, not a glob: zsh stops on a glob
+# with no match.
+tf_tmp_remove() { [ -z "${IMPL_DIR:-}" ] || find "$IMPL_DIR" -maxdepth 1 -name ".tests-freeze-*.$$" -exec rm -f {} + 2>/dev/null; }
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
   local support_raw="" absence_raw="[]"
@@ -5284,6 +5290,9 @@ do_tests_freeze() {
   [ -n "$unit_id" ]  || die3 "tests-freeze: a unit id is required"
 
   im_load_task "$task_arg" "tests-freeze"
+  trap 'tf_tmp_remove' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
 
   tt_load_snapshot "tests-freeze"
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "tests-freeze"
@@ -14066,8 +14075,9 @@ do_dispatch_open() {
   # than copied into this file, because a copy goes stale the first time a role is added. Nothing
   # else validates the name: a misspelled role opens a record no agent's payload can ever match,
   # and both hooks then allow everything in silence (ideal/agents.md, rule 3). The runtime reports
-  # an agent type in two forms, `<plugin>:<role>` and the bare name, so both are accepted and only
-  # the part after the last colon is compared.
+  # an agent type in two forms, `<plugin>:<role>` and the bare name, so both are accepted. A prefix
+  # must be this plugin's name: the hooks compare two prefixed forms whole, so another plugin's
+  # prefix opens a record this plugin's agent never matches. plugin_role asks both questions.
   local role_bare agents_dir known_list
   role_bare="${role##*:}"
   [ -z "$recheck_raw" ] || [ "$role_bare" = "row-checker" ] \
@@ -14076,10 +14086,8 @@ do_dispatch_open() {
   known_list="$(md_basenames_in "$agents_dir")"
   [ -n "$known_list" ] \
     || die 46 "dispatch-open: no agent definitions were found in $agents_dir, so no role name can be checked. This plugin's own files are incomplete; nothing about the task is wrong."
-  case " $known_list" in
-    *" $role_bare "*) ;;
-    *) die 46 "dispatch-open: $role names no agent this plugin ships, so a dispatch under it would run with no permission applied. The roles that exist are: $known_list" ;;
-  esac
+  plugin_role "$PLUGIN_ROOT" "$role" \
+    || die 46 "dispatch-open: $role names no agent this plugin ships, so a dispatch under it would run with no permission applied. The roles that exist are: $known_list"
   [ -n "$unit_id" ]  || die3 "dispatch-open: a unit id is required"
   # The schema pattern is ^wo[1-9][0-9]*$, and a looser glob here opened a record under an id no
   # other record in this stage uses. A `case` glob cannot say "digits to the end", so the digits

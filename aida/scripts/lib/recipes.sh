@@ -672,7 +672,7 @@ cr_take_flag() {
     --value)
       case "$4" in *=*) ;; *) die 3 "$who: --value takes <name>=<value>, got: $4" ;; esac
       pc_refuse_forged_value "$who" "$4"
-      CR_PAIR="$(printf '%s' "$4" | sed 's/=/\t/')" ;;
+      CR_PAIR="$(printf '%s\t%s' "${4%%=*}" "${4#*=}")" ;;
     --tooling) CR_PAIR="$4" ;;
     *) cr_recipe_pair "$who" "$flag" "$4" ;;
   esac
