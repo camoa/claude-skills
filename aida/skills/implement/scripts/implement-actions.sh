@@ -61,10 +61,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--implement-recipe <framework>=<path>]...
 #                            [--value <name>=<value>]...
 #                            [--nothing-ran <literal substring>]
-#                            [--accept-deviation <the person's reason>]
 #   implement-actions.sh review-brief  <task_folder> <unit_id>
 #   implement-actions.sh review-record <task_folder> <unit_id> --findings <path>
-#                            [--accept-deviation <the person's reason>]
 #   implement-actions.sh fix-brief     <task_folder> <unit_id> [--allow <path relative to codePath>]...
 #   implement-actions.sh fix-record    <task_folder> <unit_id>
 #                            --report <path to the fixer's report>
@@ -85,7 +83,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
 #                            [--accept-warnings <the person's reason>]
 #   implement-actions.sh reopen <task_folder>
-#   implement-actions.sh go-on <task_folder> <unit_id> --continue <build|fix|check|close>
+#   implement-actions.sh go-on <task_folder> <unit_id> --continue <build|fix|check|close|keep>
 #                            --because <the person's words> [--owns <path relative to codePath>]...
 #                            [--interface <path>] [--test-recipe <framework>=<path>]...
 #                            [--check-recipe <framework>=<path>]... [--implement-recipe <framework>=<path>]...
@@ -406,14 +404,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # six rather than one number per action per fact.
 #  49  the order is stopped, so the step refuses. Every step-five action refuses on it, and the
 #      message carries the order's recorded stop reasons. `build-record` refuses on it too, so a
-#      stopped order records no attempt; --accept-deviation lets the deviation's own reason through.
+#      stopped order records no attempt.
 #      `build-brief` and `dispatch-open implementer` refuse on it, so no builder starts (gap row 409).
 #      Only go-on, redo and drop act on a stopped order.
 #  50  a review record already exists for this order, and an order gets one review, ever
 #      (ideal/implementation.md, 'One review per order'). `review-brief` refuses to hand over a
-#      second brief and `review-record` refuses to write a second record. Interactive,
-#      `review-record --accept-deviation` on a record whose departure waits as deviationPending
-#      writes the person's keep into that record instead; after finish it refuses (gap row 318).
+#      second brief and `review-record` refuses to write a second record.
 #  51  `review-record` found the code repository is not where the build record left it: HEAD moved,
 #      or the working tree is dirty. The reviewer holds Write for one purpose, its own findings
 #      file under the task folder, and this is the check that enforces it. A probe test left inside
@@ -444,7 +440,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      a ruling and a reason before the order may close. Before the cap a ruling is taken only on a
 #      finding a fixer reported out of its scope (`scopeInsufficientInRound`), or on one whose fix
 #      scope is empty (gap row 265), or on any finding once a person kept the departure with
-#      `review-record --accept-deviation` (gap row 318); any other is exit 3 with the findings that
+#      `go-on --continue keep` (gap row 318); any other is exit 3 with the findings that
 #      may be ruled now named (live-run row 110).
 #  59  `close` found open actionable findings on this order. An order closes with nothing open.
 #  60  `close` found the last fix round unverified: the ledger counts more rounds than the review
@@ -515,9 +511,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  68  `go-on`, `redo`, `drop`, `start --leftovers keep` or `finish --accept-warnings` was called
 #      with no matching answer in the task's answer record. Each is a person's judgement, in every
 #      run mode. The step of a go-on names its choice, `implement go-on <choice>`, so a yes to one
-#      choice passes no other. One number, because it is one fact. `review-record
-#      --accept-deviation` is the same fact (gap row 224), and so is `build-record
-#      --accept-deviation` (gap row 266). A person answers through
+#      choice passes no other. One number, because it is one fact. Keeping a builder's deviation or
+#      a reviewer's departure is `go-on --continue keep` (gap rows 224 and 266). A person answers through
 #      skills/task/scripts/person-answer.sh, which shows Claude Code's permission prompt.
 #  70  `tests-freeze` was given a `--row` judged by a person with no matching answer in the task's
 #      answer record, in any run mode. Without it, `person` is a claim nobody made. Nothing is
@@ -671,13 +666,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The code the builder's stop added (gap row 219).
 # 105  `build-record` was given a report whose stop line is not `Stop: none`. The builder stopped,
 #      so this is not an attempt, whatever it committed. The message quotes the line and names each
-#      commit after --started-at. No attempt is recorded or spent. Unattended, the order stops
-#      first, the stop reason names the commits, and the message says it stopped (gap row 411). A deviation
-#      line other than `Deviation: none`, or a heading that starts with "Deviation", in the report
-#      or the interface record, is a stop too (gap row 221). A person keeps a deviation with
-#      --accept-deviation and a recorded answer (exit 68), and the message and the stop name that route.
-#      A stop line other than `Stop: none` has no such route (gap row 266). Unattended, a deviation
-#      is no stop: the attempt is recorded, and review-record keeps it (gap row 279).
+#      commit after --started-at. No attempt is recorded or spent. In both run modes the order
+#      stops first, the stop reason names the commits, and the ledger entry keeps them under
+#      stoppedCommits (gap row 411). A deviation line other than `Deviation: none`, or a heading
+#      that starts with "Deviation", in the report or the interface record, is a stop too (gap row
+#      221). A person keeps a deviation with `go-on --continue keep`, and the next build-record
+#      records the attempt with it. A stop line other than `Stop: none` has no such route (gap row
+#      266).
 #      A `Stop: closed-order-defect: <file>: <what fails>` line naming a file a closed order owns
 #      exits 0 instead: br_open_repair reopens that order for one fix round (gap row 286).
 #      A `Stop: row-wrong: <row number>: <the evidence>` line exits 105 too, and the message
@@ -694,11 +689,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 107  `review-record` found a departure the builder declared, by build-record's own scan, in the
 #      latest attempt's report or in the interface record the build record holds. What is wrong is
 #      the design, or a recipe it relies on, so the order stops for design drift, whatever the
-#      review holds. The stop reason names the file and the line. No review record is written. A
-#      person accepts the departure with --accept-deviation and a recorded answer instead (exit
-#      68). A recipe the reviewer answers departed takes the same route, under a reason of its own
-#      wording (gap row 225). Unattended, nothing stops: the record holds the departure as
-#      deviationPending, and the person decides it at the task review (gap row 279). A departed
+#      review holds, in both run modes. The stop reason names the file and the line. No review
+#      record is written. A person keeps the departure with `go-on --continue keep`, and the next
+#      review-record records it. A recipe the reviewer answers departed takes the same route, under
+#      a reason of its own wording (gap row 225). A departed
 #      recipe answer whose `finding` names an actionable finding with a fix scope stops nothing in
 #      either mode: the fix round cures it and verify confirms the cure (gap row 303). An
 #      information item marked departsFromDesign stops nothing in either mode: it waits as
@@ -1030,7 +1024,7 @@ usage() {
 
 # An order that stops carries its reasons as a list, `stopped` in its ledger entry. Each reason is
 # {step, reason, allows}: the step that wrote it, its words, and the go-on choices it allows. The
-# choices are build, fix, check and close; an empty list leaves only redo and drop. go-on takes a
+# choices are build, fix, check, close and keep; an empty list leaves only redo and drop. go-on takes a
 # choice only when every reason allows it, so one answer answers every reason. A reason already in
 # the list is not added again, so a step run twice repeats nothing. Prints the updated ledger
 # document, or nothing when the update failed; never dies, because one caller refuses afterwards
@@ -1075,12 +1069,16 @@ im_refuse_stopped() {
 # is stopped. A reason naming another order is not here; the comment in `start` says why.
 DRIFT_OWN_COPY_PREFIXES='["design drift: the design file for ","design drift: the design removed ","design drift: the live text of criterion "]'
 
-# The drift reasons `start` found for one ledger entry, added to its stop list as step "start"
-# with no go-on choice: a design change is answered by redo or drop. $drifted is [{id, reasons}].
+# The drift reasons `start` found for one ledger entry, added to its stop list as step "start".
+# $drifted is [{id, reasons}]. A changed design file of the order allows go-on keep, which builds on
+# the new design without a revert. A removed order, a changed criterion and a drifted dependency
+# allow no go-on: a criterion's frozen text is shared by every order that serves it, so one order's
+# answer cannot change it, and a dependent reason clears at start once its dependency is answered.
 START_STOP_JQ='def start_stops($drifted): . as $o
   | ([ $drifted[] | select(.id == $o.id) | .reasons[] ] | unique) as $r
   | if $r == [] then . else .stopped = ((.stopped // []) + [ $r[] | . as $x
-      | select(any(($o.stopped // [])[]; .step == "start" and .reason == $x) | not) | {step: "start", reason: $x, allows: []} ]) end;'
+      | select(any(($o.stopped // [])[]; .step == "start" and .reason == $x) | not)
+      | {step: "start", reason: $x, allows: (if ($x | startswith("design drift: the design file for ")) then ["keep"] else [] end)} ]) end;'
 
 # The go-on choice that carries on the step an order is at when a dispatch stops it: one more fix
 # round once it is in review, one more build before that. $1 the ledger document, $2 the order.
@@ -1092,24 +1090,6 @@ im_dispatch_allows() {
 # The words verify-record writes into a load-bearing stop, after the finding id. go-on --continue
 # check reads them, for the fix a person committed after it (live-run row 426).
 LOAD_BEARING_MARK=" is ruled real and load-bearing: "
-
-# Records a deviation a person kept, for `build-record` and `review-record` --accept-deviation
-# (gap rows 224 and 266). In ledger document $1, removes from order $2 each stop reason that begins
-# with a prefix in JSON array $3, and keeps the rest. It adds one stopsCleared entry: the reasons
-# removed, or $4 when the order carried none, and the person's reason $5. Prints the updated
-# document, or nothing when the update failed.
-accept_deviation_in() {
-  printf '%s' "$1" | jq -c --arg id "$2" --argjson prefixes "$3" --arg none "$4" \
-    --arg today "$(date -u +%Y-%m-%d)" --arg because "$5" '
-    def kept: . as $r | any($prefixes[]; . as $p | $r.reason | startswith($p));
-    ([ .orders[] | select(.id == $id) | (.stopped // [])[] | select(kept) ]) as $gone
-    | .orders = (.orders | map(if .id == $id then
-                 ([ (.stopped // [])[] | select(kept | not) ]) as $rest
-                 | (if $rest == [] then del(.stopped) else .stopped = $rest end) else . end))
-    | .stopsCleared = ((.stopsCleared // []) + [{id: $id, by: "accept-deviation",
-        reasons: (if $gone == [] then [{step: "accept-deviation", reason: $none}] else $gone end),
-        clearedAt: $today, because: $because}])'
-}
 
 # Prints one of: missing, unreadable, ok. Never dies. "unreadable" covers every way the file
 # fails to read as a contract once it exists: not readable, not valid JSON, not an object, or
@@ -8410,8 +8390,8 @@ BR_SHOTS
     || die 94 "$who: these $field images the observed record names lie outside $folder/: ${stray_shots%, }. A file where a browser tool put it vanishes with that folder, and the evidence with it. Move each under that folder and name the new path in the row's $field."
 }
 
-# The fronts of the stop reasons a builder's stop line and a builder's deviation write unattended.
-# `build-record --accept-deviation` clears the deviation reasons only, so a stop line still stops.
+# The fronts of the stop reasons a builder's stop line and a builder's deviation write. go-on keeps
+# only a deviation, so a stop line has no keep.
 BR_STOP_PREFIX="the builder stopped:"
 BR_DEVIATION_PREFIX="the builder declared a deviation:"
 # Gap row 346. A done-when row the builder finds wrong is a defect in no order, so the stop has
@@ -9345,7 +9325,7 @@ im_others_listed() {
         esac
       done
   jq -r --arg id "$1" '(.orders // [])[]
-    | (((.redos // []) + [ .dropped // empty ])[] | (.reverted // [])[] | .commit, .revert),
+    | (((.redos // []) + [ .dropped // empty ])[] | ((.reverted // [])[] | .commit, .revert), ((.skipped // [])[] | .revert // empty)),
       (select(.id != $id) | (.stoppedCommits // [])[])' "$IMPL_DIR/ledger.json" 2>/dev/null
 }
 
@@ -9956,7 +9936,6 @@ RB_RECORDS
 # own-copy prefix, so a resumed `start` never clears it.
 RR_DEPARTURE_PREFIX="design drift: the builder declared a departure from the design"
 RR_REVIEWER_PREFIX="design drift: the reviewer answered that the build departs from"
-RR_DEPARTURE_PREFIXES="$(jq -cn --arg a "$RR_DEPARTURE_PREFIX" --arg b "$RR_REVIEWER_PREFIX" '[$a, $b]')"
 
 do_review_record() {
   local task_arg="" unit_id="" findings_path="" accept=""
@@ -9965,9 +9944,6 @@ do_review_record() {
       --findings)
         need_value "review-record" "--findings" "$#" "${2:-}"
         findings_path="$2"; shift 2 ;;
-      --accept-deviation)
-        need_value "review-record" "--accept-deviation" "$#" "${2:-}" text
-        accept="$2"; shift 2 ;;
       -*) die3 "review-record: unrecognized argument: $1" ;;
       *)
         if [ -z "$task_arg" ]; then task_arg="$1"
@@ -9982,12 +9958,9 @@ do_review_record() {
 
   im_load_task "$task_arg" "review-record"
 
-  local answers=""
-  if [ -n "$accept" ]; then
-    fn_require_answer "review-record" "accepting a departure the builder declared" "$unit_id" "$accept"
-    answers="$RR_DEPARTURE_PREFIXES"
-  fi
-  rv_load_state "review-record" "$unit_id" "$answers"
+  rv_load_state "review-record" "$unit_id"
+  # A departure a person kept with go-on --continue keep, read once by the review it lets through.
+  accept="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.departureKept.because // ""')"
 
   # Exit 50 before the step check, for the reason review-brief above states. One case is not a
   # second review: a crash between the record write and the ledger write leaves the record on disk
@@ -10020,35 +9993,6 @@ do_review_record() {
          state: "reviewed: the record was already written and the ledger had not moved, so nothing was reviewed twice",
          stopped: "none", record: $record, next: $next}')"
       echo "REVIEW-RECORD: $review_file was already written at $rr_commit and the ledger had not moved. The ledger now reads reviewed; nothing was reviewed twice." >&2
-      exit 0
-    fi
-    # Gap row 318. A departure that waits as deviationPending already has its review record, so a
-    # person's keep lands in that record and nothing is reviewed again. The findings it lists are
-    # that departure, so each is ruled wrong with the person's reason. Once finish has carried the
-    # departure into finished.json, the task review answers it there.
-    if [ -n "$accept" ] && [ "$(printf '%s' "$rr_doc" | jq 'has("deviationPending")' 2>/dev/null)" = "true" ]; then
-      [ ! -f "$IMPL_DIR/finished.json" ] \
-        || die 50 "review-record: finish has carried the departure of $unit_id to the task review, so the person keeps it there, with close --row decision-$unit_id-departure=keep. Nothing is written."
-      local kept_doc kept_ledger
-      kept_doc="$(printf '%s' "$rr_doc" | jq -c --arg why "$accept" '
-        .deviationPending as $p
-        | .findings = [ .findings[] | if .status == "pending" and (.id as $i | ($p.findings // []) | index($i)) != null
-            then del(.pendingBecause) + {status: "ruled", ruling: "wrong", rulingReason: ("the person kept the departure the builder declared: " + $why)}
-            else . end ]
-        | .deviationAccepted = {departure: $p.departure, file: $p.file, because: $why}
-        | del(.deviationPending)')"
-      [ -n "$kept_doc" ] || die3 "review-record: the kept departure of $unit_id could not be written."
-      kept_ledger="$(accept_deviation_in "$RV_LEDGER_DOC" "$unit_id" "$RR_DEPARTURE_PREFIXES" \
-        "the departure waited for the task review: $(printf '%s' "$rr_doc" | jq -r '.deviationPending.departure')" "$accept")"
-      [ -n "$kept_ledger" ] || die3 "review-record: the ledger update for $unit_id failed."
-      write_atomic "$review_file" "$kept_doc"
-      write_atomic "$RV_LEDGER_FILE" "$kept_ledger"
-      im_print_summary "review-record" "$(printf '%s' "$kept_doc" | jq -c --arg record "$review_file" \
-        --argjson waited "$(printf '%s' "$rr_doc" | jq -c '.deviationPending.findings // []')" \
-        --arg next "$(im_next_step "$kept_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
-        {order: .unit, departureAccepted: .deviationAccepted.because, ruledWrong: $waited,
-         openActionable: ([ .findings[] | select(.actionable == true and .status == "open") | .id ]),
-         record: $record, next: $next}')"
       exit 0
     fi
     die 50 "review-record: $review_file already exists, so $unit_id has been reviewed. One order gets one review, ever."
@@ -10148,8 +10092,8 @@ do_review_record() {
   fi
   # Gap row 266. A person kept this line at build-record, so the review carries that answer and
   # does not ask again. A departure the reviewer finds is a new fact, and it still stops the order.
-  # Gap row 316: a declared departure a person kept, here or at --accept-deviation below, rules the
-  # findings marked declaredDeparture wrong with the person's reason, so no fixer undoes it.
+  # Gap row 316: a declared departure a person kept, here or through go-on --continue keep, rules
+  # the findings marked declaredDeparture wrong with the person's reason, so no fixer undoes it.
   local build_accepted kept=""
   build_accepted="$(printf '%s' "$RV_BUILD_DOC" | jq -c '.deviationAccepted // null')"
   [ -z "$departure" ] || [ "$departure" != "$(printf '%s' "$build_accepted" | jq -r '.departure // ""')" ] \
@@ -10198,35 +10142,24 @@ do_review_record() {
   # stops neither the order nor its dependents, in either mode. It waits as deviationPending, and
   # the person decides it at the task review. It is read last, so it never hides a departure that
   # stops the order.
-  local departure_waits="" waiting_json='[]'
+  local departure_waits=""
   if [ -z "$departure" ]; then
     departure="$(printf '%s' "$information_json" | jq -r \
       '[ .[] | select(.departsFromDesign) ] | .[0] // empty | "information item \(.id): \(.summary)"')"
     [ -z "$departure" ] \
       || { departure_waits=yes; halt_why="$RR_REVIEWER_PREFIX the design, marked departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"; }
   fi
-  if [ -z "$departure" ]; then
-    [ -z "$accept" ] \
-      || die3 "review-record: --accept-deviation was given, and neither the report, the interface record nor the review of $unit_id names a departure. Nothing is written."
-  elif [ -z "$accept" ] && { [ "$RV_RUN_MODE" = "autonomous" ] || [ -n "$departure_waits" ]; }; then
-    # Gap row 279. Unattended, the departure waits for the person at the task review, and the
-    # record below holds it as deviationPending. Nothing stops. Gap row 316: an open actionable
-    # finding the reviewer marks declaredDeparture is that same departure, so a fixer must not undo
-    # it. It goes pending and waits with the departure; the other findings take the fix round.
-    if [ -n "$declared" ]; then
-      findings_json="$(printf '%s' "$findings_json" | jq -c 'map(
-        if .declaredDeparture == true and .actionable and .status == "open"
-        then . + {status: "pending", pendingBecause: "it is the departure the builder declared, which the person decides at the task review"}
-        else . end)')"
-      waiting_json="$(printf '%s' "$findings_json" | jq -c '[ .[] | select(.declaredDeparture == true and .status == "pending") | .id ]')"
-    fi
-  elif [ -z "$accept" ]; then
+  # A departure stops the order in both run modes (the owner's ruling of 2026-10-26): what is wrong
+  # is the design, or a recipe it relies on, so no fixer can repair it. An information item marked
+  # departsFromDesign is a note and still waits as deviationPending (gap row 308).
+  if [ -n "$departure" ] && [ -z "$accept" ] && [ -z "$departure_waits" ]; then
     local departure_ledger
-    departure_ledger="$(stop_order_in "$RV_LEDGER_DOC" "$unit_id" review-record "$halt_why" '[]')"
+    departure_ledger="$(stop_order_in "$RV_LEDGER_DOC" "$unit_id" review-record "$halt_why" '["keep"]')"
     [ -n "$departure_ledger" ] || die3 "review-record: the stop on $unit_id could not be written."
     write_atomic "$RV_LEDGER_FILE" "$departure_ledger"
-    die 107 "review-record: $unit_id is stopped for design drift. A departure from the design is named in $departure_file: $departure. What is wrong is the design, or a recipe it relies on, so no fixer can repair it, and no review record is written. Amend the order in design and close design, then redo the order. Or a person accepts the departure: record their answer with person-answer.sh, then run review-record again with --accept-deviation <their reason>."
+    die 107 "review-record: $unit_id is stopped for design drift. A departure from the design is named in $departure_file: $departure. What is wrong is the design, or a recipe it relies on, so no fixer can repair it, and no review record is written. Amend the order in design and close design, then redo the order. Or a person keeps the departure with go-on --continue keep, and review-record runs again."
   fi
+  [ -n "$departure" ] || accept=""
 
   [ -z "$declared" ] || [ -z "$accept" ] || kept="$accept"
   if [ -n "$kept" ]; then
@@ -10243,7 +10176,7 @@ do_review_record() {
     --arg findingsPath "$findings_path" --argjson findings "$findings_json" \
     --argjson information "$information_json" --argjson recipes "$RV_RECIPE_ANSWERS" \
     --arg accept "$accept" --arg departure "$departure" \
-    --arg departureFile "$departure_file" --argjson carried "$build_accepted" --argjson waiting "$waiting_json" '
+    --arg departureFile "$departure_file" --argjson carried "$build_accepted" '
     {
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -10257,8 +10190,7 @@ do_review_record() {
     + (if ($recipes | length) == 0 then {} else {recipes: $recipes} end)
     + (if $accept != "" then {deviationAccepted: {departure: $departure, file: $departureFile, because: $accept}}
        elif $carried != null then {deviationAccepted: $carried} else {} end)
-    + (if $accept == "" and $departure != "" then {deviationPending: ({departure: $departure, file: $departureFile}
-         + (if ($waiting | length) == 0 then {} else {findings: $waiting} end))} else {} end)')"
+    + (if $accept == "" and $departure != "" then {deviationPending: {departure: $departure, file: $departureFile}} else {} end)')"
   write_atomic "$review_file" "$record_json"
 
   # Decision 11. Unattended, a finding that hits a non-goal stops the order with the non-goal
@@ -10271,13 +10203,9 @@ do_review_record() {
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger" ] || die3 "review-record: the ledger update for $unit_id failed."
-  # An accepted departure lands in stopsCleared, with the stop reason the order carried, or the one
-  # this departure would have written. rv_load_state let only that reason through, so the order is
-  # no longer stopped for it.
-  if [ -n "$accept" ]; then
-    new_ledger="$(accept_deviation_in "$new_ledger" "$unit_id" "$RR_DEPARTURE_PREFIXES" "$halt_why" "$accept")"
-    [ -n "$new_ledger" ] || die3 "review-record: the ledger update for $unit_id failed."
-  fi
+  # The kept departure served this review, whose record now holds it as deviationAccepted.
+  new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" \
+    '.orders = (.orders | map(if .id == $id then del(.departureKept) else . end))')"
   halt_why=""
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
     halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
@@ -10953,10 +10881,9 @@ RV_AC
 
   # A fixer does not widen its own scope. It reports instead, and the report is consumed here
   # (ideal/implementation.md, the unattended-answers table, "A fixer reporting its scope is too
-  # small"). Interactive, the report is recorded on the finding and the skill puts it to the
-  # person. Unattended, the order stops with the report as the reason, because widening a scope
-  # with nobody present is the unbounded work this stage refuses. An earlier draft had nothing
-  # consume it at all.
+  # small"). The report is recorded on the finding, and the order stops with it as the reason, in
+  # both run modes (the owner's ruling of 2026-10-26): widening a scope is a person's call, and
+  # go-on --owns is how a person gives the order the file. An earlier draft had nothing consume it.
   local si sc_count sc_id sc_reason scope_list=""
   sc_count="$(printf '%s' "$scope_json" | jq 'length')"
   si=0
@@ -10988,8 +10915,8 @@ RV_AC
   local all_met first_stopper halt_why=""
   all_met="$(br_checks_pass "$checks_json" "")"
   first_stopper="$(br_first_stopper "$checks_json" "")"
-  if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$scope_list" ]; then
-    halt_why="a fixer reported its scope too small and nobody is present to rule on it: ${scope_list%, }"
+  if [ -n "$scope_list" ]; then
+    halt_why="a fixer reported its scope too small, and a person decides whether the order owns more: ${scope_list%, }"
   fi
   # A check that stopped the round, at the cap too, does not stop the order here. verify-record
   # opens a finding for it, and the cap rules there decide: a ruling, a stop, or pending (gap row
@@ -11179,7 +11106,12 @@ do_verify_record() {
 
   im_load_task "$task_arg" "verify-record"
 
-  rv_load_state "verify-record" "$unit_id"
+  # A ruling answers the stops that wait on a ruling: the fix round cap, a finding on a non-goal,
+  # and a disputed already-correct claim, so rulings pass those reasons and they clear once no
+  # actionable finding is open. Every other reason still refuses.
+  local rule_answers='[]'
+  [ -z "$rulings_raw" ] || rule_answers="$RV_RULE_ANSWERS"
+  rv_load_state "verify-record" "$unit_id" "$rule_answers"
   # Rulings alone also follow `reviewed`, before any round, for a finding with an empty fix scope
   # (gap row 265), or any finding once a person kept the departure (gap row 318).
   # rv_apply_rulings refuses any other finding there.
@@ -11227,6 +11159,20 @@ do_verify_record() {
     [ -n "$ruled_doc" ] || die3 "verify-record: the review record update for $unit_id failed."
     write_atomic "$RV_REVIEW_FILE" "$ruled_doc"
     RV_REVIEW_DOC="$ruled_doc"
+    if [ "$(rv_open_actionable_count "$RV_REVIEW_DOC")" = "0" ]; then
+      ruled_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" --argjson p "$RV_RULE_ANSWERS" \
+        --arg today "$(date -u +%Y-%m-%d)" --arg because "every open finding is ruled at verify-record" '
+        def answered: . as $r | any($p[]; . as $x | $r.reason | startswith($x));
+        ([ .orders[] | select(.id == $id) | (.stopped // [])[] | select(answered) ]) as $gone
+        | if $gone == [] then . else
+            .orders = (.orders | map(if .id == $id then
+              ([ (.stopped // [])[] | select(answered | not) ]) as $rest
+              | (if $rest == [] then del(.stopped) else .stopped = $rest end) else . end))
+            | .stopsCleared = ((.stopsCleared // []) + [{id: $id, by: "ruling", reasons: $gone, clearedAt: $today, because: $because}]) end')"
+      [ -n "$ruled_ledger" ] || die3 "verify-record: the ledger update for $unit_id failed."
+      write_atomic "$RV_LEDGER_FILE" "$ruled_ledger"
+      RV_LEDGER_DOC="$ruled_ledger"
+    fi
     if [ -n "$RV_RULING_HALT" ]; then
       ruled_ledger="$(stop_order_in "$RV_LEDGER_DOC" "$unit_id" verify-record "$RV_RULING_HALT" "$RV_RULING_ALLOWS")"
       [ -n "$ruled_ledger" ] || die3 "verify-record: the stop on $unit_id could not be written."
@@ -11477,6 +11423,9 @@ do_verify_record() {
 # values, one per line. Sets RV_RULED_FINDINGS, and RV_RULING_HALT with RV_RULING_ALLOWS, the
 # stop reason a ruling writes and the go-on choices it allows; the reason is empty when none stops.
 RV_RULED_FINDINGS=""; RV_RULING_HALT=""; RV_RULING_ALLOWS='[]'
+# The fronts of the stop reasons a ruling answers: the unattended fix round cap, a finding on a
+# non-goal, and a disputed already-correct claim, each of which waits on a person's ruling.
+RV_RULE_ANSWERS='["a fix round cap reached with findings still open","a finding hits a non-goal","a fixer reports "]'
 rv_apply_rulings() {
   local unit_id="$1" updated_findings="$2" rounds_used="$3" rulings_raw="$4"
   local open_now ruling_halt="" rulings_json="[]"
@@ -11525,7 +11474,7 @@ RV_RULINGS
       if [ -n "$rulable_now" ]; then
         die3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. These findings may be ruled now, because a fixer reported them out of its scope, their fix scope is empty, or a person kept the departure: $rulable_now. The ruling named: $early_ids."
       fi
-      die3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. No finding may be ruled now: no fixer has reported one out of its scope, none has an empty fix scope, and no person kept a departure with review-record --accept-deviation."
+      die3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. No finding may be ruled now: no fixer has reported one out of its scope, none has an empty fix scope, and no person kept a departure with go-on --continue keep."
     fi
   fi
   # A ruling with nothing left to rule on is refused rather than dropped. A caller who wrote one
@@ -12293,7 +12242,8 @@ RO_ONE
 # hold, as after a rebase, and a commit a later commit on the branch already reverts, by a person
 # or an earlier run. A merge that remains refuses (exit 113), because its revert needs a person to
 # choose the parent. Sets WAY_REVERTED, a JSON array of {commit, revert}, and WAY_SKIPPED, one of
-# {commit, why}.
+# {commit, why}, with revert naming the commit that already reverts it, so no order counts that
+# commit as its own.
 WAY_WHO=""; WAY_REVERTED='[]'; WAY_SKIPPED='[]'
 im_revert_order() {
   local unit_id="$1" repo="$2" listed commits="" c said orig made failed by merges=""
@@ -12306,7 +12256,7 @@ im_revert_order() {
     fi
     by="$(git -C "$repo" log --format=%H --grep="This reverts commit $c" "$c..HEAD" 2>/dev/null | head -n 1)"
     if [ -n "$by" ]; then
-      WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" --arg by "$by" '. + [{commit: $c, why: ("already reverted by " + $by)}]')"
+      WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" --arg by "$by" '. + [{commit: $c, why: ("already reverted by " + $by), revert: $by}]')"
       continue
     fi
     ! git -C "$repo" rev-parse --verify --quiet "$c^2" >/dev/null 2>&1 || merges="$merges ${c:0:7}"
@@ -12422,7 +12372,8 @@ im_clear_stop_in() {
 # go-on: the order leaves its stop and goes on, and the person says what continues. build is one
 # more build attempt; fix is one more fix round; check runs the checks again with no new build;
 # close closes the order with its open findings listed, each ruled deferred with the person's
-# words. Each stop reason names the choices it allows, and go-on takes only a choice every reason
+# words; keep keeps a builder's deviation, a departure, or a changed design file of the order,
+# which the snapshot takes without a revert. Each stop reason names the choices it allows, and go-on takes only a choice every reason
 # allows (stop_choices), so one answer answers every reason. --owns names a file the order now
 # owns, for an owned-files check or a fixer short of scope. It is recorded on the order's ledger
 # entry, and the build brief, the dispatch record and the owned-files check read it beside the
@@ -12458,9 +12409,9 @@ do_go_on() {
   done
   im_way_load "go-on" "$task_arg" "$unit_id" "$because"
   case "$choice" in
-    build|fix|check|close) ;;
-    "") die3 "go-on: --continue is required: build, fix, check or close." ;;
-    *) die3 "go-on: --continue takes build, fix, check or close; got: $choice" ;;
+    build|fix|check|close|keep) ;;
+    "") die3 "go-on: --continue is required: build, fix, check, close or keep." ;;
+    *) die3 "go-on: --continue takes build, fix, check, close or keep; got: $choice" ;;
   esac
   fn_require_answer "go-on $choice" "going on with $choice on one order" "$WAY_UNIT" "$WAY_BECAUSE"
 
@@ -12498,7 +12449,7 @@ do_go_on() {
 $(printf '%s' "$owns_json" | jq -r '.[]')
 GO_OWNS
 
-  local entry new_ledger more state_note=""
+  local entry new_ledger more state_note="" keep_snapshot=""
   entry="$RV_ORDER_ENTRY"
   new_ledger="$RV_LEDGER_DOC"
   [ "$owns_json" = "[]" ] || new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$WAY_UNIT" --argjson o "$owns_json" \
@@ -12538,6 +12489,35 @@ GO_OWNS
           then . + {status: "ruled", ruling: "deferred", rulingReason: ("closed with this finding open, by a person'"'"'s go-on: " + $why)} else . end))')"
       more="$(printf '%s' "$more" | jq -c --arg l "$listed" '. + {listed: ($l | if . == "" then [] else split(", ") end)}')"
       state_note="closes with these findings listed: ${listed:-none}" ;;
+    keep)
+      # The change stays. A builder's deviation and a departure are kept with the person's words,
+      # and the next build-record or review-record reads them once. A changed design file is taken
+      # into the snapshot as it is, with no revert, so the order builds on the new design.
+      local today
+      today="$(date -u +%Y-%m-%d)"
+      new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$WAY_UNIT" --arg why "$WAY_BECAUSE" --arg at "$today" '
+        .orders = (.orders | map(if .id != $id then . else
+          (if any((.stopped // [])[]; .step == "build-record") then .deviationKept = {because: $why, at: $at} else . end)
+          | (if any((.stopped // [])[]; .step == "review-record") then .departureKept = {because: $why, at: $at} else . end) end))')"
+      if printf '%s' "$entry" | jq -e 'any((.stopped // [])[]; .step == "start")' >/dev/null; then
+        ALIGNMENT_FILE="$TASK_PATH/alignment.json"
+        DESIGN_DIR="$TASK_PATH/design"
+        CLOSED_FILE="$TASK_PATH/design-closed.json"
+        local live_workorders_json live_hash
+        live_workorders_json="$(gather_workorders_json "$DESIGN_DIR")"
+        [ -z "$READ_FAILED" ] || die3 "go-on: $READ_FAILED is under design/ but could not be read as JSON."
+        live_hash="$(records_hash_for "$TASK_PATH")" \
+          || die3 "go-on: could not compute a hash over the live alignment.json and design/*.json."
+        [ "$(design_closed_state)" = "ok" ] && [ "$(design_closed_hash)" = "$live_hash" ] \
+          || die 13 "go-on: keep takes the live design of $WAY_UNIT, but $CLOSED_FILE does not record a close over the live alignment.json and design/*.json. Close design again, then run go-on. Nothing is written."
+        keep_snapshot="$(snapshot_with_live_orders "$SNAPSHOT_DOC" "$(jq -cn --arg id "$WAY_UNIT" '[$id]')" "$live_workorders_json" \
+            "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment')")" \
+          || die3 "go-on: could not re-derive a hash for the snapshot with the live copy of $WAY_UNIT taken in (see stderr above)"
+        new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$WAY_UNIT" --arg from "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash')" \
+          --arg to "$(printf '%s' "$keep_snapshot" | jq -r '.hash')" --arg at "$today" '
+          .snapshotHash = $to | .resnapshots = ((.resnapshots // []) + [{id: $id, from: $from, to: $to, at: $at}])')"
+        state_note="the snapshot holds the live design of $WAY_UNIT, and nothing is reverted"
+      fi ;;
   esac
   [ -n "$new_ledger" ] || die3 "go-on: the ledger update for $WAY_UNIT failed."
 
@@ -12560,6 +12540,7 @@ GO_OWNS
   fi
   new_ledger="$(im_clear_stop_in "$new_ledger" "$WAY_UNIT" go-on "$more")"
   [ -n "$new_ledger" ] || die3 "go-on: the ledger update for $WAY_UNIT failed."
+  [ -z "$keep_snapshot" ] || write_atomic "$IMPL_DIR/snapshot.json" "$keep_snapshot"
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
   im_print_summary "go-on" "$(jq -cn --arg id "$WAY_UNIT" --arg c "$choice" --argjson s "$summary" --arg why "$why" \
     --arg note "$state_note" --argjson owns "$owns_json" --arg ledger "$RV_LEDGER_FILE" \

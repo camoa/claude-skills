@@ -81,7 +81,7 @@
         "file": { "type": "string", "minLength": 1 },
         "because": { "type": "string", "minLength": 1 }
       },
-      "description": "A deviation the builder declared that a person kept (gap row 266). A deviation line is a stop (exit 105). Interactive, `--accept-deviation` records the attempt instead: `departure` is the first deviation line, `file` the report or interface record that holds it, and `because` the person's reason. `stopsCleared` in the ledger records the same reason, and `review-record` carries this object to the review record instead of stopping on the same line. Present only when a person kept one."
+      "description": "A deviation the builder declared that a person kept (gap row 266). A deviation line is a stop (exit 105). A person keeps it with `go-on --continue keep`, and `build-record` runs again and records the attempt: `departure` is the first deviation line, `file` the report or interface record that holds it, and `because` the person's words, read from deviationKept in the ledger. `stopsCleared` in the ledger records the same words, and `review-record` carries this object to the review record instead of stopping on the same line. Present only when a person kept one."
     },
     "checks": {
       "type": "array",
