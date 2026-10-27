@@ -47,12 +47,12 @@
     "commits": {
       "type": "array",
       "items": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-      "description": "The commits the implementer made, full form, oldest first. `build-record` derives it: every commit from `startedAt` to `commit`, less each commit another order's records name, in a build or fix list or as a freeze. The owned-files check reads the files these commits change, and no range. `review-brief` builds the order's diff from this list, `commitsBefore` and the fix records' lists. A record without it was written before the lists: review-brief refuses it, and `build-recheck` writes it."
+      "description": "The commits the implementer made, full form, oldest first. `build-record` derives it: every commit from `startedAt` to `commit`, less each commit another order's records name, in a build or fix list or as a freeze. The owned-files check reads the files these commits change, and no range. `review-brief` builds the order's diff from this list, `commitsBefore` and the fix records' lists. A record without it was written before the lists, and each step that reads it reads its list from `startedAt` to `commit` the same way."
     },
     "commitsBefore": {
       "type": "array",
       "items": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-      "description": "Present after a second attempt: the commits the earlier attempts listed, which this file no longer holds, since it keeps the last attempt alone. `build-record` moves the earlier record's `commits` here. The owned-files check does not read them, so a stray change an earlier attempt reverted does not stop the next one. `review-brief` reads them, so every attempt is in the order's diff."
+      "description": "Present after a second attempt, or after a person kept a stopped builder's commits: the commits the earlier attempts listed, which this file no longer holds, since it keeps the last attempt alone, and the commits from the last record, or the freeze, up to `startedAt` that no other order lists. The owned-files check reads the paths these change that still differ from the parent of the order's oldest commit to `commit`, so a stray change nobody reverted still stops the attempt, and one a later commit reverted does not. `review-brief` reads them, so every attempt is in the order's diff."
     },
     "attempt": {
       "type": "integer",

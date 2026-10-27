@@ -30,7 +30,7 @@ It writes `implementation/brief-<order id>-review.json`:
 - the order record;
 - the diff as a path. It holds the commits the order's build and fix records list, and those
   of the records a retake moved aside. So every build attempt is in it, and another order's
-  commit stays out. A record without a list refuses; `build-recheck` writes it;
+  commit stays out. A record written before the lists has its list read from its own range;
 - the frozen tests, and the builder's report path; on an order whose proof
   is `record` the diff is the project folder's whole, and `deliverables` names
   each owned file by path. The reviewer reads the document whole rather than a patch;

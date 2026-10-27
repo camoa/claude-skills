@@ -323,7 +323,9 @@ either makes the range this attempt claims false. From that range the script lis
 implementer's commits in the build record. It leaves out each commit another order's records
 name, in a build or fix list or as a freeze. The owned-files check reads the files those commits
 change, and no range. The earlier attempts' lists move to `commitsBefore`, which review reads, so a
-second attempt that changes one line is reviewed with the code the first attempt wrote.
+second attempt that changes one line is reviewed with the code the first attempt wrote. Commits a
+person kept after a builder's stop go there too. The check also reads each path those commits
+change that still differs, so a stray change nobody reverted still stops the attempt.
 One equal commit is not refused. When it is this order's own freeze commit and every frozen test
 locks in, the freeze commit holds the order's work. A tests order whose deliverable is its test
 file is this case. So is a code order whose tests all pass on the code that is there already, and

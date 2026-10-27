@@ -7056,6 +7056,8 @@ im_freeze_holds_work() {
 #   BRC_CODEPATH        the code repository every command runs from inside
 #   BRC_COMMITS         the commits the record lists as its role's own, a JSON array from
 #                       im_role_commits. The owned-files check reads these commits and no range
+#   BRC_COMMITS_BEFORE  a build record's commitsBefore. The owned-files check also reads the paths
+#                       these change that still differ from the start of the order's commits
 #   BRC_CURRENT         the code repository's HEAD now
 #   BRC_SCOPE           the one path the owned-files check is scoped to, RV_RANGE_SCOPE: the
 #                       project folder for an order whose proof is record, empty for the whole tree
@@ -7086,7 +7088,7 @@ im_freeze_holds_work() {
 #                       beside the order's ownedFiles (live-run row 116). A build attempt
 #                       leaves it `[]`
 # ------------------------------------------------------------------------------------------------
-BRC_WHO=""; BRC_CODEPATH=""; BRC_COMMITS="[]"; BRC_CURRENT=""; BRC_SCOPE=""
+BRC_WHO=""; BRC_CODEPATH=""; BRC_COMMITS="[]"; BRC_COMMITS_BEFORE="[]"; BRC_CURRENT=""; BRC_SCOPE=""
 BRC_UNIT_JSON=""; BRC_TESTS_DOC=""; BRC_BASELINE_FILE=""; BRC_ALLOWED_JSON="[]"
 BRC_RECIPES='{"frameworks":[],"tools":[]}'; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
 BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false
@@ -8212,6 +8214,20 @@ br_seven_checks() {
   local own_count allowed_hit="" env_aside="" rerun_step="" commit_count
   diff_output="$(im_commits_paths "$BRC_CODEPATH" "$BRC_COMMITS" "$BRC_SCOPE")"
   commit_count="$(printf '%s' "$BRC_COMMITS" | jq 'length')"
+  # An earlier attempt's change that nobody reverted is still this order's change. One a later
+  # commit reverted no longer differs, so it is not read.
+  if [ "$BRC_COMMITS_BEFORE" != "[]" ]; then
+    local before_paths before_from
+    before_paths="$(im_commits_paths "$BRC_CODEPATH" "$BRC_COMMITS_BEFORE" "$BRC_SCOPE")"
+    before_from="$(im_sorted_commits "$BRC_CODEPATH" "$(jq -cn --argjson a "$BRC_COMMITS_BEFORE" --argjson b "$BRC_COMMITS" '$a + $b')" \
+      "$BRC_CURRENT" | head -n 1)"
+    if [ -n "$before_paths" ] && [ -n "$before_from" ] \
+       && before_from="$(git -C "$BRC_CODEPATH" rev-parse --verify --quiet "$before_from^")"; then
+      diff_output="$(printf '%s\n%s\n' "$diff_output" "$(printf '%s\n' "$before_paths" | while IFS= read -r p; do
+          git -C "$BRC_CODEPATH" diff --quiet "$before_from" "$BRC_CURRENT" -- "$p" 2>/dev/null || printf '%s\n' "$p"
+        done)" | sed '/^$/d' | LC_ALL=C sort -u)"
+    fi
+  fi
   # The paths a person allowed for a fix round follow the order's own. So an index at or past
   # own_count is an allowed path, and the detail names it (live-run row 116).
   owned_files_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c --argjson a "$BRC_ALLOWED_JSON" '(.ownedFiles // []) + $a')"
@@ -9157,17 +9173,23 @@ do_build_record() {
   BRC_CODEPATH="$codepath"
   BRC_SCOPE="$RV_RANGE_SCOPE"
   # The record holds the last attempt, so the earlier attempts' lists move to commitsBefore, which
-  # the review reads too. A record written before the lists has its commits read from its range,
-  # the same way.
-  local br_before='[]' br_old_commits
+  # the review reads too. So do the commits a person kept after a builder's stop: they sit after
+  # the last record, or the freeze, and before this attempt's start, in no other order's list.
+  local br_before='[]' br_last br_kept
   BRC_COMMITS="$(im_role_commits "$codepath" "$started_at_full" "$current_commit" "$unit_id")"
+  br_last="$(jq -r '.commit // ""' "$tests_file" 2>/dev/null)"
   if [ -n "${existing_doc:-}" ]; then
-    br_old_commits="$(printf '%s' "$existing_doc" | jq -c '.commits // empty')"
-    [ -n "$br_old_commits" ] || br_old_commits="$(im_role_commits "$codepath" \
-      "$(printf '%s' "$existing_doc" | jq -r '.startedAt')" "$existing_commit" "$unit_id")"
-    br_before="$(printf '%s' "$existing_doc" | jq -c --argjson old "$br_old_commits" --argjson new "$BRC_COMMITS" \
-      '((.commitsBefore // []) + $old | unique) - $new')"
+    br_last="$existing_commit"
+    br_before="$(jq -cn --argjson b "$(printf '%s' "$existing_doc" | jq -c '.commitsBefore // []')" \
+      --argjson old "$(im_record_commits "$record_file" "$codepath" "$unit_id")" '$b + $old')"
   fi
+  br_kept='[]'
+  [ -z "$br_last" ] || [ "$br_last" = "$started_at_full" ] \
+    || ! git -C "$codepath" merge-base --is-ancestor "$br_last" "$started_at_full" 2>/dev/null \
+    || br_kept="$(im_role_commits "$codepath" "$br_last" "$started_at_full" "$unit_id")"
+  BRC_COMMITS_BEFORE="$(jq -cn --argjson b "$br_before" --argjson k "$br_kept" --argjson new "$BRC_COMMITS" \
+    '($b + $k | unique) - $new')"
+  br_before="$BRC_COMMITS_BEFORE"
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
@@ -9419,13 +9441,9 @@ do_build_recheck() {
   # --- exit 88, three: a check outside the tool rows, owned-files and interface-record stopped
   # the attempt, which is the implementer's work to answer, so a re-check would be a free retry.
   # An attempt nothing stopped is past the build, and there is nothing to run again ---------------
-  # A passed build record written before the lists runs again at checks-passed, so it gets its
-  # list before review-brief reads it.
-  local stoppers outside listless=false
-  [ "$fix_round" != 0 ] || [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')" != "checks-passed" ] \
-    || printf '%s' "$record_doc" | jq -e 'has("commits")' >/dev/null || listless=true
+  local stoppers outside
   stoppers="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | stoppers | join(", ")')"
-  [ -n "$stoppers" ] || [ -n "$pf_index" ] || [ "$listless" = true ] \
+  [ -n "$stoppers" ] || [ -n "$pf_index" ] \
     || die 88 "build-recheck: $record_name at $unit_id passed its checks, so there is nothing to run again."
   outside="$(printf '%s' "$record_doc" | jq -r "$BR_STOPPERS_JQ"'(.checks // []) | outside_recheck | join(", ")')"
   [ -z "$outside" ] || [ -n "$pf_index" ] \
@@ -9488,10 +9506,9 @@ EOF_PATHS
   BRC_WHO="build-recheck"
   BRC_CODEPATH="$codepath"
   BRC_SCOPE="$RV_RANGE_SCOPE"
-  # The record's own list, read from its range when the record was written before the lists. A
-  # person's fix adds the commits after the record.
-  BRC_COMMITS="$(printf '%s' "$record_doc" | jq -c '.commits // empty')"
-  [ -n "$BRC_COMMITS" ] || BRC_COMMITS="$(im_role_commits "$codepath" "$record_started_at" "$record_commit" "$unit_id")"
+  # The record's own list. A person's fix adds the commits after the record.
+  BRC_COMMITS="$(im_record_commits "$record_file" "$codepath" "$unit_id")"
+  BRC_COMMITS_BEFORE="$(printf '%s' "$record_doc" | jq -c '.commitsBefore // []')"
   BRC_CURRENT="$record_commit"
   if [ -n "$pf_index" ]; then
     BRC_CURRENT="$current_commit"
@@ -9844,6 +9861,19 @@ im_role_commits() {
   done | jq -Rsc 'split("\n") | map(select(. != ""))'
 }
 
+# The list record file $1 holds, in the repository $2, for order $3. A record written before the
+# lists has its list read from its own range, the same way its record step reads it.
+im_record_commits() {
+  if jq -e 'has("commits")' "$1" >/dev/null 2>&1; then jq -c '.commits' "$1"; return 0; fi
+  im_role_commits "$2" "$(jq -r '.startedAt // ""' "$1")" "$(jq -r '.commit // ""' "$1")" "$3"
+}
+
+# The commits in JSON array $2 that the history of $3 in the repository $1 holds, oldest first,
+# one per line.
+im_sorted_commits() {
+  git -C "$1" rev-list --reverse --topo-order "$3" 2>/dev/null | grep -Fx -f <(printf '%s' "$2" | jq -r '.[]')
+}
+
 # The paths the commits in JSON array $2 change in the repository $1, one per line, sorted.
 # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
 # the new path, so a deleted file the order does not own would never appear. $3 a path to scope
@@ -9866,7 +9896,7 @@ im_commits_paths() {
 IM_DIFF_FROM=""
 im_list_diff() {
   local who="$1" repo="$2" list="$3" to="$4" unit_json="$5" out="$6" scope="$7" sorted missing p shared_paths="" c
-  sorted="$(git -C "$repo" rev-list --reverse --topo-order "$to" 2>/dev/null | grep -Fx -f <(printf '%s' "$list" | jq -r '.[]'))"
+  sorted="$(im_sorted_commits "$repo" "$list" "$to")"
   missing="$(printf '%s' "$list" | jq -r '.[]' | grep -Fvx -f <(printf '%s\n' "$sorted") | tr '\n' ' ')"
   [ -z "$missing" ] \
     || die3 "$who: the order's records list commits that are not in the history of $to in $repo, so the diff would leave them out: ${missing% }. Nothing was written."
@@ -10328,9 +10358,8 @@ do_review_brief() {
     || die3 "review-brief: $IMPL_DIR/build-$unit_id.json holds no commit, though build-record writes it."
   while IFS= read -r f; do
     [ -f "$f" ] || continue
-    jq -e 'has("commits")' "$f" >/dev/null 2>&1 \
-      || die3 "review-brief: $f holds no commits list. It was written before each record kept the commits its role made, and the diff reads those lists alone. At the top of $IMPL_DIR, build-recheck on $unit_id writes the list. A record a retake moved aside has no step that writes it again."
-    own_commits="$(jq -c --argjson have "$own_commits" '$have + .commits + (.commitsBefore // []) | unique' "$f")"
+    own_commits="$(jq -c --argjson have "$own_commits" --argjson c "$(im_record_commits "$f" "$RV_RANGE_REPO" "$unit_id")" \
+      '$have + $c + (.commitsBefore // []) | unique' "$f")"
   done <<RB_RECORDS
 $IMPL_DIR/build-$unit_id.json
 $(find "$IMPL_DIR" -mindepth 1 -maxdepth 2 \( -path "$IMPL_DIR/fix-$unit_id-*.json" -o -path "$IMPL_DIR/retaken-$unit_id-*/*" \
@@ -11369,6 +11398,7 @@ RV_AC
   BRC_CODEPATH="$RV_RANGE_REPO"
   BRC_SCOPE="$RV_RANGE_SCOPE"
   BRC_COMMITS="$(im_role_commits "$RV_RANGE_REPO" "$started_at_full" "$current_commit" "$unit_id")"
+  BRC_COMMITS_BEFORE="[]"
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
