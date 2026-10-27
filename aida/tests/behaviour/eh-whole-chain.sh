@@ -19,6 +19,18 @@ expect() {
 
 ROOT="$(mktemp -d)" || exit 1
 trap 'rm -rf "$ROOT"' EXIT
+# pa <task folder> <step> <order or empty> <words>: records a person's answer through
+# person-answer.sh. Since batch 2b (6.1.0) each person-only step reads it, in every run mode.
+pa() {
+  printf '%s' "$4" >"$ROOT/pa-words"
+  if [ -n "$3" ]; then
+    (cd "$HOME" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "${1%/tasks/*}" \
+      "${1##*/}" --step "$2" --order "$3" -- "@$ROOT/pa-words") >/dev/null 2>&1
+  else
+    (cd "$HOME" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "${1%/tasks/*}" \
+      "${1##*/}" --step "$2" -- "@$ROOT/pa-words") >/dev/null 2>&1
+  fi
+}
 export AIDA_REGISTRY_PATH="$ROOT/aida/registry.json"
 export AIDA_PROJECTS_HOME="$ROOT/aida/projects"
 export AIDA_SETTINGS_PATH="$ROOT/aida/settings.json"
@@ -251,6 +263,7 @@ carry() {
   must "$wt" "$DESIGN" --run-mode interactive close "$task" --no-recipe
   must "$wt" "$IMPLEMENT" start "$task"
   must "$wt" "$IMPLEMENT" preconditions "$task" --recipe "$TEST_RECIPE_FLAG" --check-recipe "$CHECK_RECIPE_FLAG"
+  pa "$task" "implement tests-freeze" wo1 "wo1=confirmed::person::reads from the document alone"
   must "$wt" "$IMPLEMENT" tests-freeze "$task" wo1 --test-recipe "$TEST_RECIPE_FLAG" \
     --row "wo1=confirmed::person::reads from the document alone"
   from="$(git -C "$PROJECT" rev-parse HEAD)"

@@ -33,7 +33,9 @@ modes.
 shows the stages in brackets, such as `autonomous (implement)`; see
 [how a stage reads its mode](../stages/scope/unattended.md). `interactive` removes the
 mode, because no mode already means interactive. Nothing in AIDA sets or proposes a mode; only you
-do. Every step reads the mode from the task, so a change takes effect at once.
+do. Each change needs your answer first, through a permission prompt; see [the person's
+answer](person-answer.md). Every step reads the mode from the task, so a change takes effect at
+once.
 
 Then start the run with the command for the stage the task is at, such as `/aida:scope <task-id>`
 for a new task. `/aida:next <task-id>` names it. Each autonomous stage then starts the next one.
@@ -74,7 +76,7 @@ Each stage page says what its unattended branch does. In short, with where each 
   writes no verdict. The task has no sign-off until you answer them.
 - [completion](../stages/completion/README.md) closes only on a passed review.
 
-To answer a halt, see [answer for a person](person-answer.md).
+To answer a halt, see [the person's answer](person-answer.md).
 
 ## Why it works this way
 

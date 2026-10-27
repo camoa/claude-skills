@@ -2242,19 +2242,17 @@ $choices"
   # between it and the worktree. The person approves such lines at this close, the design's
   # approval, and the stamp lands on each entry before the hash covers it. A line with no stamp
   # never runs: the build hands it to the reviewer as a check.
-  # An autonomous close has nobody to give that approval. A person's answer, held as a record,
-  # stands in (gap row 357): person-answer.json in the task folder, not under design/, which the
-  # hash reads. It holds step close, no order, and as its answer each line this close would stamp,
-  # one per line, as the refusal lists them (gap row 370).
-  local wo_file approved_count=0 n_approved answer_file="$TASK_PATH/person-answer.json" to_stamp
+  # An autonomous close has nobody to give that approval. A person's answer in the task's answer
+  # record stands in: step design close, no order, and as its words each line this close would
+  # stamp, one per line, as the refusal lists them (gap row 370).
+  local wo_file approved_count=0 n_approved to_stamp
   if [ "$approve_runs" = true ] && [ "$RUN_MODE" = "autonomous" ]; then
     to_stamp="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
       | while IFS= read -r wo_file; do
           jq -r '(.verify // [])[] | select(has("run") and .binding == false and (has("approved") | not)) | .run' "$wo_file"
         done)"
-    task_person_answered "$answer_file" "$TASK_PATH" "close" "" "$to_stamp" \
-      || die3 "close: --approve-runs is a person's yes to the commands research wrote, and an autonomous close has nobody to give it. Or the main session writes the person's answer to $answer_file: step close, order empty, and as its answer these lines, one per line:
-$to_stamp"
+    task_answer_find "$TASK_PATH" "design close" "" "$to_stamp" \
+      || die3 "close: --approve-runs is a person's yes to the commands research wrote, and an autonomous close has nobody to give it.$(task_answer_route "$TASK_PATH" "design close" "" "$to_stamp")"
   fi
   if [ "$approve_runs" = true ]; then
     while IFS= read -r wo_file; do

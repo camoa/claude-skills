@@ -261,7 +261,8 @@ framework whose suite read unmet or unknown. When that line is not `none`, put i
 before the first order. Interactive, open with: "The suite already fails before this build
 starts. Finish will refuse on that failure at the end unless it is decided now." When the red is
 runner warnings and no failed test, give the routes `finish` offers, in its words: "Accept the
-warnings: run finish again with --accept-warnings <the person's reason>, interactive only. Change
+warnings: record the person's answer with person-answer.sh, then run finish again with
+--accept-warnings <the person's reason>. Change
 the suite row's command in the project's copy of the test-execution recipe, so these warnings do
 not fail the run. Or repair the project configuration that raises them, in a change outside this
 task." A suite row with no `warning_line` needs the key first, or `--accept-warnings` does not

@@ -15,7 +15,7 @@ interactive.
 
 When the review did not pass, the close halts and writes nothing. See
 [completion refuses](../../when-it-stops/completion-refused.md) for what it names, and
-[answer for a person in an unattended run](../../task/person-answer.md) for how to answer.
+[the person's answer](../../task/person-answer.md) for how to answer.
 
 ## Why it works this way
 

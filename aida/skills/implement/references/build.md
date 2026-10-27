@@ -202,15 +202,16 @@ reads `Stop: row-wrong: <row number>: <the evidence>`. `build-record` stops as a
 (exit 105), and its message quotes that row from the snapshot. The person rules on the row. A
 wrong row is reworded in design, and design closes again. Then `start` halts the order for
 design drift, and `restart` answers that halt. A row that stands goes back to the builder.
-Unattended, the order halts, and the halt quotes the row. `clear-halt` and `restart` refuse on an
-autonomous run (exit 68), so a person first sets the task to interactive.
+Unattended, the order halts, and the halt quotes the row. `clear-halt` and `restart` refuse
+without the person's answer on record (exit 68), as "A person's answer" in `references/finish.md` says.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
 `build-record` again with the same flags and `--accept-deviation <their reason>`. The build record
 and `haltsCleared` in the ledger hold the reason, and the flag clears the deviation's halt. Review
 carries the answer and does not ask again about that line. A stop line other than `Stop: none`
-has no such route. Unattended, the flag refuses (exit 68). There a deviation is no stop:
+has no such route. The flag refuses without the person's answer on record (exit 68). Unattended, a deviation is
+no stop:
 `build-record` records the attempt, and `review-record` keeps the line for the task review.
 
 The interface record is prose about what this unit exposes, and it is what the next order's
@@ -227,8 +228,8 @@ allowed only while the order is still at `tests-frozen`. Once `build-record` has
 attempt, it refuses (exit 76). Then `retake-tests --because` with the person's ruling sends the
 order back, under "Offer the grant" in `references/finish.md`. Other orders may have committed since the first freeze. The freeze
 still retakes, because the report holds the `Stop: test-wrong` line. Unattended, the stop halted
-the order, and a halt still standing refuses (exit 35). `clear-halt` refuses on an autonomous run
-(exit 68), so a person first sets the task to interactive, then runs `clear-halt`. The
+the order, and a halt still standing refuses (exit 35). `clear-halt` refuses without the person's answer on record
+(exit 68). The
 retake prints `retaken:` with the earlier commit and the new one, and the record names the
 earlier one under `retakenFrom`. No attempt is spent, because none was recorded. The builder's
 stop left the tree dirty on purpose. The freeze commits only the test paths, and the next

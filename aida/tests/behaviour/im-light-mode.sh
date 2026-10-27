@@ -42,6 +42,18 @@ rows() { if [ -f "$1" ]; then grep -Fc -e "$2" "$1"; else printf '0'; fi; }
 
 ROOT="$(mktemp -d)" || exit 1
 trap 'rm -rf "$ROOT"' EXIT
+# pa <task folder> <step> <order or empty> <words>: records a person's answer through
+# person-answer.sh. Since batch 2b (6.1.0) each person-only step reads it, in every run mode.
+pa() {
+  printf '%s' "$4" >"$ROOT/pa-words"
+  if [ -n "$3" ]; then
+    (cd "$HOME" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "${1%/tasks/*}" \
+      "${1##*/}" --step "$2" --order "$3" -- "@$ROOT/pa-words") >/dev/null 2>&1
+  else
+    (cd "$HOME" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "${1%/tasks/*}" \
+      "${1##*/}" --step "$2" -- "@$ROOT/pa-words") >/dev/null 2>&1
+  fi
+}
 export AIDA_REGISTRY_PATH="$ROOT/aida/registry.json"
 export AIDA_PROJECTS_HOME="$ROOT/aida/projects"
 export AIDA_SETTINGS_PATH="$ROOT/aida/settings.json"
@@ -266,6 +278,7 @@ printf '{ "findings": [] }\n' >"$ROOT/rv-none.json"
 # light_task <name>: a light task through design, with wo2 after wo1, and the build started.
 light_task() {
   use_task "$1"
+  pa "$PROJECT/tasks/$1" "task set-run-mode" "" "light"
   must "$TASKS" set-run-mode --project "$PROJECT" "$1" light
   scope_task
   research_task
@@ -285,10 +298,12 @@ echo "--- ruled: a person who sets the light task interactive rules at once"
 light_task lb
 build_order wo1 a.php "hello"
 fix_round wo1 a.php not-addressed low
+pa "$PROJECT/tasks/lb" "task set-run-mode" "" "interactive"
 must "$TASKS" set-run-mode --project "$PROJECT" lb interactive
 RC="$(try "$OUT" "$IMPLEMENT" verify-record "$TASK" wo1 --verdicts "$IMPL/verify-wo1-1.json")"
 expect "the round is spent, and the leftover read not-addressed waits for the person (0)" "$RC $(status_of f1)" "0 open"
 expect "the summary offers the one repair round" "$(saw "$OUT" "one repair round may take f1")" "yes"
+pa "$TASK" "implement verify-record" wo1 "f1=deferred::low, a later task takes it"
 RC="$(try "$OUT" "$IMPLEMENT" verify-record "$TASK" wo1 --ruling "f1=deferred::low, a later task takes it")"
 expect "the ruling is taken at once" "$RC" "0"
 expect "the leftover is ruled deferred" "$(jq -r '[ .findings[] | select(.id == "f1") ][0].ruling // "none"' "$IMPL/review-wo1.json")" "deferred"
@@ -330,8 +345,11 @@ fix_round wo1 a.php not-addressed high
 RC="$(try "$OUT" "$IMPLEMENT" verify-record "$TASK" wo1 --verdicts "$IMPL/verify-wo1-1.json")"
 expect "a high finding halts the light order (56)" "$RC" "56"
 expect "the high finding stays open" "$(status_of f1)" "open"
+pa "$PROJECT/tasks/lc" "task set-run-mode" "" "interactive"
 must "$TASKS" set-run-mode --project "$PROJECT" lc interactive
+pa "$TASK" "implement clear-halt" wo1 "a person rules the finding"
 must "$IMPLEMENT" clear-halt "$TASK" wo1 --because "a person rules the finding"
+pa "$TASK" "implement verify-record" wo1 "f1=deferred::a later task fixes it"
 RC="$(try "$OUT" "$IMPLEMENT" verify-record "$TASK" wo1 --ruling "f1=deferred::a later task fixes it")"
 expect "the ruling is taken with no second round" "$RC" "0"
 RC="$(try "$OUT" "$IMPLEMENT" close "$TASK" wo1)"

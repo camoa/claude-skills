@@ -29,6 +29,18 @@ expect() {
 
 ROOT="$(mktemp -d)" || exit 1
 trap 'rm -rf "$ROOT"' EXIT
+# pa <task folder> <step> <order or empty> <words>: records a person's answer through
+# person-answer.sh. Since batch 2b (6.1.0) each person-only step reads it, in every run mode.
+pa() {
+  printf '%s' "$4" >"$ROOT/pa-words"
+  if [ -n "$3" ]; then
+    (cd "$HOME" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "${1%/tasks/*}" \
+      "${1##*/}" --step "$2" --order "$3" -- "@$ROOT/pa-words") >/dev/null 2>&1
+  else
+    (cd "$HOME" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "${1%/tasks/*}" \
+      "${1##*/}" --step "$2" -- "@$ROOT/pa-words") >/dev/null 2>&1
+  fi
+}
 export AIDA_REGISTRY_PATH="$ROOT/aida/registry.json"
 export AIDA_PROJECTS_HOME="$ROOT/aida/projects"
 export AIDA_SETTINGS_PATH="$ROOT/aida/settings.json"
@@ -369,6 +381,7 @@ rc="$(try "$ROOT/dc-halt2.txt" "$IMPLEMENT" dispatch-close "$TASK")"
 expect "the second close halts: exit 110" "$rc" "110"
 expect "the halt names fix-record" "$(grep -c "then runs fix-record on .*answers-wo1-fix1.md, which is complete" "$ROOT/dc-halt2.txt")" "1"
 (cd "$WT" && git add a.php && git commit -qm "the rest of the fix")
+pa "$TASK" "implement clear-halt" wo1 "the halt row"
 in_wt "$IMPLEMENT" clear-halt "$TASK" wo1 --because "the halt row"
 rm -f "$(pinned_report)"
 
@@ -411,6 +424,7 @@ must "$DESIGN" account "$TASK" --id wo1 --finding prior#1
 must "$DESIGN" --run-mode interactive close "$TASK" --no-recipe
 must "$IMPLEMENT" start "$TASK"
 must "$IMPLEMENT" preconditions "$TASK" --recipe "$TEST_RECIPE_FLAG" --check-recipe "$CHECK_RECIPE_FLAG"
+pa "$TASK" "implement tests-freeze" wo1 "wo1=confirmed::person::reads from the document alone"
 must "$IMPLEMENT" tests-freeze "$TASK" wo1 --test-recipe "$TEST_RECIPE_FLAG" \
   --row "wo1=confirmed::person::reads from the document alone" --checklist "c1=read it"
 must "$IMPLEMENT" build-brief "$TASK" wo1

@@ -442,15 +442,15 @@ rw_refuse_moved_code() {
 }
 
 # Exit 70. A person's answer is accepted only when a person is present, which is the rule
-# tests-freeze already applies to its own rows and the number it already uses. A person's answer at
-# review/person-answer.json passes it too, without a change of mode (gap row 357,
-# task_person_answered). $1 the action, $2 the flag, $3 what the flag would have decided, $4 the
-# flag's values, one per line, or empty where no record may stand in.
+# tests-freeze already applies to its own rows and the number it already uses. A person's answer in
+# the task's answer record, step "review $1", passes it too, without a change of mode
+# (task_answer_find). $1 the action, $2 the flag, $3 what the flag would have decided, $4 the
+# flag's values, one per line, or empty where no answer may stand in.
 rw_require_person() {
-  local who="$1" flag="$2" what="$3" answer_file="$REVIEW_DIR/person-answer.json" route=""
+  local who="$1" flag="$2" what="$3" route=""
   [ "$RW_RUN_MODE" = "autonomous" ] || return 0
-  task_person_answered "$answer_file" "$TASK_PATH" "$who" "" "${4:-}" && return 0
-  [ -z "${4:-}" ] || route=" Or the main session writes the person's answer to $answer_file, as the implement skill's references/finish.md says."
+  task_answer_find "$TASK_PATH" "review $who" "" "${4:-}" && return 0
+  [ -z "${4:-}" ] || route="$(task_answer_route "$TASK_PATH" "review $who" "" "$4")"
   die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written.$route"
 }
 
@@ -2211,7 +2211,7 @@ RW_RESEARCH_FILES
       if [ -n "$judged" ]; then
         rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff of $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange'). No guide body is on disk; the reviewer's practiceJudged names judging the diff against $judged in $practice_file." >>"$rows_file"
       else
-        rw_check_row "$check_id" "unknown" "$body_floor$lens_note When no guide covers this task, the person judges the diff at close with --row $check_id=met or --row $check_id=unmet. A light or autonomous run takes that answer from $REVIEW_DIR/person-answer.json, written by the main session with step close." \
+        rw_check_row "$check_id" "unknown" "$body_floor$lens_note When no guide covers this task, the person judges the diff at close with --row $check_id=met or --row $check_id=unmet. A light or autonomous run takes that answer from the task's answer record, step review close, which person-answer.sh writes." \
           | jq -c '. + {answeredBy: "nobody"}' >>"$rows_file"
       fi
     else
@@ -3224,7 +3224,7 @@ RW_ROWS
     "$rulable_findings")"
   [ -z "$waiting_rows" ] || waiting_rows="$(rw_rows_waiting "$updated" "$person_owned" "$rulable_findings")"
   [ -z "$waiting_rows" ] \
-    || person_line="CLOSE: these rows wait for the person, with the words each takes: $waiting_rows. When the person answers, run close again at this commit with one --row <id>=<word> each. A light or autonomous run takes the rows from $REVIEW_DIR/person-answer.json, written by the main session with step close."
+    || person_line="CLOSE: these rows wait for the person, with the words each takes: $waiting_rows. When the person answers, run close again at this commit with one --row <id>=<word> each. A light or autonomous run takes the rows from the task's answer record, step review close, which person-answer.sh writes."
   waiting="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select((.id | startswith("decision-")) and .verdict == "unknown") | .id ] | join(", ")')"
   if [ -n "$waiting" ]; then
     rw_write_record "close" "$(printf '%s' "$updated" | jq -c 'del(.verdict)')"

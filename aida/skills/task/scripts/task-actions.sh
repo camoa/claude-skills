@@ -931,7 +931,9 @@ do_split() {
 # set-run-mode: written only when a person asks for autonomous or light. Nothing here asks.
 # `--stage`, repeatable, limits the mode to the stages named (task-schema.json, runModeStages): a
 # person who wants the build alone unattended keeps their hand on scope and review. No `--stage`
-# covers every stage, as before the field existed.
+# covers every stage, as before the field existed. The run mode decides the person checks still
+# read it, so a change needs a person's answer for step `task set-run-mode`, in every mode: the
+# mode, then each stage, one space apart, such as `autonomous implement`.
 # ------------------------------------------------------------------------------------------------
 
 do_set_run_mode() {
@@ -972,8 +974,10 @@ do_set_run_mode() {
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
-  local was_light=no
+  local was_light=no words
   ! task_is_light "$task_dir" || was_light=yes
+  words="$value$(printf '%s' "$stages_json" | jq -r '.[] | " " + .' | tr -d '\n')"
+  task_require_answer 70 set-run-mode "the run mode" "$task_dir" "task set-run-mode" "" "$words"
 
   local tmp
   tmp="$(mktemp)" || die3 "set-run-mode: cannot create a temp file"
@@ -994,6 +998,7 @@ do_set_run_mode() {
   # jq is tested before the move. Without that test an unreadable task.json makes jq write
   # nothing, the move succeeds on an empty file, and the task loses everything it held.
   mv "$tmp" "$task_json" || { rm -f "$tmp"; die3 "set-run-mode: could not update $task_json"; }
+  task_answer_consume
 
   local stages_note=""
   [ "$stages_json" = "[]" ] || stages_note=" ($(printf '%s' "$stages_json" | jq -r 'join(", ")'))"

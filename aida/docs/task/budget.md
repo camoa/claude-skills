@@ -35,8 +35,7 @@ Do these two steps in this order:
 The reverse sequence does not work. A grant before the raise brings the halt straight back, because
 the spend is counted again at the next dispatch.
 
-`grant-attempt` is a person's call. In an unattended run, see
-[answer for a person](person-answer.md).
+`grant-attempt` is a person's call, in every run mode. See [the person's answer](person-answer.md).
 
 ## Why it works this way
 

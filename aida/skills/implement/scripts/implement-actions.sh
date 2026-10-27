@@ -436,8 +436,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      exit 41 for the build attempts. The one exception is the order's one repair round, which
 #      `fix-brief` opens when it can take every open finding, and the message names what blocks it
 #      (gap row 314).
-#  55  `verify-record` was given a --ruling on an unattended run. A ruling is a person's judgement,
-#      and an unattended run has none to offer (decision 12), unless person-answer.json holds it.
+#  55  `verify-record` was given a --ruling with no matching answer in the task's answer record. A
+#      ruling is a person's judgement, in every run mode (decision 12).
 #  56  `verify-record` reached the round cap on an unattended run with findings still open. The
 #      order is halted with them named, and the verification itself is recorded first, so a refusal
 #      never throws away the verdicts it already read. On a light task a low finding goes pending
@@ -514,17 +514,18 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      counter. A grant answers a spent counter and answers nothing else, so the message names what
 #      it found and nothing is written. One number, because both are the same fact: this order is
 #      not waiting on another attempt.
-#  68  `grant-attempt`, `restart` or `clear-halt` was called on an autonomous run. Each is a
-#      person's judgement, and an unattended run has none to offer. One number, because it is one
-#      fact. `review-record --accept-deviation` is the same fact (gap row 224), and so is
-#      `build-record --accept-deviation` (gap row 266). A matching person-answer.json passes it,
-#      and the same record passes exit 55 (gap row 357).
+#  68  `grant-attempt`, `restart`, `clear-halt`, `retake-tests` with a reason, `start --leftovers
+#      keep` or `finish --accept-warnings` was called with no matching answer in the task's answer
+#      record. Each is a person's judgement, in every run mode. One number, because it is one fact.
+#      `review-record --accept-deviation` is the same fact (gap row 224), and so is
+#      `build-record --accept-deviation` (gap row 266). A person answers through
+#      skills/task/scripts/person-answer.sh, which shows Claude Code's permission prompt.
 #  69  `restart` found no order halted for design drift. There is nothing to restart from, and a
 #      restart that reset an order anyway would throw away a build that is fine.
-#  70  `tests-freeze` was given a `--row` judged by a person on an autonomous run. An autonomous run
-#      has no person to judge a row, so `person` there is a claim nobody made. Nothing is written.
-#      `model` is accepted on both runs. The row-checker judges every row in both modes, and a
-#      person on an attended run answers only a row it rejected (live-run row 70).
+#  70  `tests-freeze` was given a `--row` judged by a person with no matching answer in the task's
+#      answer record, in any run mode. Without it, `person` is a claim nobody made. Nothing is
+#      written. `model` is accepted on both runs. The row-checker judges every row in both modes,
+#      and a person answers only a row it rejected (live-run row 70).
 #
 # The codes the paper test added. Each one is a fact nothing refused before.
 #  71  `build-record` or `fix-record` was given a `--started-at` that cannot be the commit the work
@@ -674,9 +675,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      nothing is written.
 #
 # The code a fix scope outside the order's files added (live-run row 116).
-# 100  `fix-brief` was given `--allow` on an unattended run. An allow is a person's grant of one
-#      path outside the order's ownedFiles to one fix round. An unattended run has nobody to
-#      grant it, unless person-answer.json holds the grant. Nothing is written. Three argument faults stay exit 3: an owned path a fixScope
+# 100  `fix-brief` was given `--allow` with no matching answer in the task's answer record. An allow
+#      is a person's grant of one path outside the order's ownedFiles to one fix round, in every
+#      run mode. Nothing is written. Three argument faults stay exit 3: an owned path a fixScope
 #      already names, a frozen test or support file, and an unowned path no fixScope names.
 #
 # The code the commit form of a locks-in reason added (live-run row 183).
@@ -705,7 +706,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      first, the halt names the commits, and the message says it halted (gap row 411). A deviation
 #      line other than `Deviation: none`, or a heading that starts with "Deviation", in the report
 #      or the interface record, is a stop too (gap row 221). A person keeps a deviation with
-#      --accept-deviation, interactive only (exit 68), and the message and the halt name that route.
+#      --accept-deviation and a recorded answer (exit 68), and the message and the halt name that route.
 #      A stop line other than `Stop: none` has no such route (gap row 266). Unattended, a deviation
 #      is no stop: the attempt is recorded, and review-record keeps it (gap row 279).
 #      A `Stop: closed-order-defect: <file>: <what fails>` line naming a file a closed order owns
@@ -725,7 +726,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      latest attempt's report or in the interface record the build record holds. What is wrong is
 #      the design, or a recipe it relies on, so the order halts for design drift, whatever the
 #      review holds. The halt names the file and the line. No review record is written. A person
-#      accepts the departure with --accept-deviation instead, interactive only (exit 68). A recipe
+#      accepts the departure with --accept-deviation and a recorded answer instead (exit 68). A recipe
 #      the reviewer answers departed takes the same route, under a halt of its own wording (gap
 #      row 225). Unattended, nothing halts: the record holds the departure as deviationPending,
 #      and the person decides it at the task review (gap row 279). A departed recipe answer whose
@@ -1979,10 +1980,9 @@ do_start() {
   leftovers_json="$LO_LEFTOVERS_JSON"
   lo_tracked="$LO_TRACKED"
   if [ "$leftovers_json" != "[]" ]; then
-    if [ "$run_mode" = "autonomous" ]; then
-      [ "$leftovers_choice" != "keep" ] || die3 "start: --leftovers keep is a person's call, and this run is unattended."
-      leftovers_choice="set-aside"
-    fi
+    [ "$run_mode" != "autonomous" ] || [ -n "$leftovers_choice" ] || leftovers_choice="set-aside"
+    [ "$leftovers_choice" != "keep" ] \
+      || task_require_answer 68 start "--leftovers keep, the files a stopped role left," "$TASK_PATH" "implement start" "" keep
     [ -n "$leftovers_choice" ] \
       || die 104 "start: uncommitted files in $code_path: $(printf '%s' "$leftovers_json" | jq -r "[ $LO_TEXT_JQ ] | join(\", \")"). A role stopped mid-run may have left them, and the next role would work beside them. To keep a file, commit it, or run start again with --leftovers keep to leave it as it is. To set them aside, run start again with --leftovers set-aside. That moves them under $IMPL_DIR/set-aside/ and deletes nothing."
     [ "$leftovers_choice" != "set-aside" ] || [ -z "$lo_tracked" ] \
@@ -5674,17 +5674,16 @@ TF_EOF
   [ -z "$bad_kinds" ] \
     || die3 "tests-freeze: $unit_id serves or owns criteria whose verifiedBy is neither machine nor person: $bad_kinds. Such a criterion takes no test, no checklist and no row, so freezing it would record nothing at all. Fix the contract and close design again."
 
-  # --- 70: a person's row is a claim only an attended run can make ---------------------------------
-  # A model's row is accepted on both runs. The row-checker judges every row in both modes, and on
-  # an attended run the person answers only a row it rejected. So `model` on an interactive run is
-  # the common case, not a checker standing in for a person (live-run row 70).
-  local wrong_judge
-  if [ "$tf_run_mode" = "autonomous" ]; then
-    wrong_judge="$(printf '%s' "$rows_meta_json" | jq -r '
-        [ .[] | select(.judgedBy == "person") | .criterion ] | join(", ")')"
-    [ -z "$wrong_judge" ] \
-      || die 70 "tests-freeze: these rows say a person judged them, and this run is autonomous: $wrong_judge. No person is here to read a row, and a row recorded as a person's is one nobody can list again later. Nothing is written."
-  fi
+  # --- 70: a person's row is a claim only a person's answer makes -----------------------------------
+  # A model's row is accepted on both runs. The row-checker judges every row in both modes, and the
+  # person answers only a row it rejected. So `model` is the common case, not a checker standing in
+  # for a person (live-run row 70). A row judged by a person needs the person's answer, in every run
+  # mode: those --row values, one per line, are its words.
+  local person_rows
+  person_rows="$(printf '%s' "$rows_meta_json" | jq -r '
+      [ .[] | select(.judgedBy == "person") | .criterion + "=" + .verdict + "::person::" + .note ] | join("\n")')"
+  [ -z "$person_rows" ] \
+    || task_require_answer 70 tests-freeze "a row a person judged" "$TASK_PATH" "implement tests-freeze" "$unit_id" "$person_rows"
 
   # --- 64: a model's confirmation of a record stands on the checker's kept verdicts (gap row 361) --
   # The note on the --row is the caller's word. Each done-when line's latest kept verdict decides,
@@ -6669,6 +6668,7 @@ TF_EOF
   # all checked above. So the order moves straight to tests-frozen and not through the four steps
   # the ledger's vocabulary keeps for a finer grain.
   tt_ledger_update "$IMPL_DIR/ledger.json" "$unit_id" '.lastStep = "tests-frozen"'
+  task_answer_consume
   echo "TESTS-FREEZE: written (commit $current_commit)"
   printf '%s\n' "$record_file"
   exit 0
@@ -8933,7 +8933,7 @@ do_build_record() {
 
   im_load_task "$task_arg" "build-record"
   im_refuse_open_dispatch "build-record" "$unit_id"
-  [ -z "$accept" ] || fn_require_interactive "build-record" "keeping a deviation the builder declared" "$unit_id" "$accept"
+  [ -z "$accept" ] || fn_require_answer "build-record" "keeping a deviation the builder declared" "$unit_id" "$accept"
 
   tt_load_snapshot "build-record"
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "build-record"
@@ -9091,7 +9091,7 @@ do_build_record() {
         fi ;;
     esac
     if $is_deviation; then
-      keep_route=" Or, interactive only, a person keeps the deviation: run build-record again with --accept-deviation <their reason>."
+      keep_route=" Or a person keeps the deviation: record their answer with person-answer.sh, then run build-record again with --accept-deviation <their reason>."
       halt_front="$BR_DEVIATION_PREFIX a Deviation: line or heading says so"
     fi
     local stop_halt_text=""
@@ -10514,7 +10514,7 @@ do_review_record() {
 
   local answers=""
   if [ -n "$accept" ]; then
-    fn_require_interactive "review-record" "accepting a departure the builder declared" "$unit_id" "$accept"
+    fn_require_answer "review-record" "accepting a departure the builder declared" "$unit_id" "$accept"
     answers="$RR_DEPARTURE_PREFIXES"
   fi
   rv_load_state "review-record" "$unit_id" "$answers"
@@ -10755,7 +10755,7 @@ do_review_record() {
     departure_ledger="$(halt_order_in "$RV_LEDGER_DOC" "$unit_id" "$halt_why")"
     [ -n "$departure_ledger" ] || die3 "review-record: the halt on $unit_id could not be written."
     write_atomic "$RV_LEDGER_FILE" "$departure_ledger"
-    die 107 "review-record: $unit_id is halted for design drift. A departure from the design is named in $departure_file: $departure. What is wrong is the design, or a recipe it relies on, so no fixer can repair it, and no review record is written. Amend the order in design and close design, then run restart to rebuild the order. Or, interactive only, a person accepts the departure: run review-record again with --accept-deviation <their reason>."
+    die 107 "review-record: $unit_id is halted for design drift. A departure from the design is named in $departure_file: $departure. What is wrong is the design, or a recipe it relies on, so no fixer can repair it, and no review record is written. Amend the order in design and close design, then run restart to rebuild the order. Or a person accepts the departure: record their answer with person-answer.sh, then run review-record again with --accept-deviation <their reason>."
   fi
 
   [ -z "$declared" ] || [ -z "$accept" ] || kept="$accept"
@@ -10985,9 +10985,8 @@ do_fix_brief() {
   # be granted. An unowned path no open finding names is a grant for nothing (exit 3, each). A
   # person's answer record naming the --allow values, one per line, passes it (gap row 357).
   local allowed_json='[]' granted_json='[]' ap ap_abs ap_owned other tf fp frozen_list frozen_hit named
-  [ -z "$allow_raw" ] || [ "$RV_RUN_MODE" != "autonomous" ] \
-    || task_person_answered "$IMPL_DIR/person-answer.json" "$TASK_PATH" "fix-brief" "$unit_id" "$allow_raw" \
-    || die 100 "fix-brief: --allow is a person's grant, and this run is unattended. Nobody is present to allow a path outside $unit_id's own files. Or the main session writes the person's grant to $IMPL_DIR/person-answer.json, as references/finish.md says."
+  [ -z "$allow_raw" ] \
+    || task_require_answer 100 fix-brief "--allow, a path outside $unit_id's own files," "$TASK_PATH" "implement fix-brief" "$unit_id" "$allow_raw"
   # Every frozen test and support path of the task, the list the write hook reads.
   frozen_list=""
   for tf in "$IMPL_DIR"/tests-*.json; do
@@ -11735,10 +11734,8 @@ do_verify_record() {
   # the flag outright rather than recording a model's own word as a person's (decision 12). Read
   # before the round is looked up, so a ruling on a round already recorded meets the same refusal.
   # A person's answer record naming these rulings, one per line, passes it (gap row 357).
-  if [ -n "$rulings_raw" ] && [ "$RV_RUN_MODE" = "autonomous" ] \
-     && ! task_person_answered "$IMPL_DIR/person-answer.json" "$TASK_PATH" "verify-record" "$unit_id" "$rulings_raw"; then
-    die 55 "verify-record: this run is unattended, and a ruling is a person's judgement. Nothing here may rule on an open finding. Or the main session writes the person's rulings to $IMPL_DIR/person-answer.json, as references/finish.md says."
-  fi
+  [ -z "$rulings_raw" ] \
+    || task_require_answer 55 verify-record "a ruling on an open finding" "$TASK_PATH" "implement verify-record" "$unit_id" "$rulings_raw"
 
   # Exit 45: a round is verified once. A second verification of the same round would record a
   # second set of verdicts over findings the first set already closed.
@@ -12400,18 +12397,13 @@ fn_load_task_state() {
   FN_LEDGER_DOC="$STARTED_LEDGER_DOC"
 }
 
-# Exit 68. The grant, the restart and the clearing of a halt are a person's judgement, so an
-# autonomous run refuses. The mode read is the task's own for this stage, not the ledger's copy,
-# so a person who sets the task interactive after a halt runs the action at once. A person's
-# answer at implementation/person-answer.json passes it too, without a change of mode (gap row
-# 357, task_person_answered). $1 the action's own name, $2 what the caller would have been
+# Exit 68. The grant, the restart and the clearing of a halt are a person's judgement, in every run
+# mode, so each refuses without a person's answer in the task's answer record, step "implement
+# $1" (task_require_answer). The run mode does not decide whether a person answered. The summary
+# printer marks the answer used. $1 the action's own name, $2 what the caller would have been
 # deciding, $3 the order or empty for a task-wide action, $4 the person's words the call carries.
-fn_require_interactive() {
-  local who="$1" what="$2" held="" answer_file="$IMPL_DIR/person-answer.json"
-  [ "$(task_run_mode "$TASK_PATH" implement)" = "autonomous" ] || return 0
-  task_person_answered "$answer_file" "$TASK_PATH" "$who" "$3" "$4" && return 0
-  [ ! -f "$answer_file" ] || held=" $answer_file answers another call, so it was not used."
-  die 68 "$who: this task's implement stage is autonomous, and $what is a person's judgement. Nothing is written.$held Run task set-run-mode interactive on this task, then this action again. Or the main session writes the person's answer to $answer_file, as references/finish.md says. Or let the halt stand."
+fn_require_answer() {
+  task_require_answer 68 "$1" "$2" "$TASK_PATH" "implement $1" "$3" "$4"
 }
 
 # finish: the implementation stage is done for this task. The task is not. It goes to the review
@@ -12432,7 +12424,7 @@ do_finish() {
   im_load_task "$task_arg" "finish"
 
   fn_load_task_state "finish"
-  [ -z "$accept_warnings" ] || fn_require_interactive "finish" "accepting a suite that failed on runner warnings alone" "" "$accept_warnings"
+  [ -z "$accept_warnings" ] || fn_require_answer "finish" "accepting a suite that failed on runner warnings alone" "" "$accept_warnings"
 
   # --- exit 66: every order closed, and every machine-verified criterion confirmed ----------------
   local open_orders unconfirmed
@@ -12566,7 +12558,7 @@ FN_RECIPES
         printf 'finish: the runner warning lines (first %s) are:\n%s\n' \
           "$(printf '%s' "$suite_json" | jq -r '.warningLines | length')" \
           "$(printf '%s' "$suite_json" | jq -r '.warningLines[]')" >&2
-        die 86 "finish: the suite reads warned at $head_now ($(printf '%s' "$suite_json" | jq -r '[ (.runs // [])[] | .framework + "=" + .verdict ] | join(", ")')): $(printf '%s' "$suite_json" | jq -r '.detail') The whole output is at $IMPL_DIR/$sidecar. Nothing was recorded. finish does not pass on runner warnings by itself, because the project's own configuration makes them fail the run. A person picks one of three routes. Accept the warnings: run finish again with --accept-warnings <the person's reason>, interactive only. Change the suite row's command in the project's copy of the test-execution recipe, so these warnings do not fail the run. Or repair the project configuration that raises them, in a change outside this task."
+        die 86 "finish: the suite reads warned at $head_now ($(printf '%s' "$suite_json" | jq -r '[ (.runs // [])[] | .framework + "=" + .verdict ] | join(", ")')): $(printf '%s' "$suite_json" | jq -r '.detail') The whole output is at $IMPL_DIR/$sidecar. Nothing was recorded. finish does not pass on runner warnings by itself, because the project's own configuration makes them fail the run. A person picks one of three routes. Accept the warnings: record the person's answer with person-answer.sh, then run finish again with --accept-warnings <the person's reason>. Change the suite row's command in the project's copy of the test-execution recipe, so these warnings do not fail the run. Or repair the project configuration that raises them, in a change outside this task."
       fi
       ;;
     *)
@@ -12821,7 +12813,7 @@ do_grant_attempt() {
   im_load_task "$task_arg" "grant-attempt"
 
   fn_load_task_state "grant-attempt"
-  fn_require_interactive "grant-attempt" "another attempt on one order" "$unit_id" "$reason"
+  fn_require_answer "grant-attempt" "another attempt on one order" "$unit_id" "$reason"
 
   local unit_present order_entry
   unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) ] | length')"
@@ -12929,7 +12921,7 @@ do_clear_halt() {
   im_load_task "$task_arg" "clear-halt"
 
   fn_load_task_state "clear-halt"
-  fn_require_interactive "clear-halt" "clearing a halt on one order" "$unit_id" "$because"
+  fn_require_answer "clear-halt" "clearing a halt on one order" "$unit_id" "$because"
 
   local unit_present order_entry
   unit_present="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg u "$unit_id" '[ .workOrders[]? | select(.id == $u) ] | length')"
@@ -13069,7 +13061,7 @@ do_retake_tests() {
          || { [ -n "$halt" ] && [ -n "$(halt_segments_matching "$halt" '["attempts spent"]' drop)" ]; }; then
         die 99 "retake-tests: $unit_id is at step ${rt_step:-not started}, halted for: ${halt:-nothing}. $rt_routes Nothing is written."
       fi
-      fn_require_interactive "retake-tests" "ruling a frozen test wrong" "$unit_id" "$because"
+      fn_require_answer "retake-tests" "ruling a frozen test wrong" "$unit_id" "$because"
       rt_allowed="$(attempts_allowed_for "$order_entry")"
       [ "$(printf '%s' "$order_entry" | jq -r '.attemptsUsed // 0')" -lt "$rt_allowed" ] || rt_grant=true ;;
   esac
@@ -13467,7 +13459,7 @@ do_restart() {
   im_load_task "$task_arg" "restart"
 
   fn_load_task_state "restart"
-  fn_require_interactive "restart" "restarting a build against a changed design" "" "$reason"
+  fn_require_answer "restart" "restarting a build against a changed design" "" "$reason"
 
   # Exit 69. Every drift halt `start` writes begins with "design drift: ", so this reads the halt
   # reasons rather than re-deriving the drift itself: the drift was already worked out, order by

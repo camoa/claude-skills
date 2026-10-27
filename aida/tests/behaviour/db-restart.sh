@@ -18,6 +18,18 @@ expect() {
 
 ROOT="$(mktemp -d)" || exit 1
 trap 'rm -rf "$ROOT"' EXIT
+# pa <task folder> <step> <order or empty> <words>: records a person's answer through
+# person-answer.sh. Since batch 2b (6.1.0) each person-only step reads it, in every run mode.
+pa() {
+  printf '%s' "$4" >"$ROOT/pa-words"
+  if [ -n "$3" ]; then
+    (cd "$HOME" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "${1%/tasks/*}" \
+      "${1##*/}" --step "$2" --order "$3" -- "@$ROOT/pa-words") >/dev/null 2>&1
+  else
+    (cd "$HOME" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "${1%/tasks/*}" \
+      "${1##*/}" --step "$2" -- "@$ROOT/pa-words") >/dev/null 2>&1
+  fi
+}
 export AIDA_REGISTRY_PATH="$ROOT/aida/registry.json"
 export AIDA_PROJECTS_HOME="$ROOT/aida/projects"
 export AIDA_SETTINGS_PATH="$ROOT/aida/settings.json"
@@ -266,6 +278,7 @@ echo "--- wo1 frozen and built, then halted for drift: the restart reverts the b
 build_task t1
 freeze_and_build_wo1
 halt_wo1
+pa "$TASK" "implement restart" "" "wo1 interface changed"
 rc="$(try "$ROOT/restart-t1.txt" "$IMPLEMENT" restart "$TASK" --reason "wo1 interface changed")"
 expect "restart exits 0" "$rc" "0"
 RESTARTED="$(tail -1 "$ROOT/restart-t1.txt")/restarted.json"
@@ -293,6 +306,7 @@ must "$IMPLEMENT" build-record "$TASK" wo2 --interface "$ROOT/iface.md" --report
   --started-at "$BUILD" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "fake=$RECIPES/checks.md" \
   --implement-recipe "fake=$RECIPES/implement.md"
 halt_wo1
+pa "$TASK" "implement restart" "" "wo1 interface changed"
 rc="$(try "$ROOT/restart-t2.txt" "$IMPLEMENT" restart "$TASK" --reason "wo1 interface changed")"
 expect "restart exits 0" "$rc" "0"
 RESTARTED="$(tail -1 "$ROOT/restart-t2.txt")/restarted.json"

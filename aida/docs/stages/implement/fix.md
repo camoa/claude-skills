@@ -12,8 +12,8 @@ not change a test or fix a finding not on its list. It commits its work before i
 
 A finding whose fix would change a file the order does not own: AIDA asks you first. Allow the
 file, and the fixer may change it. Withhold it, and the fixer reports the finding as out of its
-reach. Unattended, a file is allowed only through your recorded answer, in [Answer an unattended
-run](../../task/person-answer.md).
+reach. A file is allowed only through your recorded answer, in every run mode. See [the person's
+answer](../../task/person-answer.md).
 
 After the round, seven of the eight checks run again, all but the interface record. A check that
 fails spends the round and leaves every finding open. It also opens one finding for that check.
@@ -47,9 +47,9 @@ word and a reason:
 - **test-wrong.** The problem is real, and the fix needs a frozen test changed. The order halts,
   and `retake-tests` sends it back to its tests.
 
-Unattended, a ruling passes only through your recorded answer, in [Answer an unattended
-run](../../task/person-answer.md). Without one, which findings wait and which halt the order is in
-[When a work order halts](halts.md).
+A ruling passes only through your recorded answer, in every run mode. See [the person's
+answer](../../task/person-answer.md). Unattended, which findings wait and which halt the order is
+in [When a work order halts](halts.md).
 
 ## The retake
 

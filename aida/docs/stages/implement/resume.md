@@ -37,17 +37,13 @@ names the role, the order, and the record's age. A role stopped at its turn limi
 or twice for an order with a large diff budget. One more stop halts the order. Clear the halt,
 run `start` to keep or set aside the role's files, and the role is sent again.
 
-## Answer an unattended run without switching it
+## Your answer to a person's call
 
-A light or autonomous run refuses a person's call, such as a grant, a restart, a ruling, a file you
-allow, or accepted warnings. You can set the task interactive. Or tell the main session your
-answer, and it records it in `implementation/person-answer.json`. The run mode stays as it is.
-
-Only the main session, where you type, may write that file, and only with your own words. A hook
-refuses it to every dispatched role. The record names the task, the action, the order and your
-exact answer. The action passes only on a record that matches all four, and removes it once its
-writes are done. The task pages cover the same record for other stages. See [the task
-pages](../../task/).
+A person's call, such as a grant, a restart, a ruling, a file you allow, or accepted warnings,
+refuses until your answer is on record, in every run mode. Claude Code shows you a permission
+prompt, and your yes records the answer in `person-answers.json` in the task folder. The call
+passes only on an unused answer for this step, this order and your exact words, and marks it used.
+See [the person's answer](../../task/person-answer.md).
 
 ## A permission prompt partway through
 

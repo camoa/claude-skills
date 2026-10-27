@@ -56,7 +56,7 @@ nothing, so the offer waits for a person.
 - `not-applicable` records your no, with your reason, so the offer does not come again.
 
 `up` and `not-applicable` are a person's answers, so an unattended run refuses them; see
-[answer for a person](person-answer.md). `down` runs unattended, because a torn-down copy loses
+[the person's answer](person-answer.md). `down` runs unattended, because a torn-down copy loses
 nothing. When no framework has a recipe,
 AIDA records that the worktree has files and no site.
 

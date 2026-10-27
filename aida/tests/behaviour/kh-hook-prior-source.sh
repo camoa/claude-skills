@@ -29,6 +29,18 @@ expect() {
 
 ROOT="$(mktemp -d)" || exit 1
 trap 'rm -rf "$ROOT"' EXIT
+# pa <task folder> <step> <order or empty> <words>: records a person's answer through
+# person-answer.sh. Since batch 2b (6.1.0) each person-only step reads it, in every run mode.
+pa() {
+  printf '%s' "$4" >"$ROOT/pa-words"
+  if [ -n "$3" ]; then
+    (cd "$HOME" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "${1%/tasks/*}" \
+      "${1##*/}" --step "$2" --order "$3" -- "@$ROOT/pa-words") >/dev/null 2>&1
+  else
+    (cd "$HOME" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "${1%/tasks/*}" \
+      "${1##*/}" --step "$2" -- "@$ROOT/pa-words") >/dev/null 2>&1
+  fi
+}
 export AIDA_REGISTRY_PATH="$ROOT/aida/registry.json"
 export AIDA_PROJECTS_HOME="$ROOT/aida/projects"
 export AIDA_SETTINGS_PATH="$ROOT/aida/settings.json"
@@ -118,6 +130,7 @@ TASK="$PROJECT/tasks/t1"
 IMPL="$TASK/implementation"
 WT="$(jq -r '.worktree.path' "$TASK/task.json")"
 [ -d "$WT" ] || { printf 'setup failed: no worktree\n'; exit 1; }
+pa "$PROJECT/tasks/t1" "task set-run-mode" "" "light"
 env -u CLAUDE_PLUGIN_ROOT "$SH" "$TASKS" set-run-mode --project "$PROJECT" t1 light >>"$LOG" 2>&1 || exit 1
 RECORD="$TASK/deliverables/probe-record.md"
 SCRIPT="$TASK/deliverables/probe/counts.txt"

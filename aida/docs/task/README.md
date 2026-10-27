@@ -17,8 +17,8 @@ Read in this order:
 7. [Set a budget on the build](budget.md).
 8. [Run modes](run-modes.md): interactive, autonomous, and autonomous for some stages.
 9. [Light mode](light.md): a fast autonomous run that skips named steps.
-10. [Answer for a person in an unattended run](person-answer.md), and what to read when you
-    come back.
+10. [The person's answer](person-answer.md): how you answer a step only you decide, what that
+    guarantees, and what to read when you come back.
 11. [Sessions and compaction](sessions.md): what a new session is told, and when `/compact`
     refuses.
 12. [Save a decision](save.md): keep what the conversation decided before you stop.

@@ -312,7 +312,7 @@ cp_load() {
   local waiting
   waiting="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.criteria // [])[] | select(.verdict == "unanswered" and .answeredBy == "nobody") | .id ] | join(", ")' 2>/dev/null)"
   [ -z "$waiting" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
-    || CP_PERSON_ROUTE="These criteria wait for a person to answer met or unmet: $waiting. The person answers each with review close --row <criterion>=met|unmet at the reviewed commit. A light or autonomous run takes that answer from $TASK_PATH/review/person-answer.json, written by the main session with step close. Before either, run the command a criterion's verify clause names, and show its output to the person."
+    || CP_PERSON_ROUTE="These criteria wait for a person to answer met or unmet: $waiting. The person answers each with review close --row <criterion>=met|unmet at the reviewed commit. A light or autonomous run takes that answer from the task's answer record, step review close, which person-answer.sh writes. Before either, run the command a criterion's verify clause names, and show its output to the person."
   # A finding that fails a criterion is no follow up, so --leave never takes it. The person rules it
   # at review close, which makes it a follow up or clears it (live-run row 430). A medium or high
   # finding that cites no criterion fails its lens check until the person rules it there too.
@@ -397,16 +397,15 @@ cp_refuse_complete() {
 }
 
 # Exit 70. A person's answer is accepted only when a person is present. Review and tests-freeze
-# apply the same rule under the same number. A person's answer at completion/person-answer.json
-# passes it too, without a change of mode (gap row 380, task_person_answered). It sits in the
-# stage's own folder, as implement's and review's do, so it never shares a file with a review
-# record still waiting. One record answers the whole call. $1 the action, $2 the flag, $3 what the
-# flag would have decided, $4 every person's flag of the call, one "<flag> <value>" per line.
+# apply the same rule under the same number. A person's answer in the task's answer record, step
+# "completion $1", passes it too, without a change of mode (task_answer_find). One answer covers the
+# whole call. $1 the action, $2 the flag, $3 what the flag would have decided, $4 every person's
+# flag of the call, one "<flag> <value>" per line.
 cp_require_person() {
-  local who="$1" flag="$2" what="$3" answer_file="$COMPLETION_DIR/person-answer.json"
+  local who="$1" flag="$2" what="$3"
   [ "$CP_RUN_MODE" = "autonomous" ] || return 0
-  task_person_answered "$answer_file" "$TASK_PATH" "$who" "" "$4" && return 0
-  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written.$(task_answer_route "$answer_file" "$TASK_PATH" "$who" "$4")"
+  task_answer_find "$TASK_PATH" "completion $who" "" "$4" && return 0
+  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written.$(task_answer_route "$TASK_PATH" "completion $who" "" "$4")"
 }
 
 # The one follow up row for finding $1, or nothing when the review holds no follow up finding of
@@ -782,7 +781,7 @@ do_close() {
     undecided="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy == "nobody") | (.id + ": " + .detail) ] | join(" ")' 2>/dev/null)"
     local decide_route=""
     [ -z "$undecided" ] \
-      || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. Or the run mode stays, and the main session writes those rows to $TASK_PATH/review/person-answer.json with step close. A --reason here closes the task with every one of those decisions unmade."
+      || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. Or the run mode stays, and a person answers those rows through person-answer.sh, step review close. A --reason here closes the task with every one of those decisions unmade."
     decide_route="$decide_route${CP_PERSON_ROUTE:+ $CP_PERSON_ROUTE A --reason here closes the task with those criteria unanswered.}${CP_FINDING_ROUTE:+ $CP_FINDING_ROUTE}"
     case "$CP_RUN_MODE" in
       autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}$decide_route" ;;
@@ -851,7 +850,7 @@ CP_LEAVES2
   # A person's answer record that passed a refusal is the person's word, so the person closed it.
   local closed_by record
   case "$CP_RUN_MODE" in
-    autonomous) [ -n "$TASK_ANSWER_MATCHED" ] && closed_by="person" || closed_by="nobody" ;;
+    autonomous) [ -n "$TASK_ANSWER_HELD" ] && closed_by="person" || closed_by="nobody" ;;
     *)          closed_by="person" ;;
   esac
   record="$(jq -nc --arg task "$CP_TASK_ID" --arg today "$(date -u +%Y-%m-%d)" --arg verdict "$CP_REVIEW_VERDICT" \

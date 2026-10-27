@@ -33,8 +33,8 @@ The usual first-run case is `package-lock.json`, changed by a surfaces harness i
 Interactive, such a file refuses with exit 104, and nothing is written. Read the paths to the
 person and offer two choices. To keep a file, the person commits it. Or you run start again with
 `--leftovers keep` to leave it as it is, for that run only. To set the files aside, run start
-again with `--leftovers set-aside`. Unattended, the script sets them aside itself, and
-`--leftovers keep` refuses.
+again with `--leftovers set-aside`. Unattended, with no `--leftovers`, the script sets them aside
+itself. In either mode, `--leftovers keep` refuses without the person's answer on record (exit 68).
 
 Set aside moves each untracked file to `<task_folder>/implementation/set-aside/<time>/`, under its
 own path. A modified file is copied there, and its committed version comes back. Nothing is

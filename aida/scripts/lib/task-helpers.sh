@@ -535,41 +535,68 @@ task_run_mode() {
   if [ "$answer" = "autonomous" ]; then printf 'autonomous'; else printf 'interactive'; fi
 }
 
-# Gap row 357. A person's answer, held as a record, stands in for an interactive run on one call.
-# The record is {"task", "step", "order", "answer"}: the task's id, the action, the order ("" for a
-# task-wide action) and the exact words the call carries. Final newlines on either side are not
-# words. An empty answer never matches. Only the main session writes the record:
-# hooks/deny-frozen-test-writes.sh refuses it to every agent type. A match is held, not removed,
-# so a later refusal keeps the person's answer. task_answer_consume removes it once the action wrote.
-# $1 the record file, $2 the task folder, $3 the action, $4 the order or empty, $5 the words.
-TASK_ANSWER_MATCHED=""
-task_person_answered() {
-  local task_id
-  [ -n "$5" ] && [ -f "$1" ] || return 1
-  task_id="$(jq -r '.id // empty' "$2/task.json" 2>/dev/null)"
-  jq -e --arg task "$task_id" --arg step "$3" --arg order "$4" --arg answer "$5" \
-    '.task == $task and .step == $step and (.order // "") == $order
-     and ((.answer // "") | sub("\n+$"; "")) == ($answer | sub("\n+$"; ""))' "$1" >/dev/null 2>&1 || return 1
-  TASK_ANSWER_MATCHED="$1"
+# The person's answers, <task>/person-answers.json: a JSON array that
+# skills/task/scripts/person-answer.sh alone appends to. Each entry is {step, order, words, answeredAt}, and usedAt once a step used it.
+# The step is "<skill> <action>", such as "implement clear-halt". The order is "" for a task-wide
+# step. Final newlines are not words, and empty words never match. The hook makes Claude Code show
+# its permission prompt for that script, and refuses every other write of this file, so an entry is a
+# yes that whoever answers prompts in the session gave. An entry is never removed: the step that
+# used it marks it, so review can count every answer.
+TASK_ANSWER_HELD=""
+task_answer_file() { printf '%s/person-answers.json' "$1"; }
+
+# True when the task holds an unused entry for this step, order and words. The first such entry is
+# held, not marked, so a later refusal keeps it. task_answer_consume marks it once the action wrote.
+# $1 the task folder, $2 the step, $3 the order or empty, $4 the words.
+task_answer_find() {
+  local file index
+  file="$(task_answer_file "$1")"
+  [ -n "$4" ] && [ -f "$file" ] || return 1
+  index="$(jq -r --arg step "$2" --arg order "$3" --arg words "$4" '
+      [ to_entries[] | select((.value.usedAt // null) == null and .value.step == $step
+          and (.value.order // "") == $order
+          and ((.value.words // "") | sub("\n+$"; "")) == ($words | sub("\n+$"; ""))) | .key ][0] // empty' \
+      "$file" 2>/dev/null)"
+  [ -n "$index" ] || return 1
+  TASK_ANSWER_HELD="$file	$index"
 }
 
-# The end of a refusal that a record may pass: a clause when $1 answers another call, then the
-# record the main session writes, whole. $1 the record file, $2 the task folder, $3 the step, $4
-# the words.
+# The end of a refusal that an answer passes: the command that records the person's answer, with
+# its words in single quotes, or in a file when they run over one line. $1 the task folder, $2 the
+# step, $3 the order or empty, $4 the words.
 task_answer_route() {
-  [ ! -f "$1" ] || printf ' %s answers another call, so it was not used.' "$1"
-  printf " Or the main session writes the person's answer to %s as %s, as the implement skill's references/finish.md says." "$1" \
-    "$(jq -nc --arg task "$(jq -r '.id // empty' "$2/task.json" 2>/dev/null)" --arg step "$3" --arg answer "$4" \
-      '{task: $task, step: $step, order: "", answer: ($answer | sub("\n+$"; ""))}')"
+  local order="" words="$4"
+  [ -z "$3" ] || order=" --order $3"
+  while [ "${words%"
+"}" != "$words" ]; do words="${words%"
+"}"; done
+  case "$words" in
+    *"
+"*) words="@/<a file holding these lines>:
+$words" ;;
+    *) words="'$(printf '%s' "$words" | sed "s/'/'\\\\''/g")'" ;;
+  esac
+  printf " A person answers through person-answer.sh, which shows Claude Code's permission prompt: %s/skills/task/scripts/person-answer.sh --project %s %s --step '%s'%s -- %s" "$PLUGIN_ROOT" \
+    "$(dirname -- "$(dirname -- "$1")")" "$(basename -- "$1")" "$2" "$order" "$words"
 }
 
-# Removes the record task_person_answered matched, so one answer serves one call. The two summary
-# printers call it, because an action prints its summary only after its writes.
+# Refuses with exit $1 unless the task holds an unused answer for this call. $2 the action's own
+# name, $3 what a person decides, $4 the task folder, $5 the step, $6 the order or empty, $7 the
+# words the call carries.
+task_require_answer() {
+  task_answer_find "$4" "$5" "$6" "$7" && return 0
+  die "$1" "$2: $3 is a person's answer, and $(task_answer_file "$4") holds no unused answer for step $5${6:+, order $6}, with these words. Nothing is written.$(task_answer_route "$4" "$5" "$6" "$7")"
+}
+
+# Marks the entry task_answer_find held as used, so one answer serves one call. Each action calls
+# it after its writes.
 task_answer_consume() {
-  [ -n "$TASK_ANSWER_MATCHED" ] || return 0
-  rm -f "$TASK_ANSWER_MATCHED"
-  printf "task-helpers: the person's answer at %s stood in for an interactive run, and it is now removed.\n" "$TASK_ANSWER_MATCHED" >&2
-  TASK_ANSWER_MATCHED=""
+  [ -n "$TASK_ANSWER_HELD" ] || return 0
+  local file="${TASK_ANSWER_HELD%	*}" index="${TASK_ANSWER_HELD##*	}"
+  write_atomic "$file" "$(jq --argjson i "$index" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '.[$i].usedAt = $at' "$file")"
+  printf "task-helpers: the person's answer %s in %s is now marked used.\n" "$index" "$file" >&2
+  TASK_ANSWER_HELD=""
 }
 
 # True when the task's runMode is light (task-schema.json, runMode). Every light rule is behind
@@ -774,16 +801,13 @@ mark_task_in_progress() {
 # another task's uncommitted file, left beside it (live run, row 120: `tasks` whole took another
 # window's pending file). Moved here from task-actions.sh so the stage closes commit the same
 # way the task actions do. project-commit.sh is sourced here because only task-actions.sh
-# sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller. A person's answer
-# record is left out at any depth, so one that matched no call never enters the history (gap row
-# 380). task_answer_consume removes the one that matched.
+# sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller.
 commit_task_change() {
   local project="$1" subject="$2" why="$3" principle="$4" ruled_out="$5" task="$6" stage="$7"
   shift 7
   # shellcheck source=/dev/null
   source "${PLUGIN_ROOT}/scripts/lib/project-commit.sh" || die3 "the project-commit library failed to load"
-  commit_project "$project" "$subject" "$why" "$principle" "$ruled_out" "$task" "$stage" "tasks/$task" \
-    ":(exclude,glob)tasks/$task/**/person-answer.json" "$@"
+  commit_project "$project" "$subject" "$why" "$principle" "$ruled_out" "$task" "$stage" "tasks/$task" "$@"
 }
 
 # The stage-boundary commit (foundations.md, History: "AIDA commits at stage boundaries, and the

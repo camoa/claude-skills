@@ -1610,16 +1610,16 @@ SW_LINES
 # Exit 70. $1 the flag, $2 what it says a person did. A caller with a task passes $3 the task
 # folder and $4 the person's words the call carries. Then the task's own run mode for implement
 # also counts, so a call that leaves out --run-mode is not interactive by that alone; the site
-# serves the build, as fn_require_interactive reads it. And the person's answer at
-# <task>/person-answer.json, step "$ACTION $1", passes the refusal without a change of mode (gap
-# row 380, task_person_answered). The caller removes it with task_answer_consume once it wrote.
+# serves the build. And a person's answer in the task's answer record, step "task $ACTION $1",
+# passes the refusal without a change of mode (task_answer_find). Only the task script passes a
+# task. The caller marks the answer used with task_answer_consume once it wrote.
 cr_require_person() {
   local mode="$RUN_MODE" route=""
   [ -z "${3:-}" ] || [ "$(task_run_mode "$3" implement)" != "autonomous" ] || mode="autonomous"
   [ "$mode" = "autonomous" ] || return 0
   if [ -n "${3:-}" ]; then
-    task_person_answered "$3/person-answer.json" "$3" "$ACTION $1" "" "$4" && return 0
-    route="$(task_answer_route "$3/person-answer.json" "$3" "$ACTION $1" "$4")"
+    task_answer_find "$3" "task $ACTION $1" "" "$4" && return 0
+    route="$(task_answer_route "$3" "task $ACTION $1" "" "$4")"
   fi
   die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written.$route"
 }

@@ -414,7 +414,10 @@ the two-level limit stopped it. Say which and stop. Show the whole output otherw
 
 Run mode is written only when a person explicitly asks for an autonomous or a light run on this task.
 Nothing above asks about it on its own, and nothing here proposes it either. Only call this when
-asked. Run:
+asked. A change needs the person's answer first, in every mode, because the run mode decides
+which person checks still read it. Record it with `person-answer.sh` below, step
+`task set-run-mode`. The words are the mode, then each stage, one space apart, such as
+`autonomous implement`. Without it, the call refuses (exit 70) and prints the command. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   set-run-mode --project "<projectPath>" "<task-id>" <autonomous|light|interactive> [--stage <stage>]...
@@ -434,16 +437,32 @@ such script.
 
 A light or autonomous run still stops for a person, and a dispatched agent cannot answer for one.
 So when one session coordinates agents that run the tasks, that session holds every person-only
-call. An agent never runs `set-run-mode` and never writes a person's answer. It reports the stop
-to the coordinator once and stops. The coordinator puts the stop to the person. Then it runs the
-call itself. For an implement call, review's `close`, or `environment` `up`, `not-applicable` or
-`down`, it can instead write the answer as a record. The exit 70 refusal prints that record.
-The implement skill's `references/finish.md` says how.
+call. An agent never runs `person-answer.sh`, and a hook refuses it. It reports the stop to the
+coordinator once and stops. The coordinator puts the stop to the person, records the answer, and
+runs the call itself.
 
 When the mode covers review, two lines can follow, on light or autonomous. The `sign-off:` line
 names the criteria a person answers, so an unattended review writes no verdict. The
 `review-tools:` line names the review tools that preconditions found absent. Before
 preconditions has run, it says that preconditions will check them. Read both to the person.
+
+## `person-answer.sh <task-id> --step <step> [--order <id>] -- <words>`
+
+Some steps are a person's decision only. Each one refuses until the person's answer is on record.
+The refusal prints this command with the step, the order and the words to use. Run it:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/person-answer.sh --project "<projectPath>" "<task-id>" \
+  --step "<step>" [--order <order id>] -- <the person's words>
+```
+Words that run over one line go in a file, passed as `@/<file>`. Claude Code shows its permission
+prompt for this script, and the person approves or denies it. Never answer for the person. A
+denied prompt records nothing. In bypassPermissions or dontAsk mode the hook refuses the script,
+because no prompt can show there. Then stop and report the step to the person.
+
+The script appends one entry to `person-answers.json` in the task folder. The step it serves marks
+the entry used, and no entry is removed. A hook refuses every other write of that file, and of
+`task.json`, from any session. The implement skill's `references/finish.md` lists the steps and
+their words.
 
 ## `set-budget <task-id> [--dispatches <n>] [--minutes <n>]`
 

@@ -39,7 +39,7 @@ judged by the reviewer as a check.
 
 Which lines run without your yes, and what happens when nobody is present, is in
 [The design check refuses to close](../../when-it-stops/design-check.md). How a person's answer
-reaches an autonomous run is in [Answer for a person in an unattended run](../../task/person-answer.md).
+reaches an autonomous run is in [the person's answer](../../task/person-answer.md).
 
 ## What each proof does with the lines
 

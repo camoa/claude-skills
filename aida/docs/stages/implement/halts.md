@@ -49,12 +49,11 @@ tree. When an unattended start set files aside after a dirty tree, copy them bac
 first. Then say what you did. AIDA clears the halt with your words, records them in the ledger,
 and runs `start` again.
 
-## On an unattended run
+## Your answer
 
-Granting, restarting and clearing a halt are a person's judgement, so each refuses on an
-autonomous or light run. Two routes reach them. Set the task interactive with `/aida:task
-set-run-mode <task-id> interactive`. Or give your answer to the main session, which records it so
-the run mode can stay as it is. See [Answer an unattended run](../../task/person-answer.md).
+Granting, restarting and clearing a halt are a person's judgement, so each refuses until your
+answer is on record, in every run mode. Claude Code shows you a permission prompt to record it.
+See [the person's answer](../../task/person-answer.md).
 
 Some decisions do not halt an unattended run. They wait as pending on the order's review record,
 the order closes, and the review stage asks you before its verdict:

@@ -428,7 +428,10 @@ alone. Confirm and the tests are kept as written. Reject and the test author rew
 anything is built." Then name the requirement in its own words, the tests, the checker's note,
 and the answer the note recommends. The person's answer becomes
 `--row <criterion id>=confirmed::person::<the person's words>` or
-`--row <criterion id>=rejected::person::<the person's words>`. A row the person rejects goes back to
+`--row <criterion id>=rejected::person::<the person's words>`. A row a person judged needs the
+person's answer on record, in every run mode, or `tests-freeze` refuses (exit 70). Record it with
+the task skill's `person-answer.sh`, step `implement tests-freeze`, with each such `--row` as the
+words, one per line. A row the person rejects goes back to
 the test author before anything is frozen, in three steps. Run `tests-freeze` with every row as
 answered. It refuses (exit 65) and writes no test record. It records each rejected row on the
 order's ledger entry, with the person's words and the checker's note. Run `tests-brief` again, which

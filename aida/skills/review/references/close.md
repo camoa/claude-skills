@@ -59,12 +59,12 @@ then waits for the person, the way a lens check with low findings only does.
 The person answers met or unmet per criterion, from its rows. When a criterion's verify clause
 names a command, wait until the person says the step before that check is done. Then run the
 command, and show its output with the question. Their answer becomes one flag below.
-Autonomous, there is nobody to ask: with no person-answer file, each such criterion reads
-unanswered, and the task gets no sign off. A run with nobody present and no person-answer file
+Autonomous, there is nobody to ask: with no recorded answer, each such criterion reads
+unanswered, and the task gets no sign off. A run with nobody present and no recorded answer
 cannot sign off a task carrying one person verified criterion. `close` names each one and its
 route. When the person answers, `close` runs again at the same commit with the rows.
-On a light or autonomous run, a row passes only through `review/person-answer.json` with step
-`close`, which only the main session writes.
+On a light or autonomous run, a row passes only through the person's recorded answer, step
+`review close`. The task skill's `person-answer.sh` records it, after Claude Code asks.
 
 ## Check 1 joins on the test name
 

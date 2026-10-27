@@ -125,7 +125,7 @@ ccs_findings() {
     | (if $id == "" then "AIDA (the install record names no plugin@marketplace id for this copy)" else $id end) as $name
     | {kind: "hooks", stops: "AIDA'"'"'s hooks do not run. No hook refuses an edit to a frozen test, a write outside an order'"'"'s owned files, or a destructive command.",
        still: "build-record checks the frozen tests'"'"' hashes, the owned files and the builder'"'"'s stop lines, after each build.",
-       unchecked: "While hooks are off, nothing checks destructive commands, reads of denied source, or writes to the main checkout. Nothing checks a forged person-answer.json or a compact with unsaved work."} as $hooks
+       unchecked: "While hooks are off, nothing checks destructive commands, reads of denied source, or writes to the main checkout. Claude Code shows no prompt before a person'"'"'s answer is recorded, nothing refuses a forged person-answers.json, and nothing checks a compact with unsaved work."} as $hooks
     | ($managed | last_with("allowManagedHooksOnly")) as $amho
     | ($managed | last_with("disableAllHooks")) as $mdah
     | ($mine | last_with("disableAllHooks")) as $udah

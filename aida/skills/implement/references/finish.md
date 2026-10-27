@@ -39,13 +39,13 @@ configuration made them fail the run. A `warning_line` with no `failure_line` is
 the suite's detail says so.
 
 The message names three routes, and a person picks one. Put them to the person in these words:
-"Accept the warnings: run finish again with --accept-warnings <the person's reason>, interactive
-only. Change the suite row's command in the project's copy of the test-execution recipe, so these
+"Accept the warnings: record the person's answer with person-answer.sh, then run finish
+again with --accept-warnings <the person's reason>. Change the suite row's command in the project's copy of the test-execution recipe, so these
 warnings do not fail the run. Or repair the project configuration that raises them, in a change
 outside this task."
 
 `--accept-warnings` passes only a suite that reads `warned`, and only when every other framework
-passed. It refuses on an autonomous implement stage (exit 68). The record keeps the suite
+passed. It refuses without the person's answer on record (exit 68). The record keeps the suite
 `warned`, with the warning lines, the reason, and `judgedBy: person`. Review reports the suite row
 met and says it is that person's answer.
 
@@ -130,8 +130,8 @@ words. It clears the halt. The tests brief gives the words to the test author in
 finding. Then follow the retake route under Rulings in `references/review.md`: the author
 corrects the test, the checker reads the affected rows, `tests-freeze` retakes the record, and
 the build runs again. The same call takes an order at `code-written` that is not halted, and
-grants nothing there. It refuses any other halt (exit 99). An unattended stage refuses it
-(exit 68), unless the person's answer is on record.
+grants nothing there. It refuses any other halt (exit 99). It refuses without the person's answer
+on record (exit 68).
 
 If they decide the order needs one more attempt as it stands, run:
 ```
@@ -140,9 +140,9 @@ If they decide the order needs one more attempt as it stands, run:
 ```
 It raises the order's own allowed count by one, and records the reason and the date. It clears the
 halt only when the halt began with `attempts spent`; any other halt refuses, naming it. It never
-touches the attempts already used, so the counter still never goes down. It refuses on an
-autonomous implement stage (exit 68), because the grant is a person's judgement. Either route in
-"A person's answer in an unattended run" passes it. The reason may not hold the text
+touches the attempts already used, so the counter still never goes down. It refuses without the
+person's answer on record (exit 68), because the grant is a person's judgement. "A person's
+answer" below says how to record it. The reason may not hold the text
 `; earlier: `, the text this stage joins one halt reason to another with; a reason carrying it
 would forge a segment nobody wrote.
 
@@ -269,8 +269,8 @@ the ledger. It prints the step the order resumes at; nothing moves the order. It
 the grant, the restart or the retake answers (exit 85), naming that action, and a closed order
 (exit 67). For a drift halt the refusal also names `start`, which clears a segment about the
 order's own design file once the design no longer differs. It
-refuses when the task's implement stage is autonomous (exit 68), because clearing a halt is a
-person's judgement. Either route in the next section passes it. The reason may not hold
+refuses without the person's answer on record (exit 68), because clearing a halt is a person's
+judgement. The next section says how to record it. The reason may not hold
 `; earlier: `, for the same cause as the grant's. Then run `start` again and take the `next:`
 line.
 
@@ -284,34 +284,40 @@ refuses (exit 88) and needs a new clearing: run `clear-halt` again at the new co
 person's words. A failed check records nothing (exit 123), and `close` still refuses (exit 63).
 Repair the fix, clear the halt again, and run `build-recheck` again.
 
-## A person's answer in an unattended run
+## A person's answer
 
-A light or autonomous run refuses a person's call. In implement the calls are `grant-attempt`,
-`clear-halt`, `restart`, `retake-tests --because`, `finish --accept-warnings`, the two `--accept-deviation` keeps (exit 68),
-`verify-record --ruling` (exit 55) and `fix-brief --allow` (exit 100). In review the call is
-`close --row` (exit 70). In completion it is `close` with `--reason`, `--leave`,
-`--captures-offered` or `--observed-accepted` (exit 70). In the task skill the calls are
-`environment` `up`, `not-applicable` and `down` (exit 70). Two routes reach them. The person sets
-the task interactive with `task set-run-mode`. Or the person's answer travels as a record, and the
-run mode stays as it is.
+Some calls are a person's decision only. In implement they are `grant-attempt`, `clear-halt`,
+`restart`, `retake-tests --because`, `start --leftovers keep`, `finish --accept-warnings`, and
+the two `--accept-deviation` keeps (exit 68). They are also `verify-record --ruling` (exit 55),
+`fix-brief --allow` (exit 100), and `tests-freeze` with a row a person judged (exit 70). Each one
+refuses without the person's answer on record, in every run mode. The run mode does not decide
+whether a person answered.
 
-The record is `person-answer.json`. It sits in the task's `implementation/` folder for an
-implement call, in `review/` for review's `close`, and in `completion/` for completion's `close`.
-For `environment` it sits in the task folder itself. Only the main session writes it, the session
-the person types in, and only with words the person gave there. A hook refuses the file to every
-dispatched agent. A main session started with `claude --agent` carries an agent name, so the hook
-refuses it too. An agent that meets the refusal reports the halt to the main session and stops. It
-never asks again. The record holds four keys:
+Record the answer with the task skill's `person-answer.sh`, before the call:
 ```
-{"task": "<task id>", "step": "<action>", "order": "<order id, or empty for finish, restart and close>",
- "answer": "<the exact value of the call's flag>"}
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/person-answer.sh --project "<projectPath>" \
+  "<task-id>" --step "implement <action>" [--order <order id>] -- <the exact words of the flag>
 ```
-For a repeated flag, `--ruling`, `--allow` or `--row`, the answer is every value in the call's
-order, one per line. For completion's `close`, the answer is one `<flag> <value>` line per person's
-flag, in the call's order. For `environment`, the step is `environment up`, `environment
-not-applicable` or `environment down`. The answer is the reason for `not-applicable`. It is `yes`
-for the other two. A final newline does not count. The action reads the record only on an
-unattended stage. A record that names this task, this action, this order and these exact words
-passes the refusal. The action removes it once its own writes are done, so a later refusal keeps
-it. A record for another call stays. The refusals of completion and the task skill say so, and
-print the record to write. No task commit takes the record.
+Claude Code shows its permission prompt for this action, and the person approves or denies it. A
+denied prompt records nothing, so the call still refuses. In bypassPermissions or dontAsk mode the
+hook refuses the action, because no prompt can show there. Then stop and report the step.
+
+The words are the exact value of the call's flag. For a repeated flag, `--ruling` or `--allow`,
+they are every value in the call's order, one per line, passed as `@/<file>`. For `tests-freeze`
+they are each `--row` a person judged, one per line. For `start` they are `keep`. A final newline
+does not count. Each refusal prints the command with the words to use.
+
+Each answer is one entry in `person-answers.json` in the task folder. An entry passes one call. The
+call marks it used once its own writes are done, so a later refusal keeps it. No entry is removed,
+so review can count every answer. A hook refuses every other write of this file, and of
+`task.json`, from any session.
+
+Three other stages still refuse only on an unattended stage (exit 70): review's `close --row`,
+completion's `close` flags, and the task skill's `environment` calls. There the same action records
+the answer, with step `review close`, `completion close` or `task environment <up|down|not-applicable>`.
+For completion's `close`, the words are one `<flag> <value>` line per person's flag, in the call's
+order. For `environment`, the words are the reason for `not-applicable`, and `yes` for the other
+two.
+
+An agent never runs `person-answer.sh`. A hook refuses it to every dispatched agent. An agent that meets a
+person's step reports the stop to the main session and stops. It never asks again.

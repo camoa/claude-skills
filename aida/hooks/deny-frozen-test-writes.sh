@@ -51,11 +51,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # cp's -t names, and tar's extract folder and created archive. The person, and any other agent
 # type, is not its concern.
 #
-# Rule four, added for gap row 293, holds three roles to their own records. Since gap row 357 it
-# also keeps a person's answer record to the main session: no agent writes it through a file tool,
-# and since gap row 422 no agent runs a shell segment that names it beside a write signal. Since gap
-# row 438 no agent runs an action that records a person's approval, ruling or answer either, and no
-# agent writes a task's task.json. It is stated where it runs, before the others.
+# Rule four, added for gap row 293, holds three roles to their own records. Since gap row 438 no
+# agent runs an action that records a person's approval, ruling or answer. Since the person gate,
+# no session at all writes the person's answer record or a task's task.json, and the action that
+# records a person's answer makes Claude Code ask. It is stated where it runs, before the others.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
 # protected from everyone: the main thread, a builder, a critic, all of them, because changing a
@@ -146,20 +145,17 @@ deny_own_record() {
   jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
   exit 0
 }
-# Gap row 357. person-answer.json, under implementation/, review/ or the task folder, carries a
-# person's answer into an unattended run, so only the main session, the thread the person types in,
-# writes it. A main session started with --agent carries an agent type and is refused too. Every agent
-# type is refused it through the file tools. Through Bash, since gap row 422, an agent is refused a
-# segment that names it and holds a write signal, so a grep, a heredoc body or a quoted name passes.
+# The person gate. <task>/person-answers.json holds the person's answers, and
+# skills/task/scripts/person-answer.sh alone appends to it, behind the prompt below. task.json
+# holds the run mode, and only the task scripts write it. So every session, the main session
+# included, is refused a write of either: through the file tools, and through a Bash segment that names it and holds a write signal.
 # A segment names it through the name itself, or through a `$NAME` an earlier segment set to a value
-# holding the name. The test is wide on purpose: nothing checks this record afterwards, so a missed
-# write is a forged answer, while a refused read costs one turn. A copy out of the record is refused
-# too. A name built at run time passes the Bash test.
-ANSWER_REFUSAL="person-answer.json holds a person's answer, and only the main session writes it. This write's agent_type is $AGENT. Report the halt to the main session and stop."
-# Gap row 438. task.json holds the run mode a person check reads, and only the task scripts write
-# it, so an agent is refused a write of it the same way. A role's call to an actions script does
-# not name the file.
-TASK_REFUSAL="task.json holds the run mode a person's check reads, and only the task scripts write it. This write's agent_type is $AGENT. Report the halt to the main session and stop."
+# holding the name. A heredoc is read too when its line holds an interpreter, so `python3 <<EOF`
+# with the name only in the body is refused. The test is wide on purpose: a step trusts the record,
+# so a missed write is a forged answer, while a refused read costs one turn. A name built at run time
+# passes the Bash test, the limit the docs page for the person's answer names.
+ANSWER_REFUSAL="person-answers.json holds the person's answers, and only person-answer.sh writes it, after Claude Code asks. Run that script, or let the step stand."
+TASK_REFUSAL="task.json holds the run mode a person's check reads, and only the task scripts write it. Change the run mode with task-actions.sh set-run-mode, after a person's answer."
 # Returns 0 when segment $1 holds a write signal: a redirect other than 2> or one to /dev/null, a
 # write verb, sed -i, find -delete, or an interpreter word.
 answer_write_signal() {
@@ -172,26 +168,22 @@ answer_write_signal() {
     && printf '%s' "$s" | grep -Eq '[[:space:]](-[A-Za-z]*i|--in-place)' && return 0
   return 1
 }
-# Gap row 438. A person check trusts the run mode, often the mode the caller declares, so an agent
-# that leaves out --run-mode autonomous passes it. So no agent runs an action that records a
-# person's approval, ruling or answer, the same as the answer above. This list is the one copy.
-# Each line is a script, its action as an extended regex, then the words that make the call a
-# person's. A line with no words refuses the action itself. The list holds the actions whose script
-# asks for a person and that cannot be undone, and scope's update and add --author, which make a
-# criterion the owner's. A step that can be undone is left out: environment up and not-applicable,
+# Gap row 438. A person check that trusts the run mode the caller declares passes an agent that
+# leaves out --run-mode autonomous. So no agent runs an action that records a person's approval,
+# ruling or answer, and no agent runs person-answer.sh. This list is the one copy. Each line is a script, its action as an extended
+# regex, then the words that make the call a person's. A line with no words refuses the action
+# itself. The list holds the actions whose script still asks for a person by the run mode and
+# that cannot be undone, and scope's update and add --author, which make a criterion the
+# owner's. A step that reads the answer record in every mode is not listed: no agent can write
+# an answer for it. A step that can be undone is left out: environment up and not-applicable,
 # surfaces --viewport and --enable, tool install. prune's regex also reads its operands, because
 # only a task id or --all removes a tree; the form with --project alone only lists.
-PERSON_ACTIONS='task-actions.sh set-run-mode|set-budget|decline-recipe|defer-surface
+PERSON_ACTIONS='task-actions.sh set-budget|decline-recipe|defer-surface
 task-actions.sh prune([[:space:]]+--project[[:space:]=]+[^[:space:]]+)*[[:space:]]+([^-[:space:]][^[:space:]]*|--all)
 scope-actions.sh approve|retire
 scope-actions.sh update|add --author
 design-actions.sh close --approve-runs
 design-actions.sh dispose --confirmed
-implement-actions.sh grant-attempt|clear-halt|retake-tests|restart
-implement-actions.sh build-record|review-record --accept-deviation
-implement-actions.sh finish --accept-warnings
-implement-actions.sh fix-brief --allow
-implement-actions.sh verify-record --ruling
 review-actions.sh surfaces --accept-baseline --walked
 review-actions.sh close --row
 completion-actions.sh close --reason --leave --captures-offered --observed-accepted
@@ -215,8 +207,12 @@ person_action_signal() {
   done <<<"$PERSON_ACTIONS"
   return 1
 }
+# Returns 0 for any segment: a segment that names person-answer.sh is taken as a run of it, so a
+# grep for its name is asked too.
+names_it() { return 0; }
 # Refuses with reason $4 the first segment of ROLE_CMD that names $1, or a `$NAME` an earlier
 # segment set to a value matching the extended regex $2, and for which function $3 returns 0.
+# Function $5, deny_own_record when absent, decides instead, with the reason and the segment.
 deny_named_segment() {
   case "$ROLE_CMD" in *"$1"*) ;; *) return 0 ;; esac
   # Without the command library the segments cannot be read, so the whole command is refused.
@@ -228,25 +224,64 @@ deny_named_segment() {
     case "$seg" in *"$1"*) named=true ;; esac
     [ -z "$alt" ] || ! printf '%s' "$seg" | grep -Eq "\\\$\\{?($alt)([^A-Za-z0-9_]|$)" || named=true
     [ "$named" = true ] || continue
-    "$3" "$seg" && deny_own_record "$4"
+    "$3" "$seg" && "${5:-deny_own_record}" "$4" "$seg"
     names="$names $(printf '%s' "$seg" | grep -oE "[A-Za-z_][A-Za-z0-9_]*=[^[:space:];]*$2" | sed 's/=.*//' | tr '\n' ' ')"
     alt="$(printf '%s' "$names" | sed -E 's/^ +//; s/ +$//; s/ +/|/g')"
   done < <(split_segments "$(strip_heredocs "${ROLE_CMD//"$BSNL"/}")")
 }
-if [ -n "$AGENT" ]; then
-  if [ "$TOOL" = Bash ]; then
-    ROLE_CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
-    deny_named_segment person-answer.json 'person-answer\.json' answer_write_signal "$ANSWER_REFUSAL"
-    deny_named_segment task.json 'task\.json' answer_write_signal "$TASK_REFUSAL"
+# Refuses with reason $2 a command that names $1 on a heredoc line holding an interpreter, since
+# the segments above are read with every heredoc body dropped.
+deny_interpreter_heredoc() {
+  case "$ROLE_CMD" in *"$1"*) ;; *) return 0 ;; esac
+  printf '%s\n' "$ROLE_CMD" | grep -E '<<' \
+    | grep -Eq '(^|[[:space:];&|(`/])(python[0-9.]*|node|perl|ruby|php|sh|bash|zsh)([[:space:]]|$)' \
+    && deny_own_record "$2"
+  return 0
+}
+# The decision for person-answer.sh, the script that records a person's answer, from the main
+# session. Claude Code
+# shows its permission prompt for a hook's ask in Manual (default), acceptEdits, plan and auto
+# mode; in auto mode the classifier cannot approve it silently. The docs list no prompt for a hook's
+# ask in bypassPermissions, and dontAsk denies every call that would prompt. So those two, and an
+# input with no permission_mode, are refused outright, and nothing is recorded. The prompt's reason
+# goes to the person, not to Claude, and it shows the words of any @/<file> the command passes.
+# $1 the reason, $2 the segment.
+ask_person() {
+  local mode words="" f
+  mode="$(jq -r '.permission_mode // empty' <<<"$INPUT" 2>/dev/null)"
+  case "$mode" in
+    default|acceptEdits|plan|auto)
+      for f in $(printf '%s' "$2" | grep -oE '@/[^[:space:]"'"'"']+' | sed 's/^@//'); do
+        [ -f "$f" ] && [ -r "$f" ] && words="$words
+$f holds:
+$(head -c 2000 -- "$f")"
+      done
+      jq -nc --arg r "$1 $2$words" \
+        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+      exit 0 ;;
+  esac
+  deny_own_record "A person must answer this, and this session cannot show a prompt: its permission mode is ${mode:-not given}. Nothing was recorded. Stop and report the step to the person."
+}
+if [ "$TOOL" = Bash ]; then
+  ROLE_CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
+  deny_named_segment person-answers.json 'person-answers\.json' answer_write_signal "$ANSWER_REFUSAL"
+  deny_named_segment task.json 'task\.json' answer_write_signal "$TASK_REFUSAL"
+  deny_interpreter_heredoc person-answers.json "$ANSWER_REFUSAL"
+  deny_interpreter_heredoc task.json "$TASK_REFUSAL"
+  if [ -n "$AGENT" ]; then
+    deny_named_segment person-answer.sh 'person-answer\.sh' names_it "$PERSON_REFUSAL"
     while read -r PA_SCRIPT; do
       deny_named_segment "$PA_SCRIPT" "$(printf '%s' "$PA_SCRIPT" | sed 's/\./\\./g')" person_action_signal "$PERSON_REFUSAL"
     done < <(printf '%s\n' "$PERSON_ACTIONS" | cut -d' ' -f1 | sort -u)
   else
-    case "$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" in
-      *person-answer.json*) deny_own_record "$ANSWER_REFUSAL" ;;
-      */task.json) deny_own_record "$TASK_REFUSAL" ;;
-    esac
+    deny_named_segment person-answer.sh 'person-answer\.sh' names_it \
+      "AIDA records a person's answer. Approve only if you, the person, give this answer:" ask_person
   fi
+else
+  case "$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)" in
+    */person-answers.json) deny_own_record "$ANSWER_REFUSAL" ;;
+    */task.json) deny_own_record "$TASK_REFUSAL" ;;
+  esac
 fi
 if [ "$TOOL" != "Bash" ]; then
   OWN_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"

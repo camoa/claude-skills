@@ -719,8 +719,9 @@ source is not one this project accepted. The person keeps each entry, drops it w
 or asks for another source. A kept run entry runs only when the person also approves it: pass
 `--approve-runs` to the close on that yes, and the close stamps each such entry. Autonomous: the
 line and the rendered order carry it to a person later. An autonomous `--approve-runs` refuses and
-lists the lines. It passes once the main session writes the person's answer to
-`person-answer.json` in the task folder, step `close`, with those lines as the answer.
+lists the lines. It passes once the person's answer is recorded with the task skill's
+`person-answer.sh`, step `design close`, with those lines as the words. The refusal prints the
+command.
 
 `check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
 proof is `tests` that owns criteria of which none is machine-verified. The design still closes with

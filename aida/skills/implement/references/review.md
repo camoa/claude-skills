@@ -117,8 +117,8 @@ review goes on." Then say what that line or that recipe answer says. To
 change the design, amend the order in design and close design, then offer the
 restart in `references/finish.md`. To keep the departure, run `review-record` again with
 `--accept-deviation <their reason>`. The review record and `haltsCleared` in the ledger hold the
-reason, and the order goes on as below. Unattended, the flag refuses (exit 68). There nothing
-halts: `review-record` writes the record with the departure as `deviationPending`, prints a
+reason, and the order goes on as below. The flag refuses without the person's answer on record (exit 68).
+Unattended, nothing halts: `review-record` writes the record with the departure as `deviationPending`, prints a
 `departurePending:` line, and the order goes on as below. A finding the reviewer marks
 `declaredDeparture` is that same departure. It goes `pending` and waits with the departure, so no
 fixer undoes it. The task review lists it in the departure's decision. A `rebuild` answer there
@@ -127,12 +127,12 @@ answers it too. The other findings take the fix round. When a person keeps the d
 reason.
 
 A departure that waits as `deviationPending` has its review record already. A person who keeps
-it before `finish` does not wait for the task review. Set the task interactive, then run
-`review-record` again with the same `--findings` and `--accept-deviation <their reason>`. The
+it before `finish` does not wait for the task review. Record the person's answer with the task skill's
+`person-answer.sh`, then run `review-record` again with the same `--findings` and `--accept-deviation <their reason>`. The
 script writes the keep into that record and rules each marked finding `wrong`. Nothing is reviewed
 again. A finding the reviewer did not mark stays open. Once the record holds the keep, the person
-may rule any open finding with `verify-record --ruling`, before any fix round. Unattended, that
-ruling refuses (exit 55). Without a kept departure, it refuses a finding that has a fix scope
+may rule any open finding with `verify-record --ruling`, before any fix round. That ruling
+refuses without the person's answer on record (exit 55). Without a kept departure, it refuses a finding that has a fix scope
 (exit 3). After `finish`, the keep refuses (exit 50), and the task review takes the answer.
 
 An information item the reviewer marks `departsFromDesign` true is a note, not a finding. It never
@@ -212,7 +212,7 @@ for each finding whose fix scope names a file the order does not own. It stored 
 finding. `fix-brief` withholds those paths from the fixer. A person may grant one with `--allow`,
 one flag per path. The path joins the scope union and the brief records it under `allowedFiles`.
 The fixer's dispatch record carries it, and the owned-files check after the round accepts it.
-Unattended, `--allow` refuses (exit 100). A path the order owns needs no grant. When no fix
+`--allow` refuses without the person's answer on record (exit 100). A path the order owns needs no grant. When no fix
 scope names it, it joins the scope union in any round, and not `allowedFiles`. A finding with
 origin `repair` needs this, because its fix scope is the one file the stopped build named.
 Three paths refuse (exit 3):
@@ -413,7 +413,7 @@ a finding whose fix scope is empty may be ruled at `reviewed`, with the rulings 
 file. It asks for no code change, so no round can reach it. No round is recorded. Unattended,
 `fix-brief` marks each such finding pending and exits 0, and its `next:` line names the close.
 Any other finding before the cap refuses (exit 3), and the message names the findings that may be
-ruled now. Unattended refuses every ruling (exit 55).
+ruled now. Every ruling refuses without the person's answer on record (exit 55).
 
 The words are `wrong`, `deferred`, `load-bearing` or `test-wrong`, with a reason. Put the
 findings to the person and ask, opening the same way in every case: "The reviewer found problems
