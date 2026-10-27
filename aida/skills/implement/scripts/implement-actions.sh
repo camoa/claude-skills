@@ -8299,33 +8299,16 @@ BR_DIFF
     '{id: "owned-files", verdict: $verdict, detail: $detail}' >>"$parts_file"
 
   # --- every frozen test file is unchanged, and every support file frozen with them ---------------
-  # A support file is a base class or a fixture the author wrote beside the tests (live-run row
-  # 90). It is hashed here the same as a test: the implementer owns it and may not rewrite it.
+  # A support file is hashed the same as a test: the implementer owns it and may not rewrite it.
   records_hash__resolve_sha256_cmd \
     || die3 "$BRC_WHO: neither sha256sum nor 'shasum -a 256' was found on PATH"
-  local ftc_verdict ftc_detail
-  local frozen_paths frozen_count support_count support_noun fidx frozen_file fsha current_sha changed_tests=""
-  frozen_paths="$(printf '%s' "$BRC_TESTS_DOC" | jq -c \
-    '([ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | {path, sha256} ]
-      + [ (.support // [])[] | {path, sha256} ]) | unique_by(.path)')"
-  frozen_count="$(printf '%s' "$frozen_paths" | jq 'length')"
+  local ftc_verdict ftc_detail support_count support_noun
   support_count="$(printf '%s' "$BRC_TESTS_DOC" | jq '(.support // []) | length')"
-  fidx=0
-  while [ "$fidx" -lt "$frozen_count" ]; do
-    frozen_file="$(printf '%s' "$frozen_paths" | jq -r --argjson fidx "$fidx" '.[$fidx].path')"
-    fsha="$(printf '%s' "$frozen_paths" | jq -r --argjson fidx "$fidx" '.[$fidx].sha256')"
-    if [ -f "$BRC_CODEPATH/$frozen_file" ]; then
-      current_sha="$(tf_sha256_of "$BRC_CODEPATH/$frozen_file")"
-    else
-      current_sha=""
-    fi
-    [ "$current_sha" = "$fsha" ] || changed_tests="$changed_tests$frozen_file, "
-    fidx=$((fidx + 1))
-  done
-  if [ -n "$changed_tests" ]; then
+  tf_frozen_changed "$BRC_TESTS_DOC" "$BRC_CODEPATH"
+  if [ -n "$TF_FROZEN_CHANGED" ]; then
     ftc_verdict="unmet"
-    ftc_detail="these frozen test or support files no longer match the hash tests-freeze recorded: ${changed_tests%, }"
-  elif [ "$frozen_count" -eq 0 ]; then
+    ftc_detail="these frozen test or support files no longer match the hash tests-freeze recorded: ${TF_FROZEN_CHANGED%, }"
+  elif [ "$TF_FROZEN_COUNT" -eq 0 ]; then
     # This order froze no test file, so the row hashed nothing and does not apply to it. met read
     # as a hash that was taken and matched, and the executed count then counted a check that ran
     # nothing, which is the one thing that count exists to stop (live-run row 167). undeclared is

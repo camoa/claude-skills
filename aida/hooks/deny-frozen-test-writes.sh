@@ -19,7 +19,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # A path outside codePath, the task folder where
 # the report and the interface record live, is not this rule's. Any other role, or a record without
 # the key, leaves the rule off. A write the frozen rule already refuses never reaches it. A payload
-# naming no agent type is the person, allowed with a note, the same three cases as rule one. Its
+# naming no agent type is the person, allowed with a note. Its
 # Bash door is rule one's, with rule one's limits below, and a rule that refuses unless owned turns
 # a miss into a false stop. Two misses are closed (2026-09-20, live-run row 95). A heredoc body is
 # dropped before either rule reads the command. A token that is not path-shaped is not rule two's.
@@ -57,11 +57,19 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # records a person's answer makes Claude Code ask. It is stated where it runs, before the others.
 #
 # Unlike hooks/deny-prior-source.sh, rule one is not gated to one role first. A frozen test is
-# protected from everyone: the main thread, a builder, a critic, all of them, because changing a
+# protected from everyone: the main session, a builder, a critic, all of them, because changing a
 # frozen test needs the design reopened, never a direct edit. The one exception is narrow and
 # role-specific: a test author dispatched for a unit may still write that same unit's own frozen
 # file, and never an earlier unit's (ideal/implementation.md's freeze). That exception is checked
 # per write, below, not as an upfront gate the way deny-prior-source.sh gates on agent_type.
+#
+# The main session is a payload with no agent_id, the test the person gate uses. It was allowed
+# with a note, and checked only while a dispatch record was open (gap rows 358 and 408). It is
+# Claude, not the person. So rule one now holds it against the frozen records of every task of
+# the project that is not complete, with or without a dispatch open, and no exception applies to
+# it. A person changes a frozen test through implement-actions.sh retake-tests, which asks for the
+# person's answer, and the order's test author then writes the change. Rules two and three still
+# read only the dispatch record.
 #
 # The Bash door carries forward, unmodified in structure, the write-position parsing from
 # version 5's deny-reviewer-test-writes.sh (frozen, camoa-skills/ai-dev-assistant/hooks/): a path
@@ -84,8 +92,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # registered for this working directory and no open record naming the agent's type, or no
 # dispatch.json: allow, silent. Those last two are
 # every write outside an AIDA task, and a message on each would be noise, the rule version 5's
-# guard kept. The record is the task's own, <project>/tasks/<task>/implementation/dispatch.json,
-# found as the one whose codePath holds the payload's working directory, else the one open record
+# guard kept. The main session skips the dispatch.json case: it is checked against every task's
+# frozen records instead. The record is the task's own,
+# <project>/tasks/<task>/implementation/dispatch.json, found as the one whose codePath holds the payload's working directory, else the one open record
 # naming the agent's type (scripts/lib/paths.sh, dispatch_record_for). With no project for the
 # working directory, the project remembered for it answers the same way, else the one open record
 # naming this plugin's role in any registered project (dispatch_record_resolve). Records open for other
@@ -390,8 +399,8 @@ CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 # The directory is held in the same canonical form codePath is, so the two compare as strings,
 # and a working directory that no longer exists still normalizes textually. A session outside
 # every code path reads the project remembered for its folder as if it stood in the main checkout,
-# the main thread too. With none remembered, a role finds its record across the registered
-# projects, and the main thread is not held to rule one (gap row 358).
+# the main session too. With none remembered, a role finds its record across the registered
+# projects, and the main session is not held to rule one (gap row 358).
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
 dispatch_record_resolve "$CWD_CANON" "$AGENT" "$(jq -r '.session_id // empty' <<<"$INPUT" 2>/dev/null)"
@@ -401,55 +410,99 @@ case $? in
 esac
 PROJECT_PATH="$DISPATCH_PROJECT"
 DISPATCH_FILE="$DISPATCH_RECORD"
+MAIN_SESSION=false
+[ -n "$AGENT_ID" ] || MAIN_SESSION=true
+# What the record path says when no record answers for this tree. The main session goes on to rule
+# one, and the note is said only when nothing refused the write and the payload names an agent type.
+RECORD_NOTE=""
 if [ -z "$DISPATCH_FILE" ]; then
-  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
+  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || RECORD_NOTE="$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
+  if [ "$MAIN_SESSION" = false ] || [ -z "$PROJECT_PATH" ]; then
+    [ -z "$RECORD_NOTE" ] || not_enforced "$RECORD_NOTE"
+    echo '{}'; exit 0
+  fi
+fi
+# The allow for a write no rule refused.
+allow_end() {
+  [ -z "$RECORD_NOTE" ] || [ -z "$AGENT" ] || not_enforced "$RECORD_NOTE"
   echo '{}'; exit 0
+}
+
+# With no record, the main session's relative targets resolve where it stands, and rules two and
+# three stay off.
+ROLE=""; UNIT=""; CODE_CANON="$CWD_CANON"; MAIN_CANON=""
+if [ -n "$DISPATCH_FILE" ]; then
+  jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
+    || not_enforced "$DISPATCH_FILE could not be read as JSON"
+  TASK_ID="$(jq -r '.task // empty' "$DISPATCH_FILE" 2>/dev/null)"
+  # The role is read to report the exception below, never to gate this rule: a frozen test is
+  # protected from every role, so a record naming no role still enforces the freeze.
+  ROLE="$(jq -r '.role // empty' "$DISPATCH_FILE" 2>/dev/null)"
+  UNIT="$(jq -r '.unit // empty' "$DISPATCH_FILE" 2>/dev/null)"
+  CODE_PATH="$(jq -r '.codePath // empty' "$DISPATCH_FILE" 2>/dev/null)"
+  [ -n "$TASK_ID" ] && [ -n "$UNIT" ] && [ -n "$CODE_PATH" ] \
+    || not_enforced "$DISPATCH_FILE is missing task, unit or codePath"
+
+  CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
+  [ -n "$CODE_CANON" ] \
+    || not_enforced "codePath recorded in $DISPATCH_FILE does not exist on disk: $CODE_PATH"
+
+  # Rule three, added for gap row 230: the role the record names writes nothing in the project's
+  # main checkout. It works in the worktree, and a file it leaves in the checkout lands on the
+  # branch the person is on. The person, and any other agent type, is not this rule's.
+  if [ -n "$AGENT" ] && role_matches "$AGENT" "$ROLE"; then
+    MAIN_CANON="$(main_checkout "$(project_code_path_value "$PROJECT_PATH")" "$CODE_CANON")"
+  fi
 fi
-jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
-  || not_enforced "$DISPATCH_FILE could not be read as JSON"
 
-TASK_ID="$(jq -r '.task // empty' "$DISPATCH_FILE" 2>/dev/null)"
-# The role is read to report the exception below, never to gate this rule: a frozen test is
-# protected from every role, so a record naming no role still enforces the freeze.
-ROLE="$(jq -r '.role // empty' "$DISPATCH_FILE" 2>/dev/null)"
-UNIT="$(jq -r '.unit // empty' "$DISPATCH_FILE" 2>/dev/null)"
-CODE_PATH="$(jq -r '.codePath // empty' "$DISPATCH_FILE" 2>/dev/null)"
-[ -n "$TASK_ID" ] && [ -n "$UNIT" ] && [ -n "$CODE_PATH" ] \
-  || not_enforced "$DISPATCH_FILE is missing task, unit or codePath"
-
-CODE_CANON="$(cd "$CODE_PATH" 2>/dev/null && pwd -P)"
-[ -n "$CODE_CANON" ] \
-  || not_enforced "codePath recorded in $DISPATCH_FILE does not exist on disk: $CODE_PATH"
-
-# Rule three, added for gap row 230: the role the record names writes nothing in the project's
-# main checkout. It works in the worktree, and a file it leaves in the checkout lands on the
-# branch the person is on. The person, and any other agent type, is not this rule's.
-MAIN_CANON=""
-if [ -n "$AGENT" ] && role_matches "$AGENT" "$ROLE"; then
-  MAIN_CANON="$(main_checkout "$(project_code_path_value "$PROJECT_PATH")" "$CODE_CANON")"
-fi
-
-# The frozen records sit beside the dispatch record, in the task's own implementation folder.
-IMPL_DIR="$(dirname -- "$DISPATCH_FILE")"
-
-# ---- collect the frozen paths: one "unit<TAB>absolute path" line per frozen test or support file
+# ---- collect the frozen paths: one "label<TAB>absolute path" line per frozen test or support file
+# Reads the tests records in implementation folder $1, resolves each path against code root $2, and
+# labels each line with the record's unit followed by $3.
 FROZEN=""
-for f in "$IMPL_DIR"/tests-*.json; do
-  [ -e "$f" ] || continue
-  jq empty "$f" >/dev/null 2>&1 || continue
-  base="$(basename -- "$f")"
-  rec_unit="${base#tests-}"; rec_unit="${rec_unit%.json}"
-  paths="$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$f" 2>/dev/null)"
-  [ -n "$paths" ] || continue
-  while IFS= read -r rel; do
-    [ -n "$rel" ] || continue
-    abs="$(normalize_abs "$(resolve_against "$rel" "$CODE_CANON")")"
-    FROZEN="$FROZEN$rec_unit	$abs
+collect_frozen() {
+  local f base rec_unit paths rel abs
+  [ -z "${ZSH_VERSION:-}" ] || setopt LOCAL_OPTIONS NULL_GLOB
+  for f in "$1"/tests-*.json; do
+    [ -e "$f" ] || continue
+    jq empty "$f" >/dev/null 2>&1 || continue
+    base="$(basename -- "$f")"
+    rec_unit="${base#tests-}"; rec_unit="${rec_unit%.json}"
+    paths="$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$f" 2>/dev/null)"
+    [ -n "$paths" ] || continue
+    while IFS= read -r rel; do
+      [ -n "$rel" ] || continue
+      abs="$(normalize_abs "$(resolve_against "$rel" "$2")")"
+      FROZEN="$FROZEN$rec_unit$3	$abs
 "
-  done <<FROZEN_EOF
+    done <<FROZEN_EOF
 $paths
 FROZEN_EOF
-done
+  done
+}
+# The main session's frozen paths: every task of the project that is not complete, each resolved
+# against its own tree. That tree is the codePath of the task's open dispatch record, else the
+# worktree task.json records, else the project's codePath. A complete task's tests belong to the
+# code. Each label is the unit, a space, and the task folder.
+main_frozen() {
+  local t root
+  [ -z "${ZSH_VERSION:-}" ] || setopt LOCAL_OPTIONS NULL_GLOB
+  for t in "$PROJECT_PATH"/tasks/*; do
+    set -- "$t"/implementation/tests-*.json
+    [ -e "${1:-}" ] || continue
+    [ "$(jq -r '.state // empty' "$t/task.json" 2>/dev/null)" != complete ] || continue
+    root="$(jq -r '.codePath // empty' "$t/implementation/dispatch.json" 2>/dev/null)"
+    [ -n "$root" ] && [ -d "$root" ] || root="$(jq -r '.worktree | objects | .path // empty' "$t/task.json" 2>/dev/null)"
+    [ -n "$root" ] && [ -d "$root" ] || root="$(project_code_path_value "$PROJECT_PATH")"
+    [ -n "$root" ] || continue
+    root="$(cd "$root" 2>/dev/null && pwd -P)" || continue
+    collect_frozen "$t/implementation" "$root" " $t"
+  done
+}
+if [ "$MAIN_SESSION" = true ]; then
+  main_frozen
+else
+  collect_frozen "$(dirname -- "$DISPATCH_FILE")" "$CODE_CANON" ""
+fi
 
 # ---- rule two's list: the implementer's or the fixer's owned files, one absolute path per line --
 # Read only when the record names the implementer or the fixer; every other role leaves OWNED empty
@@ -466,7 +519,10 @@ $(jq -r '.ownedFiles[]? // empty' "$DISPATCH_FILE" 2>/dev/null)
 OWNED_EOF
 fi
 
-[ -n "$FROZEN" ] || [ -n "$OWNED" ] || [ -n "$MAIN_CANON" ] || not_enforced "no unit has frozen tests yet for this task"
+if [ -z "$FROZEN" ] && [ -z "$OWNED" ] && [ -z "$MAIN_CANON" ]; then
+  [ -z "$DISPATCH_FILE" ] || not_enforced "no unit has frozen tests yet for this task"
+  allow_end
+fi
 
 # Prints the unit that owns frozen path $1, or nothing when $1 is not frozen.
 owner_of() {
@@ -618,15 +674,10 @@ deny() {
   jq -nc --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
   exit 0
 }
-# A payload with no agent type at all is the person, on the main thread, and the person is allowed.
-# A freeze is not a lock. The stage it belongs to lists a person editing a file among the changes a
-# build has to survive, and the hash in the frozen record is what notices one. A dispatched role has
-# no reason to touch a frozen test. A person may be repairing a defect in the test itself, and the
-# next move is to reopen design, which nobody can do if the tool refuses them first. An unrecognised
-# role is not the same as no role: only the second is the person, and only the second passes here.
-allow_person() {
-  jq -nc --arg m "deny-frozen-test-writes: allowed, and noted: $1 is frozen for unit $2 by this task. The recorded hash will no longer match it. Reopen design if the test itself is wrong." '{systemMessage:$m}'
-  exit 0
+# Rule one's refusal to the main session. $1 is the path, $2 the label main_frozen gave it: the
+# unit, a space, and the task folder. The refusal names the person's route.
+deny_main() {
+  deny "$1: this test is frozen for unit ${2%% *} of task ${2#* }. The main session does not change a frozen test, with or without a dispatch open. If the test is wrong, a person rules it so: run implement-actions.sh retake-tests ${2#* } ${2%% *} --because <the person's reason>, which asks for the person's answer. Then the order's test author writes the change, and tests-freeze freezes it again."
 }
 # The exception is the record's, so an agent type the record does not name is allowed and reported.
 # Denying it instead would be a new refusal this rule never made, and the write is this unit's own
@@ -670,16 +721,16 @@ case "$TOOL" in
   Write|Edit|MultiEdit|NotebookEdit)
     TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
     [ -n "$TARGET" ] || { echo '{}'; exit 0; }
-    owner_of_arg "$TARGET" || { main_exit ""; stray_exit ""; echo '{}'; exit 0; }
+    owner_of_arg "$TARGET" || { main_exit ""; stray_exit ""; allow_end; }
     TARGET_ABS="$OWNER_ABS"
     OWNER="$OWNER_UNIT"
+    [ "$MAIN_SESSION" = false ] || deny_main "$TARGET_ABS" "$OWNER"
     if is_test_author "$AGENT" && [ "$OWNER" = "$UNIT" ]; then
       if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
         echo '{}'; exit 0
       fi
       allow_unnamed_role "$TARGET_ABS" "$OWNER"
     fi
-    [ -n "$AGENT" ] || allow_person "$TARGET_ABS" "$OWNER"
     deny "$TARGET_ABS: $(frozen_reason "$OWNER")"
     ;;
   Bash)
@@ -874,18 +925,17 @@ sed
       esac
     done < <(split_segments "$(strip_heredocs "$CMD")")
     if [ -n "$HIT" ]; then
+      [ "$MAIN_SESSION" = false ] || deny_main "$HIT through Bash" "$HIT_OWNER"
       if is_test_author "$AGENT" && [ "$HIT_OWNER" = "$UNIT" ]; then
         if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
           echo '{}'; exit 0
         fi
         allow_unnamed_role "$HIT" "$HIT_OWNER"
       fi
-      [ -n "$AGENT" ] || allow_person "$HIT" "$HIT_OWNER"
       deny "$HIT through Bash: $(frozen_reason "$HIT_OWNER")"
     fi
     main_exit " through Bash"
     stray_exit " through Bash"
     ;;
 esac
-echo '{}'
-exit 0
+allow_end

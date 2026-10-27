@@ -194,7 +194,7 @@ expect "choice: a non-AIDA agent is allowed with no message" \
 
 # ---- main: with a remembered project the main thread meets what it meets in the main checkout --
 IN_MAIN="$(answer "$WRITE_HOOK" "$(write_payload "" "$CODE" "$WT/tests/test_frozen.py")")"
-expect "main: from the main checkout, the main thread's frozen-test write is not enforced" "$IN_MAIN" "not-enforced"
+expect "main: from the main checkout, the main session's frozen-test write is refused" "$IN_MAIN" "deny"
 expect "main: from the remembered notes folder, the same answer" \
   "$(answer "$WRITE_HOOK" "$(write_payload "" "$NOTES" "$WT/tests/test_frozen.py")")" "$IN_MAIN"
 remember ""

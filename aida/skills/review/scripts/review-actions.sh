@@ -84,6 +84,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  73  the check recipe resolved now is not the one the baseline was taken with.
 #  77  the project records no framework.
 #  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
+# 124  `checks` found a frozen test or support file of some order that no longer matches the hash
+#      its freeze recorded. The message names each order and file. Nothing is written.
 #
 # Codes 5, 14, 15, 52, 70, 72 and 73 arrive from scripts/lib/recipes.sh, which both stages source, and
 # they carry exactly the meanings implement-actions.sh's own table gives them. ideal/review.md lists
@@ -914,7 +916,7 @@ rw_run_fault() {
 # Check 3, the half a script can decide: a changed file no order owns is work no order asked for.
 # The hunk half is the reviewer's, and its finding cites an id or is not acted on.
 rw_check_serves() {
-  local owned owned_count one matched gi glob unmatched="" env_aside="" support_aside="" support_changed="" frozen sha aside_line="" extra=""
+  local owned owned_count one matched gi glob unmatched="" env_aside="" support_aside="" frozen sha aside_line="" extra=""
   owned="$(rw_owned_files)"
   owned_count="$(printf '%s' "$owned" | jq 'length')"
   if [ "$RW_CHANGED_COUNT" -eq 0 ]; then
@@ -954,7 +956,6 @@ rw_check_serves() {
       if printf '%s\n' "$frozen" | grep -qxF -- "$sha"; then
         support_aside="$support_aside$one, "; continue
       fi
-      support_changed="$support_changed$one, "
     fi
     unmatched="$unmatched$one, "
   done <<RW_CHANGED
@@ -984,8 +985,7 @@ RW_CHANGED
   if [ -z "$unmatched" ] && [ -n "$old_log" ]; then
     rw_check_row "$CHECK_SERVES" "unmet" "every changed file in $RW_RANGE matches some order's own ownedFiles.$old_log$aside_line"
   elif [ -n "$unmatched" ]; then
-    [ -z "$support_changed" ] || extra=" These are frozen support files that changed after the freeze: ${support_changed%, }."
-    extra="$extra$old_log$aside_line$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
+    extra="$old_log$aside_line$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
     [ -z "$extra" ] || extra=".$extra"
     rw_check_row "$CHECK_SERVES" "unmet" "these changed files match no work order's own ownedFiles, so nothing in the design asked for them: ${unmatched%, }$extra"
   elif [ -n "$aside_line" ]; then
@@ -1621,6 +1621,28 @@ RW_REVIEWS
   fi
   RW_RANGE="$range"
 
+  # Exit 124. build-record and fix-record hash only their own order's frozen files, and check 3
+  # passes a changed file an order owns, test files included. So a test edited after its order's
+  # last record reached review unchecked (gap row 390). Every order's frozen files are hashed
+  # again here, before anything is written. The tree is clean and holds the range's end, so the
+  # files on disk are that commit's. A retake's freeze rewrites its order's record, so a retaken
+  # test is held to the newer hash.
+  rw_load_test_rows "checks"
+  records_hash__resolve_sha256_cmd \
+    || die 3 "checks: neither sha256sum nor 'shasum -a 256' was found on PATH"
+  local tests_rec tests_doc frozen_changed=""
+  while IFS= read -r tests_rec; do
+    [ -n "$tests_rec" ] || continue
+    tests_doc="$(jq -c '.' "$tests_rec")"
+    tf_frozen_changed "$tests_doc" "$RV_CODEPATH"
+    [ -z "$TF_FROZEN_CHANGED" ] || frozen_changed="$frozen_changed$(printf '%s' "$tests_doc" \
+      | jq -r '"\(.unit), frozen at \(.commit)"'): ${TF_FROZEN_CHANGED%, }; "
+  done <<RW_TESTS_RECORDS
+$(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort)
+RW_TESTS_RECORDS
+  [ -z "$frozen_changed" ] \
+    || die 124 "checks: these frozen test or support files no longer match the hash their order's freeze recorded: ${frozen_changed%; }. Nobody changes a frozen test, so review stops here. Nothing was written. A person puts each file back as its freeze commit holds it, or rules the test wrong through implement-actions.sh retake-tests on its order. The main session may not write a frozen file."
+
   # A task marked complete by hand before its review is reviewed as it stands. Review moves no
   # task state, so the task stays complete and close names no completion (gap row 324).
   [ "$RW_TASK_STATE" = complete ] \
@@ -1632,8 +1654,6 @@ RW_REVIEWS
   empty_range="no"
   [ "$base" = "$head_end" ] && empty_range="yes"
   upstream="$(git -C "$RV_CODEPATH" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"
-
-  rw_load_test_rows "checks"
 
   # --- the checks a script decides ----------------------------------------------------------------
   parts_file="$(mktemp)" || die 3 "checks: could not create a temporary file"

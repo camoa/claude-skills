@@ -895,6 +895,31 @@ tf_sha256_of() {
   "${RECORDS_HASH_SHA256_CMD[@]}" <"$1" 2>/dev/null | cut -d' ' -f1
 }
 
+# Hashes every frozen test file of tests record $1 (its JSON text) and every support file frozen
+# with them, read under code root $2. A support file is a base class or a fixture the author wrote
+# beside the tests (live-run row 90). build-record runs this for its own order, and review's checks
+# for every order at the final commit. Sets TF_FROZEN_COUNT to the files hashed, and
+# TF_FROZEN_CHANGED to the paths that no longer match, each followed by ", ". A missing file does
+# not match. The caller resolves RECORDS_HASH_SHA256_CMD first.
+TF_FROZEN_COUNT=0; TF_FROZEN_CHANGED=""
+tf_frozen_changed() {
+  local frozen_paths fidx frozen_file fsha current_sha
+  TF_FROZEN_CHANGED=""
+  frozen_paths="$(printf '%s' "$1" | jq -c \
+    '([ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | {path, sha256} ]
+      + [ (.support // [])[] | {path, sha256} ]) | unique_by(.path)')"
+  TF_FROZEN_COUNT="$(printf '%s' "$frozen_paths" | jq 'length')"
+  fidx=0
+  while [ "$fidx" -lt "$TF_FROZEN_COUNT" ]; do
+    frozen_file="$(printf '%s' "$frozen_paths" | jq -r --argjson fidx "$fidx" '.[$fidx].path')"
+    fsha="$(printf '%s' "$frozen_paths" | jq -r --argjson fidx "$fidx" '.[$fidx].sha256')"
+    current_sha=""
+    [ ! -f "$2/$frozen_file" ] || current_sha="$(tf_sha256_of "$2/$frozen_file")"
+    [ "$current_sha" = "$fsha" ] || TF_FROZEN_CHANGED="$TF_FROZEN_CHANGED$frozen_file, "
+    fidx=$((fidx + 1))
+  done
+}
+
 # True when path $1 matches the glob $2 (a real catalog example is `*Test.php`, so the star must
 # stay a wildcard, not become literal text). A variable used as a `case` pattern is one of this
 # project's zsh traps, so this uses `[[ ... == ... ]]` instead. bash always treats an unquoted

@@ -253,8 +253,9 @@ build_order() {
 
 WRITE_HOOK="$PLUGIN/hooks/deny-frozen-test-writes.sh"
 READ_HOOK="$PLUGIN/hooks/deny-prior-source.sh"
-# hook_answer <hook> <cwd> <agent type, or '' for the person> <tool> <command or path>: deny,
-# not-enforced or allow for one payload. Bash takes a command, the other tools a file_path.
+# hook_answer <hook> <cwd> <agent type, or '' for the main session> <tool> <command or path>: deny,
+# not-enforced or allow for one payload. Bash takes a command, the other tools a file_path. A role's
+# payload carries agent_id as well as agent_type, as Claude Code sends it inside a subagent.
 # HOOK_HOME, when set, is the hook's $HOME, so a `~/` operand can name the main checkout.
 hook_answer() {
   local out payload
@@ -263,7 +264,7 @@ hook_answer() {
   else
     payload="$(jq -nc --arg c "$2" --arg t "$4" --arg p "$5" '{tool_name: $t, cwd: $c, tool_input: {file_path: $p, content: "x"}}')"
   fi
-  [ -z "$3" ] || payload="$(printf '%s' "$payload" | jq -c --arg a "$3" '.agent_type = $a')"
+  [ -z "$3" ] || payload="$(printf '%s' "$payload" | jq -c --arg a "$3" '.agent_type = $a | .agent_id = "a1"')"
   out="$(printf '%s' "$payload" | env -u CLAUDE_PLUGIN_ROOT HOME="${HOOK_HOME:-$HOME}" "$SH" "$1" 2>>"$LOG")"
   printf '%s\n' "$out" >>"$LOG"
   case "$out" in
@@ -319,8 +320,8 @@ expect "a Bash cd into the worktree, then a redirect, is allowed" \
   "$(hook_answer "$WRITE_HOOK" "$CODEP" implementer Bash "cd $WTP && printf x > a.php")" "allow"
 expect "a Bash cd into the worktree, then a denied cat, is refused" \
   "$(hook_answer "$READ_HOOK" "$CODEP" implementer Bash "cd $WTP && cat b.php")" "deny"
-expect "the person writes the main checkout freely" \
-  "$(hook_answer "$WRITE_HOOK" "$CODEP" "" Write "$CODEP/a.php")" "not-enforced"
+expect "the main session writes a file no order froze in the main checkout" \
+  "$(hook_answer "$WRITE_HOOK" "$CODEP" "" Write "$CODEP/a.php")" "allow"
 
 echo "--- an open dispatch: the role in the worktree"
 expect "Read of the denied file in the worktree is refused, as before" \
