@@ -154,6 +154,9 @@ Which choices a reason allows:
 | The reason | The choices |
 |---|---|
 | `attempts spent`, at `build-record` | `build` or `check` |
+| `attempts spent`, the last cut off at its turn cap, at `dispatch-close` | `build` |
+| `turn caps spent`, at `dispatch-close` | `fix` for a fixer, `check` for a reviewer, `build` for the other roles |
+| commits a capped role made outside the order's files, at `dispatch-close` | `build`, or `fix` in review, often with `--owns`; a frozen test changed allows none |
 | a builder's stop, or commits by a stopped builder | `build` |
 | a builder's deviation | `build` or `keep` |
 | uncommitted changes, unattended | `build`, or `fix` after a fix round; commit the tree first |

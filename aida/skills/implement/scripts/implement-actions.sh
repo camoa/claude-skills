@@ -1054,16 +1054,18 @@ im_listed_commits_in() {
 # not own, refuses (exit 63): those are the frozen-test and owned-files guarantees. On an order
 # proved by its record, a commit that changes only files AIDA's own scripts write in the project
 # folder is set aside. Sets IM_MOVED to the commits left, a JSON array. Call after rv_load_state
-# and rv_load_range_repo. $1 the action, $6 what the commits are, for the message.
-IM_MOVED="[]"
+# and rv_load_range_repo. $1 the action, $6 what the commits are, for the message. With $7 "stop"
+# a breach refuses nothing: the guard returns 1 with IM_BREACH, its words, and IM_BREACH_ALLOWS, the
+# go-on choices it allows, for the caller's stop.
+IM_MOVED="[]"; IM_BREACH=""; IM_BREACH_ALLOWS="[]"
 im_moved_guard() {
   local who="$1" unit_id="$2" repo="$3" from="$4" to="$5" what="$6" paths p c fp f frozen="" hits="" owned outside
+  local BRC_CODEPATH="$repo"
   git -C "$repo" merge-base --is-ancestor "$from" "$to" 2>/dev/null \
     || die 63 "$who: $repo is at $to, and $what $unit_id began at $from, which that history does not hold. A person moves the branch back to it, or redoes the order."
   IM_MOVED="$(im_role_commits "$repo" "$from" "$to" "$unit_id")"
   br_order_facts "$RV_UNIT_JSON"
   if [ "$BR_ORDER_RANGE" = "project" ] && [ "$IM_MOVED" != "[]" ]; then
-    BRC_CODEPATH="$repo"
     IM_MOVED="$(printf '%s' "$IM_MOVED" | jq -r '.[]' | while IFS= read -r c; do
         im_commits_paths "$repo" "[\"$c\"]" "" | while IFS= read -r p; do
           br_aida_writes_in_project "$p" || { printf '%s\n' "$c"; break; }
@@ -1084,13 +1086,22 @@ im_moved_guard() {
   done <<ICM_PATHS
 $paths
 ICM_PATHS
-  [ -z "$hits" ] \
-    || die 63 "$who: $what $unit_id at $from change frozen tests: ${hits%, }. Nobody changes a frozen test. A person moves the branch back to $from, or redoes the order."
+  IM_BREACH="$what $unit_id at $from change frozen tests: ${hits%, }. Nobody changes a frozen test"
+  IM_BREACH_ALLOWS="[]"
+  if [ -n "$hits" ]; then
+    [ "${7:-}" = "stop" ] && return 1
+    die 63 "$who: $IM_BREACH. A person moves the branch back to $from, or redoes the order."
+  fi
   owned="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson o "$(im_owns_of "$unit_id")" '(.ownedFiles // []) + $o')"
   outside="$(rv_scope_outside "$(printf '%s\n' "$paths" | jq -Rsc 'split("\n") | map(select(. != ""))')" "$owned" "$repo" "$TASK_PATH" \
     | while IFS= read -r p; do task_env_recipe_change "$TASK_PATH" "$p" "$repo" "$to" || printf '%s, ' "$p"; done)"
-  [ -z "$outside" ] \
-    || die 63 "$who: $what $unit_id at $from change files it does not own: ${outside%, }. An order's own commits change only its own files. A person moves the branch back to $from, or redoes the order."
+  IM_BREACH="$what $unit_id at $from change files it does not own: ${outside%, }. An order's own commits change only its own files"
+  IM_BREACH_ALLOWS="$(im_dispatch_allows "$RV_LEDGER_DOC" "$unit_id")"
+  if [ -n "$outside" ]; then
+    [ "${7:-}" = "stop" ] && return 1
+    die 63 "$who: $IM_BREACH. A person moves the branch back to $from, or redoes the order."
+  fi
+  IM_BREACH=""
 }
 
 # Code moved after the last record of order $2, at $4, up to $5 in the repository $3. The guard
@@ -12377,15 +12388,17 @@ im_way_plain_args() {
   im_way_load "$who" "$task_arg" "$unit_id" "$because"
 }
 
-# The ledger entry of the order with its stop and its changed list cleared, and one stopsCleared
-# entry for it: the reasons it stopped for or was warned of, the way out, and the person's words.
+# The ledger entry of the order with its stop cleared, and its changed list too unless the way is
+# a go-on other than keep, and one stopsCleared entry for it: the reasons it cleared, the way out,
+# and the person's words.
 # $1 the ledger document, $2 the order, $3 the way, $4 a JSON object of more fields for the entry.
 # Prints the document.
 im_clear_stop_in() {
   printf '%s' "$1" | jq -c --arg id "$2" --arg way "$3" --argjson more "$4" \
     --arg today "$(date -u +%Y-%m-%d)" --arg because "$WAY_BECAUSE" '
-    ([ .orders[] | select(.id == $id) | (.stopped // [])[], (.changed // [])[] ]) as $reasons
-    | .orders = (.orders | map(if .id == $id then del(.stopped, .changed) else . end))
+    ($way != "go-on" or $more.choice == "keep") as $all
+    | ([ .orders[] | select(.id == $id) | (.stopped // [])[], (if $all then (.changed // [])[] else empty end) ]) as $reasons
+    | .orders = (.orders | map(if .id == $id then del(.stopped) | (if $all then del(.changed) else . end) else . end))
     | .stopsCleared = ((.stopsCleared // []) + [{id: $id, by: $way, reasons: $reasons, clearedAt: $today, because: $because} + $more])'
 }
 
@@ -12438,8 +12451,9 @@ do_go_on() {
   # --- exit 67: every reason the order is stopped for, or warned of, allows this choice -----------
   # An attended change mid-build leaves the order going on with a `changed` list, which go-on keep
   # and redo answer the way they answer the same change as a stop.
+  # A real stop is answered by its own choices; the change list then waits for its own keep.
   local allowed why view
-  view="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '.stopped = ((.stopped // []) + (.changed // []))')"
+  view="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c 'if (.stopped // []) == [] then .stopped = (.changed // []) else . end')"
   why="$(stop_text "$view")"
   [ -n "$why" ] \
     || rv_exit_nothing "go-on" "$WAY_UNIT" "$WAY_UNIT is not stopped, so there is nothing to go on from"
@@ -12526,7 +12540,7 @@ GO_OWNS
           | (if any((.stopped // [])[]; .step == "review-record") then .departureKept = {because: $why, at: $at} else . end) end))')"
       # A kept criterion change takes nothing: the snapshot keeps the frozen text the tests prove,
       # and start reads the stopsCleared entry so as not to raise it again.
-      if printf '%s' "$view" | jq -e 'any(.stopped[]; .step == "start" and (.reason | startswith("design drift: the design file for ")))' >/dev/null; then
+      if printf '%s' "$entry" | jq -e 'any((.stopped // []) + (.changed // []) | .[]; .step == "start" and (.reason | startswith("design drift: the design file for ")))' >/dev/null; then
         ALIGNMENT_FILE="$TASK_PATH/alignment.json"
         DESIGN_DIR="$TASK_PATH/design"
         CLOSED_FILE="$TASK_PATH/design-closed.json"
@@ -13720,42 +13734,48 @@ do_dispatch_close() {
     # work. A capped builder or fixer writes no record, and the next brief prints a new headNow, so
     # no later check reads its commits. So they pass the frozen-test and owned-files guard here (exit
     # 63), and go on the ledger, as build-record does on a stop: the order's commit list, redo and
-    # drop read them. A capped builder spends one build attempt, so the attempt cap bounds the caps,
-    # and the last one stops the order the way build-record does. Each cap is its own warning: its
-    # words carry the count of turn caps on the order. Any other role's caps are counted from those
-    # warnings, and the cap that reaches the order's attempt limit stops the order, allowing the
-    # go-on that sends the role again: fix for a fixer, check for a reviewer, build for the rest.
+    # drop read them. A breach stops the order and removes the record, so go-on --owns, redo and drop
+    # can leave it. A capped builder spends one build attempt, so the attempt cap bounds the caps,
+    # and the last one stops the order the way build-record does. Any other role's caps are counted
+    # on the ledger entry, as turnCaps, and the cap that reaches the order's attempt limit stops the
+    # order, allowing the go-on that sends the role again: fix for a fixer, check for a reviewer,
+    # build for the rest. Each cap is its own warning, because its words carry that count.
     nr_cap="$(sed -n 's/^maxTurns: *//p' "$PLUGIN_ROOT/agents/${nr_role##*:}.md" 2>/dev/null | head -1)"
-    local nr_times="twice" nr_last="second" nr_what nr_code nr_head nr_brief="" nr_spent="" nr_count
+    local nr_times="twice" nr_last="second" nr_what nr_head nr_brief="" nr_spent=""
     [ "$nr_allowed" -eq 1 ] || { nr_times="$((nr_allowed + 1)) times"; nr_last="last"; }
     nr_what="returned no report $nr_times"
     [ -z "$cut_off" ] || nr_what="stopped before it finished $nr_times, the $nr_last time because $cut_off"
-    nr_code="$(jq -r '.codePath // ""' "$dispatch_file")"
     case "${nr_role##*:}" in
       implementer) nr_brief="$IMPL_DIR/brief-$nr_unit-build.json" ;;
       fixer) nr_brief="$IMPL_DIR/brief-$nr_unit-fix-$(( $(jq -r --arg id "$nr_unit" \
         '[ .orders[] | select(.id == $id) | .roundsUsed // 0 ][0] // 0' "$IMPL_DIR/ledger.json" 2>/dev/null) + 1 )).json" ;;
     esac
     nr_head="$(jq -r '.headNow // ""' "$nr_brief" 2>/dev/null)"
-    nr_ledger="$(jq -c '.' "$IMPL_DIR/ledger.json" 2>/dev/null)"
-    [ -n "$nr_ledger" ] || die3 "dispatch-close: $IMPL_DIR/ledger.json could not be read as JSON, so the turn cap on $nr_unit could not be written."
-    if [ -n "$nr_brief" ] && git -C "$nr_code" rev-parse --verify --quiet "$nr_head^{commit}" >/dev/null 2>&1; then
-      rv_load_state "dispatch-close" "$nr_unit" '[""]'
-      rv_load_codepath "dispatch-close"
-      rv_load_range_repo "dispatch-close" "$RV_UNIT_JSON"
-      im_moved_guard "dispatch-close" "$nr_unit" "$nr_code" "$nr_head" HEAD "the commits the capped ${nr_role##*:} made on"
+    rv_load_state "dispatch-close" "$nr_unit" '[""]'
+    rv_load_codepath "dispatch-close"
+    rv_load_range_repo "dispatch-close" "$RV_UNIT_JSON"
+    nr_ledger="$RV_LEDGER_DOC"
+    if [ -n "$nr_brief" ] && git -C "$RV_RANGE_REPO" rev-parse --verify --quiet "$nr_head^{commit}" >/dev/null 2>&1; then
+      if ! im_moved_guard "dispatch-close" "$nr_unit" "$RV_RANGE_REPO" "$nr_head" HEAD "the commits the capped ${nr_role##*:} made on" stop; then
+        nr_ledger="$(stop_order_in "$(im_listed_commits_in "$nr_ledger" "$nr_unit" "$IM_MOVED")" "$nr_unit" dispatch-close "$IM_BREACH" "$IM_BREACH_ALLOWS")"
+        [ -n "$nr_ledger" ] || die3 "dispatch-close: the stop on $nr_unit could not be written."
+        write_atomic "$IMPL_DIR/ledger.json" "$nr_ledger"
+        rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
+        die 63 "dispatch-close: $IM_BREACH. $nr_unit is stopped, and the record is removed. A person moves the branch back to $nr_head, goes on with --owns naming the file, redoes the order, or drops it."
+      fi
       nr_ledger="$(im_listed_commits_in "$nr_ledger" "$nr_unit" "$IM_MOVED")"
       [ -n "$nr_ledger" ] || die3 "dispatch-close: the capped ${nr_role##*:}'s commits on $nr_unit could not be written."
     fi
-    nr_count="$(( $(jq --arg id "$nr_unit" '[ (.warnings // [])[] | select(.step == "dispatch-close" and .order == $id and (.words | startswith("turn cap: "))) ] | length' "$TASK_PATH/task.json" 2>/dev/null || printf '0') + 1 ))"
     if [ "${nr_role##*:}" != "implementer" ]; then
       local nr_role_caps nr_limit nr_allows='["build"]'
-      nr_role_caps="$(( $(jq --arg id "$nr_unit" '[ (.warnings // [])[] | select(.step == "dispatch-close" and .order == $id and (.words | startswith("turn cap: ")) and (.words | startswith("turn cap: implementer ") | not)) ] | length' "$TASK_PATH/task.json" 2>/dev/null || printf '0') + 1 ))"
+      nr_role_caps="$(( $(printf '%s' "$nr_ledger" | jq -r --arg id "$nr_unit" '[ .orders[] | select(.id == $id) | .turnCaps // 0 ][0] // 0') + 1 ))"
       nr_limit="$(attempts_allowed_for "$(printf '%s' "$nr_ledger" | jq -c --arg id "$nr_unit" '[ .orders[] | select(.id == $id) ][0]')")"
       case "${nr_role##*:}" in
         fixer) nr_allows='["fix"]' ;;
         reviewer) nr_allows='["check"]' ;;
       esac
+      nr_ledger="$(printf '%s' "$nr_ledger" | jq -c --arg id "$nr_unit" --argjson n "$nr_role_caps" \
+        '.orders = (.orders | map(if .id == $id then .turnCaps = $n else . end))')"
       nr_spent=" It is turn cap $nr_role_caps of $nr_limit for roles other than the builder."
       [ "$nr_role_caps" -lt "$nr_limit" ] \
         || nr_ledger="$(stop_order_in "$nr_ledger" "$nr_unit" dispatch-close \
@@ -13775,7 +13795,7 @@ do_dispatch_close() {
     fi
     write_atomic "$IMPL_DIR/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
-    task_warn "$TASK_PATH" dispatch-close "$nr_unit" "turn cap: ${nr_role##*:} $nr_what, $nr_after; its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty$nr_spent It is turn cap $nr_count on this order."
+    task_warn "$TASK_PATH" dispatch-close "$nr_unit" "turn cap: ${nr_role##*:} $nr_what, $nr_after; its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty$nr_spent"
     # A fixer's complete report stops a fresh dispatch-open until fix-record reads it (gap row 343).
     local nr_next="dispatch the $nr_role again with a fresh brief, which reads what it left"
     [ "${nr_role##*:}" != "fixer" ] || [ ! -f "$rp_path" ] || [ -n "$(im_report_line_fault "$rp_path" "$IM_REPORT_DONE")" ] \

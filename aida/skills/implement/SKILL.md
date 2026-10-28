@@ -242,8 +242,10 @@ dispatch a fresh role. The brief is unchanged and the work is unfinished, and a 
 the half-written files. This differs from a row a person rejects, where the brief changes and the
 role is dispatched fresh. When the resumed role returns, close again, with `--no-report` if it
 stopped again. The `--no-report` after the last resume removes the record and writes a turn-cap
-warning into the task record. The order does not stop. Report the warning. The role's commits stay
-on the order's list, and the next dispatch reads what the role left.
+warning into the task record. Report the warning. The role's commits stay on the order's list, and
+the next dispatch reads what the role left. A builder's cap spends a build attempt, and any other
+role's caps count toward the order's attempt limit, so the last one stops the order. A capped
+commit that breaks the frozen tests or the owned files stops the order too (exit 63).
 
 A record already closed takes the same route. Run `dispatch-open` with the same role and unit and
 `--resume`, then resume the same agent by message. When that agent cannot be reached, as from

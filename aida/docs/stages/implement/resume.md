@@ -35,8 +35,10 @@ same retake. Neither refusal spends an attempt.
 Each task has at most one open dispatch. When a role never returned, the next dispatch refuses and
 names the role, the order, and the record's age. A role stopped at its turn limit is resumed once,
 or twice for an order with a large diff budget. One more stop writes a turn-cap warning into the
-task record, and the order does not stop. The role's commits stay on the order's list, and the
-role is sent again.
+task record, and the role is sent again. A builder's cap spends a build attempt. Any other role's
+caps are counted, and the cap that reaches the order's attempt limit stops the order. The role's
+commits stay on the order's list, unless one breaks the frozen tests or the owned files, which
+stops the order.
 
 ## Your answer to a person's call
 

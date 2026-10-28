@@ -46,8 +46,9 @@ When you say the test stands, the next attempt builds against it as it is.
   limit writes none. build-record refuses a stop line with no cause and reason, such as
   `Stop: pending`, the same way. It stops nothing, so the corrected report records.
 - **A role stopped at its turn limit.** AIDA sends the same agent one message to finish. When it
-  returns with no report again, AIDA writes a turn-cap warning into the task record, and the order
-  does not stop. Its commits stay on the order's list, and the next dispatch reads what it left.
+  returns with no report again, AIDA writes a turn-cap warning into the task record. The cap spends
+  a build attempt, so the last allowed attempt stops the order. Its commits stay on the order's
+  list. A commit to a frozen test or a file the order does not own stops the order (exit 63).
 - **Exit 37.** Another dispatch for this task is still open. See
   [come back to a build](../stages/implement/resume.md).
 

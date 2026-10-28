@@ -215,6 +215,11 @@
           },
           "description": "The files a person's `go-on --owns` gave this order, beside the ownedFiles the snapshot holds. Present only when one was given. The build brief, the dispatch record, the fix scope and the owned-files check read them as owned. The snapshot keeps design's own list, so `start` compares design with it alone. No other order owns one of these, and none is a frozen test."
         },
+        "turnCaps": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many times a role other than the implementer was cut off at its turn cap on this order, written by `dispatch-close`. Present only after the first. The cap that reaches the order's attempt limit stops the order with `turn caps spent`. An implementer's cap spends a build attempt instead. `redo` rebuilds the entry, so the count starts again."
+        },
         "unrecordedCommits": {
           "type": "array",
           "items": {
