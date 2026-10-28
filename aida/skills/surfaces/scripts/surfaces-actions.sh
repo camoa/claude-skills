@@ -226,7 +226,9 @@ do_register() {
               kinds="$(printf '%s' "$kinds" | jq -c --arg k "$2" '. + [$k] | unique')" ;;
       --mask) masks="$(printf '%s' "$masks" | jq -c --arg m "$2" '. + [$m]')" ;;
       --path) paths="$(printf '%s' "$paths" | jq -c --arg g "$2" '. + [$g]')" ;;
-      --reason) reason="$(pc_trim "$2")" ;;
+      # One line, because `read` prints one line per surface and a newline would forge another.
+      --reason) [ "$(printf '%s' "$2" | wc -l | tr -d '[:space:]')" = "0" ] || die 3 "register: --reason is one line, and it holds a newline"
+                reason="$(pc_trim "$2")" ;;
     esac
     shift 2
   done

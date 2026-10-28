@@ -51,11 +51,12 @@ end to end surface is a command. It needs no recipe and no install:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --command "<line>" --kind e2e --reason "<why>" --critical --enable
 ```
-The line is the command that walks the path, such as a script in the code repository. Exit 0
-means the path works. The line is split at spaces and runs without a shell. So a quote or a shell
-character is refused at 3. `--reason` is required, as for every e2e surface below. With no
-surface file, `register` writes one and turns end to end on in the project record, and commits both. Review runs the command in the task's tree, and nobody walks
-it. Exit 3 also means the file holds an e2e page surface already, because a project uses one form.
+The line is the command that walks the path, such as a script in the code repository. Exit 0 means
+the path works. The line is split at spaces and runs without a shell. So a quote or a shell
+character is refused at 3. `--reason` is required, as for every e2e surface below. With no surface
+file, `register` writes one and turns end to end on in the project record, and commits both. Review
+runs the command in the task's tree, and nobody walks it. Exit 3 also means the file holds an e2e
+page surface already, because a project uses one form.
 
 The command runs with the session's PATH. So it must reach this tree's own build, never an
 installed copy, for example through a path inside the tree. Register it before the build starts:
