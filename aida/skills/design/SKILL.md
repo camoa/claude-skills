@@ -209,7 +209,7 @@ AIDA cannot know on its own:
   created with no `--proof`. Such a file must live in a folder the project commits:
   `add-owned-file` refuses an ignored path on a record order.
 - What is proved by what a page shows rather than by a test. A layout, a rendered block, a
-  page at each viewport. Such an order is created with `--proof observe`. It names at least one
+  page as it renders. Such an order is created with `--proof observe`. It names at least one
   `--surface` and declares no test. Each done-when row is the sentence a model judges. After
   the build, the orchestrator opens the page the order builds at one size in a browser. It
   judges the row against what renders, with a screenshot as the evidence. Write each row as one thing

@@ -7633,7 +7633,7 @@ br_confirm_check() {
 # round or go-on's check reads a file the build step already refused or accepted. Prints the check
 # object.
 br_observed_check() {
-  local unit verdict detail unmet_row rows_count
+  local unit verdict detail unmet_row rows_phrase
   unit="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')"
   if [ -z "$BRC_OBSERVED" ] || ! jq empty "$BRC_OBSERVED" >/dev/null 2>&1; then
     jq -n --arg unit "$unit" --arg observed "${BRC_OBSERVED:-none}" \
@@ -7641,7 +7641,7 @@ br_observed_check() {
         detail: ($unit + " is proved by a model\u0027s observation, and no observed record could be read at " + $observed + ". The build step writes it after the implementer returns and passes it as --observed.")}'
     return 0
   fi
-  rows_count="$(jq '(.rows // []) | length' "$BRC_OBSERVED")"
+  rows_phrase="$(jq -r '(.rows // []) | length | "\(.) row" + (if . == 1 then "" else "s" end)' "$BRC_OBSERVED")"
   unmet_row="$(jq -r '[ (.rows // [])[] | select(.verdict != "met") ][0] // empty
     | .surface + " at " + .viewport + ": " + .doneWhen + " (" + .note + ")"' "$BRC_OBSERVED")"
   if [ -n "$unmet_row" ]; then
@@ -7649,7 +7649,7 @@ br_observed_check() {
     detail="a model judged a row unmet on $unmet_row; the observed record holds every row and the screenshots."
   else
     verdict="met"
-    detail="a model judged every done-when row and live-site check met ($rows_count rows); the observed record holds the screenshots."
+    detail="a model judged every done-when row and live-site check met ($rows_phrase); the observed record holds the screenshots."
   fi
   jq -n --arg verdict "$verdict" --arg detail "$detail" --arg judgedBy "$(jq -r '.judgedBy' "$BRC_OBSERVED")" \
     '{id: "observed", verdict: $verdict, detail: $detail, judgedBy: $judgedBy}'
