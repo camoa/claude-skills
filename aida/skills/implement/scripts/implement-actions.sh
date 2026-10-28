@@ -8172,9 +8172,10 @@ im_reopen_in() {
 
 # The review record of closed order $2 with one repair finding added on its file $3, with evidence
 # $4. The finding cites the owner's first criterion. $1 the action's own name. Sets IM_REPAIR_DOC,
-# IM_REPAIR_ID and IM_REPAIR_LINKED. Returns 1 when the owner serves no criterion, so no fixer
-# could act on the finding.
-IM_REPAIR_DOC=""; IM_REPAIR_ID=""; IM_REPAIR_LINKED=""
+# IM_REPAIR_ID, IM_REPAIR_LINKED, and IM_REPAIR_OWED, true when tests prove the owner, so its test
+# author writes one failing test of the bug before its fixer runs, as reopen asks. Returns 1 when
+# the owner serves no criterion, so no fixer could act on the finding.
+IM_REPAIR_DOC=""; IM_REPAIR_ID=""; IM_REPAIR_LINKED=""; IM_REPAIR_OWED=false
 im_repair_finding() {
   local built
   IM_REPAIR_LINKED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" \
@@ -8190,6 +8191,8 @@ im_repair_finding() {
   built="$(printf '%s' "$built" | jq -c '.actionableBecause += "; the repair took the owner'"'"'s first criterion by position, and nobody judged the link"')"
   IM_REPAIR_DOC="$(printf '%s' "$IM_REPAIR_DOC" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
   [ -n "$IM_REPAIR_DOC" ] || die3 "$1: the repair finding on $2 could not be written."
+  IM_REPAIR_OWED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" "$BR_ORDER_FACTS_JQ"'
+    [ .workOrders[] | select(.id == $id) ][0] | orderFacts.slot == "order-tests"')"
 }
 
 # Gap row 286. A builder that meets a defect in a file a closed order owns stops with
@@ -8238,7 +8241,7 @@ BR_OWNER
     return 1
   fi
   earlier="$(printf '%s' "$ledger_doc" | jq -r --arg u "$unit_id" --argjson a "$attempt" \
-    '(.orders // [])[] | .id as $o | (.repairs // [])[] | select(.by == $u and .attempt == $a) | $o + " " + .finding')"
+    '(.orders // [])[] | .id as $o | (.repairs // [])[] | select(.by == $u and .attempt == $a) | $o + " " + .findings[0]')"
   allowed="$(attempts_allowed_for "$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0] // {}')")"
   if [ "$(printf '%s' "$earlier" | grep -c .)" -ge "$allowed" ]; then
     BR_REPAIR_NOTE=" No repair opened: $unit_id has opened $allowed at attempt $attempt, as many as its attempts allowed."
@@ -8267,7 +8270,9 @@ BR_EARLIER
     --arg f "$new_id" --arg report "$report" --arg at "$(date -u +%Y-%m-%d)" \
     --argjson commits "$(printf '%s' "$commits" | tr ' ' '\n' | while IFS= read -r one; do
         [ -z "$one" ] || git -C "$RV_CODEPATH" rev-parse --verify --quiet "$one^{commit}"; done | jq -Rsc 'split("\n") | map(select(. != ""))')" \
-    '{by: $u, attempt: $a, finding: $f, report: $report, at: $at} + (if $commits == [] then {} else {commits: $commits} end)')")"
+    --argjson owed "$IM_REPAIR_OWED" \
+    '{by: $u, attempt: $a, findings: [$f], report: $report, at: $at} + (if $commits == [] then {} else {commits: $commits} end)
+     + (if $owed then {testOwed: true} else {} end)')")"
   [ -n "$new_ledger" ] || die3 "build-record: the repair on $owner could not be written to the ledger."
   if [ -n "$commits" ]; then
     commit_count="$(printf '%s' "$commits" | wc -w | tr -d ' ')"
@@ -10170,9 +10175,8 @@ FB_CLOSED
         [ .[] | .id as $i | .id + ": " + .evidence
           + ([ $r.findings[] | select(.id == $i) | .scopeInsufficientBecause // empty | " The fixer reported: " + . ][0] // "") ] | join(" ")')" \
       || die3 "fix-brief: $cg_owner owns $cg_rel and serves no criterion, so no fixer could act on a repair finding. Nothing is written."
-    br_order_facts "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg o "$cg_owner" '[ .workOrders[] | select(.id == $o) ][0]')"
     cg_ledger="$(im_reopen_in "$RV_LEDGER_DOC" "$cg_owner" "$(jq -cn --arg u "$unit_id" --arg f "$IM_REPAIR_ID" \
-      --arg at "$(date -u +%Y-%m-%d)" --argjson owed "$([ "$BR_ORDER_SLOT" = "order-tests" ] && echo true || echo false)" \
+      --arg at "$(date -u +%Y-%m-%d)" --argjson owed "$IM_REPAIR_OWED" \
       '{by: $u, findings: [$f], at: $at} + (if $owed then {testOwed: true} else {} end)')")"
     [ -n "$cg_ledger" ] || die3 "fix-brief: the repair on $cg_owner could not be written to the ledger."
     write_atomic "$IMPL_DIR/review-$cg_owner.json" "$IM_REPAIR_DOC"

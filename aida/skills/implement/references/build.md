@@ -184,7 +184,9 @@ review step and adds one fix round to its allowance, so no counter goes down. Th
 keeps the repair under `repairs`, with the range the order closed with. `finished.json` carries
 that range beside the new one. The script exits 0 and prints a `repair:` line. The stopped order
 spends no attempt. Commits it made after it began are named, as at any stop, and recorded on the
-repair entry. They stop the stopped order for a person, in both run modes. The owner's fixer works in the owner's files, and the
+repair entry. They stop the stopped order for a person, in both run modes. When tests prove the
+owner, its test author first writes one failing test of the defect, and `tests-freeze` freezes it.
+The owner's fixer works in the owner's files, and the
 reviewer verifies the round. The verifier also answers whether the failure arises in that file.
 A `no` makes the finding pending, and the person rules on it at the task review. So the route
 runs unattended too. Follow the `next:` line to the reopened order. Run `start` first when the

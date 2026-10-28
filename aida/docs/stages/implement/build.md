@@ -57,7 +57,7 @@ attempts ran out. Unattended, the order stops.
 The builder can find that a file of an order already closed is wrong:
 `Stop: closed-order-defect: <file>: <what fails>`. AIDA reopens the order that owns the file, in
 both run modes. It gives that order one finding and one more fix round. The `repair:` line names
-it. The owner's fixer repairs its own file, and a reviewer checks the repair and where the defect
+it. When tests prove that order, its test author first writes one failing test of the defect. The owner's fixer repairs its own file, and a reviewer checks the repair and where the defect
 lies. When the reviewer finds the defect lies elsewhere, the finding waits for you at the task
 review. Until the owner closes again, the stopped order cannot build. Then it builds again.
 

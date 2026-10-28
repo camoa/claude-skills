@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # closed-order-grant-spec.sh: a person's grant, at another order's fix round, of a file a closed
 # order owns reopens that order for a repair round, and the granting order waits until it closes
-# again (gap row 433).
+# again (gap row 433). A builder's closed-order-defect stop gives a tests order its failing test
+# first too.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
@@ -57,5 +58,18 @@ frozen_case() (
   printf '%s|%s\n' "$RC" "$(ledger '.lastStep')"
 )
 expect "a grant of the closed order's frozen test refuses" "$(frozen_case)" '3|closed'
+
+# A builder's stop on a defect in the closed tests order's file reopens it the same way: its
+# failing test comes first.
+builder_case() (
+  source "$HERE/records.bash"
+  in_review closed
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo2")).lastStep = "tests-frozen"'
+  sed 's/wo1/wo2/' "$IMPL/tests-wo1.json" >"$IMPL/tests-wo2.json"
+  printf 'Stop: closed-order-defect: a.php: a.php is wrong\nDeviation: none\n' >"$IMPL/answers-wo2-attempt1.md"
+  run "$IMPLEMENT" build-record "$TASK" wo2 --report "$IMPL/answers-wo2-attempt1.md" --interface "$IMPL/interface-wo2.md" --started-at "$(git -C "$WT" rev-parse HEAD)"
+  printf '%s|%s|%s\n' "$RC" "$(ledger '.repairs[0].by + " " + (.repairs[0].testOwed | tostring)')" "$(sed -n 's/^next: //p' "$OUT" | cut -d: -f1)"
+)
+expect "a builder's closed-order-defect on a tests order owes the failing test first" "$(builder_case)" '0|wo2 true|tests wo1'
 
 finish
