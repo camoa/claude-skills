@@ -4,7 +4,7 @@
 # scope-actions.sh, research-actions.sh and design-actions.sh each carried their own copy of these
 # four. One implementation, not three copies drifting apart, the same reason schema-check.sh exists.
 #
-# The caller defines die1, die2, die3, die4 and die79 before it sources this file, each with its own
+# The caller defines die1, die3 and die79 before it sources this file, each with its own
 # script name in the message, so a refusal still says which script refused, and PLUGIN_ROOT, so
 # this library can find the task script. Those are the only things this library takes from its
 # caller rather than owning.
@@ -681,7 +681,7 @@ test_weight_warn() {
   task_warn "$1" "$2" "$3" "a run of this order's frozen tests took over $TEST_WEIGHT_SECONDS s. A test heavier than its behaviour is sent back: see skills/implement/references/what-a-test-is.md"
 }
 
-# The one overlap rule for owned files, read by check-design.sh and by implementation's `start`.
+# The one overlap rule for owned files, read by check-design.sh, where an overlap is a warning.
 # Input: the work orders as a JSON array. Output: one {ids, path} per entry two orders both
 # declare, compared as declared strings. An entry both orders list in sharedFiles is not an
 # overlap, because each order only adds to that file (gap row 287).
@@ -991,7 +991,8 @@ distill_stamp() {
 
 # Reads the sidecar the distiller wrote for one stage, records/<stage>-distill.json
 # (agents/distiller.md), and prints `standsAlone:` and one `gap:` line per gap. The check never
-# blocks, so every value exits 0. schema-check.sh is sourced here because no stage script sources
+# blocks. A missing sidecar, or one that is not in its shape, prints `standsAlone: none` and is a
+# warning in the task record, step `<stage> distill`. A malformed one is set aside first. schema-check.sh is sourced here because no stage script sources
 # it on its own. A stale sidecar prints `standsAlone: stale` and a `stale:` line naming the
 # dispatch that refreshes it, and none of its gaps. A current one gets its stamp, as distill_stale
 # says. $1 the canonical task folder, $2 the stage, $3 optional, the answer distill_stale gave
@@ -1000,16 +1001,26 @@ distill_read() {
   local task_folder="$1" stage="$2" stale="${3:-}" sidecar schema result faults
   sidecar="$task_folder/records/$stage-distill.json"
   schema="${PLUGIN_ROOT}/scripts/distill-schema.json"
-  [ -f "$sidecar" ] || die2 "distill: no sidecar at $sidecar. Dispatch the distiller first"
+  if [ ! -f "$sidecar" ]; then
+    echo "standsAlone: none"
+    task_warn "$task_folder" "$stage distill" "" "no distiller sidecar at $sidecar, so nobody read the $stage record cold"
+    return 0
+  fi
   # shellcheck source=/dev/null
   source "${PLUGIN_ROOT}/scripts/lib/schema-check.sh" || die3 "distill: the schema-check library failed to load"
-  result="$(schema_check_compare "$schema" "$sidecar")" \
-    || { sidecar_set_aside "$sidecar"; die4 "distill: $sidecar could not be read as JSON"; }
-  faults="$(printf '%s' "$result" | jq -r '(.missing + .unreadable) | map(.field) | join(" ")')"
-  [ -z "$faults" ] || { sidecar_set_aside "$sidecar"; die4 "distill: $sidecar does not match $schema: $faults"; }
-  if [ "$(jq -r '(.standsAlone == false) != ((.gaps | length) > 0)' "$sidecar")" = "true" ]; then
+  if ! result="$(schema_check_compare "$schema" "$sidecar")"; then
+    faults="it could not be read as JSON"
+  else
+    faults="$(printf '%s' "$result" | jq -r '(.missing + .unreadable) | map(.field) | join(" ")')"
+    [ -z "$faults" ] || faults="it does not match $schema: $faults"
+    [ -n "$faults" ] || [ "$(jq -r '(.standsAlone == false) != ((.gaps | length) > 0)' "$sidecar")" != "true" ] \
+      || faults="its standsAlone and gaps disagree. False needs a gap, and a gap needs false"
+  fi
+  if [ -n "$faults" ]; then
     sidecar_set_aside "$sidecar"
-    die4 "distill: $sidecar has standsAlone and gaps that disagree. False needs a gap, and a gap needs false"
+    echo "standsAlone: none"
+    task_warn "$task_folder" "$stage distill" "" "the distiller sidecar for $stage was set aside, because $faults"
+    return 0
   fi
   [ -n "$stale" ] || stale="$(distill_stale "$task_folder" "$stage")" || exit $?
   if [ "$stale" = "yes" ]; then
@@ -1056,19 +1067,17 @@ source "${PLUGIN_ROOT}/scripts/lib/task-state.sh"
 # Each word is the stage's skill name, so `/aida:<stage>` is the command to run.
 # Derived from the records in the task folder every time, never stored: each stage writes one
 # record when it closes, and the stage is the first whose record is absent. Scope's is the
-# distill sidecar, records/scope-distill.json, which approve and distill both need before they
-# close (scope-actions.sh, exit 2); alignment.json is written by init, at the stage's start. A
-# light task has no scope sidecar until design closes, so its scope closes on the pluginVersion
-# that only the scope close writes into alignment.json.
+# pluginVersion that only the scope close writes into alignment.json; init writes alignment.json
+# itself, at the stage's start. Research is optional: a task whose design has started is past it.
 # This is the one copy of that rule; the session-start hook and the next skill's report both
 # print what it says. $1 the task folder, $2 the review word next-actions.sh derives from
 # review/review.json (passed, failed, unfinished or none). Calls no die function.
 task_stage() {
   local task_folder="$1" review="$2"
-  if [ ! -f "$task_folder/records/scope-distill.json" ] && { ! task_is_light "$task_folder" \
-      || [ -z "$(jq -r '.pluginVersion // empty' "$task_folder/alignment.json" 2>/dev/null)" ]; }; then
+  if [ -z "$(jq -r '.pluginVersion // empty' "$task_folder/alignment.json" 2>/dev/null)" ]; then
     echo "scope"
-  elif [ "$(jq -r '.exitCode // 1' "$task_folder/records/research-check.json" 2>/dev/null)" != "0" ]; then
+  elif [ ! -d "$task_folder/design" ] \
+      && [ "$(jq -r '.exitCode // 1' "$task_folder/records/research-check.json" 2>/dev/null)" != "0" ]; then
     echo "research"
   elif [ ! -f "$task_folder/design-closed.json" ]; then
     echo "design"

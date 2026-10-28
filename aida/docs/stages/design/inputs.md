@@ -11,7 +11,8 @@ collaborator, a service, a convention or a constraint is used by the order it af
 that says nothing was found is accounted for too. The builder sees each used finding in its
 build brief.
 
-The design check and the close refuse while a finding is in no order's list: see
+A finding in no order's list is a warning at the close with you present, and stops an
+unattended close: see
 [The design check refuses to close](../../when-it-stops/design-check.md).
 
 ## The plays

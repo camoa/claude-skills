@@ -7,9 +7,8 @@ it wrote. There is no skip. Run the stage the message names, then run this one a
 
 | You ran | It refuses when | Run first |
 |---|---|---|
-| `/aida:research` | no contract exists (exit 2) | `/aida:scope` |
+| `/aida:research` | no contract exists (exit 3) | `/aida:scope` |
 | `/aida:design` | no contract exists; it names the scope skill | `/aida:scope` |
-| `/aida:design` | research has not closed (exit 6) | `/aida:research` |
 | `/aida:implement` | no contract, or design has not started; it names the missing stage | that stage |
 | `/aida:implement` | design never closed (exit 11), or its check fails (exit 4) | `/aida:design` close |
 | `/aida:implement` | design changed after it closed (exit 13); the message names each order | `/aida:design` close again |

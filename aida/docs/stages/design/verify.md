@@ -34,7 +34,8 @@ criterion needs at least one, even when a run line proves that criterion.
 
 Before the close, design shows each order that holds a line that is not binding, with its
 sources. For each line you keep it, drop it, or ask for another source. To let a kept run line
-run, say yes to it, and design records your approval at the close. An unapproved run line is
+run, say yes to it. Your yes is a person's answer, in every run mode, and design records it at
+the close. An unapproved run line is
 judged by the reviewer as a check.
 
 Which lines run without your yes, and what happens when nobody is present, is in

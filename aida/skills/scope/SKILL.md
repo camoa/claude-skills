@@ -125,7 +125,8 @@ ordinary mode drafted whole fields and asked what was missing; its one-question 
 Each correction the person gives becomes one write, in the person's words. The goal or the
 expected result they rephrase is `set-goal`; a criterion or non-goal they rephrase is `update`; a
 criterion they add is `add`; one they drop is `remove`; a non-goal they name is `add-non-goal`. A
-criterion the person rephrases or adds is `--author owner` at once, on that same call.
+criterion the person rephrases or adds stays `designer` until `approve` promotes it. An owner
+author on `add` or `update` is a person's answer, as `approve` is, so a correction does not pass it.
 
 Answer a correction with the changed lines: the `UPDATED:`, `ADDED:` or `REMOVED:` line and the
 summary the call printed. Then the turn ends. Do not run `render`, do not show the page, and do
@@ -169,8 +170,8 @@ is a gap: ask for one, with a recommended answer. Then run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   init "<task_folder>"
 ```
-only on a first run, before anything else is written; it refuses when `alignment.json` already
-exists. When its output holds `environment: none`, put the task skill's site offer to the person
+only on a first run, before anything else is written. On a task that has `alignment.json` already,
+it changes nothing and says so. When its output holds `environment: none`, put the task skill's site offer to the person
 now, or say it waits when it says so. Then, on a first run and on any later correction to either
 sentence, run:
 ```
@@ -329,11 +330,18 @@ running `/aida:scope approve <task-id>`, or by saying the contract is right in t
 Map those words to the call below. No reply from this skill asks for them.
 
 When the person says so, dispatch the `distiller` role once, as "The distill check" below says.
-The contract is final by then. Then run:
+The contract is final by then. Then record the person's answer. Claude Code shows its permission
+prompt for this call, and the person's yes there is the approval:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/person-answer.sh --project "<projectPath>" "<task-id>" \
+  --step 'scope approve' -- approve
+```
+Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   approve "<task_folder>"
 ```
+Without that answer, `approve` refuses with exit 70 in every run mode, and prints the command.
 It promotes every criterion still `designer` to `owner` and prints `promoted:` with the count.
 It marks each decision an unattended run took as approved by the person, and prints
 `approved-decisions:` with the count. A marked decision is history, not an open question. A
@@ -347,14 +355,15 @@ When `set-goal`, `set-tests`, `update` or `remove` prints `superseded-decisions:
 person which unattended answer their change replaced.
 
 A decision can stop holding after it was approved, or name no field at all. When the person
-says one no longer holds, run:
+says one no longer holds, record their answer with `person-answer.sh`, step `scope retire`, and
+the words `entry <n>: <the person's reason>`. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   retire "<task_folder>" --entry <n> --reason "<the person's reason>"
 ```
 `--entry` counts from 1 in the list. The entry becomes history with the reason. `retire` commits
 nothing, so run the distill check and `approve` again after it. It refuses an entry that does
-not exist, and one already superseded or retired.
+not exist, one already superseded or retired, and a call with no answer recorded.
 
 An earlier version of this skill rendered the whole document after every correction and asked
 for a yes on it, even for one small change. On one task it asked five times in a
@@ -398,27 +407,19 @@ writes `records/scope-distill.json`. Interactive, `approve` reads it. Autonomous
 `distill: deferred to the design close`. Design's close dispatches one distiller over all three
 stages.
 
-Either call prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show
+Either call prints `standsAlone:` and one `gap:` line per gap, and exits 0 on every value. Show
 each `gap:` line. Acting on one is the relevant step above run again; the check never blocks.
 `standsAlone: stale` means the contract changed after the distiller read it. The call then prints
 a `stale:` line and no gap. Dispatch the distiller again with the same message, then run the
 same call again.
-Exit 2 means the sidecar was not written. Send the same agent one message: write the file and
-read it back. An agent has reported a write it never made. Dispatch a fresh one only when exit 2
-repeats. Then run the same call again. Exit 4 means the sidecar was malformed. The script set it
-aside at the `setAside:` path it printed. Dispatch a fresh distiller, with the rule it broke
-quoted from `agents/distiller.md`. Then run the same call again. A second exit 4 stops for the
-person: show the stderr line and the path set aside.
 
-The third case is a dispatch that ends before the role's first write. The Agent call returns
-with no reply from the role, and no sidecar exists, before `approve` or `distill` runs.
-Re-dispatch once with the same message. When it ends the same way, dispatch once more with
-`model: sonnet` on the Agent call. The distiller's definition keeps `model: opus`, and the
-call's `model` overrides it. The reason: the harness once ended the distiller on opus twice
-before it wrote anything, and the same message on sonnet completed. A rejection tied to one
-model is not tied to the message, so the message stays and the model moves. When the sonnet
-dispatch also ends before its first write, stop: interactive, put it to the person with the
-Agent call's own error; autonomous, stop the run. The research and design pages refer to this rule.
+`standsAlone: none` means the sidecar is missing or unusable, and the task record holds a warning.
+A malformed sidecar was set aside at the `setAside:` path the call printed. A dispatch that ended
+before the role's first write is the same case. One retry rule covers it, and the distiller, the
+split advisor and the design critics all follow it. Dispatch the role once more, with the same
+message. For a malformed file, quote the rule it broke from the role's agent definition. Then run
+the same call again. A second miss stays a warning, and the stage goes on, in both run modes. The
+research and design pages refer to this rule.
 
 Cancelled at any point, first run or later: stop without running `init`, `set-goal`, `add`,
 `add-non-goal`, `update`, `remove`, `set-tests` or `set-mechanism` again. A drafted line is
@@ -454,9 +455,11 @@ reason first, or the change stops every started order that serves the criterion.
 spares a change to the verify clause alone. When a started order serves a criterion, a change to
 its text stops every order that serves it, whatever is recorded. Those stops clear when the text
 goes back word for word.
-A non-goal's id only accepts `--text`; the others are a criterion's own fields. `--author owner`
-is for a criterion the person corrected in this conversation; `approve` promotes the rest. Both
-only ever move a criterion from `designer` to `owner`, and the other way round is refused.
+A non-goal's id only accepts `--text`; the others are a criterion's own fields. `approve`
+promotes every `designer` criterion. `--author owner` promotes one, and it is a person's answer:
+record it first with `person-answer.sh`, step `scope update` and the words `<id> author owner`,
+or step `scope add` and the criterion's text. Both only ever move a criterion from `designer` to
+`owner`, and the other way round is refused.
 
 To drop one:
 ```

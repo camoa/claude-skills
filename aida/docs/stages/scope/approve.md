@@ -7,10 +7,12 @@ You approve the contract yourself. Scope never asks for a yes. When the contract
 
 1. Scope sends a fresh reader, the distiller, over the written contract. The distiller did not see
    your conversation. It reads the contract and the task files from disk.
-2. Scope then runs the approve action. Every criterion still marked `designer` becomes `owner`.
+2. Claude Code shows you its permission prompt for your answer. Your yes there is the approval,
+   and it is recorded in the task, in every run mode. See [the person's answer](../../task/person-answer.md).
+3. Scope then runs the approve action. Every criterion still marked `designer` becomes `owner`.
    Any decision an unattended run took is marked as approved by you, with the date.
-3. The action commits the task folder.
-4. Scope shows what the distiller found: whether the contract stands alone, and one line per gap.
+4. The action commits the task folder.
+5. Scope shows what the distiller found: whether the contract stands alone, and one line per gap.
 
 That moment is the approval, and there is no other. A yes on the draft alone promotes nothing.
 
@@ -39,8 +41,8 @@ If you stop before you approve, the draft stays on disk, marked `designer`, and 
 Research can still run on it. It lists the criteria that no person approved, so an unfinished
 contract is yours to notice.
 
-The distiller can fail: it writes nothing, or it writes a record in the wrong shape. Scope tries
-again, and stops for you when it cannot recover. See [When a stage stops](../../when-it-stops/).
+The distiller can fail: it writes nothing, or it writes a record in the wrong shape. Scope sends
+it once more. A second miss is a warning in the task record, and scope closes.
 
 ## Why it works this way
 

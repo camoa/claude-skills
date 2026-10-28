@@ -227,8 +227,8 @@ Typical search subjects, named by what they read, not by a fixed roster:
   nothing. Otherwise write a small runnable experiment under `<codePath>/.aida-spike/` and run
   it. Record the answer as a finding: `--source` is that folder path, and `--text` holds what
   ran and what it printed. Delete the folder before the coverage check closes research. The
-  check refuses (exit 6) while it exists, so nothing throwaway ships. Carry the idea forward,
-  never the code: design authors it fresh.
+  check writes a warning while it exists, so nothing throwaway ships unseen. Carry the idea
+  forward, never the code: design authors it fresh.
 
 How many searches run is set by what these criteria actually need. A task with three criteria
 that all rest on the same library may need one search, not three. The search inside this project
@@ -292,8 +292,9 @@ from 1, so a person rewrites such a text when one is found.
 
 `--searched-for` holds the words this search searched for. Words, not a sentence about how the
 search ran: "responsive images, image styles, picture element". Give the same value on every
-`record` call for one search. A second value is refused, because the search is the unit. A search
-that broadens takes a new `--search` name of its own.
+`record` call for one search. The file keeps the first value, and a second one is a warning in the
+task record, because the search is the unit. A search that broadens takes a new `--search` name
+of its own.
 
 Those words bound every finding in the file. A search that found nothing proves nothing outside
 the words it used. The design stage reads them to know what it must look up for itself, because
@@ -411,7 +412,7 @@ to what can be checked.
 ## Check the automated tests answer
 
 Do this before the coverage check, so its commit carries any change. It applies only when
-`automated-tests:` reads `no`. The coverage check refuses (exit 7) until it has run. For each of
+`automated-tests:` reads `no`. The coverage check writes a warning until it has run. For each of
 the project's frameworks, dispatch `catalog-identifier` with `point: test-execution`, that
 framework, and the project folder. Pass each path it returns as `--recipe`. When the lookup
 answered no path, pass `--lookup-failed <framework>=<reason>` in its place. Run:
@@ -459,8 +460,9 @@ zero it adds one `open:` line with the uncovered ids and the counts. The report 
 A task whose `research` folder does not exist yet is not an error: it is reported as research not
 started, with every criterion uncovered, the same as an empty `research` folder that does exist.
 
-Exit 0: nothing to do. The record is committed when the stage closes: a clean check commits the
-task folder, and `record` commits nothing. Dispatch `distiller` once, with the message this file
+Exit 0: nothing stops research. The record is committed when the stage closes: the check commits
+the task folder, and `record` commits nothing. Each `warning:` line the check printed is in the
+task record, and the repairs below answer it. Show each one, and repair what the person asks for. Dispatch `distiller` once, with the message this file
 names. Its lines are the role, the run mode, the task folder, the stage `research`, and the
 paths of `research/*.json` and `records/research-check.json`. Never a summary of this
 conversation. It
@@ -472,15 +474,9 @@ writes `records/research-distill.json`. Then run:
 design close`, because design's close distills all three stages.
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
 `gap:` line; acting on one is another `record` call. `standsAlone: stale` means the findings
-changed after the distiller read them: dispatch it again, then run the same call again. Exit 2
-means the sidecar was not written. Send the same agent one message: write the file and read it
-back. An agent has reported a write it never made. Dispatch a fresh one only when exit 2 repeats.
-Exit 4 means the sidecar was malformed. The script set it aside at the `setAside:` path it
-printed. Dispatch a fresh distiller, with the rule it broke quoted from `agents/distiller.md`.
-Then run the same call again. A second exit 4 stops for the person: show the stderr line and the
-path set aside. A dispatch that ends before the role's first write is the third case. The scope
-skill states the rule under "The distill check": once more with the same message, then once on
-`model: sonnet`.
+changed after the distiller read them: dispatch it again, then run the same call again.
+`standsAlone: none` means the sidecar was missing or unusable, and the task record holds a
+warning. The scope skill states the one retry rule under "The distill check".
 
 Then show what research found, before anything else. This is a presentation, not a question.
 Research asks nothing here, and the person speaks up only when something looks missing. Read
@@ -491,19 +487,18 @@ design decides reuse, extend, supersede or decline, not research. Each assumptio
 finding showed false, in one sentence. A count and a next command are not a presentation. The
 findings are what design acts on, so the person sees them here or not at all.
 
-Exit 4: a research file itself is broken: not valid JSON, not an object, or a field missing,
-malformed or undeclared at any depth, such as `searchedFor`. A malformed finding the schema can
-describe is exit 4 too. No action wrote such a file and none repairs it, `drop` included. Say
-which file and what is wrong with it, and stop; a person decides what it was.
-
 Exit 3: the script could not run the check at all. Read its stderr and fix the named problem,
 then check again.
 
-Exit 6: the coverage is clean but the spike folder named on the `spike:` line still exists.
-Delete that folder, then check again. Nothing else is missing.
+Exit 5: a research file is broken, or the run is unattended and the coverage has a gap. A broken
+file is not valid JSON, not an object, or has a field missing, malformed or undeclared at any
+depth, such as `searchedFor`. No action wrote such a file and none repairs it, `drop` included.
+Say which file and what is wrong with it. An unattended gap is a criterion with no finding, or an
+id or a citation that resolves to nothing. Nobody reads the warning before design builds on it,
+so the close stops instead. The `open:` line names each one.
 
-Exit 5: the files read, but the coverage is wrong. For each id the `open:` line
-names under criteria with no finding, dispatch another search for that criterion specifically.
+The repairs, for an `open:` line and for each coverage warning alike: for each criterion with no
+finding, dispatch another search for that criterion specifically.
 Every finding names the criterion it serves, so repair each entry in the report's
 `findingsWithNoCriterion`.
 The report names each one as `finding`, `<search>#<n>`, counted from 1. A "looked and found
@@ -534,8 +529,8 @@ or malformed field is listed by its `finding` too. Drop it with `drop`, then `re
 with every field. Calling `record` alone, with the same `--search`, appends a
 second finding and leaves the first one as it was, so it repairs nothing.
 
-Research is done only when this check reaches exit 0. Nothing is left deliberately open, because
-design refuses to start until the report holds exit 0.
+Research is done when this check reaches exit 0. A warning left open stays in the task record,
+and review lists it.
 
 ## Offer a split
 
@@ -551,12 +546,9 @@ role, the run mode, and the task folder. It writes `records/research-split.json`
 It prints `recommendation:`, `children:`, one `child:` line per child with its criterion count,
 and `reason:` with the first sentence. Show those lines.
 
-Exit 2: the advisor wrote no sidecar. Send it one message to write and read back, then run
-`split-read` again. Still exit 2:
-say the advisor wrote no sidecar. Go on flat. Exit 4 means the sidecar was malformed. The script
-set it aside at the `setAside:` path it printed. Dispatch a fresh split-advisor, with the rule
-it broke quoted from `agents/split-advisor.md`. Then run the same call again. A second exit 4
-stops for the person: show the stderr line and the path set aside.
+`recommendation: none` means the sidecar was missing or unusable, and the task record holds a
+warning. Follow the one retry rule in the scope skill's "The distill check", with the
+split-advisor. A second miss goes on flat.
 
 `recommendation: flat`: say so in one line. Go on.
 

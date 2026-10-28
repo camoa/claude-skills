@@ -14,11 +14,11 @@ A test the order declares lives in a file the order owns. The freeze refuses a t
 file.
 
 A `record` order has its own rule for where its files live: see
-[How an order is proved](proof.md). Design refuses an ignored path, such as `records/`, when you
-add it to a `record` order.
+[How an order is proved](proof.md). The design check refuses a `record` order that owns an
+ignored path, such as `records/`.
 
-An order must keep at least one owned file. Design refuses to remove the last one. Add the
-replacement first, or merge the order into another.
+An order must keep at least one owned file, and the design check refuses one that has none. Add
+the replacement first, or merge the order into another.
 
 ## Shared files
 

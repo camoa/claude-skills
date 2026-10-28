@@ -14,8 +14,9 @@ that own one file, an id that names nothing. Each open item names the order it i
 refusal, and what clears it, is in
 [The design check refuses to close](../../when-it-stops/design-check.md).
 
-No open item can be left with a reason. The build refuses to start on any of them, so leaving one
-open only moves the stop to a later and more costly place.
+No finding that stops can be left with a reason. The build refuses to start on any of them, so
+leaving one open only moves the stop to a later and more costly place. A warning never stops the
+close: you read it there, and the close writes it to the task record.
 
 ## Lines that inform and never hold the close
 

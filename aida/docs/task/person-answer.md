@@ -10,12 +10,13 @@ what it does not.
 - In implementation: the three ways out of a stop, `go-on`, `redo` and `drop`,
   `start --leftovers keep`, `verify-record --ruling`, `fix-brief --allow`, and a test row you judged at the freeze.
 - In the task skill: `set-run-mode`, to any mode.
+- In scope: `approve`, `retire`, and `add` or `update` with `--author owner`.
+- In design: `close --approve-runs`.
 
 The run mode does not decide whether you answered. An interactive run asks for your answer too.
 
 ## The steps that need your answer only in an unattended run
 
-- In design: `close --approve-runs`.
 - In review: `close --row`.
 - In completion: `close` with `--reason`, `--leave`, `--captures-offered` or
   `--observed-accepted`.

@@ -46,18 +46,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     questioned as well as a departure from it (live-run row 145). This one list reports and never
 #     raises the exit code, the way designStarted below never raises it: which of the other three
 #     proofs fits is a judgment, and a script that cannot name the repair must not hold the close;
-#   - every criterion's verifiedBy is machine or person, and never a third value: a criterion whose
-#     verifiedBy is neither needs no test, no checklist and no checkpoint row, so implementation
-#     would freeze it with nothing at all behind it. scripts/check-alignment.sh already refuses the
-#     value when scope closes; this reads it again here, because implementation runs this check and
-#     not that one;
 #   - a work order that owns nothing reaches an owning work order by walking dependsOn edges
 #     through its own dependents (ideal/design.md, "An order that owns nothing is a supporting
 #     order": "it reaches a criterion through the orders that depend on it"); a chain that reaches
 #     no owner fails, and a chain that loops fails too;
 #   - on a light task, every work order but wo1, the walking skeleton, reaches wo1 through its
 #     dependsOn chain, so the skeleton is built first (gap row 197);
-#   - ownedFiles do not overlap between work orders, compared as declared strings only, the same
+#   - ownedFiles do not overlap between work orders, a warning, compared as declared strings only, the same
 #     bound version 5's own overlap check carried (ideal/design.md, "What a work order holds"):
 #     this is not a glob-intersection check, and it proves nothing about what a builder actually
 #     touches. A path both orders list in sharedFiles is not an overlap (gap row 287);
@@ -97,53 +92,27 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # read; nothing here needs a second copy on disk, because nothing yet reads a saved design check
 # back.
 #
-# Exit codes, each one and only one meaning. When more than one condition is true at once, the
-# report still names every one of them; the exit code picks the single most severe, in this
-# order, highest first: 3, 1, 4.
+# Exit codes, each one and only one meaning. The report names every finding at whatever code.
 #
-#   0  every work order file matches its schema and carries no field the schema does not declare,
-#      every list item in every file passes its own checks, and every cross-order check named
-#      above passes. Reported, with every findings list empty, as the JSON object on stdout
-#      described below. A task whose design/ folder does not exist yet reaches this same code
-#      when the contract has no criteria at all: see "designStarted" below.
-#   1  a work order file exists but cannot be read as this format: it is not valid JSON, or is
-#      valid JSON but not an object; or a top-level field on a readable file is missing, the
-#      wrong shape, or not declared by the schema at all (any of the thirteen fields, or any
-#      other key present). Each is named in the JSON on stdout against the file it came from. A
-#      missing or malformed list field also stops that field's own per-item check (see exit 4)
-#      from running, and stops that work order from taking part in the cross-order checks; the
-#      report says so under that file's own "checked" key instead of guessing, and that alone
-#      never raises the exit code past what this paragraph already sets. The same code when
-#      <task_folder>/design-guides-read.json exists and cannot be read as its own format: not
-#      valid JSON, not an object, a top-level field missing, wrong or undeclared, or an entry
-#      without a path, a sha256 or a date. Named under "guidesRead" on stdout.
+#   0  nothing found stops the design. Findings that warn, and findings that stop only an
+#      unattended close, may still be listed under `open`, below. A task whose design/ folder does
+#      not exist yet reaches this code when the contract has no criteria: see designStarted.
 #   3  this script could not do its job: no task folder was given, the given path is not a
 #      folder, the schema file is missing or fails to parse, or the comparison itself failed to
-#      run. Reported to stderr; nothing is printed on stdout, so this is never confused with a
-#      finding about what design wrote, which is always reported as JSON. A design/ folder that
-#      does not exist, or that exists and is empty, is not this case: both are reported as zero
-#      files checked, on stdout, at whatever exit code their own coverage produces, because
-#      design not having started, or having started with nothing written yet, is a fact about the
-#      task, not a reason this script cannot run.
-#   4  every work order file passed the schema comparison, but a list item, or one of the
-#      cross-order checks named above, fails. Since 2026-09-23 the comparison reads every level,
-#      so a list item fault it can express now raises exit 1 instead. What is left here: a
-#      criterion/non-goal/work-order id that is not a
-#      valid shape, a tests entry that is not well-formed, a criterion with no serving order, a
-#      criterion owned by zero or by more than one order, an order serving no criterion, an order
-#      that owns a machine-verified criterion and declares no test, an order whose proof is gate
-#      and that declares a test, an order whose proof is record and that declares a test, owns a
-#      file outside the project folder or under an ignored path, or has no done-when row, an
-#      order whose proof is observe and
-#      that declares a test, names no surface or has no done-when row, an order whose proof is
-#      confirm and that declares a test, has no done-when row, owns a test file, or is code on a
-#      task with tests whose run lines do not prove every machine criterion it owns, a text-only
-#      order whose proof is tests, a machine criterion a text-only order owns, a machine criterion
-#      an observe or record order owns with no run line proving it, an order that owns nothing
-#      and reaches no owner, an order of a light task that does not come after wo1, a
-#      dependency cycle, two orders sharing
-#      a declared owned file, or an id named anywhere that resolves to nothing. Each is named in
-#      the JSON on stdout.
+#      run. Reported to stderr, and nothing is printed on stdout. A design/ folder that is absent
+#      or empty is not this case: design not having started is a fact about the task.
+#   4  a finding stops the design in either run mode: a file or the guides-read record that does
+#      not match its shape, a list item that fails its own check, an id that resolves to nothing,
+#      an owned path that is not one literal path, a dependency cycle, an order whose proof does
+#      not fit its tests, rows or files, or a machine criterion an observe or record order owns
+#      with no run line proving it. Implementation's `start` refuses on this code.
+#
+# `open` sorts every finding by what it does, one line each. Both callers print these lines, so
+# they are written once, here. `stop` raises exit 4. `unattended` stops an autonomous close and
+# is a warning when a person closes: a criterion with no serving order, no owner or two owners,
+# and a confirm order on a task with tests or one that owns a test file. `warn` never stops: an
+# order that serves nothing, a supporting order no owner reaches, a light order not after wo1,
+# and two orders that declare one owned file.
 #
 # designStarted (top level, on stdout) is false when <task_folder>/design does not exist yet, true
 # otherwise. It being false is not an error and never raises the exit code on its own: every
@@ -152,7 +121,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # a plain sentence saying so when false, and is empty when true.
 #
 # What this script could not check is always named on stdout, never silently skipped
-# (check-research.sh and check-alignment.sh state the same rule in their own headers):
+# (check-research.sh states the same rule in its own header):
 #   - schema-check.sh evaluates only minLength, pattern, minItems and enum by its own header, and
 #     does not evaluate minimum at all; design-schema.json's schemaVersion carries "minimum": 1,
 #     and a value of 0 or of -7 both pass that shared comparison undetected. This script does not
@@ -176,6 +145,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Reported stdout shape (always one JSON object, always present, never empty output on exit 0):
 #   {
 #     timestamp, taskPath, designDir, designStarted, designStartedNote, exitCode,
+#     open: { stop: [line], unattended: [line], warn: [line] },
 #     files: [ { path, schema: {missingFields, unreadableFields, unknownFields, issueCount},
 #                content: {checked, note, issues} } ],
 #     duplicateWorkOrderIds: [ {id, paths} ],
@@ -184,7 +154,6 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 criteriaWithNoServingOrder: [ {id, text} ],
 #                 criteriaWithNoOwner: [ {id, text} ],
 #                 criteriaWithMultipleOwners: [ {id, text, owners} ],
-#                 criteriaWithUnusableVerifiedBy: [ {id, text, verifiedBy} ],
 #                 ordersServingNothing: [ {id, path} ],
 #                 ordersMissingRequiredTests: [ {id, path, criterionId, problem} ],
 #                 gateOrdersDeclaringTests: [ {id, path} ],
@@ -213,7 +182,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   }
 #
 # Portability notes, because this script must run wherever the plugin runs:
-#   - No awk, no GNU-only flags, the same as check-research.sh and check-alignment.sh. Every read
+#   - No awk, no GNU-only flags, the same as check-research.sh. Every read
 #     of a work order file goes through jq. Every jq filter that tests one id against a set of ids
 #     binds that id to a named variable first, never a bare `.`, because piping into a second
 #     filter rebinds the dot: check-research.sh's own coverage join shipped exactly that defect
@@ -598,7 +567,6 @@ TEXT_ONLY_TEST_ORDERS_JSON='[]'
 MACHINE_ON_TEXT_ONLY_JSON='[]'
 MACHINE_ON_LOOK_OR_RECORD_JSON='[]'
 TEST_ORDERS_OWNING_NO_MACHINE_JSON='[]'
-CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
 UNKNOWN_NONGOAL_IDS_JSON='[]'
 COVERAGE_ISSUE_COUNT=0
@@ -779,16 +747,6 @@ CONFIRM_GLOBS
         | {id: $o.id, path: $o.path} ]
   ')"
 
-  # A fact about the contract alone, so it needs no work order and is never withheld when one
-  # cannot be read: it reports a value that is present and wrong, not something absent.
-  CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON="$(jq -c -n --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" --argjson criteria "$CRITERIA_WITH_TEXT_JSON" '
-    ($criteria | map({(.id): .text}) | add // {}) as $textOf
-    | [ $verifiedBy[] | select(.verifiedBy != "machine") | select(.verifiedBy != "person")
-        | {id: .id,
-           text: (($textOf[.id] // "") | if length > 120 then (.[0:117] + "...") else . end),
-           verifiedBy: .verifiedBy} ]
-  ')"
-
   UNKNOWN_CRITERIA_IDS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$CRITERION_IDS_JSON" '
     [ $orders[] | . as $o
       | ( ( ($o.criteriaServed // [])[] | {field: "criteriaServed", id: .} ),
@@ -803,15 +761,10 @@ CONFIRM_GLOBS
       | {path: $o.path, id: $nid} ]
   ')"
 
-  NO_SERVE_COUNT="$(printf '%s' "$CRITERIA_WITH_NO_SERVING_ORDER_JSON" | jq 'length')"
-  NO_OWNER_COUNT="$(printf '%s' "$CRITERIA_WITH_NO_OWNER_JSON" | jq 'length')"
-  MULTI_OWNER_COUNT="$(printf '%s' "$CRITERIA_WITH_MULTIPLE_OWNERS_JSON" | jq 'length')"
-  UNUSABLE_VERIFIED_BY_COUNT="$(printf '%s' "$CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON" | jq 'length')"
-  SERVES_NOTHING_COUNT="$(printf '%s' "$ORDERS_SERVING_NOTHING_JSON" | jq 'length')"
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
   GATE_WITH_TESTS_COUNT="$(printf '%s' "$GATE_ORDERS_DECLARING_TESTS_JSON" | jq 'length')"
   TEXT_ONLY_COUNT="$(jq -n --argjson a "$TEXT_ONLY_TEST_ORDERS_JSON" --argjson b "$MACHINE_ON_TEXT_ONLY_JSON" --argjson c "$MACHINE_ON_LOOK_OR_RECORD_JSON" '($a | length) + ($b | length) + ($c | length)')"
-  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" --argjson e "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" --argjson f "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length) + ($e | length) + ($f | length)')"
+  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length)')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
   UNKNOWN_NONGOAL_COUNT="$(printf '%s' "$UNKNOWN_NONGOAL_IDS_JSON" | jq 'length')"
 
@@ -827,14 +780,13 @@ CONFIRM_GLOBS
     CRITERIA_WITH_NO_SERVING_ORDER_JSON='[]'
     CRITERIA_WITH_NO_OWNER_JSON='[]'
     ORPHAN_SUPPORT_ORDERS_JSON='[]'
-    NO_SERVE_COUNT=0
-    NO_OWNER_COUNT=0
     COVERAGE_WITHHELD="true"
   else
     COVERAGE_WITHHELD="false"
   fi
 
-  COVERAGE_ISSUE_COUNT=$((NO_SERVE_COUNT + NO_OWNER_COUNT + MULTI_OWNER_COUNT + SERVES_NOTHING_COUNT + MISSING_TESTS_COUNT + GATE_WITH_TESTS_COUNT + TEXT_ONLY_COUNT + RECORD_ISSUE_COUNT + UNKNOWN_CRIT_COUNT + UNKNOWN_NONGOAL_COUNT + UNUSABLE_VERIFIED_BY_COUNT))
+  # The findings that stop. The others are in `open`, sorted by what they do.
+  COVERAGE_ISSUE_COUNT=$((MISSING_TESTS_COUNT + GATE_WITH_TESTS_COUNT + TEXT_ONLY_COUNT + RECORD_ISSUE_COUNT + UNKNOWN_CRIT_COUNT + UNKNOWN_NONGOAL_COUNT))
   if [ "$DESIGN_STARTED" = "true" ] && [ "$COVERAGE_WITHHELD" = "true" ]; then
     COVERAGE_NOTE="ran in part: $FILE_COUNT file(s), $COUNTED_ORDERS work order(s) counted, $EXCLUDED_COUNT excluded as unreadable, against $(printf '%s' "$CRITERION_IDS_JSON" | jq 'length') criterion/criteria. Every finding that reports something absent is withheld, because an excluded work order and a missing one look the same from here. Repair the files listed above and run this again."
   elif [ "$DESIGN_STARTED" = "true" ]; then
@@ -944,11 +896,8 @@ else
 
   UNKNOWN_DEPENDS_COUNT="$(printf '%s' "$UNKNOWN_DEPENDS_ON_IDS_JSON" | jq 'length')"
   CYCLE_COUNT="$(printf '%s' "$DEPENDENCY_CYCLES_JSON" | jq 'length')"
-  ORPHAN_COUNT="$(printf '%s' "$ORPHAN_SUPPORT_ORDERS_JSON" | jq 'length')"
-  OVERLAP_COUNT="$(printf '%s' "$OVERLAPPING_OWNED_FILES_JSON" | jq 'length')"
   GLOBBED_COUNT="$(printf '%s' "$GLOBBED_OWNED_FILES_JSON" | jq 'length')"
-  SKELETON_COUNT="$(printf '%s' "$ORDERS_NOT_AFTER_SKELETON_JSON" | jq 'length')"
-  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + ORPHAN_COUNT + OVERLAP_COUNT + GLOBBED_COUNT + SKELETON_COUNT))
+  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + GLOBBED_COUNT))
   GRAPH_NOTE="ran: $(printf '%s' "$WORK_ORDERS_JSON" | jq 'length') work order(s) in the graph"
 fi
 
@@ -977,17 +926,57 @@ fi
 NOT_CHECKED_JSON="$(printf '%s\n' "${NOT_CHECKED_ITEMS[@]}" | jq -R . | jq -s .)"
 
 # ---------------------------------------------------------------------------
-# 10. Decide the exit code. Priority, highest first: 3 already exited above on its own; between
-#     what remains, 1 outranks 4, the same order check-research.sh and check-alignment.sh use.
+# 10. Decide the exit code: 3 already exited above, and any finding that stops is 4.
 # ---------------------------------------------------------------------------
 
-if [ "$FILE_ISSUE_COUNT" -gt 0 ]; then
-  EXIT_CODE=1
-elif [ "$CONTENT_ISSUE_COUNT" -gt 0 ]; then
+if [ "$FILE_ISSUE_COUNT" -gt 0 ] || [ "$CONTENT_ISSUE_COUNT" -gt 0 ]; then
   EXIT_CODE=4
 else
   EXIT_CODE=0
 fi
+
+# Each finding as one line, sorted by what it does (the header, `open`).
+OPEN_JQ='
+def prover(p): if p == "observe" then "proved by a model looking through a browser"
+               elif p == "confirm" then "confirmed by a person"
+               else "proved by its record" end;
+def open: {
+  stop: [
+    ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape"),
+    ((.files // [])[] | .path as $p | (.content.issues // [])[] | "file " + $p + ": " + .problem),
+    (.guidesRead // {} | select((.issueCount // 0) > 0) | "file " + .path + " does not match the guides-read shape: " + ([.issues[].problem] | join(", "))),
+    ((.duplicateWorkOrderIds // [])[] | "work order id " + .id + " is used by more than one file: " + (.paths | join(", "))),
+    ((.coverage.unknownCriteriaIds // [])[] | "file " + .path + " names an unknown criterion id " + .id + " in " + .field),
+    ((.coverage.unknownNonGoalIds // [])[] | "file " + .path + " names an unknown non-goal id " + .id),
+    ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " " + .problem),
+    ((.coverage.gateOrdersDeclaringTests // [])[] | "order " + .id + " is proved by the configuration gate and declares a test"),
+    ((.coverage.recordOrdersDeclaringTests // [])[] | "order " + .id + " is " + prover(.proof) + " and declares a test"),
+    ((.coverage.recordOrdersOwningOutsideProjectFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " " + .reason),
+    ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
+    ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
+    ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests, so a test would only read the text back: update --proof confirm, or record for a document under the project folder"),
+    ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope, or give it to an order that builds code"),
+    ((.coverage.machineCriteriaOnLookOrRecordOrders // [])[] | "order " + .id + " is " + prover(.proof) + " and owns the machine-verified criterion " + .criterionId + ", which neither a look nor a reading judges: make it person-verified in scope, add a run line that proves it, or give it to an order that builds code"),
+    ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
+    ((.graph.unknownDependsOnIds // [])[] | "file " + .path + " depends on an unknown work order id " + .id),
+    ((.graph.globbedOwnedFiles // [])[] | "order " + .id + " owns " + .path + ", which is not one literal path")
+  ],
+  unattended: [
+    ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
+    ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
+    ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
+    ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person on a task with tests and owns code, "
+      + (if .machineOwned == 0 then "which gets tests even with no machine criterion" else "and run lines do not prove every machine criterion it owns" end) + ": update --proof tests"),
+    ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests")
+  ],
+  warn: [
+    ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
+    ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
+    ((.graph.ordersNotAfterSkeleton // [])[] | "order " + . + " does not come after wo1, the walking skeleton: add wo1 to its dependsOn"),
+    ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path)
+  ]
+};
+'
 
 # ---------------------------------------------------------------------------
 # 11. Print the one JSON report (stdout, always non-empty, never exit 0 with nothing said)
@@ -1011,7 +1000,6 @@ jq -n \
   --argjson criteriaWithNoServingOrder "$CRITERIA_WITH_NO_SERVING_ORDER_JSON" \
   --argjson criteriaWithNoOwner "$CRITERIA_WITH_NO_OWNER_JSON" \
   --argjson criteriaWithMultipleOwners "$CRITERIA_WITH_MULTIPLE_OWNERS_JSON" \
-  --argjson criteriaWithUnusableVerifiedBy "$CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON" \
   --argjson ordersServingNothing "$ORDERS_SERVING_NOTHING_JSON" \
   --argjson ordersMissingRequiredTests "$ORDERS_MISSING_REQUIRED_TESTS_JSON" \
   --argjson gateOrdersDeclaringTests "$GATE_ORDERS_DECLARING_TESTS_JSON" \
@@ -1039,7 +1027,7 @@ jq -n \
   --argjson fileIssueCount "$FILE_ISSUE_COUNT" \
   --argjson contentIssueCount "$CONTENT_ISSUE_COUNT" \
   --argjson notChecked "$NOT_CHECKED_JSON" \
-  '{
+  "$OPEN_JQ"'{
     timestamp: $timestamp,
     taskPath: $taskPath,
     designDir: $designDir,
@@ -1055,7 +1043,6 @@ jq -n \
       criteriaWithNoServingOrder: $criteriaWithNoServingOrder,
       criteriaWithNoOwner: $criteriaWithNoOwner,
       criteriaWithMultipleOwners: $criteriaWithMultipleOwners,
-      criteriaWithUnusableVerifiedBy: $criteriaWithUnusableVerifiedBy,
       ordersServingNothing: $ordersServingNothing,
       ordersMissingRequiredTests: $ordersMissingRequiredTests,
       gateOrdersDeclaringTests: $gateOrdersDeclaringTests,
@@ -1086,6 +1073,6 @@ jq -n \
     fileIssueCount: $fileIssueCount,
     contentIssueCount: $contentIssueCount,
     notChecked: $notChecked
-  }'
+  } | .open = open'
 
 exit "$EXIT_CODE"

@@ -23,7 +23,7 @@ Only `met` says that this project can run tests.
 - **On any other verdict.** Research shows the verdict and each check that fell short, and asks
   nothing. The answer stays no. To change it, set up the test runner, then run research again.
 
-This check can refuse to run, and the coverage check refuses until it has run. See
+This check can refuse to run, and the coverage check writes a warning until it has run. See
 [The research check refuses to close](../../when-it-stops/research-check.md).
 
 An autonomous or a light run answers for you. See

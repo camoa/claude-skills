@@ -63,7 +63,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["text"],
-      "description": "One decision an unattended run took. `record-decision --field`, and `set-tests` and `add-non-goal` under an autonomous run, write text and field. `approve` adds approvedAt and approvedBy to an open entry. An interactive scope action that changes the field adds supersededAt and supersededBy. `retire` adds retiredAt, retiredBy and retiredReason. Each group is whole or absent, which check-alignment.sh checks.",
+      "description": "One decision an unattended run took. `record-decision --field`, and `set-tests` and `add-non-goal` under an autonomous run, write text and field. `approve` adds approvedAt and approvedBy to an open entry. An interactive scope action that changes the field adds supersededAt and supersededBy. `retire` adds retiredAt, retiredBy and retiredReason. Each group is whole or absent.",
       "properties": {
         "text": { "type": "string", "minLength": 1, "description": "The entry's own text, unchanged." },
         "field": { "type": "string", "minLength": 1, "description": "What the answer set: automatedTests, goal, expectedResult, or a criterion or non-goal id." },

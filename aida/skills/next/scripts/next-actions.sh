@@ -104,7 +104,7 @@ command -v jq >/dev/null 2>&1 || die3 "jq is required and was not found on PATH"
 # shellcheck source=/dev/null
 source "$REGISTRY_LIB"
 # task_stage is the one copy of the stage rule; the session-start hook reads the stage off this
-# script's lines. The library's other functions take die1, die2 and die4 from the caller and are
+# script's lines. The library's other functions take die1 from the caller and are
 # not called here, and task_stage and task_after_state call none of them.
 TASK_HELPERS="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 # shellcheck source=/dev/null

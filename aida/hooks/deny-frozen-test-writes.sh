@@ -147,8 +147,6 @@ is_test_author() {
 #   distiller              records/<stage>-distill.json
 #   test-reader            test-cleanup/<run>/reports/<group>.json
 #   acceptance-verifier    records/evidence.json, and its files under review/evidence/
-# A confirmer keeps every value the verdict file already holds, so a disagreement it recorded is
-# never cleared by asking again. Only design-actions.sh's `dispose` removes a value.
 own_record_owner() {
   case "$1" in
     */records/disposition-*.json) echo disposition-confirmer ;;
@@ -196,17 +194,12 @@ answer_write_signal() {
 # ruling or answer, and no agent runs person-answer.sh. This list is the one copy. Each line is a script, its action as an extended
 # regex, then the words that make the call a person's. A line with no words refuses the action
 # itself. The list holds the actions whose script still asks for a person by the run mode and
-# that cannot be undone, and scope's update and add --author, which make a criterion the
-# owner's. A step that reads the answer record in every mode is not listed: no agent can write
-# an answer for it. A step that can be undone is left out: environment up and not-applicable,
+# that cannot be undone. A step that reads the answer record in every mode is not listed: no
+# agent can write an answer for it. A step that can be undone is left out: environment up and not-applicable,
 # surfaces --viewport and --enable, tool install. prune's regex also reads its operands, because
 # only a task id or --all removes a tree; the form with --project alone only lists.
 PERSON_ACTIONS='task-actions.sh set-budget|decline-recipe|defer-surface
 task-actions.sh prune([[:space:]]+--project[[:space:]=]+[^[:space:]]+)*[[:space:]]+([^-[:space:]][^[:space:]]*|--all)
-scope-actions.sh approve|retire
-scope-actions.sh update|add --author
-design-actions.sh close --approve-runs
-design-actions.sh dispose --confirmed
 review-actions.sh acceptance --accept-baseline
 review-actions.sh close --row
 completion-actions.sh close --reason --leave --captures-offered
@@ -367,15 +360,6 @@ if [ "$TOOL" != "Bash" ]; then
       [ -z "$OWN_OWNER" ] \
         || deny_own_record "$OWN_TARGET: only the $OWN_OWNER writes this record, and this write's agent_type is ${AGENT:-empty, the main thread}. Dispatch it; do not write the record yourself." ;;
   esac
-  if [ "$OWN_OWNER" = disposition-confirmer ]; then
-    [ "$TOOL" = Write ] || deny_own_record "$OWN_TARGET: write the whole verdict file with Write, and keep every value it already holds."
-    if [ -f "$OWN_TARGET" ] && jq -e 'type == "object"' "$OWN_TARGET" >/dev/null 2>&1; then
-      jq -e --argjson old "$(cat "$OWN_TARGET")" '
-          (.tool_input.content | fromjson) as $new
-          | ($new | type) == "object" and all($old | to_entries[]; $new[.key] == .value)' <<<"$INPUT" >/dev/null 2>&1 \
-        || deny_own_record "$OWN_TARGET: a value once written in this file stays. Keep every key and value it holds, and add only the candidates it lacks."
-    fi
-  fi
 fi
 
 # ---- resolve the project the same way hooks/session-start.sh's own resolution does -------------

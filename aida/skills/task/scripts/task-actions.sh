@@ -1012,12 +1012,6 @@ do_set_run_mode() {
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
 
   echo "RUN MODE: ${value}${stages_note}"
-  # A light scope closes with no sidecar and a stamped contract (distill_deferred). Out of light,
-  # the stage rule wants the sidecar again, so the task reads scope until one distiller runs.
-  if [ "$value" != "light" ] && [ ! -f "$task_dir/records/scope-distill.json" ] \
-      && [ -n "$(jq -r '.pluginVersion // empty' "$task_dir/alignment.json" 2>/dev/null)" ]; then
-    echo "distill: scope closed in light mode with no distiller, so this task reads stage scope. Dispatch one distiller for stage scope, then run scope's distill."
-  fi
   # Light scope wrote automatedTests false (gap row 197). Leaving light does not undo it, so the
   # orders keep their confirm or record proofs and finish runs no suite (gap row 362).
   if [ "$was_light" = yes ] && [ "$value" != "light" ] && [ "$(automated_tests "$task_dir")" = "no" ]; then

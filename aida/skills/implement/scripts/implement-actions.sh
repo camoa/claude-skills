@@ -285,8 +285,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      codePath is the one derived as trunk. `start` refuses it, and so do `build-brief` and
 #      `dispatch-open implementer`, because the branch can change after start.
 #   8  the build order could not be derived from the snapshot's own work orders: a dependency
-#      cycle among them (naming every order in it), or two orders declaring the same path in
-#      ownedFiles (naming both).
+#      cycle among them, naming every order in it.
 #   9  a resumed run's ledger.json does not belong to the snapshot on disk: its own recorded
 #      snapshotHash disagrees with the snapshot file's own hash field.
 #  11  a new run found no <task_folder>/design-closed.json. Design has never closed. Run the
@@ -1741,30 +1740,9 @@ do_start() {
 
   case "$design_rc" in
     0) : ;;
-    1|4)
+    4)
       local open_summary
-      open_summary="$(printf '%s' "$design_report_json" | jq -r '
-          [
-            ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
-            ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
-            ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
-            ((.coverage.criteriaWithUnusableVerifiedBy // [])[] | "criterion " + .id + " has a verifiedBy of " + (.verifiedBy | tostring) + ", which is neither machine nor person"),
-            ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
-            ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " " + .problem),
-            ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests"),
-            ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId),
-            ((.coverage.machineCriteriaOnLookOrRecordOrders // [])[] | "order " + .id + " is proved by " + (if .proof == "observe" then "a look" else "its record" end) + " and owns the machine-verified criterion " + .criterionId + " with no run line that proves it"),
-            ((.coverage.unknownCriteriaIds // [])[] | "file " + .path + " names an unknown criterion id " + .id + " in " + .field),
-            ((.coverage.unknownNonGoalIds // [])[] | "file " + .path + " names an unknown non-goal id " + .id),
-            ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
-            ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
-            ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
-            ((.graph.unknownDependsOnIds // [])[] | "file " + .path + " depends on an unknown work order id " + .id),
-            ((.duplicateWorkOrderIds // [])[] | "work order id " + .id + " is used by more than one file: " + (.paths | join(", "))),
-            ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape"),
-            ((.files // [])[] | .path as $p | (.content.issues // [])[] | "file " + $p + ": " + .problem)
-          ] | join("; ")
-        ' 2>/dev/null)"
+      open_summary="$(printf '%s' "$design_report_json" | jq -r '(.open.stop // []) | join("; ")' 2>/dev/null)"
       [ -n "$open_summary" ] || open_summary="design left something open; see check-design.sh against $TASK_PATH for detail"
       die 4 "start: design has not closed cleanly. Finish design first. Open: $open_summary"
       ;;
@@ -2219,9 +2197,11 @@ REMOVED_PATHS
   local snapshot_criteria_json
   snapshot_criteria_json="$(printf '%s' "$snapshot_alignment_json" | jq -c '[ (.criteria // [])[] | {id: .id} ]')"
 
-  # --- step 10: derive the build order; refuse on a cycle or an owned-file overlap ----------------
-  local build_orders_json cycles_json overlap_json
-  build_orders_json="$(jq_files -cn --argjson orders "$snapshot_workorders_json" --argjson gone "$(jq -cn --argjson a "$stopped_removed_ids_json" --argjson b "$dropped_ids_json" '$a + $b')" \
+  # --- step 10: derive the build order; refuse on a cycle --------------------------------------------
+  # Two orders that declare one owned file is a warning at the design close. Each order is still
+  # held to its own list at build.
+  local build_orders_json cycles_json
+  build_orders_json="$(jq_files -cn --argjson orders "$snapshot_workorders_json" --argjson gone "$(jq -cn --argjson a "$halted_removed_ids_json" --argjson b "$dropped_ids_json" '$a + $b')" \
     '[ $orders[] | . as $o | select(($gone | index($o.id)) == null) ]')"
   cycles_json="$(jq_files -c -n --argjson orders "$build_orders_json" '
       def reach($adj; $start):
@@ -2239,22 +2219,8 @@ REMOVED_PATHS
       | (reduce $trimmed[] as $o ({}; .[$o.id] = $o.dependsOn)) as $adj
       | [ $ids[] | . as $x | select((reach($adj; $x) | index($x)) != null) ]
     ')"
-  overlap_json="$(printf '%s' "$build_orders_json" | jq -c "$OWNED_OVERLAP_JQ")"
-  local cycle_count overlap_count
-  cycle_count="$(printf '%s' "$cycles_json" | jq 'length')"
-  overlap_count="$(printf '%s' "$overlap_json" | jq 'length')"
-  if [ "$cycle_count" -gt 0 ] || [ "$overlap_count" -gt 0 ]; then
-    local msg=""
-    if [ "$cycle_count" -gt 0 ]; then
-      msg="a dependency cycle among $(printf '%s' "$cycles_json" | jq -r 'join(", ")')"
-    fi
-    if [ "$overlap_count" -gt 0 ]; then
-      local overlap_text
-      overlap_text="$(printf '%s' "$overlap_json" | jq -r '[.[] | (.ids | join(" and ")) + " both declare " + .path] | join("; ")')"
-      if [ -n "$msg" ]; then msg="$msg; and $overlap_text"; else msg="$overlap_text"; fi
-    fi
-    die 8 "start: the build order could not be derived from the frozen work orders: $msg"
-  fi
+  [ "$(printf '%s' "$cycles_json" | jq 'length')" -eq 0 ] \
+    || die 8 "start: the build order could not be derived from the frozen work orders: a dependency cycle among $(printf '%s' "$cycles_json" | jq -r 'join(", ")')"
 
   # A light task's review runs no visual regression (gap row 197). The log is written here, once.
   if task_is_light "$TASK_PATH" \
@@ -4844,7 +4810,7 @@ TF_EOF
 # field is repository-relative and not absolute (scripts/baseline-schema.json, `scope`). A frozen
 # path must still mean the same file once the checkout moves. An absolute $1 is relativised against
 # $2; anything else is taken as already relative to $2. Checked as a declared string only, the same
-# bound the overlap check on ownedFiles already accepts (`start`'s own step 10 comment): this never
+# bound the overlap check on ownedFiles already accepts (check-design.sh's header): this never
 # resolves a symlink and never requires $1 to exist yet, which is what lets the freeze tell "does not
 # exist" apart from this. Prints one tab-separated result: `REL<TAB><path relative to $2>` on
 # success, or `OUTSIDE<TAB><the absolute form>` when $1 names something outside $2 altogether.
@@ -5459,10 +5425,8 @@ TF_EOF
 
   # --- 64: a criterion whose frozen verifiedBy is neither word answers nothing ----------------------
   # Such a criterion needs no test (the check above reads machine), no checklist (person) and
-  # no row, so it would be frozen with nothing at all behind it. scripts/check-alignment.sh refuses
-  # the value when scope closes, and scripts/check-design.sh refuses it again when design closes.
-  # This is a third reading, against the frozen copy rather than the live file: a snapshot taken
-  # before either check carried the rule still holds whatever it froze.
+  # no row, so it would be frozen with nothing at all behind it. scope-actions.sh refuses any other
+  # value before it writes one, so only a hand edit reaches this, read here against the frozen copy.
   local bad_kinds
   bad_kinds="$(printf '%s' "$CRITERIA_JSON" | jq -r '
       [ .[] | select((.verifiedBy // "") != "machine") | select((.verifiedBy // "") != "person")

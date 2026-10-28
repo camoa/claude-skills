@@ -65,7 +65,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh distill    <task_folder>
 #   design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
 #                        --candidate <text> --distance <same-name|same-directory|same-layer> \
-#                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> [--confirmed] \
+#                        --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> \
 #                        [--path <path> --interface <text>]
 #   design-actions.sh account    <task_folder> --id <woId> --finding <search>#<n> [--set-aside <reason> | --remove]
 #
@@ -139,87 +139,27 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet
-#      and that no work orders exist yet. For `check`, this is check-design.sh's own exit 0. For
-#      `close`, this is check-design.sh's own exit 0 followed by a write of design-closed.json.
-#   1  the given path does not exist, is not a folder, or holds no task.json: not a task folder
-#      (ideal/scope.md, "Scope runs against a task that already exists"). This is the only meaning
-#      of exit 1 from this script, for every action, `check` included: check-design.sh's own exit
-#      1 means something else, a work order file is malformed, and it is remapped to 4 below so a
-#      caller branching on 1 never confuses "not a task folder" with "a file is broken".
-#   2  the target of this action is not present: `start` was asked to begin a task with no
-#      alignment.json, or with one that will not parse or is not a contract; or `update`,
-#      `add-owned-file`, `add-done-when`, `add-test`, `remove-test`, `remove-done-when`,
-#      `remove-owned-file`, `remove` or `render` were given an --id naming no work order file in this
-#      task's design/ folder; or `remove-test` was given a --description no test on that order
-#      carries, `remove-done-when` a --text no row carries, or `remove-owned-file` a --path the
-#      order does not own; or `merge` was given an --into or --from naming no work order file,
-#      or `remove --merged-into` a survivor naming none;
-#      or `read-guide` or `verify` was given a path naming no file on disk; or `account` was given
-#      a --finding naming no finding under research/, or a --remove naming no entry on the order;
-#      or `distill` found no
-#      records/design-distill.json, so the distiller has not been dispatched yet. On a light task
-#      it reads the scope and research sidecars too, and any of the three can be absent.
-#   3  the script could not do its job: a missing, blank or malformed argument; an argument value
-#      that is itself another option; a `--id` that is not a valid work order id shape; a
-#      `--criteria-served`, `--criteria-owned`, `--non-goals` or `--depends-on` entry that is not
-#      a valid id shape in its own space; a `dispose` refused attended (a supersede with no cost dimension, or
-#      one without --confirmed), or a decline given --path; an `add-test` refused because the description names one of
-#      the order's own surfaces on a `tests` order; a `remove-test` refused because the test named is the last one
-#      on a `tests` order owning a machine-verified criterion; a `remove-owned-file` refused because
-#      the path named is the only file the order owns; a `merge` refused because the two orders' proofs differ or
-#      --into and --from name the same order; a `merge` or `remove` with no --reason; a `remove`
-#      refused because implementation started the order, another order depends on it, or it is
-#      the only order serving or owning a criterion of the contract; a `remove --merged-into`
-#      refused because the id is still an order or is already recorded; a work order file already on disk that is not valid
-#      JSON or is not a JSON object; the plugin root could not be resolved; a write that failed;
-#      `create`'s, `update`'s or `render`'s own call to design-render.sh failing to produce
-#      <id>.md; `check`'s or `close`'s own call to check-design.sh failing to run at all
-#      (check-design.sh's own exit 3, meaning it could not do its job either); the records-hash
-#      library could not be sourced; or `close`'s own call to records_hash_for failing, once
-#      design has already closed clean, to produce a hash; or a `close` with neither --recipe-fit nor --no-recipe;
-#      or `read-guide` found design-guides-read.json already on disk and not valid JSON; or
-#      `update` was given --reasoning with --append-reasoning or --strike-reasoning; or
-#      --strike-reasoning named no paragraph that is there and live; or --absence-reviewed named
-#      no done-when row; or `close` was given
-#      --critique-outcome with no finished critique file to record it beside, or unattended; or
-#      `close` found something that is not a file where a critique file has to move; or `verify`
-#      was given no single mode, a recipe with no `## Verifier` or nothing in it to carry, an
-#      entry with no run or no pass, a pass or a kind outside its three forms, a run line carrying
-#      a shell character, or a --run or --check with no --cite; or `close` was given
-#      --approve-runs unattended; or `account` was given a --finding not shaped <search>#<n>, or a
-#      blank --set-aside.
-#   4  `check` ran and found a work order file, or the guides-read record, that cannot be read as
-#      its format: not valid JSON, not an object, or a missing, malformed or unknown field
-#      (check-design.sh's own exit 1, remapped here so it never collides with this script's own
-#      exit 1, "not a task folder"). `close` refuses for the same reason, on the live files, before
-#      writing anything. `close` also refuses a design-removed.json that is not in its shape.
-#      Or `distill` found a sidecar that fails scripts/distill-schema.json, or says standsAlone
-#      false with no gap. That sidecar is moved aside first, to <name>.malformed-<date>.json,
-#      and stdout names it in a `setAside:` line.
-#   5  `check` ran, every work order file reads fine, but a content or cross-order check has a
-#      problem. That is a criterion with no serving order, or one owned by zero or by more than
-#      one work order. Or an order serving no criterion, or one missing a required test. Or a
-#      `record` order that declares a test or has no done-when row. Or one that owns a file
-#      outside the project folder or under a path the project ignores. Or a dependency cycle, an
-#      order that reaches no owner, overlapping owned files, or an id naming nothing real
-#      (check-design.sh's own exit 4). `close` refuses for the same reason, on the live
-#      files, before writing anything.
-#   6  `start` was asked to begin design on a task research has not closed: no
-#      records/research-check.json, or one whose exitCode is not 0. Research is required (the
-#      owner's rule: no skip), and the way through is the research skill.
-#   7  `check` or `close` found a research finding no work order accounts for (gap row 223). Each
-#      one prints as `<search>#<n>: <the first line of its text>`. `account` is the way through.
-#      `check` reports it only when the design check itself is clean.
-#   8  an unattended `close` found a disposition made unattended, or one only a paragraph records,
-#      that records/disposition-<order>.json does not confirm: no value for the candidate, or
-#      another value (gap row 293). One line per such disposition says which, and what to do.
-#   9  retired in 6.1.0. Two names in backticks joined with `or` are a notice, `interfaceChoice:`,
-#      since the build's interface check went (batch 3c).
+#      and that no work orders exist yet. For `check`, the design check found nothing that stops
+#      the design. For `close`, the same, followed by a write of design-closed.json. A finding that
+#      does not stop is a warning: `check` prints it, and `close` writes it to the task record.
+#   3  the call or the script could not do its job: not a task folder, a missing or malformed
+#      argument, an id naming no work order, a file, a finding or a test that is not there, a file
+#      on disk that does not parse, a write or a render that failed, or check-design.sh that could
+#      not run or could not reach the contract or the graph. Nothing was written.
+#   5  `check` or `close` found what stops the design: check-design.sh's own exit 4, or a
+#      design-removed.json out of its shape. An unattended `close` also stops on a criterion with
+#      no serving order, no owner or two owners, and on a confirm order on a task with tests or
+#      one that owns a test file. A person's close records those as warnings.
+#   7  an unattended `close` found a research finding no work order accounts for (gap row 223).
+#      Each one prints as `<search>#<n>: <the first line of its text>`. `account` is the way
+#      through. A person's close records them as warnings, and `check` prints them.
+#   70  `close --approve-runs` found no person's answer for the run lines it would stamp. The
+#      person answers through person-answer.sh, step `design close`, in every run mode.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
 # expression interval quantifier anywhere, the same rule research-actions.sh and
-# check-alignment.sh state for the same reason (foundations.md, Honesty). An id's own shape is
+# scope-actions.sh state for the same reason (foundations.md, Honesty). An id's own shape is
 # checked with a `case` glob (`wo[1-9]*`, `c[1-9]*` or `n[1-9]*`), never a regular expression, the
 # same way research-actions.sh checks a criterion id's own shape.
 
@@ -257,17 +197,15 @@ fi
 
 command -v jq >/dev/null 2>&1 || { printf 'design-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
+# An answer task_answer_find held is marked refused before the exit (task-helpers.sh).
+die() { ! command -v task_answer_refused >/dev/null 2>&1 || task_answer_refused "$1"; printf 'design-actions: %s\n' "$2" >&2; exit "$1"; }
+die3() { die 3 "$1"; }
+die5() { die 5 "$1"; }
+die7() { die 7 "$1"; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
-die1() { printf 'design-actions: %s\n' "$1" >&2; exit 1; }
-die2() { printf 'design-actions: %s\n' "$1" >&2; exit 2; }
-die3() { printf 'design-actions: %s\n' "$1" >&2; exit 3; }
-die4() { printf 'design-actions: %s\n' "$1" >&2; exit 4; }
-die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
-die6() { printf 'design-actions: %s\n' "$1" >&2; exit 6; }
-die7() { printf 'design-actions: %s\n' "$1" >&2; exit 7; }
-die8() { printf 'design-actions: %s\n' "$1" >&2; exit 8; }
+die1() { die 3 "$1"; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
-die79() { printf 'design-actions: %s\n' "$1" >&2; exit 79; }
+die79() { die 79 "$1"; }
 
 [ -f "$RECORDS_HASH_LIB" ] || die3 "cannot find the records-hash library at $RECORDS_HASH_LIB"
 # shellcheck source=/dev/null
@@ -312,7 +250,7 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh distill        <task_folder>
        design-actions.sh --run-mode <interactive|autonomous> dispose <task_folder> --id <woId> \
                                          --candidate <text> --distance <same-name|same-directory|same-layer> \
-                                         --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> [--confirmed] \
+                                         --cost <build|carry|agent|risk[,...]> --verdict <reuse|extend|supersede|decline> --why <text> \
                                          [--path <path> --interface <text>]
        design-actions.sh account        <task_folder> --id <woId> --finding <search>#<n> [--set-aside <reason> | --remove]
 EOF
@@ -506,42 +444,9 @@ implied_proof_line() {
 }
 
 # One line naming everything a check report left open, for `check` and `close` alike.
-open_summary_of() {
-  printf '%s' "$1" | jq -r '
-      def prover(p): if p == "observe" then "proved by a model looking through a browser"
-                     elif p == "confirm" then "confirmed by a person"
-                     else "proved by its record" end;
-      [
-        ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
-        ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
-        ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
-        ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
-        ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " " + .problem),
-        ((.coverage.gateOrdersDeclaringTests // [])[] | "order " + .id + " is proved by the configuration gate and declares a test"),
-        ((.coverage.recordOrdersDeclaringTests // [])[] | "order " + .id + " is " + prover(.proof) + " and declares a test"),
-        ((.coverage.recordOrdersOwningOutsideProjectFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " " + .reason),
-        ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
-        ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
-        ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person on a task with tests and owns code, "
-          + (if .machineOwned == 0 then "which gets tests even with no machine criterion" else "and run lines do not prove every machine criterion it owns" end) + ": update --proof tests"),
-        ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests, so a test would only read the text back: update --proof confirm, or record for a document under the project folder"),
-        ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope, or give it to an order that builds code"),
-        ((.coverage.machineCriteriaOnLookOrRecordOrders // [])[] | "order " + .id + " is " + prover(.proof) + " and owns the machine-verified criterion " + .criterionId + ", which neither a look nor a reading judges: make it person-verified in scope, add a run line that proves it, or give it to an order that builds code"),
-        ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests"),
-        ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
-        ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
-        ((.graph.ordersNotAfterSkeleton // [])[] | "order " + . + " does not come after wo1, the walking skeleton: add wo1 to its dependsOn"),
-        ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
-        ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape"),
-        (.guidesRead // {} | select((.issueCount // 0) > 0) | "file " + .path + " does not match the guides-read shape: " + ([.issues[].problem] | join(", ")))
-      ] | join("; ")
-    ' 2>/dev/null
-}
-
 # The orders whose declared proof disagrees with what their owned criteria imply, from a check
 # report (live-run row 145). This one finding never raises the exit code, so `check` prints it on
-# a line of its own. open_summary_of above prints only when the verdict is not zero, and a finding
-# that never raises the verdict would vanish from every line whenever it is the only one.
+# a line of its own.
 proof_disagreement_of() {
   printf '%s' "$1" | jq -r '
       [ (.coverage.testOrdersOwningNoMachineCriterion // [])[] | .id ] | join(", ")
@@ -822,9 +727,10 @@ do_start() {
   [ "$#" -eq 0 ] || die3 "start: unrecognized argument: $1"
 
   [ "$(contract_ok)" = "true" ] \
-    || die2 "start: $ALIGNMENT_FILE not found, unreadable, or not a contract. Run the scope skill on this task first"
+    || die3 "start: $ALIGNMENT_FILE not found, unreadable, or not a contract. Run the scope skill on this task first"
+  # Research is optional, so design starts without it and says so.
   [ -f "$RESEARCH_CHECK_FILE" ] && [ "$(jq -r '.exitCode // 1' "$RESEARCH_CHECK_FILE" 2>/dev/null)" = "0" ] \
-    || die6 "start: research has not closed on this task ($RESEARCH_CHECK_FILE is absent or not clean). Research is required; run the research skill first"
+    || task_warn "$TASK_PATH" "design start" "" "research has not closed on this task, so no criterion has a finding behind it"
 
   records_hash__resolve_sha256_cmd || die3 "start: neither sha256sum nor 'shasum -a 256' was found on PATH"
 
@@ -1061,7 +967,7 @@ do_update() {
   fi
   local file
   file="$(wo_file_for "$id")"
-  wo_exists "$id" || die2 "update: no work order $id in $DESIGN_DIR"
+  wo_exists "$id" || die3 "update: no work order $id in $DESIGN_DIR"
   jq empty "$file" 2>/dev/null || die3 "update: $file exists but is not valid JSON"
 
   local doc
@@ -1164,7 +1070,7 @@ require_wo_id_arg() {
   local who="$1" id="$2"
   is_blank "$id" && die3 "$who: --id is required and must not be blank"
   id_shape_ok "$id" wo || die3 "$who: --id '$id' is not a valid wo<n> id shape"
-  wo_exists "$id" || die2 "$who: no work order $id in $DESIGN_DIR"
+  wo_exists "$id" || die3 "$who: no work order $id in $DESIGN_DIR"
 }
 
 do_add_owned_file() {
@@ -1227,17 +1133,6 @@ do_add_owned_file() {
     elif textOnly then "confirm"
     else "" end')"
   [ -z "$inferred" ] || doc="$(printf '%s' "$doc" | jq --arg p "$inferred" '.proof = $p')"
-  # A record order's range is the project folder's history, so a file the project ignores never
-  # lands in it, and the range never holds the deliverable the order exists to make. The
-  # project ignores records/ at every depth, the folder of derived check output. git finds the
-  # repository upward from the task folder. Only a path under the project folder is asked. A
-  # path outside it is a code path, which the design check names on a record order. The refusal
-  # comes before the proof-set line, so nothing reports a write that did not happen.
-  if [ "$(printf '%s' "$doc" | jq -r '.proof // "tests"')" = "record" ] \
-     && [ "${path_val#"$PROJECT_PATH"/}" != "$path_val" ] \
-     && git -C "$TASK_PATH" check-ignore -q -- "$path_val" 2>/dev/null; then
-    die3 "add-owned-file: the project ignores $path_val, so a commit can never hold it and a record order owning it can never be recorded. records/ is derived check output the project keeps out of history. Put the deliverable in a folder the project commits, such as $TASK_PATH/deliverables/."
-  fi
   [ "$inferred" != "record" ] || echo "proof-set: record, because every owned file of $id lies under the project folder"
   if [ "$inferred" = "confirm" ] && [ "$(automated_tests "$TASK_PATH")" = "no" ]; then
     echo "proof-set: confirm, because the task has no automated tests, so a person confirms $id's done-when rows at review"
@@ -1335,9 +1230,8 @@ do_add_test() {
 # ------------------------------------------------------------------------------------------------
 # remove-test: drops one declared test, named by its description, the one field design writes on
 # a test. The sizing rules end with a test ceasing to exist. Until this action existed, that edit
-# ran through jq outside the one producer (live-run row 74). The last test is refused on the same
-# rule check-design.sh applies: a `tests` order that owns a machine-verified criterion needs one.
-# Add the replacement first, then remove. A person-only order may go to zero.
+# ran through jq outside the one producer (live-run row 74). The design check refuses a `tests`
+# order that owns a machine-verified criterion and declares no test, at the next check or close.
 # ------------------------------------------------------------------------------------------------
 
 do_remove_test() {
@@ -1356,23 +1250,11 @@ do_remove_test() {
   require_wo_id_arg "remove-test" "$id"
   is_blank "$description" && die3 "remove-test: --description is required and must not be blank"
 
-  local file doc matched total proof
+  local file doc matched
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "remove-test: $file exists but is not valid JSON"
   matched="$(jq -r --arg d "$description" '[(.tests // [])[] | select(.description == $d)] | length' "$file")"
-  [ "$matched" -gt 0 ] || die2 "remove-test: $id declares no test with the description '$description'"
-  total="$(jq -r '(.tests // []) | length' "$file")"
-  proof="$(jq -r '.proof // "tests"' "$file")"
-  if [ "$proof" = "tests" ] && [ "$total" -eq "$matched" ]; then
-    # The machine-verified criteria this order owns, read the way check-design.sh reads them.
-    local machine_owned
-    machine_owned="$(jq -r --slurpfile wo "$file" '
-      [ (.criteria // [])[]? | select(type == "object") | select(.verifiedBy == "machine") | .id ] as $machine
-      | [ ($wo[0].criteriaOwned // [])[] | select(. as $c | $machine | index($c) != null) ] | join(",")
-    ' "$ALIGNMENT_FILE" 2>/dev/null)"
-    [ -z "$machine_owned" ] \
-      || die3 "remove-test: that is the last test on $id, and $id owns the machine-verified criteria $machine_owned. check-design.sh refuses a tests order that owns one with no test. Add the replacement test first, or set --proof gate when the deliverable is configuration, or --proof record when it is a document in the task folder"
-  fi
+  [ "$matched" -gt 0 ] || die3 "remove-test: $id declares no test with the description '$description'"
   doc="$(jq --arg d "$description" '.tests = [(.tests // [])[] | select(.description != $d)]' "$file")"
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
@@ -1387,8 +1269,8 @@ do_remove_test() {
 # same move remove-test makes one field over (live-run row 76). A row is named by its exact text,
 # the way add-done-when wrote it and remove-test names a test. No report numbers a done-when row,
 # so an index would be a number counted from a rendered list. Every row carrying that text goes,
-# and the count is printed. A path is named as it was added. The last owned file is refused on the
-# schema's own rule: an order that names no file hands the builder no boundary. On a `record`
+# and the count is printed. A path is named as it was added. The design check refuses an order left
+# with no owned file, on the schema's own rule: it hands the builder no boundary. On a `record`
 # order, the inference add-owned-file makes runs again in reverse. An order left with no owned
 # file under the project folder loses `proof`. It does not stay `record` on the strength of
 # files it no longer owns.
@@ -1414,7 +1296,7 @@ do_remove_done_when() {
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "remove-done-when: $file exists but is not valid JSON"
   matched="$(jq -r --arg t "$text" '[(.doneWhen // [])[] | select(. == $t)] | length' "$file")"
-  [ "$matched" -gt 0 ] || die2 "remove-done-when: $id carries no done-when row with the text '$text'"
+  [ "$matched" -gt 0 ] || die3 "remove-done-when: $id carries no done-when row with the text '$text'"
   doc="$(jq --arg t "$text" '.doneWhen = [(.doneWhen // [])[] | select(. != $t)]
     | if has("absenceReviewed") then .absenceReviewed -= [$t] else . end' "$file")"
   write_atomic "$file" "$doc"
@@ -1445,9 +1327,7 @@ do_remove_owned_file() {
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "remove-owned-file: $file exists but is not valid JSON"
   jq -e --arg p "$path_val" '((.ownedFiles // []) | index($p)) != null' "$file" >/dev/null 2>&1 \
-    || die2 "remove-owned-file: $id does not own $path_val"
-  [ "$(jq -r '(.ownedFiles // []) | length' "$file")" -gt 1 ] \
-    || die3 "remove-owned-file: $path_val is the only file $id owns, and an order that names no file hands the builder no boundary (design-schema.json, ownedFiles). Add the replacement first, or fold the order into another with merge"
+    || die3 "remove-owned-file: $id does not own $path_val"
   doc="$(jq --arg p "$path_val" '.ownedFiles = [(.ownedFiles // [])[] | select(. != $p)]
     | if has("sharedFiles") then .sharedFiles -= [$p] else . end' "$file")"
   local unset_proof
@@ -1570,7 +1450,7 @@ do_verify() {
     doc="$(printf '%s' "$doc" | jq 'del(.verify)')"
     echo "cleared: $before"
   elif [ -n "$recipe" ]; then
-    [ -f "$recipe" ] || die2 "verify: no file at $recipe. Give the path the navigator returned"
+    [ -f "$recipe" ] || die3 "verify: no file at $recipe. Give the path the navigator returned"
     grep -q '^## Verifier[[:space:]]*$' "$recipe" || die3 "verify: $recipe has no ## Verifier section"
     source_name="$recipe"
     local block_file state line trimmed item
@@ -1651,8 +1531,8 @@ do_verify() {
 # verdict file does not name them, so an unattended close asks for a confirmer again. The summary says which scalars were carried
 # and which were dropped. A live run that saw only list counts read the append as a drop and
 # rewrote the interface by hand (live-run row 78). `title`, `diffBudget`
-# and `proof` stay the survivor's, so the two proofs must agree. A `gate` order folded into a
-# `tests` order would carry tests it may not declare, or the reverse. The folded order's
+# and `proof` stay the survivor's. The design check refuses a survivor whose proof does not fit
+# the tests and rows it gained, such as a `gate` order carrying a test. The folded order's
 # json and md are removed. Every other order's `dependsOn` naming it is rewritten to the survivor,
 # without duplicates, and the survivor never depends on itself. The folded id, the survivor and
 # --reason go into design-removed.json through record_removal, as `remove` writes them (gap row
@@ -1680,18 +1560,14 @@ do_merge() {
   id_shape_ok "$from" wo || die3 "merge: --from '$from' is not a valid wo<n> id shape"
   [ "$into" != "$from" ] || die3 "merge: --into and --from both name $into"
   require_reason "merge" "$from" "$reason"
-  wo_exists "$into" || die2 "merge: no work order $into in $DESIGN_DIR"
-  wo_exists "$from" || die2 "merge: no work order $from in $DESIGN_DIR"
+  wo_exists "$into" || die3 "merge: no work order $into in $DESIGN_DIR"
+  wo_exists "$from" || die3 "merge: no work order $from in $DESIGN_DIR"
 
-  local into_file from_file into_proof from_proof
+  local into_file from_file
   into_file="$(wo_file_for "$into")"
   from_file="$(wo_file_for "$from")"
   jq empty "$into_file" 2>/dev/null || die3 "merge: $into_file exists but is not valid JSON"
   jq empty "$from_file" 2>/dev/null || die3 "merge: $from_file exists but is not valid JSON"
-  into_proof="$(jq -r '.proof // "tests"' "$into_file")"
-  from_proof="$(jq -r '.proof // "tests"' "$from_file")"
-  [ "$into_proof" = "$from_proof" ] \
-    || die3 "merge: $into is proved by $into_proof and $from by $from_proof. Set one order's --proof so the two agree, then merge"
 
   # The union keeps first occurrence order, so `unique`, which sorts, is not used here.
   local doc
@@ -1776,10 +1652,9 @@ record_removal() {
 # remove: deletes an order that no longer earns its place, when a changed contract left it with
 # nothing to do (gap row 234). The id and the reason go into <task_folder>/design-removed.json,
 # which `close` carries into design-closed.json, so a reader can tell why the number is missing.
-# Refused while implementation has started the order, read as implementation's `start` reads it:
-# a ledger step reached or an attempt spent, a frozen test record, or a build record. Refused
-# while another order depends on it, or while it is the only order serving or owning a criterion
-# the contract still holds. A finding the order accounted for is left to `check`, which names it.
+# What the removal leaves is caught later, never refused here. Implementation's `start` stops an
+# order it started for design drift. The design check names a dependsOn that now resolves to
+# nothing, a criterion left with no serving order or owner, and a finding left unaccounted.
 # With --merged-into, it records an order that a merge folded before merge wrote this record (gap
 # row 245). The order is already gone, so it refuses an id that is still an order, or one the
 # record already holds, and the survivor must be an order. Commits nothing, the same as every
@@ -1804,7 +1679,7 @@ do_remove() {
     ! wo_exists "$id" || die3 "remove: $id is still an order. Fold it into $into with merge, which records it"
     [ ! -f "$REMOVED_FILE" ] || jq -e --arg id "$id" 'all((.removed // [])[]; .id != $id)' "$REMOVED_FILE" >/dev/null 2>&1 \
       || die3 "remove: $id is already recorded in $REMOVED_FILE"
-    wo_exists "$into" || die2 "remove: no work order $into in $DESIGN_DIR"
+    wo_exists "$into" || die3 "remove: no work order $into in $DESIGN_DIR"
     record_removal "remove" "$id" "$reason" "$into"
     exit 0
   fi
@@ -1815,34 +1690,12 @@ do_remove() {
   local doc_before
   doc_before="$(cat "$file")"
 
-  started_orders_json "$TASK_PATH" | jq -e --arg id "$id" 'index($id) == null' >/dev/null \
-    || die3 "remove: implementation started $id: a ledger step, a spent attempt, a frozen test record or a build record. Fold it into the order that takes its work with merge. Implementation's start then stops it for design drift, and implement-actions.sh drop sets its records aside"
-
-  local others f dependents
-  others="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
-    | while IFS= read -r f; do [ "$f" = "$file" ] || jq -c '.' "$f" 2>/dev/null; done | jq -sc '.')"
-  dependents="$(printf '%s' "$others" | jq -r --arg id "$id" \
-    '[ .[] | select(((.dependsOn // []) | index($id)) != null) | .id ] | join(", ")')"
-  [ -z "$dependents" ] \
-    || die3 "remove: $dependents $(case "$dependents" in *,*) echo depend ;; *) echo depends ;; esac) on $id. Change each dependsOn with update first, or fold $id into another order with merge"
-
-  # The criteria of the live contract that only this order serves, then those only it owns.
-  local alone
-  alone="$(jq_files -r --argjson others "$others" --argjson live "$(contract_criteria_json)" '
-      ($live | map(.id)) as $ids
-      | def only(k): [ (.[k] // [])[] | . as $c | select(($ids | index($c)) != null)
-                       | select(([ $others[] | (.[k] // [])[] ] | index($c)) == null) ] | join(", ");
-      [ (only("criteriaServed") | select(. != "") | "the only order serving " + .),
-        (only("criteriaOwned") | select(. != "") | "the only order owning " + .) ] | join(", and ")' "$file")"
-  [ -z "$alone" ] \
-    || die3 "remove: $id is $alone. Give each to another order with update first"
-
   record_removal "remove" "$id" "$reason"
   rm -f "$file" "$DESIGN_DIR/$id.md"
   echo "REMOVED: $file"
   echo "removed: $DESIGN_DIR/$id.md"
-  # The findings the order accounted for are now in no order's list, and `check` refuses until
-  # each is accounted for again.
+  # The findings the order accounted for are now in no order's list, and `check` names each until
+  # it is accounted for again.
   echo "findingsLeft: $(printf '%s' "$doc_before" | jq -r '[ (.findings // [])[] | .ref ] | if length == 0 then "none" else join(", ") + ". Account for each again" end')"
   exit 0
 }
@@ -1866,7 +1719,7 @@ do_read_guide() {
     esac
   done
   is_blank "$path_val" && die3 "read-guide: --path is required and must not be blank"
-  [ -f "$path_val" ] || die2 "read-guide: no file at $path_val. Give the path the navigator's lookup returned, or the project's own source file"
+  [ -f "$path_val" ] || die3 "read-guide: no file at $path_val. Give the path the navigator's lookup returned, or the project's own source file"
   [ -r "$path_val" ] || die3 "read-guide: $path_val exists but is not readable"
   records_hash__resolve_sha256_cmd || die3 "read-guide: neither sha256sum nor 'shasum -a 256' was found on PATH"
 
@@ -1941,14 +1794,12 @@ do_check() {
   rc=$?
   case "$rc" in
     0) verdict=0 ;;
-    1) verdict=4 ;;
     3) verdict=3 ;;
     4) verdict=5 ;;
     *) die3 "check: check-design.sh exited with an unexpected code $rc" ;;
   esac
   local unaccounted
   unaccounted="$(unaccounted_findings)"
-  [ -z "$unaccounted" ] || [ "$verdict" -ne 0 ] || verdict=7
   local choices
   choices="$(open_choices)"
   lines="$(wc -l <"$CHECK_FILE" | tr -d '[:space:]')"
@@ -2079,11 +1930,16 @@ do_check() {
   else
     echo "callsUndeclared: none"
   fi
-  if [ "$verdict" -eq 7 ]; then
+  # What does not stop here. A person's close writes it to the task record. An unattended close
+  # stops on the unattended lines and on an unaccounted finding.
+  jq -r '(.open.unattended // [])[] | "unattended: " + .' "$CHECK_FILE" 2>/dev/null
+  jq -r '(.open.warn // [])[] | "warning: " + .' "$CHECK_FILE" 2>/dev/null
+  if [ -n "$unaccounted" ]; then
     printf '%s\n' "$unaccounted" | sed 's/^/unaccounted: /'
     echo "next: account for each finding above, cited by the order it affects or set aside with a reason"
-  elif [ "$verdict" -ne 0 ]; then
-    echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
+  fi
+  if [ "$verdict" -ne 0 ]; then
+    echo "open: $(jq -r '(.open.stop // []) | join("; ")' "$CHECK_FILE" 2>/dev/null)"
   elif task_is_light "$TASK_PATH"; then
     # A light task closes with no critique (gap row 197). The clean check is the last step
     # before the critics, so the skip is decided here.
@@ -2121,8 +1977,6 @@ do_close() {
       --critique-outcome)
         need_value "close" "--critique-outcome" "$#" "${2:-}"
         is_blank "$2" && die3 "close: --critique-outcome must not be blank"
-        [ "$RUN_MODE" != "autonomous" ] \
-          || die3 "close: --critique-outcome is a person's answer to the findings, and an autonomous close has nobody to answer them. The record says none"
         outcome="${outcome:+$outcome
 }$2"; shift 2 ;;
       *) die3 "close: unrecognized argument: $1" ;;
@@ -2164,22 +2018,15 @@ do_close() {
       skipped_note=""
       if [ "$coverage_checked" != "true" ]; then
         skipped_note="$(printf '%s' "$check_report_json" | jq -r '.coverage.note // "the contract could not be read"' 2>/dev/null)"
-        die5 "close: the coverage checks against the contract never ran, so nothing compared this design to the criteria it must serve. Reason: $skipped_note"
+        die3 "close: the coverage checks against the contract never ran, so nothing compared this design to the criteria it must serve. Reason: $skipped_note"
       fi
       if [ "$graph_checked" != "true" ]; then
         skipped_note="$(printf '%s' "$check_report_json" | jq -r '.graph.note // "design has not started"' 2>/dev/null)"
-        die5 "close: the checks between work orders never ran, so nothing walked this design's own dependencies. Reason: $skipped_note"
+        die3 "close: the checks between work orders never ran, so nothing walked this design's own dependencies. Reason: $skipped_note"
       fi
       ;;
-    1|4)
-      local open_summary
-      open_summary="$(open_summary_of "$check_report_json")"
-      [ -n "$open_summary" ] || open_summary="design left something open; see check-design.sh against $TASK_PATH for detail"
-      if [ "$check_rc" -eq 1 ]; then
-        die4 "close: a work order file, or the guides-read record, does not match its shape. Fix it and close again. Open: $open_summary"
-      else
-        die5 "close: design has not closed cleanly. Finish design first. Open: $open_summary"
-      fi
+    4)
+      die5 "close: design has not closed cleanly. Finish design first. Open: $(printf '%s' "$check_report_json" | jq -r '.open.stop | join("; ")')"
       ;;
     3)
       die3 "close: check-design.sh could not run: $check_stderr_text"
@@ -2197,58 +2044,63 @@ do_close() {
         and ((has("mergedInto") | not) or (.mergedInto | type == "string" and test("^wo[1-9][0-9]*$")))
         and (.reason | type == "string" and length > 0)
         and (.removedAt | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")))' "$REMOVED_FILE" >/dev/null 2>&1 \
-      || die4 "close: $REMOVED_FILE does not match its shape: a removed list of entries, each with only id, reason, removedAt and an optional mergedInto"
+      || die5 "close: $REMOVED_FILE does not match its shape: a removed list of entries, each with only id, reason, removedAt and an optional mergedInto"
   fi
 
-  # Unattended, each disposition nobody watched needs the confirmer's verdict file, and the value
-  # in it must be the one that stands (gap row 293). A value that differs is a disagreement.
-  if [ "$RUN_MODE" = "autonomous" ]; then
-    local unconfirmed="" wo_json wo_id disp mode cand verdict_file got
-    while IFS= read -r wo_json; do
-      [ -n "$wo_json" ] || continue
-      wo_id="$(jq -r '.id' "$wo_json")"
-      verdict_file="$TASK_PATH/records/disposition-$wo_id.json"
-      while IFS="$(printf '\t')" read -r disp mode cand; do
-        [ "$mode" != "interactive" ] || continue
-        got="$(jq -r --arg c "$cand" '.[$c] // empty' "$verdict_file" 2>/dev/null)"
-        if [ -z "$got" ]; then
-          unconfirmed="$unconfirmed
-$wo_id, $cand, $disp: no verdict in $verdict_file"
-        elif [ "$got" = "supersede" ] && [ "$disp" != "supersede" ]; then
-          unconfirmed="$unconfirmed
-$wo_id, $cand, $disp: the confirmer answered supersede, which an unattended dispose cannot record. A person decides it"
-        elif [ "$got" != "$disp" ]; then
-          unconfirmed="$unconfirmed
-$wo_id, $cand, $disp: the confirmer answered $got. Dispose it again with --verdict $got"
-        fi
-      done < <(standing_dispositions "$wo_json")
-    done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort)
-    [ -z "$unconfirmed" ] \
-      || die8 "close: a disposition made unattended has no confirmer verdict that agrees. For a missing verdict, dispatch one disposition-confirmer for that order:$unconfirmed"
-  fi
+  # The findings a person reads at the close, as warnings in the task record. Unattended, nobody
+  # reads them then, so the ones a person would stop on stop the close instead.
+  local unattended_lines warn_lines
+  unattended_lines="$(printf '%s' "$check_report_json" | jq -r '(.open.unattended // [])[]')"
+  warn_lines="$(printf '%s' "$check_report_json" | jq -r '(.open.warn // [])[]')"
+  [ "$RUN_MODE" != "autonomous" ] || [ -z "$unattended_lines" ] \
+    || die5 "close: this close is unattended, and it stops on what a person would read first: $(printf '%s' "$unattended_lines" | paste -s -d ';' - | sed 's/;/; /g')"
+
+  # Each disposition nobody watched is read against the confirmer's verdict file (gap row 293). A
+  # missing or other value is a warning: the builder and the architecture reviewer both read the
+  # reused interface, and both stop on a misfit.
+  local wo_json wo_id disp mode cand verdict_file got
+  while IFS= read -r wo_json; do
+    [ -n "$wo_json" ] || continue
+    wo_id="$(jq -r '.id' "$wo_json")"
+    verdict_file="$TASK_PATH/records/disposition-$wo_id.json"
+    while IFS="$(printf '\t')" read -r disp mode cand; do
+      [ "$mode" != "interactive" ] || continue
+      got="$(jq -r --arg c "$cand" '.[$c] // empty' "$verdict_file" 2>/dev/null)"
+      if [ -z "$got" ]; then
+        warn_lines="$warn_lines
+$wo_id reuses $cand as $disp, made unattended, and no confirmer verdict is in $verdict_file"
+      elif [ "$got" != "$disp" ]; then
+        warn_lines="$warn_lines
+$wo_id reuses $cand as $disp, made unattended, and the confirmer answered $got"
+      fi
+    done < <(standing_dispositions "$wo_json")
+  done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort)
 
   local unaccounted
   unaccounted="$(unaccounted_findings)"
-  [ -z "$unaccounted" ] \
-    || die7 "close: a research finding is in no work order's findings. Account for each one with account, cited or set aside with a reason:
+  if [ -n "$unaccounted" ]; then
+    [ "$RUN_MODE" != "autonomous" ] \
+      || die7 "close: a research finding is in no work order's findings, and this close is unattended. Account for each one with account, cited or set aside with a reason:
 $unaccounted"
+    warn_lines="$warn_lines
+$(printf '%s\n' "$unaccounted" | sed 's/^/a research finding is in no work order: /')"
+  fi
 
 
   # A run line that is not binding was written by a model from research, and only a person stands
   # between it and the worktree. The person approves such lines at this close, the design's
   # approval, and the stamp lands on each entry before the hash covers it. A line with no stamp
   # never runs: the build hands it to the reviewer as a check.
-  # An autonomous close has nobody to give that approval. A person's answer in the task's answer
-  # record stands in: step design close, no order, and as its words each line this close would
-  # stamp, one per line, as the refusal lists them (gap row 370).
+  # The yes is the person's answer in the task's answer record, in every run mode: step design
+  # close, no order, and as its words each line this close would stamp, one per line (gap row 370).
   local wo_file approved_count=0 n_approved to_stamp
-  if [ "$approve_runs" = true ] && [ "$RUN_MODE" = "autonomous" ]; then
+  if [ "$approve_runs" = true ]; then
     to_stamp="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
       | while IFS= read -r wo_file; do
           jq -r '(.verify // [])[] | select(has("run") and .binding == false and (has("approved") | not)) | .run' "$wo_file"
         done)"
-    task_answer_find "$TASK_PATH" "design close" "" "$to_stamp" \
-      || die3 "close: --approve-runs is a person's yes to the commands research wrote, and an autonomous close has nobody to give it.$(task_answer_route "$TASK_PATH" "design close" "" "$to_stamp")"
+    [ -z "$to_stamp" ] \
+      || task_require_answer 70 close "--approve-runs, a yes to the commands research wrote," "$TASK_PATH" "design close" "" "$to_stamp"
   fi
   if [ "$approve_runs" = true ]; then
     while IFS= read -r wo_file; do
@@ -2323,8 +2175,8 @@ $unaccounted"
   # design: a critic that can stop a close trains a design that writes for the critic. Beside the
   # count sits `outcome`, the --critique-outcome line: how the findings were answered, in the
   # person's words, one line per flag. A count alone said nothing about what changed (live-run row
-  # 135). `none` when no flag was passed and no earlier answer carries, below. Unattended, nobody
-  # answers the findings, so the flag is refused above. A second close reads the files the first close
+  # 135). `none` when no flag was passed and no earlier answer carries, below. Unattended, the
+  # flag holds the model's answer, recorded the same way. A second close reads the files the first close
   # moved and records them again, so the record still names what is on disk.
   local critique_files critique_total crit_n
   critique_files=""; critique_total=0
@@ -2358,17 +2210,15 @@ $unaccounted"
       | {outcome: .critique.outcome, carriedFrom: (.critique.carriedFrom // {closedAt, closedBy, hash})}' \
       "$CLOSED_FILE" 2>/dev/null)"
   fi
-  # An order added, removed or merged since the answer is one the critics never read. The order
-  # ids the answered close held come from its own commit, so an uncommitted close carries nothing.
+  # An order added, removed or merged since the answer is one the critics never read. The answer
+  # is still carried, and the difference is a warning. The order ids the answered close held come
+  # from its own commit.
   if [ -n "$carried" ]; then
     local answered_ids now_ids
     answered_ids="$(answered_order_ids "$(printf '%s' "$carried" | jq -r '.carriedFrom.hash')")" || answered_ids="unknown"
     now_ids="$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sed 's|.*/||; s|\.json$||' | sort)"
-    if [ "$answered_ids" != "$now_ids" ]; then
-      printf 'close: the critique answer is not carried: the orders are %s, and the answered close held %s. Critique the design again\n' \
-        "$(printf '%s' "$now_ids" | tr '\n' ' ')" "$(printf '%s' "$answered_ids" | tr '\n' ' ')" >&2
-      carried=""
-    fi
+    [ "$answered_ids" = "$now_ids" ] || warn_lines="$warn_lines
+the critique answer is carried from a close that held the orders $(printf '%s' "$answered_ids" | paste -s -d ' ' -), and the design now holds $(printf '%s' "$now_ids" | paste -s -d ' ' -)"
   fi
   if [ -n "$carried" ]; then
     doc="$(printf '%s' "$doc" | jq --argjson c "$carried" '.critique += $c')"
@@ -2380,6 +2230,10 @@ $unaccounted"
     doc="$(printf '%s' "$doc" | jq --slurpfile r "$REMOVED_FILE" '.removed = $r[0].removed')"
   fi
 
+  local line
+  while IFS= read -r line; do
+    [ -z "$line" ] || task_warn "$TASK_PATH" "design close" "" "$line"
+  done < <(printf '%s\n%s\n' "$unattended_lines" "$warn_lines")
   write_atomic "$CLOSED_FILE" "$doc"
   # The stage boundary: the task folder is committed, with the order count the check just
   # walked and who closed as the reason. Closing again commits again, over the new hash.
@@ -2421,18 +2275,17 @@ $unaccounted"
 #   distance    cost cited       verdict       mode        outcome
 #   any         any              decline       any         stands: nothing compared; the reason names what was weighed
 #   any         none recognised  reuse|extend  any         stands: nothing to downgrade to; the reasoning says no cost was cited
-#   any         none recognised  supersede     attended    refused: a supersede naming no cost compared nothing; ask the person
-#   any         none recognised  supersede     unattended  extend: nobody to ask
+#   any         none recognised  supersede     any         extend: a supersede naming no cost compared nothing
 #   any         build only       supersede     any         extend: build is paid once, carry, agent and risk forever
 #   same-layer  any              supersede     any         extend: sharing only a layer, it is not absorbed; a second implementation
-#   name|dir    recurring        supersede     attended    stands with --confirmed, else refused: it widens the task and owes a migration
+#   name|dir    recurring        supersede     attended    stands: the skill asked the person once; it widens the task and owes a migration
 #   name|dir    recurring        supersede     unattended  extend: no person to ask; re-surfaces on the next attended run
 #   any         recognised       reuse|extend  any         stands
 # ------------------------------------------------------------------------------------------------
 
 do_dispose() {
   [ -n "$RUN_MODE" ] || die3 "dispose: --run-mode is required. The table reads it, and it is never assumed"
-  local id="" candidate="" distance="" cost="" verdict="" why="" confirmed=false reuse_path="" reuse_interface=""
+  local id="" candidate="" distance="" cost="" verdict="" why="" reuse_path="" reuse_interface=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --id)        need_value "dispose" "--id" "$#" "${2:-}";        id="$2"; shift 2 ;;
@@ -2443,7 +2296,6 @@ do_dispose() {
       --cost)      need_value "dispose" "--cost" "$#" "${2:-}";      cost="$2"; shift 2 ;;
       --verdict)   need_value "dispose" "--verdict" "$#" "${2:-}";   verdict="$2"; shift 2 ;;
       --why)       need_value "dispose" "--why" "$#" "${2:-}";       why="$2"; shift 2 ;;
-      --confirmed) confirmed=true; shift ;;
       *) die3 "dispose: unrecognized argument: $1" ;;
     esac
   done
@@ -2480,18 +2332,14 @@ do_dispose() {
   elif [ "$known" != "true" ] && [ "$verdict" != "supersede" ]; then
     rule="stands: no recognised cost dimension cited; a $verdict has nothing to downgrade to"
   elif [ "$known" != "true" ]; then
-    [ "$RUN_MODE" = "interactive" ] \
-      && die3 "dispose: no recognised cost dimension named (build, carry, agent, risk). Ask the person what this supersede compared, then call again"
-    outcome=extend; rule="downgraded: a supersede with no cost dimension cited and nobody present to ask"
+    outcome=extend; rule="downgraded: a supersede with no cost dimension cited compared nothing"
   elif [ "$verdict" = "supersede" ]; then
     if [ "$recurring" != "true" ]; then
       outcome=extend; rule="downgraded: a supersede resting on build cost alone; build is paid once, carry, agent and risk forever"
     elif [ "$distance" = "same-layer" ]; then
       outcome=extend; rule="downgraded: a candidate sharing only a layer is not absorbed by a replacement"
     elif [ "$RUN_MODE" = "interactive" ]; then
-      [ "$confirmed" = "true" ] \
-        || die3 "dispose: a supersede widens the task and owes a migration. Ask the person whether it stands, then call again with --confirmed"
-      rule="stands: the person confirmed the supersede"
+      rule="stands: a person was asked about the supersede"
     else
       outcome=extend; rule="downgraded: a supersede with no person present; it re-surfaces on the next attended run"
     fi
@@ -2522,6 +2370,8 @@ do_dispose() {
   if [ -n "$held" ] && [ "$held" != "$outcome" ] && [ "$before" != "$outcome" ]; then
     write_atomic "$verdict_file" "$(jq --arg c "$candidate" 'del(.[$c])' "$verdict_file")"
   fi
+  [ "$outcome" = "$verdict" ] \
+    || task_warn "$TASK_PATH" "design dispose" "$id" "the supersede of $candidate is recorded as extend: ${rule#downgraded: }"
   echo "DISPOSED: $file"
   echo "proposed: $verdict"
   echo "disposition: $outcome"
@@ -2561,7 +2411,7 @@ do_account() {
   jq empty "$file" 2>/dev/null || die3 "account: $file exists but is not valid JSON"
   if [ "$remove" = true ]; then
     jq -e --arg r "$ref" 'any((.findings // [])[]; .ref == $r)' "$file" >/dev/null \
-      || die2 "account: $id holds no entry $ref"
+      || die3 "account: $id holds no entry $ref"
     doc="$(jq --arg r "$ref" '.findings = [ .findings[] | select(.ref != $r) ]' "$file")"
     write_atomic "$file" "$doc"
     echo "REMOVED: $ref from $file"
@@ -2570,12 +2420,12 @@ do_account() {
     exit 0
   fi
   parse_finding_ref account "$ref" "$TASK_PATH/research" \
-    || die2 "account: no research file $TASK_PATH/research/$FINDING_REF_SEARCH.json"
+    || die3 "account: no research file $TASK_PATH/research/$FINDING_REF_SEARCH.json"
   local search="$FINDING_REF_SEARCH" n="$FINDING_REF_N"
   local rfile="$TASK_PATH/research/$search.json" text count
   count="$(jq -r '(.findings // []) | length' "$rfile" 2>/dev/null)"
   text="$(jq -r --argjson i "$((n - 1))" '(.findings // [])[$i].text // empty' "$rfile" 2>/dev/null)"
-  [ -n "$text" ] || die2 "account: $rfile holds no finding $n. It holds ${count:-0}, numbered from 1 as research/$search.md shows them"
+  [ -n "$text" ] || die3 "account: $rfile holds no finding $n. It holds ${count:-0}, numbered from 1 as research/$search.md shows them"
   doc="$(jq --arg r "$ref" --arg t "$text" --arg a "$set_aside" \
     '.findings = ((.findings // []) | map(select(.ref != $r))) + [{ref: $r, text: $t} + (if $a == "" then {} else {setAside: $a} end)]' "$file")"
   write_atomic "$file" "$doc"

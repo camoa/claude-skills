@@ -44,18 +44,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # `add` records `author` as `designer` in both run modes. Only an explicit `--author owner`, or
 # the promotion `approve` makes when a person says the contract is right, records `owner`
 # (ideal/scope.md, "Approval"). A criterion nobody confirmed must never read as one the owner
-# wrote, so `approve` refuses `--run-mode autonomous`; that is the one thing --run-mode changes
-# here. A non-goal carries no author (alignment-schema.json's
+# wrote, so each of these is a person's answer, recorded through person-answer.sh in every run
+# mode, and so is `retire`. A non-goal carries no author (alignment-schema.json's
 # own nonGoal has only id and text), so no action here ever writes one for it.
 #
 # Depends on, shipped by the same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/alignment-render.sh   called by `render` and by every action that
 #                                                       writes alignment.json, unmodified
 #
-# This script never runs check-alignment.sh. Every field it writes is validated before the write,
-# so what it produces is shaped correctly by construction; a stale or hand-edited alignment.json
-# already on disk before this script's first call on a task is a fact check-alignment.sh reports,
-# not one this script repairs.
+# Every field this script writes is validated before the write, so what it produces is shaped
+# correctly by construction. A hand-edited alignment.json already on disk is not repaired here.
 #
 # alignment.json's top level carries schemaVersion, goal, expectedResult, criteria, nonGoals,
 # nextCriterionId, nextNonGoalId and decidedWithoutAPerson, and nothing else, apart from two
@@ -91,37 +89,19 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet.
-#   1  the given path does not exist, is not a folder, or holds no task.json: not a task folder
-#      (ideal/scope.md, "Scope runs against a task that already exists").
-#   2  the target of this action is not present: alignment.json does not exist yet, for an action
-#      that needs one already (every action but `read`, `init`, `set-mechanism` and `distill`);
-#      or, for `update` and `remove`, the given --id names no criterion and no non-goal in an
-#      alignment.json that does exist; or, for `record-decision`, an id in --field names none;
-#      or, for `retire`, no entry is at the given --entry; or, for `approve` and `distill`, records/scope-distill.json
-#      does not exist yet, so the distiller has not been dispatched. `approve` has promoted and
-#      committed by then; run it again once the sidecar exists. A light task's `distill` reads no
-#      sidecar, because design's close distills all three stages (distill_deferred).
-#   3  the script could not do its job: a missing, blank or malformed argument; an argument value
-#      that is itself another option; alignment.json exists but will not parse as JSON, or parses
-#      but is not a contract (missing schemaVersion, goal, expectedResult, or criteria/nonGoals
-#      not arrays); task.json exists but will not parse as JSON; `init` called where
-#      alignment.json already exists (refused, never overwritten); a given --id that does not
-#      match either id format, or that is already present when `add` tries to mint it; a given
-#      --verified-by that is not machine or person; a given --author that add does not recognise,
-#      or that update is asked to set to anything but owner; `approve` under --run-mode
-#      autonomous; a given --automated that is not yes or no, or yes on a light task whose
-#      runner check in records/test-runner.json does not read met; a missing or unusable nextCriterionId or nextNonGoalId; a name in --field record-decision does not know;
-#      `retire` under --run-mode autonomous, or on an entry already superseded or retired; the
-#      plugin root could not be resolved; or a write that failed.
-#   4  a script this action calls ran and failed. `render`, and every action that writes
-#      alignment.json, call alignment-render.sh; that script's own stderr is the answer, printed
-#      here rather than duplicated. For `approve` and `distill`, the sidecar exists but fails
-#      scripts/distill-schema.json, or says standsAlone false with no gap. That sidecar is moved
-#      aside first, to <name>.malformed-<date>.json, and stdout names it in a `setAside:` line.
+#      For `init` on a task that has a contract, nothing changed. For `approve` and `distill`, a
+#      missing or unusable distiller sidecar is a warning in the task record, and the stage closes.
+#   3  the call or the script could not do its job: not a task folder, no alignment.json yet for
+#      an action that needs one, an id naming no criterion, non-goal or entry, a missing or
+#      malformed argument, a contract or task.json that does not parse, a render that failed, or a
+#      write that failed. Nothing was written.
+#   70  `approve`, `retire`, `update --author owner` or `add --author owner` found no person's
+#      answer for it. The person answers through person-answer.sh, which shows Claude Code's
+#      permission prompt, in every run mode: step `scope <action>`, and the words the refusal names.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
-# expression interval quantifier anywhere, the same rule task-actions.sh and check-alignment.sh
+# expression interval quantifier anywhere, the same rule task-actions.sh and design-actions.sh
 # state for the same reason (foundations.md, Honesty). No awk is used at all. An id's own shape is
 # checked with a `case` glob (`c[1-9][0-9]*` or `n[1-9][0-9]*`), never a regular expression, the
 # same way task-actions.sh checks a task id's own shape.
@@ -134,9 +114,8 @@ if [ -n "${ZSH_VERSION:-}" ]; then
 fi
 
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own resolved
-# location otherwise (the fallback scripts/check-alignment.sh and skills/tool/scripts/tool-
-# actions.sh both use), so a person can run it directly and so a bare unset variable never exits
-# 1: exit 1 is reserved for "not a task folder" by this script's own table above.
+# location otherwise (the fallback skills/tool/scripts/tool-actions.sh uses too), so a person can
+# run it directly.
 if [ -n "${ZSH_VERSION:-}" ]; then
   SCRIPT_SOURCE="$0"
 else
@@ -162,14 +141,13 @@ esac
 
 command -v jq >/dev/null 2>&1 || { printf 'scope-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
+# An answer task_answer_find held is marked refused before the exit (task-helpers.sh).
+die() { ! command -v task_answer_refused >/dev/null 2>&1 || task_answer_refused "$1"; printf 'scope-actions: %s\n' "$2" >&2; exit "$1"; }
+die3() { die 3 "$1"; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
-die1() { printf 'scope-actions: %s\n' "$1" >&2; exit 1; }
-die2() { printf 'scope-actions: %s\n' "$1" >&2; exit 2; }
-die3() { printf 'scope-actions: %s\n' "$1" >&2; exit 3; }
+die1() { die 3 "$1"; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
-die4() { printf 'scope-actions: %s\n' "$1" >&2; exit 4; }
-# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
-die79() { printf 'scope-actions: %s\n' "$1" >&2; exit 79; }
+die79() { die 79 "$1"; }
 
 usage() {
   cat <<'EOF' >&2
@@ -208,7 +186,7 @@ source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TAS
 # instead of trusted (ideal/scope.md, "A file that will not parse is unreadable, not empty").
 require_alignment_exists() {
   local who="$1" shape
-  [ -f "$ALIGNMENT_FILE" ] || die2 "$who: $ALIGNMENT_FILE not found. Run init first"
+  [ -f "$ALIGNMENT_FILE" ] || die3 "$who: $ALIGNMENT_FILE not found. Run init first"
   [ -r "$ALIGNMENT_FILE" ] \
     || die3 "$who: $ALIGNMENT_FILE exists but is not readable (a permission problem, not the same fact as missing or malformed)"
   jq empty "$ALIGNMENT_FILE" 2>/dev/null \
@@ -340,8 +318,10 @@ LIGHT_TESTS_NORMAL="write and freeze tests for each code order before its code, 
 do_init() {
   [ "$#" -eq 0 ] || die3 "init: unrecognized argument: $1"
 
-  [ ! -e "$ALIGNMENT_FILE" ] \
-    || die3 "init: $ALIGNMENT_FILE already exists. This task already has a scope contract; use the other actions to change it"
+  if [ -e "$ALIGNMENT_FILE" ]; then
+    echo "UNCHANGED: $ALIGNMENT_FILE already exists, so this task already has a scope contract"
+    exit 0
+  fi
 
   # The first write into this task, so the task itself moves to in_progress here.
   mark_task_in_progress "$TASK_PATH" "scope wrote its contract" scope
@@ -429,7 +409,7 @@ do_set_tests() {
   # A light task meets no person before review, so its yes rests on research's runner check.
   [ "$value" = "false" ] || ! task_is_light "$TASK_PATH" \
     || [ "$(jq -r '.verdict' "$TASK_PATH/$TEST_RUNNER_RECORD" 2>/dev/null)" = "met" ] \
-    || die3 "set-tests: a light task takes yes only when research's runner check reads met in $TASK_PATH/$TEST_RUNNER_RECORD. Run research-actions.sh runner"
+    || task_warn "$TASK_PATH" "scope set-tests" "" "a light task said yes to automated tests, and research's runner check does not read met in $TASK_PATH/$TEST_RUNNER_RECORD"
 
   local updated
   updated="$(jq --argjson v "$value" '.automatedTests = $v' "$ALIGNMENT_FILE")" \
@@ -492,6 +472,7 @@ do_add() {
   fi
 
   require_alignment_exists "add"
+  [ "$author" != owner ] || task_require_answer 70 add "--author owner, a criterion the owner wrote," "$TASK_PATH" "scope add" "" "$text"
 
   local next_id id present updated
   next_id="$(jq -r '.nextCriterionId // empty' "$ALIGNMENT_FILE")"
@@ -513,6 +494,7 @@ do_add() {
        | .nextCriterionId = $next' "$ALIGNMENT_FILE")" \
     || die3 "add: could not add the new criterion to $ALIGNMENT_FILE"
   write_atomic "$ALIGNMENT_FILE" "$updated"
+  task_answer_consume
 
   echo "ADDED: $id"
   echo "verifiedBy: $verified_by"
@@ -629,7 +611,8 @@ do_update() {
   local present
   present="$(jq -r --arg arr "$arrfield" --arg id "$id" \
       '([ (.[$arr] // [])[]?.id? ] | index($id)) != null' "$ALIGNMENT_FILE")"
-  [ "$present" = "true" ] || die2 "update: no $kind with id $id in $ALIGNMENT_FILE"
+  [ "$present" = "true" ] || die3 "update: no $kind with id $id in $ALIGNMENT_FILE"
+  [ "$set_author" -eq 0 ] || task_require_answer 70 update "--author owner, the owner's word on $id," "$TASK_PATH" "scope update" "" "$id author owner"
 
   local set_text_json set_verification_json set_verified_by_json set_author_json updated
   if [ "$set_text" -eq 1 ]; then set_text_json=true; else set_text_json=false; fi
@@ -652,6 +635,7 @@ do_update() {
           else . end
         ))' "$ALIGNMENT_FILE")" || die3 "update: could not update $ALIGNMENT_FILE"
   write_contract update "$updated"
+  task_answer_consume
 
   echo "UPDATED: $id"
   local fields_set=""
@@ -695,7 +679,7 @@ do_remove() {
   local present
   present="$(jq -r --arg arr "$arrfield" --arg id "$id" \
       '([ (.[$arr] // [])[]?.id? ] | index($id)) != null' "$ALIGNMENT_FILE")"
-  [ "$present" = "true" ] || die2 "remove: no $kind with id $id in $ALIGNMENT_FILE"
+  [ "$present" = "true" ] || die3 "remove: no $kind with id $id in $ALIGNMENT_FILE"
 
   local updated
   updated="$(jq --arg arr "$arrfield" --arg id "$id" '.[$arr] |= map(select(.id != $id))' "$ALIGNMENT_FILE")" \
@@ -721,7 +705,7 @@ render_alignment() {
 
   bash "$ALIGNMENT_RENDER_SCRIPT" "$TASK_PATH" >/dev/null
   local rc=$?
-  [ "$rc" -eq 0 ] || exit 4
+  [ "$rc" -eq 0 ] || exit 3
   echo "rendered: $TASK_PATH/alignment.md"
 }
 
@@ -816,7 +800,7 @@ do_record_decision() {
       [ -n "$(id_kind "$name")" ] \
         || die3 "record-decision: each --field name must be automatedTests, goal, expectedResult, or a criterion or non-goal id, got '$name'"
       [ "$(jq -r --arg id "$name" '[(.criteria // [])[], (.nonGoals // [])[] | .id?] | index($id) != null' "$ALIGNMENT_FILE")" = "true" ] \
-        || die2 "record-decision: no criterion or non-goal with id $name in $ALIGNMENT_FILE"
+        || die3 "record-decision: no criterion or non-goal with id $name in $ALIGNMENT_FILE"
     done < <(printf '%s\n' "$names")
     while IFS= read -r name; do
       append_decision "$text" "$name"
@@ -871,10 +855,8 @@ close_scope() {
 
 do_approve() {
   [ "$#" -eq 0 ] || die3 "approve: unrecognized argument: $1"
-  [ "$RUN_MODE" = "interactive" ] \
-    || die3 "approve: only a person approves. An autonomous run records the approval with record-decision, promotes nothing, and closes with distill"
-
   require_alignment_exists "approve"
+  task_require_answer 70 approve "the contract's approval" "$TASK_PATH" "scope approve" "" approve
 
   local ids count updated marked stale
   stale="$(distill_stale "$TASK_PATH" scope)" || exit $?
@@ -896,6 +878,7 @@ do_approve() {
       || die3 "approve: could not update $ALIGNMENT_FILE"
     write_atomic "$ALIGNMENT_FILE" "$updated"
   fi
+  task_answer_consume
   echo "promoted: $count"
   echo "approved-decisions: $marked"
   [ -z "$ids" ] || echo "promoted-ids: $ids"
@@ -926,20 +909,19 @@ do_retire() {
       *) die3 "retire: unrecognized argument: $1" ;;
     esac
   done
-  [ "$RUN_MODE" = "interactive" ] \
-    || die3 "retire: only a person retires a decision. An autonomous run leaves it for the person"
   case "$entry" in
     ''|0*|*[!0-9]*) die3 "retire: --entry must be a whole number from 1, got '${entry:-<nothing>}'" ;;
   esac
   is_blank "$reason" && die3 "retire: --reason is required and must not be blank"
 
   require_alignment_exists "retire"
+  task_require_answer 70 retire "retiring a decision" "$TASK_PATH" "scope retire" "" "entry $entry: $reason"
 
   local state updated
   state="$(jq -r --argjson i "$((entry - 1))" "$DECIDED_JQ"' (.decidedWithoutAPerson // [])[$i] // empty
       | if decidedWhole then decidedState else "malformed" end' "$ALIGNMENT_FILE")"
   case "$state" in
-    '') die2 "retire: no entry $entry in decidedWithoutAPerson of $ALIGNMENT_FILE" ;;
+    '') die3 "retire: no entry $entry in decidedWithoutAPerson of $ALIGNMENT_FILE" ;;
     open|approved) ;;
     *) die3 "retire: entry $entry is $state, not open or approved, so there is nothing to retire" ;;
   esac
@@ -948,6 +930,7 @@ do_retire() {
         + {retiredAt: $at, retiredBy: "person", retiredReason: $why}' "$ALIGNMENT_FILE")" \
     || die3 "retire: could not update $ALIGNMENT_FILE"
   write_atomic "$ALIGNMENT_FILE" "$updated"
+  task_answer_consume
 
   echo "RETIRED: $entry"
   contract_summary

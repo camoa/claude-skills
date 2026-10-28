@@ -24,7 +24,7 @@
     },
     "alignment": {
       "type": "object",
-      "description": "The contract, copied verbatim from alignment.json at capture, and refreshed from it whenever the snapshot is rewritten, since design must have closed on the live files for that rewrite. A changed criterion a started order stands on keeps its frozen copy. Not re-validated here, because check-alignment.sh already judged it and a second judge is a second producer for one fact. Copied rather than referenced, because a reference would read the live file and there would be nothing to drift from."
+      "description": "The contract, copied verbatim from alignment.json at capture, and refreshed from it whenever the snapshot is rewritten, since design must have closed on the live files for that rewrite. A changed criterion a started order stands on keeps its frozen copy. Not re-validated here, because scope-actions.sh validated each field as it wrote it, and a second judge is a second producer for one fact. Copied rather than referenced, because a reference would read the live file and there would be nothing to drift from."
     },
     "workOrders": {
       "type": "array",

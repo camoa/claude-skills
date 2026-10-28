@@ -33,7 +33,7 @@ never removed.
 `remove-test`, `remove-done-when` and `remove-owned-file` take one item off an order. A `record`
 order left with no file under the project folder loses its proof, and the output says so.
 
-What `merge`, `remove` and the remove calls refuse is in
+What a `merge`, a `remove` or a remove call leaves wrong, the next check names. See
 [The design check refuses to close](../../when-it-stops/design-check.md).
 
 ## Change a design that already closed

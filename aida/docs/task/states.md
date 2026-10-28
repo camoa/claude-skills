@@ -37,8 +37,8 @@ absent:
 
 | Stage | Closes when this exists |
 |---|---|
-| scope | `records/scope-distill.json`. A light task closes scope when the contract records the plugin version |
-| research | `records/research-check.json`, with a passing exit code |
+| scope | the plugin version in `alignment.json`, which only the scope close writes |
+| research | `records/research-check.json`, with a passing exit code, or a design folder: research is optional |
 | design | `design-closed.json` |
 | implement | `implementation/finished.json` |
 | review | `review/review.json` with a passed or failed verdict, for the build that is finished now |

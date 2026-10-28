@@ -34,16 +34,17 @@ A light task runs no critique.
 ## Close
 
 Run `/aida:design close <task-id>`, or say in your own words that the design is right. On a first
-interactive close after a critique, design asks for one line: how many findings changed an order
-and how many you left with a reason.
+close after a critique, design records one line: how many findings changed an order. With you
+present, you give it. You do not answer each finding one by one.
 
-The close runs the check again and writes `design-closed.json` only when it is clean. It records
+The close runs the check again and writes `design-closed.json` only when nothing stops it. It
+writes each warning to the task record. It records
 a hash over the contract and every order, the run mode, and who was present. It moves the
 critique files into `design/` and commits the task folder. The build refuses to start on a
 contract or an order that no longer matches the hash.
 
-A second close replaces the first. It keeps your critique line, unless an order was added,
-removed or merged since. Then the critique runs again.
+A second close replaces the first. It keeps your critique line. When an order was added, removed
+or merged since, it writes a warning that names both sets of orders.
 
 ## After the close
 
