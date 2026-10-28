@@ -1590,7 +1590,7 @@ git_diff_of() {
 # check reads the owned files alone (nyc defect 17).
 br_require_clean_tree() {
   local who="$1" repo="$2" unit_id="${3:-}" run_mode="${4:-}" ledger_file="${5:-}" ledger_doc="${6:-}"
-  local dirty why halted_doc allows='["build"]'
+  local dirty why stopped_doc allows='["build"]'
   # Not --ignored. A gitignored file an implementer wrote can change a test outcome while leaving
   # a clean tree, and that is a real gap, but --ignored lists node_modules and every other build
   # product a repository ignores on purpose, so every record step refused. The gap stands.
@@ -1605,9 +1605,9 @@ br_require_clean_tree() {
   if [ "$run_mode" = "autonomous" ] && [ -n "$ledger_file" ] && [ -n "$ledger_doc" ] && [ -n "$unit_id" ]; then
     # Once the person commits the tree, the order goes on with the step this one belongs to.
     [ "$who" != "fix-record" ] || allows='["fix"]'
-    halted_doc="$(stop_order_in "$ledger_doc" "$unit_id" "$who" "$why" "$allows")"
-    [ -n "$halted_doc" ] || die 3 "$who: the ledger update for $unit_id failed."
-    write_atomic "$ledger_file" "$halted_doc"
+    stopped_doc="$(stop_order_in "$ledger_doc" "$unit_id" "$who" "$why" "$allows")"
+    [ -n "$stopped_doc" ] || die 3 "$who: the ledger update for $unit_id failed."
+    write_atomic "$ledger_file" "$stopped_doc"
     echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): $unit_id is stopped. $why" >&2
   fi
   # One message for every caller. For the record step the reason is that the owned-files check

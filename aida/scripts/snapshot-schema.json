@@ -15,7 +15,7 @@
     "takenAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-      "description": "The UTC date the snapshot was captured, YYYY-MM-DD. Set by the script at the moment of capture, never typed by hand. It answers how old the frozen shape is when a person arrives at a halted run weeks later."
+      "description": "The UTC date the snapshot was captured, YYYY-MM-DD. Set by the script at the moment of capture, never typed by hand. It answers how old the frozen shape is when a person arrives at a stopped run weeks later."
     },
     "hash": {
       "type": "string",

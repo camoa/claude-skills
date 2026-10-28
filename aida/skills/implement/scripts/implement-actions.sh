@@ -1860,9 +1860,9 @@ do_start() {
 
   local run_kind snapshot_hash_on_disk snapshot_alignment_json snapshot_workorders_json
   local drifted_orders_json='[]' contract_changed=false added_ids_json='[]'
-  local changed_criteria_json='[]' drift_halts_json='[]'
+  local changed_criteria_json='[]' drift_stops_json='[]'
   local drift_checked=false
-  local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' halted_removed_ids_json='[]'
+  local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' stopped_removed_ids_json='[]'
   # A dropped order ended without code. A design change no longer reaches it, and its owned files
   # take no part in the build order, since nothing will build it again.
   local dropped_ids_json='[]'
@@ -2197,7 +2197,7 @@ REMOVED_PATHS
       # records aside. It will never build again, so its owned files take no part in the build
       # order derived below: the live survivor that absorbed them would otherwise refuse a
       # conflict with a copy nothing will build.
-      halted_removed_ids_json="$(jq_files -cn --argjson drifted "$drifted_orders_json" --argjson live "$live_workorders_json" '
+      stopped_removed_ids_json="$(jq_files -cn --argjson drifted "$drifted_orders_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id | . as $d | select(($liveIds | index($d)) == null) ]')"
       # An order that depends on a changed one is not stopped. Unbuilt, build-brief refuses it until
@@ -2205,7 +2205,7 @@ REMOVED_PATHS
       # A criterion reason a person answered with go-on keep is not raised again: that answer kept
       # that live text, which the reason's hash names. A design file reason needs no filter, because
       # keep took the live copy into the snapshot, so only a later edit raises it again.
-      drift_halts_json="$(jq_files -cn --argjson d "$drifted_orders_json" \
+      drift_stops_json="$(jq_files -cn --argjson d "$drifted_orders_json" \
           --argjson c "$(jq -c '.stopsCleared // []' "$LEDGER_FILE" 2>/dev/null || printf '[]')" '
           [ $d[] | .id as $id
             | .reasons = (.reasons - [ $c[] | select(.id == $id and .choice == "keep") | .reasons[] | .reason
@@ -2220,7 +2220,7 @@ REMOVED_PATHS
 
   # --- step 10: derive the build order; refuse on a cycle or an owned-file overlap ----------------
   local build_orders_json cycles_json overlap_json
-  build_orders_json="$(jq_files -cn --argjson orders "$snapshot_workorders_json" --argjson gone "$(jq -cn --argjson a "$halted_removed_ids_json" --argjson b "$dropped_ids_json" '$a + $b')" \
+  build_orders_json="$(jq_files -cn --argjson orders "$snapshot_workorders_json" --argjson gone "$(jq -cn --argjson a "$stopped_removed_ids_json" --argjson b "$dropped_ids_json" '$a + $b')" \
     '[ $orders[] | . as $o | select(($gone | index($o.id)) == null) ]')"
   cycles_json="$(jq_files -c -n --argjson orders "$build_orders_json" '
       def reach($adj; $start):
@@ -2374,11 +2374,11 @@ REMOVED_PATHS
     # goes on with its frozen copy until a person takes go-on keep or redo. A removed order stops in
     # both modes.
     start_change_json='[]'
-    start_stop_json="$drift_halts_json"
+    start_stop_json="$drift_stops_json"
     if [ "$run_mode" != "autonomous" ]; then
-      start_change_json="$(printf '%s' "$drift_halts_json" | jq -c \
+      start_change_json="$(printf '%s' "$drift_stops_json" | jq -c \
         '[ .[] | .reasons = [ .reasons[] | select(startswith("design drift: the design removed ") | not) ] | select(.reasons != []) ]')"
-      start_stop_json="$(printf '%s' "$drift_halts_json" | jq -c \
+      start_stop_json="$(printf '%s' "$drift_stops_json" | jq -c \
         '[ .[] | .reasons = [ .reasons[] | select(startswith("design drift: the design removed ")) ] | select(.reasons != []) ]')"
     fi
     final_orders_json="$(printf '%s' "$ledger_doc" | jq -c --argjson drifted "$start_stop_json" --argjson changes "$start_change_json" \
@@ -2408,7 +2408,7 @@ REMOVED_PATHS
     stops_cleared_json="$(printf '%s' "$ledger_doc" | jq -c '.stopsCleared // []')"
     if [ "$drift_checked" = "true" ]; then
       local cleared_doc
-      cleared_doc="$(jq -cn --argjson orders "$final_orders_json" --argjson now "$drift_halts_json" \
+      cleared_doc="$(jq -cn --argjson orders "$final_orders_json" --argjson now "$drift_stops_json" \
           --argjson p "$DRIFT_OWN_COPY_PREFIXES" --arg today "$(date -u +%Y-%m-%d)" '
           def mine($id): [ $now[] | select(.id == $id) | .reasons[] ];
           def without($gone): .stopped = ((.stopped // []) - $gone) | if .stopped == [] then del(.stopped) else . end;
@@ -2446,7 +2446,7 @@ REMOVED_PATHS
     base_orders_json="$(printf '%s' "$snapshot_workorders_json" | jq -c '[ .[] | {id: .id, lastStep: null, attemptsUsed: 0, roundsUsed: 0} ]')"
     # A ledger opened here carries no stop yet, so there is nothing to keep. The same function is
     # called anyway, so the two paths cannot drift into stopping two different ways.
-    final_orders_json="$(jq_files -n --argjson orders "$base_orders_json" --argjson drifted "$drift_halts_json" "$START_STOP_JQ"'
+    final_orders_json="$(jq_files -n --argjson orders "$base_orders_json" --argjson drifted "$drift_stops_json" "$START_STOP_JQ"'
         $orders | map(start_stops($drifted))')"
     final_criteria_json="$(printf '%s' "$snapshot_criteria_json" | jq -c '[ .[] | {id: .id, rowState: "not-judged"} ]')"
   fi
@@ -2557,7 +2557,7 @@ ST_CHANGES
   fi
 
   # --- step 13: the report --------------------------------------------------------------------------
-  local ready_ids_json halted_json in_flight_json
+  local ready_ids_json stopped_orders_json in_flight_json
   ready_ids_json="$(jq_files -n --argjson orders "$snapshot_workorders_json" --argjson ledgerOrders "$final_orders_json" '
       ($ledgerOrders | map({(.id): .}) | add // {}) as $lm
       | [ $orders[] | . as $o
@@ -2568,7 +2568,7 @@ ST_CHANGES
           | $o.id
         ]
     ')"
-  halted_json="$(printf '%s' "$final_orders_json" | jq -c "$STOP_JQ"'[ .[] | select((.stopped // null) != null) | {id: .id, stopped: stop_text} ]')"
+  stopped_orders_json="$(printf '%s' "$final_orders_json" | jq -c "$STOP_JQ"'[ .[] | select((.stopped // null) != null) | {id: .id, stopped: stop_text} ]')"
   in_flight_json="$(printf '%s' "$final_orders_json" | jq -c '
       [ .[] | select(.lastStep != null) | select(.lastStep != "closed" and .lastStep != "dropped") | select((.stopped // null) == null)
         | {id: .id, lastStep: .lastStep, attemptsUsed: .attemptsUsed, roundsUsed: .roundsUsed} ]
@@ -2584,17 +2584,17 @@ ST_CHANGES
   # An empty ready list with nothing stopped and nothing in flight is a state, not a blank. Every
   # order closed is a finished build; anything else with nothing ready is a dependency graph where
   # no order can start, which a person needs told rather than left to infer from an empty list.
-  local run_state all_closed_count order_total removed_halted
+  local run_state all_closed_count order_total removed_stopped
   order_total="$(printf '%s' "$final_orders_json" | jq 'length')"
   all_closed_count="$(printf '%s' "$final_orders_json" | jq '[ .[] | select(.lastStep == "closed" or .lastStep == "dropped") ] | length')"
-  removed_halted="$(printf '%s' "$final_orders_json" | jq -r '[ .[] | select(any((.stopped // [])[]; .reason | startswith("design drift: the design removed "))) | .id ] | join(", ")')"
-  if [ -n "$removed_halted" ] && [ "$(printf '%s' "$ready_ids_json" | jq 'length')" -gt 0 ]; then
-    run_state="the design removed $removed_halted, and the frozen test record of each still guards its test files; drop each before the survivor's tests are written"
+  removed_stopped="$(printf '%s' "$final_orders_json" | jq -r '[ .[] | select(any((.stopped // [])[]; .reason | startswith("design drift: the design removed "))) | .id ] | join(", ")')"
+  if [ -n "$removed_stopped" ] && [ "$(printf '%s' "$ready_ids_json" | jq 'length')" -gt 0 ]; then
+    run_state="the design removed $removed_stopped, and the frozen test record of each still guards its test files; drop each before the survivor's tests are written"
   elif [ "$(printf '%s' "$ready_ids_json" | jq 'length')" -gt 0 ]; then
     run_state="orders are ready to build"
   elif [ "$(printf '%s' "$in_flight_json" | jq 'length')" -gt 0 ]; then
     run_state="an order is in flight; continue it at the step the ledger records"
-  elif [ "$(printf '%s' "$halted_json" | jq 'length')" -gt 0 ]; then
+  elif [ "$(printf '%s' "$stopped_orders_json" | jq 'length')" -gt 0 ]; then
     run_state="every order that is not closed is stopped; read the stop reasons, and a person takes one of the three ways out: go-on, redo or drop"
   elif [ "$order_total" -gt 0 ] && [ "$all_closed_count" -eq "$order_total" ]; then
     run_state="every order is closed or dropped; run finish on this task"
@@ -2651,7 +2651,7 @@ ST_CHANGES
     --arg finished "$st_unfinished" \
     --argjson leftovers "$(printf '%s' "$leftovers_json" | jq -c "[ $LO_TEXT_JQ ]")" \
     --arg setAside "$set_aside_dir" \
-    --argjson stopped "$halted_json" \
+    --argjson stopped "$stopped_orders_json" \
     --argjson inFlight "$(printf '%s' "$in_flight_json" | jq -c '[ .[] | {id, lastStep, attempts: ("attempts=" + (.attemptsUsed | tostring)), rounds: ("rounds=" + (.roundsUsed | tostring))} ]')" \
     --argjson ready "$ready_ids_json" \
     --arg state "$run_state" --arg next "$st_next" '
@@ -5157,7 +5157,7 @@ do_tests_freeze() {
   # owes one failing test of the bug. That test freezes as a record of its own,
   # tests-<order>-repair-<n>.json, n the repair's place in the order's repairs. The order stays at
   # its fix step, and its first record is never rewritten.
-  local tf_prior_step tf_prior_ledger tf_prior_halt="" tf_repair=""
+  local tf_prior_step tf_prior_ledger tf_prior_stop="" tf_repair=""
   if [ -f "$IMPL_DIR/ledger.json" ]; then
     tf_prior_ledger="$(jq -c '.' "$IMPL_DIR/ledger.json" 2>/dev/null)"
     if [ -n "$tf_prior_ledger" ]; then
@@ -5170,7 +5170,7 @@ do_tests_freeze() {
       esac
       [ -z "$tf_repair" ] || [ "$absence_json" = "[]" ] \
         || die3 "tests-freeze: $unit_id is freezing the test of a repair, which proves a bug and routes no --absence clause. Drop the --absence."
-      tf_prior_halt="$(stop_text "$(printf '%s' "$tf_prior_ledger" | jq -c --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0] // {}')")"
+      tf_prior_stop="$(stop_text "$(printf '%s' "$tf_prior_ledger" | jq -c --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0] // {}')")"
     fi
   fi
 
@@ -5688,7 +5688,7 @@ TF_RECORDED
     # person who judges the row at the next freeze then goes on to the build; one who changes the
     # tests or the row redoes the order.
     if [ -n "$rejected_by_model" ] && [ "$tf_run_mode" = "autonomous" ] && [ -n "$tf_ledger_doc" ]; then
-      local tf_why tf_halted_doc tf_model_rows
+      local tf_why tf_stopped_doc tf_model_rows
       tf_model_rows="$(jq_files -nc --argjson rows "$rows_meta_json" --argjson check "$tf_check_doc" \
           --argjson author "$tf_has_author" --arg id "$unit_id" --argjson ledger "$tf_ledger_doc" '
           ([ ($ledger.orders // [])[] | select(.id == $id) ][0].rowsSentBack // []) as $sent
@@ -5705,10 +5705,10 @@ TF_RECORDED
       if printf '%s' "$tf_model_rows" | jq -e 'any(.[]; .cause != null)' >/dev/null; then
         tf_why="row rejected by the checker: $(printf '%s' "$tf_model_rows" | jq -r '
             [ .[] | .criterion + (if .cause == null then "" else " (" + .cause + ")" end) + ": " + .note ] | join("; ")')"
-        tf_halted_doc="$(stop_order_in "$tf_ledger_doc" "$unit_id" tests-freeze "$tf_why" '["build"]')"
-        [ -n "$tf_halted_doc" ] || die3 "tests-freeze: the ledger update for $unit_id failed."
-        write_atomic "$tf_ledger_file" "$tf_halted_doc"
-        tf_ledger_doc="$tf_halted_doc"
+        tf_stopped_doc="$(stop_order_in "$tf_ledger_doc" "$unit_id" tests-freeze "$tf_why" '["build"]')"
+        [ -n "$tf_stopped_doc" ] || die3 "tests-freeze: the ledger update for $unit_id failed."
+        write_atomic "$tf_ledger_file" "$tf_stopped_doc"
+        tf_ledger_doc="$tf_stopped_doc"
         echo "TESTS-FREEZE: $unit_id is stopped. $tf_why" >&2
         tf_model_next=" $unit_id is stopped. Report the stop, and take the next ready order."
         tf_person_next="$tf_model_next"
@@ -6142,7 +6142,7 @@ TF_EOF
     # orders commit while a person rules on it (live-run row 406). No stop on the order means a
     # person took it out of the stopped state. A report older than the record stopped before an
     # earlier freeze.
-    elif [ "$tf_prior_step" != "tests-frozen" ] || [ -n "$tf_prior_halt" ] || ! tf_stopped_test_wrong "$unit_id" "$record_file"; then
+    elif [ "$tf_prior_step" != "tests-frozen" ] || [ -n "$tf_prior_stop" ] || ! tf_stopped_test_wrong "$unit_id" "$record_file"; then
       die 35 "tests-freeze: $record_file was already frozen at commit $existing_commit, and this run is at a different commit, $current_commit, with different tests. A record is taken once per commit; investigate before proceeding. A wrong test is frozen again after a redo, or after a builder's Stop: test-wrong once the order is out of the stopped state."
     fi
   fi
@@ -10800,21 +10800,21 @@ do_verify_record() {
       write_atomic "$RV_LEDGER_FILE" "$ruled_ledger"
       RV_LEDGER_DOC="$ruled_ledger"
     fi
-    if [ -n "$RV_RULING_HALT" ]; then
-      ruled_ledger="$(stop_order_in "$RV_LEDGER_DOC" "$unit_id" verify-record "$RV_RULING_HALT" "$RV_RULING_ALLOWS")"
+    if [ -n "$RV_RULING_STOP" ]; then
+      ruled_ledger="$(stop_order_in "$RV_LEDGER_DOC" "$unit_id" verify-record "$RV_RULING_STOP" "$RV_RULING_ALLOWS")"
       [ -n "$ruled_ledger" ] || die3 "verify-record: the stop on $unit_id could not be written."
       write_atomic "$RV_LEDGER_FILE" "$ruled_ledger"
       RV_LEDGER_DOC="$ruled_ledger"
     fi
     if [ "$rounds_used" = "0" ]; then
-      rv_print_verification 0 "ruled before any fix round" "${RV_RULING_HALT:-none}"
+      rv_print_verification 0 "ruled before any fix round" "${RV_RULING_STOP:-none}"
     elif [ "$already" = "0" ]; then
-      rv_print_verification "$rounds_used" "ruled: round $rounds_used is not verified yet, so the rulings were applied and its verification waits for the verifier's file" "${RV_RULING_HALT:-none}"
+      rv_print_verification "$rounds_used" "ruled: round $rounds_used is not verified yet, so the rulings were applied and its verification waits for the verifier's file" "${RV_RULING_STOP:-none}"
     else
-      rv_print_verification "$rounds_used" "verified: round $rounds_used was already on the record, so its verdicts stand and the rulings were applied" "${RV_RULING_HALT:-none}"
+      rv_print_verification "$rounds_used" "verified: round $rounds_used was already on the record, so its verdicts stand and the rulings were applied" "${RV_RULING_STOP:-none}"
     fi
     [ -z "$verdicts_path" ] || echo "verdicts: ignored, round $rounds_used was already on the record and its verdicts stand"
-    [ -z "$RV_RULING_HALT" ] || echo "VERIFY-RECORD: $unit_id is stopped. $RV_RULING_HALT" >&2
+    [ -z "$RV_RULING_STOP" ] || echo "VERIFY-RECORD: $unit_id is stopped. $RV_RULING_STOP" >&2
     exit 0
   fi
   local fix_file
@@ -11019,8 +11019,8 @@ do_verify_record() {
   local stop_why="" stop_allows='["fix","close"]'
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
     stop_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
-  elif [ -n "$RV_RULING_HALT" ]; then
-    stop_why="$RV_RULING_HALT"
+  elif [ -n "$RV_RULING_STOP" ]; then
+    stop_why="$RV_RULING_STOP"
     stop_allows="$RV_RULING_ALLOWS"
   elif [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$disputed" ]; then
     stop_why="a fixer reports $disputed already correct with the cited code unchanged since the review, and nobody is present to rule on it"
@@ -11042,9 +11042,9 @@ do_verify_record() {
 # the round rather than the text. Then the before-the-cap gate, the nothing-left gate, and each
 # ruling landing on its finding. The unattended refusal (exit 55) is the caller's, read before
 # the round is looked up. $1 unit, $2 the findings array, $3 the round, $4 the raw --ruling
-# values, one per line. Sets RV_RULED_FINDINGS, and RV_RULING_HALT with RV_RULING_ALLOWS, the
+# values, one per line. Sets RV_RULED_FINDINGS, and RV_RULING_STOP with RV_RULING_ALLOWS, the
 # stop reason a ruling writes and the go-on choices it allows; the reason is empty when none stops.
-RV_RULED_FINDINGS=""; RV_RULING_HALT=""; RV_RULING_ALLOWS='[]'
+RV_RULED_FINDINGS=""; RV_RULING_STOP=""; RV_RULING_ALLOWS='[]'
 # The fronts of the stop reasons a ruling answers: the unattended fix round cap and a finding on a
 # non-goal, each of which waits on a person's ruling. A disputed already-correct claim is not one:
 # its finding is pending, not open, so no ruling lands on it, and go-on fix or close answers it.
@@ -11055,7 +11055,7 @@ RV_RULE_ANSWERS='["a fix round cap reached with findings still open","a finding 
 RV_SCOPE_STOP='["a fixer reported its scope too small"]'
 rv_apply_rulings() {
   local unit_id="$1" updated_findings="$2" rounds_used="$3" rulings_raw="$4"
-  local open_now ruling_halt="" rulings_json="[]"
+  local open_now ruling_stop="" rulings_json="[]"
   open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
   local rline rid rrest rverdict rreason rcount ri is_open
   while IFS= read -r rline; do
@@ -11107,18 +11107,18 @@ RV_RULINGS
       --arg ruling "$rverdict" --arg reason "$rreason" '
       map(if .id == $id then . + {status: "ruled", ruling: $ruling, rulingReason: $reason} else . end)')"
     case "$rverdict" in
-      test-wrong) ruling_halt="test wrong: $rid: $rreason" ;;
+      test-wrong) ruling_stop="test wrong: $rid: $rreason" ;;
       load-bearing)
-        case "$ruling_halt" in
+        case "$ruling_stop" in
           "test wrong: "*) ;;
-          *) ruling_halt="$rid$LOAD_BEARING_MARK$rreason" ;;
+          *) ruling_stop="$rid$LOAD_BEARING_MARK$rreason" ;;
         esac ;;
     esac
     ri=$((ri + 1))
   done
   RV_RULED_FINDINGS="$updated_findings"
-  RV_RULING_HALT="$ruling_halt"
-  case "$ruling_halt" in
+  RV_RULING_STOP="$ruling_stop"
+  case "$ruling_stop" in
     "test wrong: "*) RV_RULING_ALLOWS='[]' ;;
     *) RV_RULING_ALLOWS='["check","close"]' ;;
   esac
