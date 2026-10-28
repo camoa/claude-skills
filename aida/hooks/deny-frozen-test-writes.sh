@@ -98,8 +98,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # naming the agent's type (scripts/lib/paths.sh, dispatch_record_for). With no project for the
 # working directory, the project remembered for it answers the same way, else the one open record
 # naming this plugin's role in any registered project (dispatch_record_resolve). Records open for other
-# trees only: allow, through `systemMessage` naming why. dispatch.json unreadable, missing
-# fields, or no unit has frozen anything yet for this task and rules two and three are off: allow, through `systemMessage` naming why. Nothing is frozen
+# trees only: allow, silent outside every task's worktree, else through `systemMessage` naming why.
+# dispatch.json unreadable, missing fields, or no unit has frozen anything yet for this task and rules two and three are off: allow, through `systemMessage` naming why. Nothing is frozen
 # before the third step of implementation runs, and that is a real state, not a fault, the same
 # distinction dispatch-schema.json's own header draws. An agent that reports a test author type
 # while the record names another role, or names no role, still gets the exception
@@ -397,7 +397,8 @@ CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 
 # Each task keeps its own record under its implementation folder (live-run row 139). The one this
 # agent works under is the one whose codePath holds the payload's working directory. A record
-# open for another tree is another task's dispatch, and it says so rather than passing in silence.
+# open for another tree is another task's dispatch. The hook says so only for a write in a task's
+# worktree, and passes any other write in silence.
 # The directory is held in the same canonical form codePath is, so the two compare as strings,
 # and a working directory that no longer exists still normalizes textually. A session outside
 # every code path reads the project remembered for its folder as if it stood in the main checkout,
@@ -414,11 +415,33 @@ PROJECT_PATH="$DISPATCH_PROJECT"
 DISPATCH_FILE="$DISPATCH_RECORD"
 MAIN_SESSION=false
 [ -n "$AGENT_ID" ] || MAIN_SESSION=true
-# What the record path says when no record answers for this tree. The main session goes on to rule
-# one, and the note is said only when nothing refused the write and the payload names an agent type.
+# True when directory $1 lies in the worktree of a task that is not complete, in the project read,
+# else in any registered project. Only such a write is a gap in this guard (gap row 466).
+in_task_worktree() {
+  local p wt
+  [ -z "${ZSH_VERSION:-}" ] || setopt LOCAL_OPTIONS NULL_GLOB
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    while IFS= read -r wt; do
+      wt="$(cd "$wt" 2>/dev/null && pwd -P)" || continue
+      is_under "$1" "$wt" && return 0
+    done < <(jq -r 'select(.state != "complete") | .worktree | objects | .path // empty' "$p"/tasks/*/task.json 2>/dev/null </dev/null)
+  done <<<"${PROJECT_PATH:-$(registry_list_projects 2>/dev/null | jq -r '.path // empty' 2>/dev/null)}"
+  return 1
+}
+# What the record path says when no record answers for this tree. It is said only for a write in a
+# task's worktree: the file tool's target folder, else the shell's folder. The main session goes on
+# to rule one, and the note is said only when nothing refused the write and the payload names an
+# agent type.
 RECORD_NOTE=""
 if [ -z "$DISPATCH_FILE" ]; then
-  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || RECORD_NOTE="$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
+  WRITE_DIR="$CWD_CANON"
+  if [ -n "${RECORD_TARGET:-}" ]; then
+    WRITE_DIR="$(dirname -- "$(normalize_abs "$(resolve_against "$RECORD_TARGET" "$CWD_CANON")")")"
+    WRITE_DIR="$(cd "$WRITE_DIR" 2>/dev/null && pwd -P || printf '%s' "$WRITE_DIR")"
+  fi
+  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || ! in_task_worktree "$WRITE_DIR" \
+    || RECORD_NOTE="$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
   if [ "$MAIN_SESSION" = false ] || [ -z "$PROJECT_PATH" ]; then
     [ -z "$RECORD_NOTE" ] || not_enforced "$RECORD_NOTE"
     echo '{}'; exit 0
