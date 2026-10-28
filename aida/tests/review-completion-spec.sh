@@ -77,6 +77,68 @@ moved_case() (
 )
 expect "code moved since checks warns attended and stops unattended" "$(moved_case)" "0|1|51"
 
+echo "--- the four rows from the 2026-10-28 scan"
+# halves_record: the review record as checks leaves it, with checks 3 and 4 met on their script half.
+halves_record() {
+  reviewed_record
+  edit "$TASK/review/review.json" '.checks += [
+    {id: "serves-a-criterion", verdict: "met", detail: "x", scriptHalf: {verdict: "met", detail: "x"}},
+    {id: "test-and-mutation", verdict: "met", detail: "x", scriptHalf: {verdict: "met", detail: "x"}}]'
+}
+env_case() (
+  source "$HERE/records.bash"
+  review_records
+  mkdir -p "$WT/.ddev" && printf 'name: t1\n' >"$WT/.ddev/config.yaml"
+  git -C "$WT" add .ddev/config.yaml && git -C "$WT" commit -qm "the site of t1"
+  edit "$TASK/task.json" '.worktree.recipeChanges = [{path: ".ddev/config.yaml", blob: $b}]' \
+    --arg b "$(git -C "$WT" rev-parse HEAD:.ddev/config.yaml)"
+  edit "$IMPL/finished.json" '.commitRange = $r' --arg r "$(git -C "$WT" rev-parse HEAD~2)..$(git -C "$WT" rev-parse HEAD)"
+  halves_record
+  jq -n '{findings: [{id: "f1", lens: "purpose", severity: "high", file: ".ddev/config.yaml", lines: "1",
+    linkedTo: "", evidence: "serves no criterion"}]}' >"$ROOT/findings.json"
+  run "$REVIEW" findings "$TASK" --findings "$ROOT/findings.json"
+  jq -r '([ .checks[] | select(.id == "serves-a-criterion") ][0].verdict) + "|" + (.findings | length | tostring)' "$TASK/review/review.json"
+)
+expect "a purpose finding on a file the environment wrote is not recorded (row 469)" "$(env_case)" "met|0"
+
+nocriterion_case() (
+  source "$HERE/records.bash"
+  review_records
+  reviewed_record
+  edit "$TASK/review/review.json" '.findings = [{id: "f1", lens: "solid", severity: "high", file: "a.php", lines: "1",
+    linkedTo: "", evidence: "a god class", disposition: "follow-up"}]
+    | .checks = [{id: "solid", verdict: "unmet", detail: "f1"}]'
+  closed_with --row c1=met
+  printf '%s|' "$(jq -r '.verdict' "$TASK/review/review.json")"
+  run "$COMPLETION" read "$TASK"
+  grep -c '^followUp(f1): ' "$OUT"
+)
+expect "a finding that cites no criterion warns, and completion offers it as a task (row 470)" "$(nocriterion_case)" "passed|1"
+
+rebuild_case() (
+  source "$HERE/records.bash"
+  review_records "" closed
+  jq -n --arg c "$(git -C "$WT" rev-parse HEAD)" '{schemaVersion: 1, unit: "wo1", reviewedAt: $c, findings: [], rounds: [],
+    deviationPending: {departure: "a.php reads the old file", file: "report.md"}}' >"$IMPL/review-wo1.json"
+  printf 'rebuilt\n' >"$WT/a.php" && git -C "$WT" commit -qam "rebuild wo1 to the design"
+  edit "$IMPL/finished.json" '.commitRange = $r' --arg r "$(git -C "$WT" rev-parse HEAD~2)..$(git -C "$WT" rev-parse HEAD)"
+  reviewed_record
+  edit "$TASK/review/review.json" '.checks += [{id: "decision-wo1-departure", verdict: "unknown", answeredBy: "nobody",
+    detail: "wo1 departs from the design"}]'
+  closed_with --row c1=met --row decision-wo1-departure=rebuild
+  jq -r '.checks[] | select(.id == "decision-wo1-departure") | .verdict' "$TASK/review/review.json"
+)
+expect "a rebuild already on the reviewed branch reads met (row 471)" "$(rebuild_case)" "met"
+
+stale_case() (
+  source "$HERE/records.bash"
+  review_records
+  reviewed_record
+  closed_with --row c1=met --row decision-wo1-f2=deferred
+  printf '%s|%s\n' "$RC" "$(jq -r '.verdict' "$TASK/review/review.json")"
+)
+expect "a decision row from an earlier pass is named and dropped, and close goes on (row 472)" "$(stale_case)" "0|passed"
+
 echo "--- checks: the task's own change set (row 441)"
 merge_case() (
   source "$HERE/records.bash"

@@ -39,6 +39,8 @@ The answer decides what happens next:
   in `skills/implement/references/finish.md`. A load-bearing finding is fixed. A wrong
   test is corrected by the person, not a model. A departure is rebuilt to the design. That
   finish carries no decision the person already answered, so the next review asks it no more.
+  A `rebuild` reads met when the reviewed branch already holds it: a commit after the order's own
+  review record changes a file the order owns.
 
 `close` writes no verdict while a `decision-` check is unanswered. The record keeps every row,
 and a later `close` with the person present answers each one with no fresh pass. Autonomous,

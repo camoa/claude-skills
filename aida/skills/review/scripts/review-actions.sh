@@ -959,6 +959,21 @@ rw_run_fault() {
   esac
 }
 
+# The changed files `task environment up` recorded, still as it recorded them at the range end, as
+# one JSON array. Check 3 sets them aside (gap row 256). The brief names them to the purpose lens,
+# and findings records no purpose finding on one (gap row 469). Reads RW_RANGE and RW_CHANGED_JSON.
+rw_env_aside() {
+  local one out='[]'
+  while IFS= read -r one; do
+    [ -n "$one" ] || continue
+    task_env_recipe_change "$TASK_PATH" "$one" "$RV_CODEPATH" "${RW_RANGE##*..}" \
+      && out="$(printf '%s' "$out" | jq -c --arg p "$one" '. + [$p]')"
+  done <<RW_ENV_CHANGED
+$(printf '%s' "$RW_CHANGED_JSON" | jq -r '.[]')
+RW_ENV_CHANGED
+  printf '%s' "$out"
+}
+
 # Check 3, the half a script can decide: a changed file no order owns is work no order asked for.
 # The hunk half is the reviewer's, and its finding cites an id or is not acted on.
 rw_check_serves() {
@@ -1695,6 +1710,8 @@ do_brief() {
   rw_load_record "brief"
   rw_require_step "brief" "$CHECK_SERVES" "checks"
   rw_load_absence_clauses "brief"
+  RW_RANGE="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange')"
+  rw_load_changed "${RW_RANGE%%..*}" "${RW_RANGE##*..}"
 
   local research_json list one doc brief_json
   research_json='[]'
@@ -1773,10 +1790,11 @@ RW_GUIDES
     --slurpfile record "$RECORD_FILE" --argjson research "$research_json" \
     --argjson guideBodies "$guide_bodies" --argjson practiceSearch "$practice_json" \
     --argjson finished "$RW_FINISHED_DOC" --arg lenses "$LENS_WORDS" \
-    --argjson absenceClauses "$RW_ABSENCE_CLAUSES" \
+    --argjson absenceClauses "$RW_ABSENCE_CLAUSES" --argjson setAside "$(rw_env_aside)" \
     --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" "$REASONING_JQ"'
     $record[0] as $record
     | {task: $task,
+     setAside: $setAside,
      codePath: $codePath,
      playbooksPath: $playbooksPath,
      reviewedRange: $record.reviewedRange,
@@ -2015,6 +2033,19 @@ do_findings() {
     findings_json="$(jq_files -nc --argjson have "$findings_json" --argjson one "$built" '$have + [$one]')"
     i=$((i + 1))
   done
+
+  # A purpose finding on a file `task environment up` wrote judges no order's work: no order owns
+  # the file, and check 3 sets it aside (gap row 469). It is named and not recorded.
+  local env_aside env_dropped
+  RW_RANGE="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange')"
+  rw_load_changed "${RW_RANGE%%..*}" "${RW_RANGE##*..}"
+  env_aside="$(rw_env_aside)"
+  env_dropped="$(printf '%s' "$findings_json" | jq -r --argjson a "$env_aside" \
+    '[ .[] | select(.lens == "purpose" and (.file as $f | $a | index($f)) != null) | .id + " on " + .file ] | join(", ")')"
+  findings_json="$(printf '%s' "$findings_json" | jq -c --argjson a "$env_aside" \
+    '[ .[] | select((.lens == "purpose" and (.file as $f | $a | index($f)) != null) | not) ]')"
+  [ -z "$env_dropped" ] \
+    || echo "FINDINGS: these purpose findings name files \`task environment up\` wrote for the worktree's site, which no order owns, so none is recorded: $env_dropped" >&2
 
   # Each check reads its verdict off its own lens: met when that lens returned nothing, unmet when
   # it returned a finding. An absent verdict is never a clean one, and version 5 paid for that four
@@ -3182,9 +3213,33 @@ RW_ROWS
 $rows
 RW_ROWS
 )"
-  updated="$(printf '%s' "$updated" | jq -c --argjson given "$check_rows" '
+  # A rebuild the reviewed branch already holds is done, so the departure reads met (gap row 471).
+  # The branch holds it when a commit after the order's own review record changes a file the order
+  # owns. Each such order maps to those commits.
+  local rebuilt='{}' rb_unit rb_from rb_files rb_one rb_glob rb_hit
+  for rb_unit in $(printf '%s' "$check_rows" | jq -r '.[] | select(.word == "rebuild" and (.id | endswith("-departure"))) | .id | ltrimstr("decision-") | rtrimstr("-departure")'); do
+    rb_from="$(jq -r '.reviewedAt // empty' "$IMPL_DIR/review-$rb_unit.json" 2>/dev/null)"
+    [ -n "$rb_from" ] || continue
+    rb_files="$(git -C "$RV_CODEPATH" diff --no-renames --name-only "$rb_from" "$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')" 2>/dev/null)"
+    rb_hit=""
+    while IFS= read -r rb_one; do
+      [ -n "$rb_one" ] && [ -z "$rb_hit" ] || continue
+      for rb_glob in $(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg u "$rb_unit" '.workOrders[] | select(.id == $u) | (.ownedFiles // [])[]'); do
+        tf_path_matches_catalog_glob "$rb_one" "$rb_glob" && { rb_hit="$rb_one"; break; }
+      done
+    done <<RW_REBUILT
+$rb_files
+RW_REBUILT
+    [ -z "$rb_hit" ] || rebuilt="$(printf '%s' "$rebuilt" | jq -c --arg u "$rb_unit" --arg from "${rb_from:0:12}" --arg f "$rb_hit" '.[$u] = "the reviewed branch changes \($f) after the order'"'"'s own record at \($from)"')"
+  done
+  updated="$(printf '%s' "$updated" | jq -c --argjson given "$check_rows" --argjson rebuilt "$rebuilt" '
     .checks = [ .checks[] | . as $c | ([ $given[] | select(.id == $c.id) ][0]) as $g
+      | ($c.id | ltrimstr("decision-") | rtrimstr("-departure")) as $u
       | if $g == null then $c
+        elif $g.word == "rebuild" and ($c.id | endswith("-departure")) and $rebuilt[$u] != null then
+          $c | .verdict = "met" | .answeredBy = "person" | .answer = $g.word
+          | .detail = ((.detail | sub(" The person (ruled|deferred|kept|did not keep|accepted|rejected) .*$"; ""))
+                       + " The person did not keep the departure, and the rebuild is already done: " + $rebuilt[$u] + ".")
         elif ($c.id | startswith("decision-")) then
           $c | .verdict = $g.verdict | .answeredBy = "person" | .answer = $g.word
           | .detail = ((.detail | sub(" The person (ruled|deferred|kept|did not keep|accepted|rejected) .*$"; ""))

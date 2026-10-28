@@ -48,7 +48,8 @@ departure from the design. For a finding, answer `wrong`, `deferred`, `load-bear
 `test-wrong`. For a departure, answer `keep` or `rebuild`. The words mean what they mean at the
 build; see [implement](../implement/README.md).
 
-`load-bearing`, `test-wrong` and `rebuild` read unmet, a warning. While one decision is
+`load-bearing`, `test-wrong` and `rebuild` read unmet, a warning. A `rebuild` that the reviewed
+branch already holds reads met. While one decision is
 unanswered, review writes no verdict and prints "no verdict yet". Run the close again when you can
 answer.
 

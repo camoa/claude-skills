@@ -79,6 +79,49 @@ page_case() (
     "$(jq -r '.surfaces[] | select(.id == "home") | .looked' "$TASK/review/review.json")" "$(grep -c . "$ROOT/runs.txt")"
 )
 
+# vr_case <viewport>...: one visual-regression surface, home, at two viewports, wide and narrow.
+# The verifier's rows name home at the viewports given. Prints the check's verdict and whether
+# home reads looked.
+vr_case() (
+  source "$HERE/records.bash"
+  review_records
+  jq -n '{schemaVersion: 1, viewports: [{name: "wide", width: 1280, height: 800}, {name: "narrow", width: 390, height: 844}],
+    surfaces: [{id: "home", url: "/", kinds: ["visual-regression"], enabled: true, masks: []}]}' >"$ROOT/surfaces.json"
+  jq --arg s "$ROOT/surfaces.json" '.surfaces = {e2e: {enabled: false}, visualRegression: {enabled: true}, registryPath: $s}' \
+    "$PROJECT/project.json" >"$ROOT/p.json" && mv "$ROOT/p.json" "$PROJECT/project.json"
+  printf 'echo home\n' >"$ROOT/vr.sh"
+  printf -- '---\nname: fake_review\ncapability: review\nrecipe_class: process\nframework: fake\n---\n\n## Surface commands\n\n```yaml\nsurface_commands:\n  - id: visual-regression\n    argv: ["sh", "%s/vr.sh"]\n```\n' "$ROOT" >"$ROOT/checks.md"
+  reviewed_record "$(jq -nc --arg c "$ROOT/checks.md" '[{framework: "fake", lookup: "resolved", testRecipe: "", checkRecipe: $c}]')"
+  run "$REVIEW" acceptance "$TASK"
+  local rows v
+  rows=("$(c1_row)")
+  for v in "$@"; do
+    : >"$TASK/review/evidence/home-$v.png"
+    rows+=("$(jq -nc --arg v "$v" '{surface: "home", viewport: $v, sentence: "home matches", path: ("home-" + $v + ".png"), verdict: "met", note: "same"}')")
+  done
+  evidence "${rows[@]}"
+  run "$REVIEW" acceptance "$TASK" --evidence
+  printf '%s|%s\n' "$(jq -r '.checks[] | select(.id == "visual-regression") | .verdict' "$TASK/review/review.json")" \
+    "$(jq -r '.surfaces[] | select(.id == "home") | .looked' "$TASK/review/review.json")"
+)
+
+# mixed_case: a command surface, cli, beside a page surface, home, both end to end. The command
+# exits 0. Prints the e2e check's verdict, whether cli ran, and whether home ran.
+mixed_case() (
+  source "$HERE/records.bash"
+  review_records
+  jq -n '{schemaVersion: 1, viewports: [{name: "wide", width: 1280, height: 800}],
+    surfaces: [{id: "cli", command: ["true"], kinds: ["e2e"], enabled: true},
+               {id: "home", url: "/", kinds: ["e2e"], enabled: true, masks: []}]}' >"$ROOT/surfaces.json"
+  jq --arg s "$ROOT/surfaces.json" '.surfaces = {e2e: {enabled: true}, visualRegression: {enabled: false}, registryPath: $s}' \
+    "$PROJECT/project.json" >"$ROOT/p.json" && mv "$ROOT/p.json" "$PROJECT/project.json"
+  reviewed_record
+  run "$REVIEW" acceptance "$TASK"
+  printf '%s|%s|%s\n' "$(jq -r '.checks[] | select(.id == "e2e") | .verdict' "$TASK/review/review.json")" \
+    "$(jq -r '.surfaces[] | select(.id == "cli") | .ran' "$TASK/review/review.json")" \
+    "$(jq -r '.surfaces[] | select(.id == "home") | .ran' "$TASK/review/review.json")"
+)
+
 # light_case: the acceptance step on a light task in a project that never set end to end up.
 # Prints the verdict of the e2e check.
 light_case() (
@@ -117,6 +160,12 @@ expect "an unmet row naming a file is a finding that fails the review, and reope
 echo "--- a page surface and the verifier's look"
 expect "with a row at its viewport, e2e reads met, home is looked at, and the suite ran once" "$(page_case yes)" "met|true|1"
 expect "with no row at its viewport, e2e reads unknown" "$(page_case no)" "unknown|false|1"
+
+echo "--- visual regression at two viewports, and a command surface beside a page"
+expect "evidence at both viewports: the check reads met and home is looked at" "$(vr_case wide narrow)" "met|true"
+expect "evidence at one of two viewports: the check reads unknown" "$(vr_case wide)" "unknown|false"
+expect "a page beside a command surface: the command runs, the page does not, and the check reads unknown" \
+  "$(mixed_case)" "unknown|true|false"
 
 echo "--- acceptance: a light task with no demo-path script"
 expect "a light task whose project has no end to end set up is not unmet" "$(light_case)" "undeclared"

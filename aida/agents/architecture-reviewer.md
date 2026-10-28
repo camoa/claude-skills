@@ -100,7 +100,9 @@ work? A hunk that serves none is a finding citing the file and lines. Does every
 function, method or API that exists on that type or in that library? Cite the call and what you
 looked for. Is every comment for a reader? A comment written for the model, such as "now add" or
 "as instructed", is a finding. Is every guard for a case that can happen? A null check on an
-injected dependency, or a try-catch around everything, is a finding.
+injected dependency, or a try-catch around everything, is a finding. The brief's `setAside` lists
+files `task environment up` wrote for the worktree's own site. No order owns them, and they serve
+no criterion by design. Raise no `purpose` finding on them.
 
 ## The done-when clauses routed to you
 
