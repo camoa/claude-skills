@@ -1040,24 +1040,38 @@ stop_text() {
 # cap records no attempt, and a step that goes on past code moved after a record writes none.
 # Redo and drop read them from here, and no other order counts them as its own.
 im_unrecorded_commits_in() {
-  printf '%s' "$1" | jq -c --arg id "$2" --argjson c "$(im_role_commits "$3" "$4" "$5" "$2")" '
+  im_listed_commits_in "$1" "$2" "$(im_role_commits "$3" "$4" "$5" "$2")"
+}
+# Prints ledger document $1 with the JSON array of commits $3 added to order $2's unrecordedCommits.
+im_listed_commits_in() {
+  printf '%s' "$1" | jq -c --arg id "$2" --argjson c "$3" '
     .orders = (.orders | map(if .id == $id and ($c | length) > 0
       then .unrecordedCommits = ((.unrecordedCommits // []) + $c | unique) else . end))'
 }
 
-# Code moved after the last record of order $2: the commits after $4 up to $5 in the repository $3
-# that no other order's records list. A commit there that changes a frozen test, or a file the
-# order does not own, stops the step (exit 63), because those are the frozen-test and owned-files
-# guarantees and no record judged the commit. Otherwise the step goes on with a warning, and the
-# commits join the order's unrecordedCommits, so its commit range, redo and drop still hold them.
-# Call after rv_load_state and rv_load_range_repo. $1 the action.
-im_code_moved() {
-  local who="$1" unit_id="$2" repo="$3" from="$4" to="$5" moved paths p fp f frozen="" hits="" owned outside count
+# The commits of order $2 after $4 up to $5 in the repository $3 that no record judged, those no
+# other order's records list. A commit there that changes a frozen test, or a file the order does
+# not own, refuses (exit 63): those are the frozen-test and owned-files guarantees. On an order
+# proved by its record, a commit that changes only files AIDA's own scripts write in the project
+# folder is set aside. Sets IM_MOVED to the commits left, a JSON array. Call after rv_load_state
+# and rv_load_range_repo. $1 the action, $6 what the commits are, for the message.
+IM_MOVED="[]"
+im_moved_guard() {
+  local who="$1" unit_id="$2" repo="$3" from="$4" to="$5" what="$6" paths p c fp f frozen="" hits="" owned outside
   git -C "$repo" merge-base --is-ancestor "$from" "$to" 2>/dev/null \
-    || die 63 "$who: $repo is at $to, and the last record for $unit_id was written at $from, which that history does not hold. A person moves the branch back to it, or redoes the order."
-  moved="$(im_role_commits "$repo" "$from" "$to" "$unit_id")"
-  [ "$moved" != "[]" ] || return 0
-  paths="$(im_commits_paths "$repo" "$moved" "$RV_RANGE_SCOPE")"
+    || die 63 "$who: $repo is at $to, and $what $unit_id began at $from, which that history does not hold. A person moves the branch back to it, or redoes the order."
+  IM_MOVED="$(im_role_commits "$repo" "$from" "$to" "$unit_id")"
+  br_order_facts "$RV_UNIT_JSON"
+  if [ "$BR_ORDER_RANGE" = "project" ] && [ "$IM_MOVED" != "[]" ]; then
+    BRC_CODEPATH="$repo"
+    IM_MOVED="$(printf '%s' "$IM_MOVED" | jq -r '.[]' | while IFS= read -r c; do
+        im_commits_paths "$repo" "[\"$c\"]" "" | while IFS= read -r p; do
+          br_aida_writes_in_project "$p" || { printf '%s\n' "$c"; break; }
+        done
+      done | jq -Rsc 'split("\n") | map(select(. != ""))')"
+  fi
+  [ "$IM_MOVED" != "[]" ] || return 0
+  paths="$(im_commits_paths "$repo" "$IM_MOVED" "$RV_RANGE_SCOPE")"
   for f in "$IMPL_DIR"/tests-*.json; do
     [ -e "$f" ] || continue
     frozen="$frozen$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$f" 2>/dev/null | while IFS= read -r fp; do
@@ -1071,17 +1085,29 @@ im_code_moved() {
 $paths
 ICM_PATHS
   [ -z "$hits" ] \
-    || die 63 "$who: the commits after the record of $unit_id at $from change frozen tests: ${hits%, }. Nobody changes a frozen test. A person moves the branch back to $from, or redoes the order."
+    || die 63 "$who: $what $unit_id at $from change frozen tests: ${hits%, }. Nobody changes a frozen test. A person moves the branch back to $from, or redoes the order."
   owned="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson o "$(im_owns_of "$unit_id")" '(.ownedFiles // []) + $o')"
   outside="$(rv_scope_outside "$(printf '%s\n' "$paths" | jq -Rsc 'split("\n") | map(select(. != ""))')" "$owned" "$repo" "$TASK_PATH" \
     | while IFS= read -r p; do task_env_recipe_change "$TASK_PATH" "$p" "$repo" "$to" || printf '%s, ' "$p"; done)"
   [ -z "$outside" ] \
-    || die 63 "$who: the commits after the record of $unit_id at $from change files it does not own: ${outside%, }. An order's own commits change only its own files. A person moves the branch back to $from, or redoes the order."
-  RV_LEDGER_DOC="$(im_unrecorded_commits_in "$RV_LEDGER_DOC" "$unit_id" "$repo" "$from" "$to")"
-  [ -n "$RV_LEDGER_DOC" ] || die3 "$who: the commits after the record of $unit_id could not be written."
-  write_atomic "$RV_LEDGER_FILE" "$RV_LEDGER_DOC"
-  count="$(printf '%s' "$moved" | jq 'length')"
-  task_warn "$TASK_PATH" "$who" "$unit_id" "the code moved after the record at ${from:0:12}: $count commits no record judged, inside the order's own files, joined its commit list"
+    || die 63 "$who: $what $unit_id at $from change files it does not own: ${outside%, }. An order's own commits change only its own files. A person moves the branch back to $from, or redoes the order."
+}
+
+# Code moved after the last record of order $2, at $4, up to $5 in the repository $3. The guard
+# above refuses what breaks a guarantee. Otherwise the step goes on with a warning, and the commits
+# join the order's unrecordedCommits, so its commit range, redo and drop still hold them. The
+# ledger on disk takes only those commits: a go-on grant the caller holds in RV_LEDGER_DOC is
+# written only once its check passes. $1 the action.
+im_code_moved() {
+  local who="$1" unit_id="$2" repo="$3" from="$4" to="$5" disk
+  im_moved_guard "$who" "$unit_id" "$repo" "$from" "$to" "the commits after the record of"
+  [ "$IM_MOVED" != "[]" ] || return 0
+  disk="$(jq -c '.' "$RV_LEDGER_FILE" 2>/dev/null)"
+  disk="$(im_listed_commits_in "$disk" "$unit_id" "$IM_MOVED")"
+  RV_LEDGER_DOC="$(im_listed_commits_in "$RV_LEDGER_DOC" "$unit_id" "$IM_MOVED")"
+  [ -n "$disk" ] && [ -n "$RV_LEDGER_DOC" ] || die3 "$who: the commits after the record of $unit_id could not be written."
+  write_atomic "$RV_LEDGER_FILE" "$disk"
+  task_warn "$TASK_PATH" "$who" "$unit_id" "the code moved after the record at ${from:0:12}: $(printf '%s' "$IM_MOVED" | jq 'length') commits no record judged, inside the order's own files, joined its commit list"
 }
 
 # Exit 49: a stopped order refuses every step after the stop, until a person takes one of the
@@ -2026,12 +2052,23 @@ do_start() {
 $(printf '%s' "$snapshot_workorders_json" | jq -r '.[].id')
 CLAUSE_ORDERS
         fi
-        drifted_orders_json="$(jq_files -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" '
+        # Each reason ends with a hash of the live text it read, so a person's go-on keep answers
+        # that text alone, and a later edit is a new reason that start raises again.
+        local crit_hash_json='{}' crit_id
+        records_hash__resolve_sha256_cmd || die3 "start: neither sha256sum nor 'shasum -a 256' was found on PATH"
+        while IFS= read -r crit_id; do
+          [ -n "$crit_id" ] || continue
+          crit_hash_json="$(printf '%s' "$crit_hash_json" | jq -c --arg id "$crit_id" --arg h "$(tf_sha256_of <(printf '%s' "$live_alignment_json" \
+              | jq -c --arg id "$crit_id" '[ (.criteria // [])[] | select(.id == $id) | del(.verdict, .author) ][0]') | cut -c1-12)" '. + {($id): $h}')"
+        done <<CRIT_HASHES
+$(printf '%s' "$changed_criteria_json" | jq -r '.[]')
+CRIT_HASHES
+        drifted_orders_json="$(jq_files -cn --argjson drifted "$drifted_orders_json" --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" --argjson spared "$spared_json" --argjson h "$crit_hash_json" '
             [ $snap[] | . as $s
               | ([ (($s.criteriaServed // []) + ($s.criteriaOwned // [])) | unique[] | . as $c | select(($changed | index($c)) != null)
                    | select((($spared[$s.id] // []) | index($c)) == null) ]) as $hits
               | select(($hits | length) > 0)
-              | {id: $s.id, reasons: ["design drift: the live text of criterion " + ($hits | join(", ")) + ", which " + $s.id + " serves, differs from the frozen copy the snapshot keeps"]}
+              | {id: $s.id, reasons: ["design drift: the live text of criterion " + ($hits | join(", ")) + ", which " + $s.id + " serves, differs from the frozen copy the snapshot keeps (live text " + ([ $hits[] | . + " " + ($h[.] // "") ] | join(", ")) + ")"]}
             ] as $byCriterion
             | ($drifted | map(.id)) as $have
             | ($drifted | map(. as $d | $d + {reasons: ($d.reasons + [ $byCriterion[] | select(.id == $d.id) | .reasons[] ])}))
@@ -2222,11 +2259,14 @@ REMOVED_PATHS
           | [ $drifted[] | .id | . as $d | select(($liveIds | index($d)) == null) ]')"
       # An order that depends on a changed one is not stopped. Unbuilt, build-brief refuses it until
       # the changed order closes again (exit 40); built, review reads it.
-      # A reason a person answered with go-on keep is not raised again: that answer kept the change.
+      # A criterion reason a person answered with go-on keep is not raised again: that answer kept
+      # that live text, which the reason's hash names. A design file reason needs no filter, because
+      # keep took the live copy into the snapshot, so only a later edit raises it again.
       drift_halts_json="$(jq_files -cn --argjson d "$drifted_orders_json" \
           --argjson c "$(jq -c '.stopsCleared // []' "$LEDGER_FILE" 2>/dev/null || printf '[]')" '
           [ $d[] | .id as $id
-            | .reasons = (.reasons - [ $c[] | select(.id == $id and .choice == "keep") | .reasons[] | .reason ])
+            | .reasons = (.reasons - [ $c[] | select(.id == $id and .choice == "keep") | .reasons[] | .reason
+                | select(startswith("design drift: the live text of criterion ")) ])
             | select(.reasons != []) ]')"
     fi
   fi
@@ -2548,12 +2588,13 @@ LO_MOVE
   fi
 
   # A change mid-build that an attended run goes on past is a warning in the task record, one per
-  # order it touches. Either mode names a criterion no order serves now, because review would find
-  # it unmet with no order to answer it.
+  # order it touches. The words name the live design's hash, so a later change is its own warning.
+  # Either mode names a criterion no order serves now, because review would find it unmet with no
+  # order to answer it.
   local st_change st_unserved
   while IFS= read -r st_change; do
     [ -n "$st_change" ] || continue
-    task_warn "$TASK_PATH" start "${st_change%%	*}" "${st_change#*	}; the order goes on with its frozen copy until a person takes go-on keep or redo"
+    task_warn "$TASK_PATH" start "${st_change%%	*}" "${st_change#*	}; the order goes on with its frozen copy until a person takes go-on keep or redo (live design ${live_hash:0:12})"
   done <<ST_CHANGES
 $(printf '%s' "$start_change_json" | jq -r '.[] | .id + "\t" + (.reasons | join("; "))')
 ST_CHANGES
@@ -13594,7 +13635,7 @@ do_dispatch_close() {
       rp_cause="$rp_path is older than its dispatch: written $(im_iso_of "$rp_written"), dispatch opened $(im_iso_of "$rp_opened")"
     elif [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" = "implementer" ]; then
       # The implementer writes its answers first and its stop line last, so the stop line is
-      # its finished mark. The rule is the one build-record and the return hook read (gap row 327).
+      # its finished mark. The rule is the one build-record reads (gap row 327).
       # A placeholder such as `Stop: pending` is no stop line, so that builder takes the resume
       # route as unfinished (gap row 411).
       rp_cause="$(br_lines_fault "$rp_path" "$(jq -r '.interfacePath // ""' \
@@ -13675,12 +13716,15 @@ do_dispatch_close() {
       echo "next: resume the same $nr_role agent by message: finish the work and write the report. Then run dispatch-close again, with --no-report if it returns none."
       exit 0
     fi
-    # The turn cap is a warning: the order does not stop, and the next step reads what the role
-    # left, as it reads any role's work. A capped builder or fixer writes no record, and the next
-    # brief prints a new headNow. So its commits since its own brief's headNow go on the ledger
-    # here, as build-record does on a stop, and its order's commit list, redo and drop read them.
+    # The turn cap is a warning, and the next step reads what the role left, as it reads any role's
+    # work. A capped builder or fixer writes no record, and the next brief prints a new headNow, so
+    # no later check reads its commits. So they pass the frozen-test and owned-files guard here (exit
+    # 63), and go on the ledger, as build-record does on a stop: the order's commit list, redo and
+    # drop read them. A capped builder spends one build attempt, so the attempt cap bounds the caps,
+    # and the last one stops the order the way build-record does. Each cap is its own warning: its
+    # words carry the count of turn caps on the order.
     nr_cap="$(sed -n 's/^maxTurns: *//p' "$PLUGIN_ROOT/agents/${nr_role##*:}.md" 2>/dev/null | head -1)"
-    local nr_times="twice" nr_last="second" nr_what nr_code nr_head nr_brief=""
+    local nr_times="twice" nr_last="second" nr_what nr_code nr_head nr_brief="" nr_spent="" nr_count
     [ "$nr_allowed" -eq 1 ] || { nr_times="$((nr_allowed + 1)) times"; nr_last="last"; }
     nr_what="returned no report $nr_times"
     [ -z "$cut_off" ] || nr_what="stopped before it finished $nr_times, the $nr_last time because $cut_off"
@@ -13691,15 +13735,32 @@ do_dispatch_close() {
         '[ .orders[] | select(.id == $id) | .roundsUsed // 0 ][0] // 0' "$IMPL_DIR/ledger.json" 2>/dev/null) + 1 )).json" ;;
     esac
     nr_head="$(jq -r '.headNow // ""' "$nr_brief" 2>/dev/null)"
+    nr_ledger="$(jq -c '.' "$IMPL_DIR/ledger.json" 2>/dev/null)"
+    [ -n "$nr_ledger" ] || die3 "dispatch-close: $IMPL_DIR/ledger.json could not be read as JSON, so the turn cap on $nr_unit could not be written."
     if [ -n "$nr_brief" ] && git -C "$nr_code" rev-parse --verify --quiet "$nr_head^{commit}" >/dev/null 2>&1; then
-      nr_ledger="$(jq -c '.' "$IMPL_DIR/ledger.json" 2>/dev/null)"
-      [ -n "$nr_ledger" ] || die3 "dispatch-close: $IMPL_DIR/ledger.json could not be read as JSON, so the capped ${nr_role##*:}'s commits on $nr_unit could not be written."
-      nr_ledger="$(im_unrecorded_commits_in "$nr_ledger" "$nr_unit" "$nr_code" "$nr_head" HEAD)"
+      rv_load_state "dispatch-close" "$nr_unit" '[""]'
+      rv_load_codepath "dispatch-close"
+      rv_load_range_repo "dispatch-close" "$RV_UNIT_JSON"
+      im_moved_guard "dispatch-close" "$nr_unit" "$nr_code" "$nr_head" HEAD "the commits the capped ${nr_role##*:} made on"
+      nr_ledger="$(im_listed_commits_in "$nr_ledger" "$nr_unit" "$IM_MOVED")"
       [ -n "$nr_ledger" ] || die3 "dispatch-close: the capped ${nr_role##*:}'s commits on $nr_unit could not be written."
-      write_atomic "$IMPL_DIR/ledger.json" "$nr_ledger"
     fi
+    if [ "${nr_role##*:}" = "implementer" ]; then
+      local nr_used_attempts nr_allowed_attempts
+      nr_used_attempts="$(( $(printf '%s' "$nr_ledger" | jq -r --arg id "$nr_unit" '[ .orders[] | select(.id == $id) | .attemptsUsed // 0 ][0] // 0') + 1 ))"
+      nr_allowed_attempts="$(attempts_allowed_for "$(printf '%s' "$nr_ledger" | jq -c --arg id "$nr_unit" '[ .orders[] | select(.id == $id) ][0]')")"
+      nr_ledger="$(printf '%s' "$nr_ledger" | jq -c --arg id "$nr_unit" --argjson n "$nr_used_attempts" \
+        '.orders = (.orders | map(if .id == $id then .attemptsUsed = $n else . end))')"
+      nr_spent=" It spent attempt $nr_used_attempts of $nr_allowed_attempts."
+      [ "$nr_used_attempts" -lt "$nr_allowed_attempts" ] \
+        || nr_ledger="$(stop_order_in "$nr_ledger" "$nr_unit" dispatch-close \
+             "attempts spent: $nr_used_attempts of $nr_allowed_attempts, and the last was cut off at its turn cap" '["build"]')"
+      [ -n "$nr_ledger" ] || die3 "dispatch-close: the attempt the capped implementer spent on $nr_unit could not be written."
+    fi
+    write_atomic "$IMPL_DIR/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
-    task_warn "$TASK_PATH" dispatch-close "$nr_unit" "turn cap: ${nr_role##*:} $nr_what, $nr_after; its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty"
+    nr_count="$(( $(jq --arg id "$nr_unit" '[ (.warnings // [])[] | select(.step == "dispatch-close" and .order == $id and (.words | startswith("turn cap: "))) ] | length' "$TASK_PATH/task.json" 2>/dev/null || printf '0') + 1 ))"
+    task_warn "$TASK_PATH" dispatch-close "$nr_unit" "turn cap: ${nr_role##*:} $nr_what, $nr_after; its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty$nr_spent It is turn cap $nr_count on this order."
     # A fixer's complete report stops a fresh dispatch-open until fix-record reads it (gap row 343).
     local nr_next="dispatch the $nr_role again with a fresh brief, which reads what it left"
     [ "${nr_role##*:}" != "fixer" ] || [ ! -f "$rp_path" ] || [ -n "$(im_report_line_fault "$rp_path" "$IM_REPORT_DONE")" ] \

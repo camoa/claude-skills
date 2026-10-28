@@ -106,9 +106,10 @@ resumed_start() {
   printf '%s' "$?"
 }
 line() { grep "^$2:" "$1" | head -1; }
-ledger_halt() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | (.stopped // []) | if length == 0 then "none" else map(.reason) | join("; ") end' "$TASK/implementation/ledger.json"; }
+# Since 6.1.0 batch 3b a criterion reason ends with " (live text <id> <hash>)"; the readers drop it.
+ledger_halt() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | (.stopped // []) | if length == 0 then "none" else map(.reason | sub(" [(]live text [^)]*[)]$"; "")) | join("; ") end' "$TASK/implementation/ledger.json"; }
 # ledger_changed <unit>: the reasons of an attended change mid-build, which stop nothing (6.1.0 batch 3b).
-ledger_changed() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | (.changed // []) | if length == 0 then "none" else map(.reason) | join("; ") end' "$TASK/implementation/ledger.json"; }
+ledger_changed() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | (.changed // []) | if length == 0 then "none" else map(.reason | sub(" [(]live text [^)]*[)]$"; "")) | join("; ") end' "$TASK/implementation/ledger.json"; }
 ledger_step() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | .lastStep // "null"' "$TASK/implementation/ledger.json"; }
 # set_ledger <jq args>: edits the ledger by hand, the way a fixture stands in for an earlier run.
 set_ledger() {

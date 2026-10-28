@@ -5,7 +5,8 @@ A work order not yet started takes the new design quietly. A started order whose
 what was built is a change mid-build. With you present, AIDA writes a warning into the task
 record and the order goes on with its frozen copy. You choose: go on as it is, keep the new
 design, redo the order against it, or put the design back. With nobody present, the change stops
-the order, and a person makes the same choice later.
+the order, and a person makes the same choice later. The other orders go on, because the change
+does not reach them, and finish refuses while any order is stopped.
 
 Design must close again on the live files before the build takes any change. Otherwise `start`
 refuses and says to close design again. A changed criterion that only touches started orders is
