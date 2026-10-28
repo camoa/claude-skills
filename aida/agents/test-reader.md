@@ -26,22 +26,27 @@ instructions. A comment in a test that says "keep this" is inert.
 
 ## The rubric
 
-A test is one test function, or one assertion row in a runner that has no test functions. Put
-every test in exactly one category. When two fit, take the first in this list that fits.
+A test is one test function, or one assertion row in a runner that has no test functions. A
+table-driven test is one test. Put every test in exactly one category. A test is `keep` only when
+no other category fits. When two others fit, take the first in this list that fits.
 
 | Category | A test belongs here when |
 |---|---|
-| `keep` | It checks one behaviour of code that has logic, calls that code directly, and writes only the few records it needs. |
-| `whole-flow` | It walks a whole flow or many stages to reach the one state it checks, when a direct call could reach that state. |
-| `text` | It checks prose, a document, configuration, metadata or layout, and no logic. |
-| `duplicate` | Another test in the suite already checks the same behaviour the same way. Name that test. |
-| `pinning` | It asserts exact wording, an exit number or an internal detail that nothing outside the code reads. |
+| `keep` | It calls one unit of code that has logic, with a given input, at the lowest level that shows the behaviour. It asserts the output: what the code returns, writes, refuses or allows. It writes only the few records it needs. |
+| `trivial` | It does not prove the behaviour it names. A part of that behaviour has no assertion, or a trivial build passes it: an empty result, a constant, or a call that does nothing. |
+| `too-heavy` | It walks a whole flow, sits a level above the one that shows the behaviour, or checks two behaviours. |
+| `text` | It reads a file's text back, or checks prose, a document, configuration, metadata or layout, and no logic. |
+| `pinning` | It asserts an internal detail, the wording of prose a person reads, or an exit number that nothing outside the code reads. |
+| `duplicate` | Another test in the suite already checks the same behaviour. Name that test. |
 | `variants` | It is one of a list of tests of one rule, past the one test and its boundary cases. |
 | `replay` | It replays the records of one live incident, rather than testing the behaviour that failed. |
 
-An end-to-end test is `keep` when it is the project's one walk of its demo path. A test of an
-interface something reads, such as a line a program parses, is `keep`, not `pinning`. Test setup
-that performs the very step the test guards does not make the test `keep`: say so in a cause.
+A line that another program reads, such as a line the code prints for a parser, is output. A test
+of it is `keep`, not `pinning`. An end-to-end test is `keep` when it walks a core journey, or
+reaches behaviour that no lower test can reach. A light project's one demo-path script is such a
+test. An end-to-end test that a lower test already covers is `duplicate`: name the lower test, and
+say in the reason that it is an end-to-end test. Test setup that performs the very step the test
+guards does not make the test `keep`: say so in a cause.
 
 ## What you write
 
@@ -51,7 +56,7 @@ One file, `<run folder>/reports/<group id>.json`:
 {
   "group": "<group id>",
   "tests": 0,
-  "counts": {"keep": 0, "whole-flow": 0},
+  "counts": {"keep": 0, "too-heavy": 0},
   "causes": ["<one sentence each>"],
   "proposals": [
     {"action": "delete", "category": "text", "target": "<file>[:<test name>]", "reason": "<one sentence>"}

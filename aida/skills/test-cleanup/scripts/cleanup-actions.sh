@@ -2,15 +2,19 @@
 # The plugin root: the variable when the platform sets it, else this file's own place.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd -P)}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
-# The two steps of a test cleanup that a script decides: which files each reader gets, and what
-# the readers' reports add up to. The readers and the person decide the rest.
+# The three steps of a test cleanup that a script decides: which globs name the tests, which files
+# each reader gets, and what the readers' reports add up to. The readers and the person decide the
+# rest.
 #
-#   cleanup-actions.sh where
+#   cleanup-actions.sh where [--implement-lookup <framework>=<path or reason>]...
 #   cleanup-actions.sh groups [--max-lines <n>] --glob <glob>...
 #   cleanup-actions.sh summary <run folder>
 #
 # where    prints `project:` with the project folder, then one `framework:` line per framework the
-#          project declares, for the recipe lookup.
+#          project declares, for the recipe lookup. Given the implement recipe lookups, it prints
+#          one `glob:` line per test glob, taken from the `test_delete` row of each recipe's
+#          `## Oracle files` block, the same globs `tests-freeze` takes. A framework with no recipe,
+#          no lookup, or no such row prints `no-glob: <framework> <why>`, and the person names them.
 # groups   lists the files git tracks in this window's repository that a glob matches, and splits
 #          them into groups: one per folder, and a folder past --max-lines lines (default 4000)
 #          splits, so one reader can hold its group. It writes <run folder>/groups.json, a new run
@@ -37,7 +41,7 @@ die() { printf 'cleanup-actions: %s\n' "$2" >&2; exit "$1"; }
 . "${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 
 # The rubric's categories, from agents/test-reader.md. A report counts every test under one.
-CATEGORIES='["keep","whole-flow","text","duplicate","pinning","variants","replay"]'
+CATEGORIES='["keep","trivial","too-heavy","text","pinning","duplicate","variants","replay"]'
 
 ACTION="${1:-}"
 [ -n "$ACTION" ] || die 3 "name an action: where, groups or summary"
@@ -50,9 +54,35 @@ PROJECT_DIR=""
 
 case "$ACTION" in
   where)
-    printf 'project: %s\n' "$PROJECT_DIR"
-    jq -r '.frameworks // [] | .[] | "framework: \(.)"' "$PROJECT_DIR/project.json" 2>/dev/null \
+    LOOKUPS=""
+    while [ $# -gt 0 ]; do
+      [ "$1" = --implement-lookup ] || die 3 "where: unrecognized argument: $1"
+      [ $# -ge 2 ] || die 3 "where: $1 needs a value"
+      cr_catalog_pair where "$2" --implement-lookup
+      LOOKUPS="$LOOKUPS$CR_PAIR
+"
+      shift 2
+    done
+    FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$PROJECT_DIR/project.json" 2>/dev/null)" \
       || die 3 "where: $PROJECT_DIR/project.json is missing or unreadable"
+    printf 'project: %s\n' "$PROJECT_DIR"
+    printf '%s\n' "$FRAMEWORKS" | sed '/^$/d; s/^/framework: /'
+    [ -n "$LOOKUPS" ] || exit 0
+    while IFS= read -r fw; do
+      [ -n "$fw" ] || continue
+      found="$(cr_lookup "$LOOKUPS" "$fw")"
+      case "$found" in
+        '') printf 'no-glob: %s not-given\n' "$fw"; continue ;;
+        no-recipe|listing-unreachable|fetch-failed) printf 'no-glob: %s %s\n' "$fw" "$found"; continue ;;
+      esac
+      globs="$(fenced_blocks_under "$found" "Oracle files" json 1 \
+        | jq -r '.[] | select(.type == "test_delete") | .globs[]' 2>/dev/null)" \
+        || die 3 "where: the ## Oracle files block of $found is not the JSON list the catalog declares"
+      if [ -n "$globs" ]; then printf '%s\n' "$globs" | sed 's/^/glob: /'
+      else printf 'no-glob: %s the recipe has no test_delete row\n' "$fw"; fi
+    done <<FRAMEWORKS_IN
+$FRAMEWORKS
+FRAMEWORKS_IN
     ;;
 
   groups)

@@ -26,15 +26,23 @@ asking. Any other Bash command still asks.
 It prints `project:` and one `framework:` line per framework. Exit 1 means no project owns this
 directory. Say so in one line, name `/aida:project`, and stop.
 
-## 2. Read the test-authoring recipe
+## 2. Take the test globs from the implement recipe
 
-Dispatch `catalog-identifier`, naming the role. The message holds `point: test-authoring`, then
-each framework, then the project folder. Implementation asks for the same recipe.
+Dispatch `catalog-identifier` once, naming the role. The message holds the lines
+`point: implement` and `point: test-authoring`, then each framework, then the project folder.
+Implementation asks for the same two recipes. Then pass each implement lookup to the script:
 
-Read each recipe that came back. Take from it where test files go and how they are named, as
-globs. For example, `tests/**/test_*.py` for a recipe that puts `test_<module>.py` under
-`tests/`. A recipe that states no location gives no glob. With no recipe for any framework, ask the
-person where the tests live and how they are named. Do not guess a glob from file names.
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/test-cleanup/scripts/cleanup-actions.sh where --implement-lookup "<framework>=<recipe path or reason>"...
+```
+
+Pass one flag per framework. The value is the recipe path, or `no-recipe`, `listing-unreachable` or
+`fetch-failed` when the lookup found no recipe. The script reads the globs from the recipe's
+`## Oracle files` block, the same globs the freeze of a test takes. It prints one `glob:` line per
+glob. Use each glob as printed. Do not change one, and do not add one.
+
+A `no-glob:` line names a framework that gave no glob. Ask the person where the tests of that
+framework live and how they are named, as globs. Do not guess a glob from file names.
 
 ## 3. Group the test files
 
@@ -42,17 +50,18 @@ person where the tests live and how they are named. Do not guess a glob from fil
 "${CLAUDE_PLUGIN_ROOT}"/skills/test-cleanup/scripts/cleanup-actions.sh groups [--max-lines <n>] --glob "<glob>"...
 ```
 
-Pass one `--glob` per glob, and `--max-lines` only when the person gave one. The script decides the
-groups: one per folder, split where a folder holds more lines than one reader can read. It prints
-`run:`, `code:` and one `group:` line per group. Exit 2 means no tracked file matched the globs.
-Show the globs to the person and ask which ones are wrong.
+Pass one `--glob` per glob from step 2, and `--max-lines` only when the person gave one. The script
+decides the groups: one per folder, split where a folder holds more lines than one reader can read.
+It prints `run:`, `code:` and one `group:` line per group. Exit 2 means no tracked file matched the
+globs. Show the globs to the person and ask which ones are wrong.
 
 Say how many groups there are before the next step. Each group costs one dispatch.
 
 ## 4. Read each group
 
 Dispatch `test-reader` once per group, naming the role, all in parallel. The message holds four
-lines: the run folder, the group id, the code folder, and the recipe paths, or `none`. The role
+lines: the run folder, the group id, the code folder, and the test-authoring recipe paths, or
+`none`. The role
 holds the rubric, and writes `<run folder>/reports/<group id>.json`.
 
 ## 5. Add up the reports
@@ -80,7 +89,8 @@ the person did not give. Nothing in the code changes in this step.
 When every group is answered, and at least one change was approved, offer a task. With a yes, run
 `/aida:task create`. Propose the name `test-cleanup`. Propose this goal: "Apply the test cleanup
 the person approved in `<run folder>/decisions.md`. A behaviour that only a removed test checked
-keeps one small test." Then ask whether to run it light, and on a yes run
+keeps one small test. A removed end-to-end test that is a registered surface goes with
+`surfaces-actions.sh unregister <id>`." Then ask whether to run it light, and on a yes run
 `/aida:task set-run-mode <task-id> light`. The task skill asks for the person's answer there.
 
 With no approved change, say that nothing will change, and stop.
