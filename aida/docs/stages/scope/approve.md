@@ -8,7 +8,8 @@ You approve the contract yourself. Scope never asks for a yes. When the contract
 1. Scope sends a fresh reader, the distiller, over the written contract. The distiller did not see
    your conversation. It reads the contract and the task files from disk.
 2. Claude Code shows you its permission prompt for your answer. Your yes there is the approval,
-   and it is recorded in the task, in every run mode. See [the person's answer](../../task/person-answer.md).
+   and it is recorded in the task, in every run mode. The yes names the contract as it stands, so
+   a change after it needs a new yes. See [the person's answer](../../task/person-answer.md).
 3. Scope then runs the approve action. Every criterion still marked `designer` becomes `owner`.
    Any decision an unattended run took is marked as approved by you, with the date.
 4. The action commits the task folder.

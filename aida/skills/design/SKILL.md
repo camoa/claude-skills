@@ -497,6 +497,7 @@ one script that walks the demo path. `start` prints the `path-script:` line, and
 says the case. `create`: `wo1` also owns that script. For a page, it sits where the harness reads
 its tests. For a command surface, it is the file the command runs. A person registers it with
 `/aida:surfaces`. `registered`: the project has the script, and no order writes or extends it.
+`check` refuses an order that owns one of its files, `wo1` included.
 `declined` or `off`: no order writes one. A change to the script goes through `/aida:surfaces`
 with a person.
 
@@ -723,6 +724,8 @@ never stops. The report holds:
   proves it;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
+- on a light task, every work order that owns a file of the registered script that walks the demo
+  path;
 - two work orders sharing a declared owned file that one of them does not mark `--shared`;
 - any criterion, non-goal, or work order id named anywhere that resolves to nothing real.
 
@@ -832,6 +835,8 @@ lines are not enough, and fix the specific order each line names. The same repai
     entry point that is not a screen belongs in the order that builds the feature, as above, not
     in an order of its own; an order for it alone needs a criterion that names it;
   - a cycle needs one of the `dependsOn` edges in it removed;
+  - a light order that owns the registered demo-path script needs `remove-owned-file` for it. A
+    change to that script goes through `/aida:surfaces` with a person;
   - overlapping owned files need one order's `ownedFiles` narrowed so the paths do not repeat,
     or `--shared` on both orders when each only adds to the file;
   - a wildcard in an owned file needs the directory named instead, or each file added, because

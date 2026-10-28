@@ -856,7 +856,11 @@ close_scope() {
 do_approve() {
   [ "$#" -eq 0 ] || die3 "approve: unrecognized argument: $1"
   require_alignment_exists "approve"
-  task_require_answer 70 approve "the contract's approval" "$TASK_PATH" "scope approve" "" approve
+  # The yes is for the contract as it stands, named by its hash, so a change after the answer needs
+  # a new one (gap row 473). The refusal prints the words.
+  local seen
+  seen="$(distill_sha256 <"$ALIGNMENT_FILE")" || exit $?
+  task_require_answer 70 approve "the contract's approval" "$TASK_PATH" "scope approve" "" "approve ${seen:0:12}"
 
   local ids count updated marked stale
   stale="$(distill_stale "$TASK_PATH" scope)" || exit $?

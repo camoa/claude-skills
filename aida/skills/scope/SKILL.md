@@ -330,18 +330,15 @@ running `/aida:scope approve <task-id>`, or by saying the contract is right in t
 Map those words to the call below. No reply from this skill asks for them.
 
 When the person says so, dispatch the `distiller` role once, as "The distill check" below says.
-The contract is final by then. Then record the person's answer. Claude Code shows its permission
-prompt for this call, and the person's yes there is the approval:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/person-answer.sh --project "<projectPath>" "<task-id>" \
-  --step 'scope approve' -- approve
-```
-Then run:
+The contract is final by then. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   approve "<task_folder>"
 ```
-Without that answer, `approve` refuses with exit 70 in every run mode, and prints the command.
+With no answer recorded, it refuses with exit 70 in every run mode, and prints the
+`person-answer.sh` command. Its words name the contract's hash, so the yes is for the contract as
+it stands. Run that command: Claude Code shows its permission prompt, and the person's yes there is
+the approval. Then run `approve` again. A change after the yes needs a new one (gap row 473).
 It promotes every criterion still `designer` to `owner` and prints `promoted:` with the count.
 It marks each decision an unattended run took as approved by the person, and prints
 `approved-decisions:` with the count. A marked decision is history, not an open question. A

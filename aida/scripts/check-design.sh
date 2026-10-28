@@ -52,6 +52,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     no owner fails, and a chain that loops fails too;
 #   - on a light task, every work order but wo1, the walking skeleton, reaches wo1 through its
 #     dependsOn chain, so the skeleton is built first (gap row 197);
+#   - on a light task, no work order owns a file of the registered script that walks the demo path,
+#     wo1 included: review runs that script, and a light order never extends it (audit/24);
 #   - ownedFiles do not overlap between work orders, a warning, compared as declared strings only, the same
 #     bound version 5's own overlap check carried (ideal/design.md, "What a work order holds"):
 #     this is not a glob-intersection check, and it proves nothing about what a builder actually
@@ -104,8 +106,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   4  a finding stops the design in either run mode: a file or the guides-read record that does
 #      not match its shape, a list item that fails its own check, an id that resolves to nothing,
 #      an owned path that is not one literal path, a dependency cycle, an order whose proof does
-#      not fit its tests, rows or files, or a machine criterion an observe or record order owns
-#      with no run line proving it. Implementation's `start` refuses on this code.
+#      not fit its tests, rows or files, a machine criterion an observe or record order owns with
+#      no run line proving it, or a light order that owns the registered script that walks the
+#      demo path. Implementation's `start` refuses on this code.
 #
 # `open` sorts every finding by what it does, one line each. Both callers print these lines, so
 # they are written once, here. `stop` raises exit 4. `unattended` stops an autonomous close and
@@ -174,6 +177,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #              dependencyCycles: [ id, ... ],
 #              orphanSupportOrders: [ id, ... ],
 #              ordersNotAfterSkeleton: [ id, ... ],   a light task only
+#              lightOrdersOwningPathScript: [ {id, path} ],   a light task only
 #              overlappingOwnedFiles: [ {ids: [id, id], path} ],
 #              globbedOwnedFiles: [ {id, path} ],
 #              unrecordedIds: [ id, ... ] },   advisory, never raises the exit code
@@ -807,6 +811,8 @@ UNKNOWN_DEPENDS_ON_IDS_JSON='[]'
 DEPENDENCY_CYCLES_JSON='[]'
 ORPHAN_SUPPORT_ORDERS_JSON='[]'
 ORDERS_NOT_AFTER_SKELETON_JSON='[]'
+LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON='[]'
+PATH_SCRIPT_UNREAD=false
 OVERLAPPING_OWNED_FILES_JSON='[]'
 GLOBBED_OWNED_FILES_JSON='[]'
 UNRECORDED_IDS_JSON='[]'
@@ -862,6 +868,28 @@ else
   ORPHAN_SUPPORT_ORDERS_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.orphans')"
   ORDERS_NOT_AFTER_SKELETON_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.notAfterSkeleton')"
 
+  # A light task never extends the registered script that walks the demo path, wo1 included (audit/24,
+  # "Light mode"). path_script_state names its files the way review reads them. recipes.sh empties
+  # TASK_PATH when it loads, so it loads only inside this subshell.
+  if [ "$LIGHT_TASK" = true ]; then
+    PATH_SCRIPT="$(
+      PS_TASK="$TASK_PATH"
+      # shellcheck source=/dev/null
+      source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
+      path_script_state "$PS_TASK"
+      printf '%s\n%s' "$PS_STATE" "$PS_FILES"
+    )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"
+    if [ "${PATH_SCRIPT%%$'\n'*}" = registered ]; then
+      LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON="$(printf '%s' "$PATH_SCRIPT" | sed 1d | jq -R -s -c --argjson orders "$WORK_ORDERS_JSON" '
+        (split("\n") | map(select(length > 0))) as $files
+        | [ $orders[] | .id as $id | (.ownedFiles // [])[]
+            | (ltrimstr("./") | rtrimstr("/")) as $p
+            | select(any($files[]; . == $p or startswith($p + "/") or ($p | startswith(. + "/"))))
+            | {id: $id, path: $p} ]')"
+      [ -n "$(printf '%s' "$PATH_SCRIPT" | sed 1d)" ] || PATH_SCRIPT_UNREAD=true
+    fi
+  fi
+
   # Overlap on the declared strings only, never a glob intersection (ideal/design.md, "What a
   # work order holds"): two orders sharing one identical entry in ownedFiles.
   OVERLAPPING_OWNED_FILES_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq -c "$OWNED_OVERLAP_JQ")"
@@ -897,7 +925,7 @@ else
   UNKNOWN_DEPENDS_COUNT="$(printf '%s' "$UNKNOWN_DEPENDS_ON_IDS_JSON" | jq 'length')"
   CYCLE_COUNT="$(printf '%s' "$DEPENDENCY_CYCLES_JSON" | jq 'length')"
   GLOBBED_COUNT="$(printf '%s' "$GLOBBED_OWNED_FILES_JSON" | jq 'length')"
-  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + GLOBBED_COUNT))
+  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + GLOBBED_COUNT + $(printf '%s' "$LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON" | jq 'length')))
   GRAPH_NOTE="ran: $(printf '%s' "$WORK_ORDERS_JSON" | jq 'length') work order(s) in the graph"
 fi
 
@@ -918,6 +946,9 @@ fi
 if [ "$CONTRACT_READABLE" = "true" ] && [ -z "$CONFIRM_TEST_GLOBS" ] \
    && printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .slot == "confirm-at-review")' >/dev/null; then
   NOT_CHECKED_ITEMS+=("whether a confirm order owns a test file: no freeze in this project recorded a test glob, so nothing here says which path is a test.")
+fi
+if [ "$PATH_SCRIPT_UNREAD" = true ]; then
+  NOT_CHECKED_ITEMS+=("whether a light order owns the registered script that walks the demo path: that surface names no file of the tree, such as a page surface, so no file is known to compare.")
 fi
 if [ "$DESIGN_STARTED" != "true" ]; then
   NOT_CHECKED_ITEMS+=("the graph checks between work orders: $GRAPH_NOTE")
@@ -959,7 +990,8 @@ def open: {
     ((.coverage.machineCriteriaOnLookOrRecordOrders // [])[] | "order " + .id + " is " + prover(.proof) + " and owns the machine-verified criterion " + .criterionId + ", which neither a look nor a reading judges: make it person-verified in scope, add a run line that proves it, or give it to an order that builds code"),
     ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
     ((.graph.unknownDependsOnIds // [])[] | "file " + .path + " depends on an unknown work order id " + .id),
-    ((.graph.globbedOwnedFiles // [])[] | "order " + .id + " owns " + .path + ", which is not one literal path")
+    ((.graph.globbedOwnedFiles // [])[] | "order " + .id + " owns " + .path + ", which is not one literal path"),
+    ((.graph.lightOrdersOwningPathScript // [])[] | "order " + .id + " owns " + .path + ", the registered script that walks the demo path, and on a light task no order extends it: remove-owned-file")
   ],
   unattended: [
     ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
@@ -1021,6 +1053,7 @@ jq -n \
   --argjson dependencyCycles "$DEPENDENCY_CYCLES_JSON" \
   --argjson orphanSupportOrders "$ORPHAN_SUPPORT_ORDERS_JSON" \
   --argjson ordersNotAfterSkeleton "$ORDERS_NOT_AFTER_SKELETON_JSON" \
+  --argjson lightOrdersOwningPathScript "$LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON" \
   --argjson overlappingOwnedFiles "$OVERLAPPING_OWNED_FILES_JSON" \
   --argjson globbedOwnedFiles "$GLOBBED_OWNED_FILES_JSON" \
   --argjson unrecordedIds "$UNRECORDED_IDS_JSON" \
@@ -1066,6 +1099,7 @@ jq -n \
       dependencyCycles: $dependencyCycles,
       orphanSupportOrders: $orphanSupportOrders,
       ordersNotAfterSkeleton: $ordersNotAfterSkeleton,
+      lightOrdersOwningPathScript: $lightOrdersOwningPathScript,
       overlappingOwnedFiles: $overlappingOwnedFiles,
       globbedOwnedFiles: $globbedOwnedFiles,
       unrecordedIds: $unrecordedIds

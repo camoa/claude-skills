@@ -55,8 +55,10 @@ text. See [Run the design check](check.md) for what the check asks of an interfa
 
 On a `light` task the first order, `wo1`, is the walking skeleton. It is a tiny version that
 joins the input, the logic and the output along the demo path. Every other order depends on it,
-directly or through a chain, and the check refuses one that does not. With end to end on, `wo1`
-also owns the script that walks the demo path. That script is the one test a light task keeps.
+directly or through a chain, and the check refuses one that does not. With end to end on and no
+script that walks the demo path registered, `wo1` also writes that script. Once one is registered,
+no order writes or extends it, and the check refuses an order that owns one of its files. That
+script is the one test a light task keeps.
 
 ## Why it works this way
 

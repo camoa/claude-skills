@@ -36,8 +36,9 @@
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
-#   path_script_line <folder>             prints the `path-script:` line: what a light task does
-#                                         about the script that walks the demo path
+#   path_script_state <folder>            sets PS_STATE and PS_FILES: what a light task does about
+#                                         the script that walks the demo path, and its files
+#   path_script_line <folder>             prints the `path-script:` line from path_script_state
 #   log_compromise <folder> <stage> <skipped> <normal>
 #                                         adds one row to COMPROMISES.md in the task folder
 #   unlog_compromise <folder> <stage> <skipped> <normal>
@@ -621,21 +622,23 @@ task_is_light() {
   [ "$(jq -r '.runMode // ""' "$1/task.json" 2>/dev/null)" = "light" ]
 }
 
-# Prints the `path-script:` line: what a light task does about the one script that walks the demo
-# path (gap row 458). Its first word is the case the skills act on. `registered`: the surface file
-# holds an enabled critical end to end surface, which is that script, so no order writes or extends
-# it. `create`: end to end is on and none is registered, so wo1 writes it. `declined` and `off`: no
-# order writes one. The surface file is read in the task's worktree, or the code path when the
-# task has none, the tree review reads. task's set-run-mode and design's start print it. The caller
-# sources recipes.sh. $1 the task folder.
-path_script_line() {
-  local project tree
+# What a light task does about the one script that walks the demo path (gap row 458). Sets PS_STATE
+# and PS_FILES. PS_STATE is `registered`: the surface file holds an enabled critical end to end
+# surface, which is that script, so no order writes or extends it. `create`: end to end is on and
+# none is registered, so wo1 writes it. `declined` and `off`: no order writes one. PS_FILES holds the
+# registered command's own files, one per line: each argv token that is a relative path in the
+# tree, the rule review reads them by. A page surface records no file, so PS_FILES is empty for it.
+# The surface file is read in the task's worktree, or the code path when the task has none, the
+# tree review reads. The caller sources recipes.sh. $1 the task folder.
+path_script_state() {
+  local project tree tok
+  PS_STATE=""; PS_FILES=""
   project="$(dirname -- "$(dirname -- "$1")")"
   if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project/project.json" 2>/dev/null)" != "true" ]; then
     if [ "$(jq -r '.surfaces.e2e.declined // false' "$project/project.json" 2>/dev/null)" = "true" ]; then
-      echo "path-script: declined. End to end is declined for this project, so no order writes a script that walks the demo path."
+      PS_STATE=declined
     else
-      echo "path-script: off. End to end is not set up, so no order writes a script that walks the demo path. A person may set it up with /aida:surfaces e2e."
+      PS_STATE=off
     fi
     return 0
   fi
@@ -649,10 +652,27 @@ path_script_line() {
     || die3 "the library failed to load: paths.sh"
   sf_load_surfaces "$(sf_surface_path "$(jq -r '.surfaces.registryPath // ""' "$project/project.json" 2>/dev/null)" "$tree")"
   if [ "$SF_STATE" = "ok" ] && printf '%s' "$SF_SURFACES" | jq -e 'any(.[]; .enabled and .critical and (.kinds | index("e2e")))' >/dev/null; then
-    echo "path-script: registered. The project's script that walks the demo path is registered, so no order writes or extends it. Review runs it."
+    PS_STATE=registered
+    for tok in $(printf '%s' "$SF_SURFACES" | jq -r '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ][0].command // [] | .[]'); do
+      case "$tok" in -*|/*|*..*) continue ;; esac
+      [ ! -e "$tree/$tok" ] || PS_FILES="$PS_FILES$tok
+"
+    done
   else
-    echo "path-script: create. End to end is on and no script that walks the demo path is registered, so wo1 writes it. A person registers it with /aida:surfaces."
+    PS_STATE=create
   fi
+}
+
+# Prints the `path-script:` line, path_script_state's answer. Its first word is the case the skills
+# act on. task's set-run-mode and design's start print it. $1 the task folder.
+path_script_line() {
+  path_script_state "$1"
+  case "$PS_STATE" in
+    declined) echo "path-script: declined. End to end is declined for this project, so no order writes a script that walks the demo path." ;;
+    off) echo "path-script: off. End to end is not set up, so no order writes a script that walks the demo path. A person may set it up with /aida:surfaces e2e." ;;
+    registered) echo "path-script: registered. The project's script that walks the demo path is registered, so no order writes or extends it. Review runs it." ;;
+    *) echo "path-script: create. End to end is on and no script that walks the demo path is registered, so wo1 writes it. A person registers it with /aida:surfaces." ;;
+  esac
 }
 
 # Writes one warning into the task record, task.json `warnings`, and prints it as a summary line.

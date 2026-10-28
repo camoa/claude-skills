@@ -82,6 +82,13 @@ start_case() (
 )
 expect "design starts when research has not closed, with a warning" "$(start_case)" "0|1"
 
+# approve_answer: the person's answer to approve, with the words approve's own refusal names. They
+# name the contract as it is now.
+approve_answer() {
+  run "$SCOPE" approve "$TASK"
+  answer "scope approve" "" "$(sed -n "s/.* -- '\(approve [^']*\)'.*/\1/p" "$OUT")"
+}
+
 # scope_case <answered> <action> [<args>...]: the action's exit, c1's author and whether the answer is
 # used. c1 starts as designer. With answered, the person answered the action's step first.
 scope_case() (
@@ -90,7 +97,7 @@ scope_case() (
   jq '.criteria[0].author = "designer"' "$TASK/alignment.json" >"$ROOT/a" && mv "$ROOT/a" "$TASK/alignment.json"
   local how="$1" action="$2"; shift 2
   case "$how:$action" in
-    answered:approve) answer "scope approve" "" "approve" ;;
+    answered:approve) approve_answer ;;
     answered:update) answer "scope update" "" "c1 author owner" ;;
   esac
   run "$SCOPE" "$action" "$TASK" "$@"
@@ -101,6 +108,18 @@ expect "an attended approve with no person's answer promotes nothing" "$(scope_c
 expect "approve with the person's answer promotes, and uses the answer" "$(scope_case answered approve)" "0|owner|1"
 expect "update --author owner with no person's answer promotes nothing" "$(scope_case none update --id c1 --author owner)" "70|designer|0"
 expect "update --author owner with the person's answer promotes" "$(scope_case answered update --id c1 --author owner)" "0|owner|1"
+
+# Gap row 473: the person's yes is for the contract they saw. A change after it needs a new yes.
+changed_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  jq '.criteria[0].author = "designer"' "$TASK/alignment.json" >"$ROOT/a" && mv "$ROOT/a" "$TASK/alignment.json"
+  approve_answer
+  run "$SCOPE" update "$TASK" --id c1 --text "a.php says c"
+  run "$SCOPE" approve "$TASK"
+  printf '%s|%s\n' "$RC" "$(jq -r '.criteria[0].author' "$TASK/alignment.json")"
+)
+expect "an answer given before a change does not approve the changed contract" "$(changed_case)" "70|designer"
 
 # A scope close with no distiller sidecar goes on, with a warning. The task's design is closed and
 # it has no research check, so its stage reads past scope and past research.
@@ -141,5 +160,25 @@ confirmer_case() (
   write_hook "$(jq -nc --arg f "$TASK/records/disposition-wo1.json" '{file_path: $f, content: "{}"}')" aida:disposition-confirmer
 )
 expect "the confirmer may rewrite its own verdict file" "$(confirmer_case)" "allow"
+
+# light_case <owner>: the design check's status on a light task whose project registers the command
+# `bash tests/demo.sh` as the script that walks the demo path. <owner> is the order that owns that
+# script, or none.
+light_case() (
+  source "$HERE/records.bash"
+  task_records branch wo2
+  jq '.runMode = "light"' "$TASK/task.json" >"$ROOT/t" && mv "$ROOT/t" "$TASK/task.json"
+  mkdir -p "$WT/tests" && printf 'echo ok\n' >"$WT/tests/demo.sh"
+  jq -n '{schemaVersion: 1, surfaces: [{id: "demo", command: ["bash", "tests/demo.sh"], kinds: ["e2e"],
+      enabled: true, masks: [], critical: true, reason: "walks the demo path"}]}' >"$WT/surfaces.json"
+  jq '.surfaces = {e2e: {enabled: true}, registryPath: "surfaces.json"}' "$PROJECT/project.json" >"$ROOT/p" \
+    && mv "$ROOT/p" "$PROJECT/project.json"
+  [ "$1" = none ] || { jq '.ownedFiles += ["tests/demo.sh"]' "$TASK/design/$1.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/$1.json"; }
+  run "$DESIGN" check "$TASK"
+  sed -n 's/^status: //p' "$OUT"
+)
+expect "a light order that owns the registered demo-path script does not pass the design check" "$(light_case wo2)" "5"
+expect "a light first order that owns the registered demo-path script does not pass either" "$(light_case wo1)" "5"
+expect "a light design that leaves the registered script alone passes" "$(light_case none)" "0"
 
 finish
