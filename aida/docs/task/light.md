@@ -11,8 +11,8 @@ the task.
 ```
 
 Then start the run with the command for the stage the task is at, such as `/aida:scope <task-id>`
-for a new task. Each stage then starts the next one. Light takes no `--stage`. The output adds a `path-script:` line, which says whether end to end
-tests are on for this project. Everything on [run modes](run-modes.md) about autonomous runs
+for a new task. Each stage then starts the next one. Light takes no `--stage`. The output adds a `path-script:` line, which says what light does
+about the one script that walks the demo path. Everything on [run modes](run-modes.md) about autonomous runs
 holds for light too.
 
 ## What light skips
@@ -36,9 +36,10 @@ holds for light too.
 
 - The code review of each order, and the project's own checks, its security check included.
 - One script that walks the demo path. That is the project's end to end setup for that one path.
-  A person sets it up once with `/aida:surfaces e2e` and registers the demo path as one critical
-  surface. Review fails a light task without it. A project that declined end to end keeps no such
-  script. See [sources](../sources/).
+  With end to end on and no such script registered, `wo1` writes it. Once one is registered, no
+  order writes or extends it. A project that declined end to end keeps no such script. A missing
+  script is not a failure at review: the acceptance verifier's evidence is the task's acceptance.
+  See [sources](../sources/).
 - A budget, when you set one. See [set a budget](budget.md).
 
 ## The compromises log

@@ -37,6 +37,20 @@ When a test needs a signature the brief does not hold, the author stops with
 and the build takes the order fresh, as [Change the design mid-build](drift.md) says. Unattended,
 the run reports the stop.
 
+## What a test is
+
+Each test proves one behaviour of the code the order changes. It calls the unit directly, at the
+lowest level the recipe names, with one input. It asserts the output: what the code returns,
+writes, refuses or allows. A test never checks internals, the wording of prose, configuration or
+metadata. A table-driven test is one test.
+
+A criterion's wording decides nothing. "The suite still passes" gets a test of the code's
+behaviour, or none when there is no logic. The test author writes no end to end or browser test.
+Those are surfaces, which only `/aida:surfaces` adds, with you present.
+
+Each build attempt and each fix round runs the order's own test files. The whole suite runs at
+the implement start, as the baseline, and once at finish.
+
 ## A red run
 
 A test fails for the right reason only when an assertion ran and did not hold. AIDA reads the
@@ -78,4 +92,4 @@ The checker and the reviewer both ask whether a test could have proved it.
   alone describe the intent.
 - A test nobody watched fail proves nothing about the code that makes it pass.
 
-Source: skills/implement/references/tests.md
+Source: skills/implement/references/tests.md, skills/implement/references/what-a-test-is.md

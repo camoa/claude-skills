@@ -1,7 +1,7 @@
 # Surfaces at review
 
-Review runs each kind that is on, over the surfaces the change could reach. Then it puts every
-surface in front of you, including the ones that passed.
+Review runs each kind that is on, over the surfaces the change could reach. Then the acceptance
+verifier looks at every page surface that ran, including the ones that passed.
 
 ## What review runs
 
@@ -26,9 +26,9 @@ Review uses the address the task records for its worktree site. See
 ## A light task
 
 A light task runs no visual regression, and that check reads `undeclared`. End to end still runs,
-because it is the one test a light run keeps. With no enabled critical end to end surface, the
-check reads `unmet` and names `/aida:surfaces e2e`. A project that declined end to end reads
-`undeclared` instead.
+including the one script that walks the demo path when it is registered. A missing script is not
+a failure. The check reads `undeclared`, and the verifier's evidence is the light task's
+acceptance.
 
 ## What a surface does to the verdict
 
@@ -37,11 +37,13 @@ recipe declares no command for, reads `undeclared`. That passes, and the review 
 word. Visual parity has no harness today, so review records it as unavailable, never as passed.
 See [Review](../stages/review/README.md).
 
-## The walk
+## The look at each surface
 
-After the run, review puts every surface in front of you, at every viewport, and records which
-you looked at. On an autonomous run, nobody can look. The walk is recorded as not done, and the
-surface checks read `unknown`.
+After the run, the acceptance verifier looks at each page surface that ran, at every viewport. It
+writes one evidence row each. A page surface with no row at every viewport reads `unknown`. A row
+the verifier did not judge met, on a surface whose run passed, waits for your answer at the close.
+On an autonomous run nobody answers, so the surface check reads `unknown`. See
+[verify the task by running it](../stages/review/acceptance.md).
 
 ## Accept an intended change
 
@@ -51,9 +53,9 @@ for those ids only. It never does this automatically or unattended.
 
 ## Why it works this way
 
-- An aggregate score can improve while visible defects sit inside the passing surfaces, so a
-  person looks at all of them.
+- An aggregate score can improve while visible defects sit inside the passing surfaces. So the
+  verifier looks at all of them, and you answer from its evidence.
 - A check that cannot notice its subject going absent tells you nothing, so a missing result is
   `unmet`.
 
-Source: skills/review/references/surfaces.md, skills/surfaces/SKILL.md
+Source: skills/review/references/acceptance.md, skills/surfaces/SKILL.md

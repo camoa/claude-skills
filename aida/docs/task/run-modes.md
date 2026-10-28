@@ -74,7 +74,7 @@ Each stage page says what its unattended branch does. In short, with where each 
   finished record counts the test rows a model judged, which nobody read.
 - [review](../stages/review/README.md) leaves each person-answered criterion unanswered and
   writes no verdict. The task has no sign-off until you answer them.
-- [completion](../stages/completion/README.md) closes only on a passed review.
+- [completion](../stages/completion/README.md) closes only on a review that passed with no warning.
 
 To answer a stop, see [the person's answer](person-answer.md).
 

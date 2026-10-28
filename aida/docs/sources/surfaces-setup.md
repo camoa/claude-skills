@@ -43,18 +43,32 @@ own list too. A version 5 `registry.yml` offers its ids and URLs as candidates.
 A mask hides an element before capture, such as a date. AIDA proposes one only with the count of
 elements it hides. A mask that hides everything hides the regression too.
 
-For each surface you keep, AIDA asks two things:
+For each surface you keep, AIDA asks these things:
 
 - **The paths that render it**, as globs relative to the code tree. Review runs the surface only
   when a change touches one of them. A surface with no paths runs on every review.
 - **Whether it is critical.** A critical surface runs on every review.
+- **Why, for an end to end surface.** An end to end test is added on purpose. The reason is your
+  words: the core journey it walks, or the behaviour no lower test can reach. `register` refuses
+  an end to end surface with no `--reason`, and the surface file keeps it.
 
 Only a row you confirmed is written, and nothing is enabled unattended. Each registration commits
 the surface file alone, so other uncommitted work does not stop it. To add one later, run
-`/aida:surfaces register` with the id, URL, kinds, paths
+`/aida:surfaces register` with the id, URL, kinds, paths, `--reason` for an end to end surface,
 and `--enable`. Without `--enable` the surface is written disabled, and review records it as not
 run. Registering the same id with different fields is refused, naming both. Registering before
 the install is refused.
+
+## Remove a surface
+
+```
+/aida:surfaces unregister <id>
+```
+
+This removes one surface from the surface file and commits the file alone. Run it only when you
+decided the surface goes, such as when a lower test already covers it. A test cleanup task runs it
+for an end to end test you approved for removal. The surface's baselines stay on disk. It refuses
+when no surface has that id, or when there is no surface file.
 
 ## Take the first baselines
 

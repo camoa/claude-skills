@@ -6,8 +6,11 @@ surface. Review runs the command, and exit 0 is a pass. It needs no recipe and n
 ## What you type
 
 ```
-/aida:surfaces register <id> --command "<line>" --kind e2e --critical --enable
+/aida:surfaces register <id> --command "<line>" --kind e2e --reason "<why>" --critical --enable
 ```
+
+`--reason` is required, because an end to end surface is added on purpose. The reason names the
+core journey it walks, or the behaviour no lower test can reach. The surface file keeps it.
 
 The line is the command that walks the path, such as a script in the code repository. With no
 surface file, `register` writes one, turns end to end on in the project file, and commits both.

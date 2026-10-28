@@ -33,6 +33,8 @@ The commit range section adds a line when each of these applies:
 
 - both ends of the range are one commit: the code repository holds nothing from this task, and
   every deliverable is in the project folder;
+- a test that passed at the start of the range fails at its end, and you said at finish that this
+  task did not cause it: the line and your words;
 - the branch has no upstream: push before you open the pull request;
 - the task has a worktree: the branch, and the worktree to push from;
 - a restore commit put back the site's files: the commit and the files;

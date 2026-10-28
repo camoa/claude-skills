@@ -17,17 +17,23 @@ On a light task, scope does not ask. The answer starts as no, and the skip is lo
 `COMPROMISES.md` in the task folder. Research changes the answer to yes when it finds a test runner
 that works. A light task cannot take yes any other way.
 
+## Machine or person
+
+Scope recommends each criterion's kind from what the outcome is, never from the words that state
+it. A behaviour of code with logic, which a small test or a named command observes, is `machine`.
+"An admin can download the user list as CSV" is `machine` when a test can observe the export.
+Anything else is `person`: a document, configuration, metadata, layout, how a page looks, or a
+whole journey. Design refuses a `machine` criterion that only a document serves.
+
+Words such as "test that the export works", "check" or "make sure" ask for no automated test.
+They mean that review verifies the outcome by running it and keeps the evidence.
+
 ## A kind the project has on
 
-- **End to end tests are on.** The end to end test is the surface's own check, which review runs
-  after the build. So scope asks no separate question about coverage. Each drafted criterion is
-  checked by a machine, and its verify clause names the behaviour a test proves, never the end to
-  end test. Scope warns on a clause that names one. Correct a line back to a person like any other
-  line.
-- **Visual regression is on.** A page this task changes that already has a baseline becomes a
-  criterion: the visual check on it must pass. A page with no baseline becomes a criterion too:
-  this task creates the baseline. Both are AIDA's proposals, so both stay `designer` until you
-  approve.
+When end to end tests are on, the end to end test is the surface's own check, which review runs
+after the build. So scope asks no separate question about coverage, and no question per criterion.
+It recommends each criterion's kind from its outcome, as above. A machine verify clause names the
+behaviour a test proves, never the end to end test. Visual regression adds no criterion either.
 
 ## The test setup offer
 

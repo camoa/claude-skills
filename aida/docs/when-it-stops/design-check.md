@@ -9,6 +9,16 @@ full, is on [the design check](../stages/design/check.md).
 - **Exit 5: the work orders cannot be built from.** A file that does not match its shape, an id
   that names nothing, an owned path that is not one literal path, a dependency cycle, or an order
   whose proof does not fit its tests, rows or files. AIDA repairs the orders and checks again.
+  These shapes stop too:
+  - a `tests` order whose every owned file is a document or configuration;
+  - a machine-verified criterion that such an order owns. Nothing there can test it, so make the
+    criterion a person's;
+  - a machine-verified criterion that an `observe` or `record` order owns, with no run line
+    proving it. Make the criterion a person's, or prove it with a run line;
+  - a tests-only order whose done-when rows and owned files do not match, or that does not come
+    after every `tests` order. See [clean up a test suite](../task/test-cleanup.md);
+  - an order that owns a test another open task froze;
+  - on a light task, an order that owns a file of the registered demo-path script.
 - **Unattended only, exit 5 or 7: what a person would read first.** A criterion with no serving
   order, no owner or two owners. A research finding no order accounts for (exit 7). With you
   present, each is a warning. A confirm order that is code on a task with tests, or that owns a

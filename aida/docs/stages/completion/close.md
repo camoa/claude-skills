@@ -39,10 +39,12 @@ A reason given instead closes the task with those criteria unanswered.
 Completion asks, in this order:
 
 1. one question per [follow up finding](follow-ups.md) that has no task;
-2. your reason, when the verdict is not `passed`;
-3. one question per [criterion a model observed](observed.md);
-4. a summary of what was done, in one or two lines, unless the conversation already says it;
-5. one question per [saved note](plays.md).
+2. your reason, when the verdict is not `passed`, or passed with warnings;
+3. a summary of what was done, in one or two lines, unless the conversation already says it;
+4. one question per [saved note](plays.md).
+
+A criterion a model looked at is not asked here. You answered it at the review's close, from the
+acceptance verifier's evidence.
 
 ## What the close does
 

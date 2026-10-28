@@ -12,12 +12,11 @@ Read these pages in order:
 
 1. [Close a task](close.md): what you type, the review verdict, and what the close writes.
 2. [Follow up tasks](follow-ups.md): which leftover work becomes a task, and how.
-3. [What a model observed](observed.md): the criteria a model judged through a browser.
-4. [Saved notes become plays](plays.md): turning a decision you saved into a playbook entry.
-5. [The restore commit](restore.md): the one commit completion makes, and why.
-6. [The pull request body](pr-body.md): what each section carries.
-7. [After the merge](after-merge.md): pushing, the guard on destructive commands, and pruning.
-8. [Completion with nobody present](autonomous.md): what an autonomous run does instead.
+3. [Saved notes become plays](plays.md): turning a decision you saved into a playbook entry.
+4. [The restore commit](restore.md): the one commit completion makes, and why.
+5. [The pull request body](pr-body.md): what each section carries.
+6. [After the merge](after-merge.md): pushing, the guard on destructive commands, and pruning.
+7. [Completion with nobody present](autonomous.md): what an autonomous run does instead.
 
 ## Why it works this way
 

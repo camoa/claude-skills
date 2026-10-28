@@ -12,6 +12,10 @@ order's own fixer repairs it, a fresh verifier checks the round, and the order c
 build then finishes again, with a range that ends at the new head. Then run
 `/aida:review <task-id>`. It starts from the checks, and archives the old record first.
 
+A bug in an order proved by tests gets a failing test first. That order's test author writes one
+test that fails on the bug, and it freezes as a new record. Then the fixer makes it pass. See
+[finish](../implement/finish.md).
+
 `reopen` takes findings that fail a criterion, and findings you ruled `test-wrong`. A test ruled
 wrong goes to the order whose frozen record holds it. That order's test author corrects it, and
 the correction freezes as a new record. You never correct a frozen test by hand. `reopen` names
@@ -45,7 +49,7 @@ and review again.
 | the tool printed nothing, and the baseline kept nothing | open the tool's output in the record and see why |
 | the suite, or a surface run, selected no tests | make it select tests |
 | the end to end preflight failed, so the run never started | fix what it checks, such as the site being up |
-| nobody walked the surfaces, on an autonomous run | review again with a person present |
+| a verifier row on a passing surface waited for a person, on an autonomous run | review again with a person present |
 
 ## Close without a passed review
 

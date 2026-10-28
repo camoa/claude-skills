@@ -15,9 +15,8 @@ those commits before the next build.
 You rule on it; a model never does. When you agree the test is wrong:
 
 1. AIDA sends the order's test writer again, to correct that assertion and nothing else.
-2. It runs the coding-standards check on the file, and sends the checker again over the affected
-   tests.
-3. It freezes the tests again. The freeze takes the corrected test because the builder's report
+2. It sends the checker again over the affected tests.
+3. It freezes the tests again, and the freeze runs the coding-standards check on the file. The freeze takes the corrected test because the builder's report
    holds the `Stop: test-wrong` line. No attempt is spent.
 4. The builder's stop left its code uncommitted on purpose. Say whether to keep it for the next
    attempt or clean the tree. Then the build goes on.

@@ -18,7 +18,7 @@ person can see. Each check is one question with one answer.
 
 The lens checks are the reviewer's. See [the reviewer](reviewer.md). "Everything serves a criterion"
 and the mutation check each have a script half and a reviewer half. The surface checks are on
-[their own page](surfaces.md). Visual parity runs only when the review recipe
+[their own page](acceptance.md). Visual parity runs only when the review recipe
 commands it. Otherwise it reads undeclared.
 
 A recipe may declare more tool rows, such as a duplication tool. Each row adds one check, so the
@@ -38,9 +38,11 @@ or a non-goal that changed after the freeze. You answer those at the [close](clo
   recipe. A task already past its build start adopts the copy as
   [the build's baseline page](../implement/baseline.md) says.
 - **The suite is not run again.** Finishing the build ran it at this commit, and review reads
-  that result. It can still read unknown when the recipe lookup failed or the recipe's commands
-  could not be read. When a person accepted runner warnings at finish, the row reads met, and
-  its detail says it is a person's answer.
+  that result. Finish stops on a newly broken test, so the suite never reads unmet here. It reads
+  warned or unknown when finish recorded a warning.
+- **Mutation testing runs only when the project opts in.** With mutation off, the mutation
+  command never runs, and the audit list names the check `off`. Turn it on with
+  [`/aida:project set-mutation`](../../project/mutation.md).
 - **A run that selected no tests reads unknown**, never met.
 
 ## Old findings do not fail a new task

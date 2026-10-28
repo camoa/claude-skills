@@ -6,7 +6,7 @@ its own branch, and the record says which branch ran. A light task reads as auto
 | Question | A person is present | Nobody is present |
 |---|---|---|
 | a criterion a person verifies | you answer met or unmet | your recorded answer; else unanswered, and no sign off |
-| the walk of the surfaces | you walk every one | recorded as not done, and the surface checks read unknown |
+| a verifier row not met on a surface whose run passed | you read the evidence and answer met or unmet | unanswered, and the surface checks read unknown |
 | a lens check whose findings are all low | you confirm, met, or reject, unmet | met, and named in the audit list |
 | a follow up finding | review offers a task | recorded, and no task is created |
 | a decision the build left | you answer it | unanswered, so review writes no verdict |
@@ -36,4 +36,4 @@ A light task changes what the surface checks require. See
 - Each stage refuses to start without the previous stage's record, so the chain to completion
   cannot run out of order.
 
-Source: skills/review/SKILL.md, skills/review/references/close.md, skills/review/references/surfaces.md, skills/implement/references/finish.md
+Source: skills/review/SKILL.md, skills/review/references/close.md, skills/review/references/acceptance.md, skills/implement/references/finish.md

@@ -19,7 +19,7 @@ next step.
 |---|---|
 | Checks | It writes the task's diff once and runs every tool the framework's recipes declare. |
 | Reviewer | One reviewer reads the diff through eight lenses and writes its findings. |
-| Surfaces | It runs the end to end and visual harnesses, when the project has them, and you walk each surface. |
+| Acceptance | It runs the end to end and visual harnesses, when the project has them. Then a verifier that did not build the task runs the product and records evidence. |
 | Close | It asks you the rows only a person can answer, then writes the verdict. |
 
 The diff covers the range the build recorded: from the commit the build started at to its final

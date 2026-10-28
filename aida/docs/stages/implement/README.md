@@ -17,7 +17,8 @@ build stopped.
    them, and the freeze locks them. An implementer writes the code. Eight checks run. A reviewer
    reads the diff, a fixer repairs what it found, and the order closes.
 4. **Finish.** When every order has closed, AIDA runs the whole suite once and records the stage
-   as done. The review stage is next.
+   as done. A test that passed before the build and fails now stops the task. The review stage is
+   next.
 
 AIDA tells you what each step did and where each record is. It prints summaries and paths, never
 a record's body. Open a record in your editor when you want to read it. Each question it asks

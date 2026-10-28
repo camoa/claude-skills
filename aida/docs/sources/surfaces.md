@@ -15,7 +15,8 @@ project, because every baseline is named from it.
 
 The surfaces live in one file, `.visual-review/surfaces.json`, committed beside the baselines. It
 holds the viewports and one row per surface: id, URL, kinds, masks, the paths that render it,
-whether it is critical, and whether it is enabled.
+whether it is critical, and whether it is enabled. An end to end surface also holds why it was
+added.
 
 A project with no page to drive registers a command instead: see
 [A command as the end to end surface](command-surface.md).
@@ -66,4 +67,4 @@ commits it. A decline refuses on an autonomous run, because it is a person's ans
   and "not this task" does not.
 
 Source: skills/surfaces/SKILL.md, skills/scope/SKILL.md, skills/design/SKILL.md,
-skills/review/references/surfaces.md
+skills/review/references/acceptance.md

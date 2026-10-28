@@ -24,5 +24,7 @@ Read in this order:
 12. [Save a decision](save.md): keep what the conversation decided before you stop.
 13. [Move a task to another machine](another-machine.md).
 14. [Complete a task](complete.md).
+15. [Clean up a test suite](test-cleanup.md): sort the tests, decide what goes, and hand the
+    cleanup to a task.
 
-Source: skills/task/SKILL.md, skills/next/SKILL.md, hooks/session-start.sh, hooks/pre-compact.sh
+Source: skills/task/SKILL.md, skills/next/SKILL.md, skills/test-cleanup/SKILL.md, hooks/session-start.sh, hooks/pre-compact.sh

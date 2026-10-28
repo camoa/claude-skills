@@ -35,6 +35,7 @@ path. Two plugins in one repository are two projects.
 - [Set where task worktrees go](worktree-location.md): the folder that holds a project's task
   worktrees.
 - [Uninstall AIDA from a repository](uninstall.md): take AIDA's instructions out of your code.
+- [Turn mutation testing on or off](mutation.md): whether review runs mutation testing.
 
 To pick up work on a task, use `/aida:next`. The [task pages](../task/) describe it.
 

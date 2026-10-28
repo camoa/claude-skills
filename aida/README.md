@@ -26,8 +26,8 @@ your project.
 Every task runs through six stages. Scope writes a contract: the goals, the non-goals, and the
 criteria that prove each goal was met. Research looks for prior art in your own code first, then
 outside, and reads current documentation rather than the model's memory. Design writes a spec
-detailed enough to build from. Implementation writes the tests first. Review runs the blocking
-checks and compares the result against the contract. Completion closes the task on that verdict
+detailed enough to build from. Implementation writes the tests first. Review runs the checks, runs
+the product, and compares the result against the contract. Completion closes the task on that verdict
 and writes the pull request body from the records.
 
 Two things hold the process together.
@@ -52,7 +52,7 @@ make a decision once.
 | Research | prior art, the guides to read, and how this is done today |
 | Design | the spec: what to build, where the logic lives, which pattern each part follows |
 | Implementation | the code, written test first, reviewed as it lands |
-| Review | the blocking checks, and the result held against the contract |
+| Review | the checks, evidence from running the product, and the result held against the contract |
 | Completion | the pull request body, and the task closed on the review's verdict |
 
 ## Status

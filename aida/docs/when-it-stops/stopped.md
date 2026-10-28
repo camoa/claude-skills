@@ -18,6 +18,7 @@ Each reason names the go-on choices it allows. AIDA offers only a choice every r
 | a finding on a non-goal, or the fix rounds spent | the review needs your ruling | rule on each open finding, or go on with `fix` or `close` |
 | a fixer short of scope | the fix needs a file the order does not own | go on with `fix`, and give the order the file it needs with `--owns` |
 | a finding ruled load-bearing | the finding is real and stays | commit the fix, then go on with `check`; or go on with `close` |
+| a test newly broken, at `finish` | a test that passed before the build fails at the final commit | go on with `fix`; see [finish refuses](finish-refused.md) |
 | `test wrong` | you ruled a frozen test wrong at review | redo |
 | `design drift: the builder declared a departure` or `design drift: the reviewer answered` | what was built departs from the design | keep it with go-on `keep`, or change the design and redo |
 | `design drift: the design file for` an order, or `the live text of criterion`, with nobody present | the design changed after the order started | keep the change with go-on `keep`, with no revert; or put the design back and run `start`; or redo |

@@ -9,7 +9,6 @@ interactive.
 | a follow up finding with no task | you accept or decline each one | every one is created and listed |
 | a review that did not pass, or passed with warnings | you give the reason | the close halts, naming the verdict and the warnings |
 | a high severity follow up with no task | you create it, or say why not | it already has a task, because every task was created first |
-| a criterion a model observed | you accept or reject the look | nobody is asked; the body says no person accepted it |
 | the summary | you give one or two lines | one line naming the grounds |
 | a saved note | you say yes or no per note | nothing is offered; the record says so |
 

@@ -26,7 +26,7 @@ A started order is taken in place, and keeps its step, when it only:
 - dropped an owned path that never named a file;
 - gained done-when rows after its frozen rows. When its done-when row was already judged, this
   holds only at `tests-frozen`: the checker judges that row again, and the same tests freeze
-  again. When it has no done-when judgement, this holds until its review, and from `reviewed` on
+  again. When the order has no done-when row, this holds until its review, and from `reviewed` on
   it is a change mid-build.
 
 Any other change is a change mid-build: a removed owned file the code holds, a changed or removed

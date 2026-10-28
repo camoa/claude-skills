@@ -9,8 +9,15 @@ Review shows the checklist rows of each criterion a person verifies, word for wo
 froze them. You answer met or unmet per criterion. On a task with no automated tests, the
 done-when rows of each order you confirm are yours to answer too.
 
+Each criterion shows the acceptance verifier's evidence under it: the verdict, the file it judged
+from, and its note. Open the files it names. The verifier's verdict decides nothing. You answer
+from what it saw. See [verify the task by running it](acceptance.md).
+
 When a criterion's verify clause names a command, review waits until you say the step before it
 is done. Then it runs the command and shows you its output with the question.
+
+A surface check whose run passed, but where the verifier did not judge a row met, is asked too.
+Review shows its evidence rows, and you answer the check met or unmet.
 
 A criterion a test proves needs no answer. It reads met when its row was confirmed and no failing
 test is one it froze.

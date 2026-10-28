@@ -11,23 +11,25 @@ carries the criteria the order owns and their tests. A done-when clause routed a
 a row of its own, with no test. For that row the checker asks one question: could a test prove
 this clause?
 
-The checker reads each named test against the framework's test-writing recipe. It catches a case
-the recipe asks for that no test covers. It catches a test that measures something easier than
-the sentence. Like the test author, it may not read production source, and a hook refuses it.
+The checker asks one question per row: if these tests pass, is the sentence true? It rejects a
+test for one of four reasons only:
 
-On a document order, a done-when row the checker already confirmed is not put to it again. That
-holds while the row's text, the order's owned files and the checker's own rules stay unchanged.
-Ask AIDA to put a row back, and it is checked again. On any other order, a confirmed row is carried
-only after a rejection, as the next sections say.
+1. It does not prove the behaviour, or a part of the sentence has no test.
+2. A trivial build passes it: an empty result, a constant, or a call that does nothing.
+3. It is too heavy: a whole flow, a level above the one that shows the behaviour, or two
+   behaviours.
+4. It reads a file's text back, or checks prose, configuration or metadata. No test can repair
+   that, so the order stops for design.
+
+It never asks for more cases than the behaviour needs. Like the test author, it may not read
+production source, and a hook refuses it. A document order has no checkpoint, so it puts no row
+to the checker but its absence rows and its verify-line rows.
 
 ## A confirmed row
 
-A confirmed row is the checker's, in both modes. You are not asked about it. The record says a
-model judged it, so you can list those rows later and read any of them again.
-
-There is one exception. Interactive, when another row of the same order goes back to the test
-author, AIDA lists the order's confirmed rows once. It asks whether any of them goes back too.
-The author rewrites that order's tests anyway, so a doubt costs nothing to act on now.
+A confirmed row is the checker's, in both modes. You are not asked about it, and no later
+checker reads it again. The record says a model judged it, so you can list those rows later and
+read any of them again.
 
 ## A rejected row, with you present
 
@@ -38,9 +40,10 @@ note, and the answer the note recommends.
 - **Reject.** The tests go back to a fresh test author, with your words and the checker's note.
   Nothing is frozen while a rejected row stands.
 
-After the repair, a fresh checker reads only the rows that need it. The `checkAgain:` line names
-them: the rejected rows and each confirmed row whose test file the repair edits. Every other
-confirmed row is carried, and the `rowsCarried:` line names those.
+After the repair, a fresh checker reads the rejected rows alone. The `checkAgain:` line names
+them. Every confirmed row is carried, even when the repair edits its test file, and the
+`rowsCarried:` line names those. A confirmed row whose test file changed outside the repair is
+not carried, and it goes to the checker again.
 
 ## A rejected row, with nobody present
 
@@ -59,6 +62,7 @@ A row marked as judged by a person refuses on an unattended run, because nobody 
 
 - A person shown only test names cannot see what the checker sees. So you are asked only where
   the checker doubts a test.
+- A confirmed row read a second time gives a drifting verdict and no new judgement.
 - No model overrules the checker's rejection. A model ruling on a test with nobody watching is the
   test describing the code again.
 - The record says who judged each row, so the rows no person read can be found later.

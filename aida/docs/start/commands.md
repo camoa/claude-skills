@@ -40,6 +40,7 @@ acts on the task active in this conversation.
 | `/aida:project task-rule <name>` | Adds the task rule to your repository's `CLAUDE.md`. |
 | `/aida:project check-machine` | Checks this machine can reach a task's worktree. |
 | `/aida:project uninstall <name>` | Takes AIDA's own instructions out of your repository. |
+| `/aida:project set-mutation <name> <on\|off>` | Turns mutation testing at review on or off. |
 
 ## The task
 
@@ -59,6 +60,8 @@ acts on the task active in this conversation.
 | `/aida:tool install <tool>` | Installs a tool, such as `phpunit` or `playwright`, from your stack's recipe. |
 | `/aida:tool run <tool>` | Runs a tool from its recipe. |
 | `/aida:surfaces` | Sets up end to end and visual regression tests. |
+| `/aida:surfaces unregister <id>` | Removes one surface you decided goes. |
+| `/aida:test-cleanup` | Sorts a grown test suite, asks you what goes, and hands the cleanup to a task. |
 | `/aida:playbooks list` | Lists the plays that apply to this project. |
 | `/aida:playbooks capture` | Saves a rule you want followed as a play. |
 
