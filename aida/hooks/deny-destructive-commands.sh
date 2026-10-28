@@ -351,7 +351,7 @@ skip_wrappers() {
 # with one grep, the segments that cannot hit its rule. A bash loop over every segment of a long
 # command took most of a minute (live-run row 255).
 starts_shell() {
-  local seg k sudo
+  local seg k sudo c
   SHELL_WORD=false
   while IFS= read -r seg; do
     set -f; read_words "$seg"; set +f
@@ -364,7 +364,8 @@ starts_shell() {
       esac
       k=$((k + 1))
     done
-    case "${w[$I]:-}" in bash|sh|zsh|dash|ksh|source|.|eval|su) SHELL_WORD=true; return 0 ;; esac
+    case "${w[$I]:-}" in */*) c="${w[$I]##*/}" ;; *) c="${w[$I]:-}" ;; esac
+    case "$c" in bash|sh|zsh|dash|ksh|source|.|eval|su) SHELL_WORD=true; return 0 ;; esac
   done <<SEGMENTS
 $(printf '%s\n' "$1" | tr ';&|(){}`' '\n\n\n\n\n\n\n\n' | grep -E -e 'sh|su|source|eval|(^| )\.( |$)')
 SEGMENTS
@@ -472,26 +473,20 @@ deletes_home_or_cwd() {
 }
 
 # True when a segment of normalised text $1 is a recursive rm of a target deletes_home_or_cwd names.
+# On a line that starts a shell (starts_shell), any `rm` word may be a command word, since the shell
+# runs the text around it: `su -c`, `sh -c`, `eval`, or a string piped to a shell.
 recursive_delete() {
   local seg word recursive targets done_opts t j
   while IFS= read -r seg; do
     set -f; read_words "$seg"; set +f
     skip_wrappers
-    # A shell's -c text is a command line of its own, so its first word is a command word. Its
-    # options before -c are skipped.
-    case "${w[$I]:-}" in
-      bash|sh|zsh|dash|ksh)
-        j=$((I + 1))
-        while [ "$j" -lt "${#w[@]}" ]; do
-          case "${w[$j]}" in
-            -o|+o) j=$((j + 2)) ;;
-            --*) j=$((j + 1)) ;;
-            -*c*) I=$((j + 1)); break ;;
-            -*) j=$((j + 1)) ;;
-            *) break ;;
-          esac
-        done ;;
-    esac
+    if [ "$SHELL_WORD" = true ]; then
+      j=$I
+      while [ "$j" -lt "${#w[@]}" ]; do
+        case "${w[$j]}" in rm|*/rm) I=$j; break ;; esac
+        j=$((j + 1))
+      done
+    fi
     [ "$I" -lt "${#w[@]}" ] || continue
     case "${w[$I]}" in rm|*/rm) ;; *) continue ;; esac
     recursive=false; targets=""; done_opts=false
@@ -520,21 +515,21 @@ SEGMENTS
   return 1
 }
 
-# The rules that ask, on normalised text $1, and on $2, the same text normalised after
-# quoted_words. The push rule reads $3, the text after quoted_words args, so a quoted argument
-# that names git, such as a reason text, is not read as a command (live-run row 377). On a line
-# that starts a shell, $3 is $1, because `echo "git push" | bash` runs the string.
-# Sets REASON and returns 0 on the first rule that hits.
+# The rules that ask. The delete rule reads $1, the normalised text after quoted_words. The git and
+# gh rules read $2, the text after quoted_words args, so a quoted argument that names git, such as
+# a reason text or a grep pattern, is not read as a command (live-run row 377). On a line that
+# starts a shell, both are the plain normalised text, because `echo "git push" | bash` runs the
+# string. Sets REASON and returns 0 on the first rule that hits.
 rules() {
-  local t="$1" q="$2" a="$3" line
+  local q="$1" a="$2" line
   hit "$a" "${GIT}push$END" && { REASON="is a git push, and version 6 never publishes: a person pushes"; return 0; }
-  hit "$t" "${GIT}reset$ARGS +$HARD$END" && { REASON="is a hard reset"; return 0; }
-  hit "$t" "${GIT}clean$ARGS +(-[a-zA-Z]*[fxX]|--f(o(r(c(e)?)?)?)?$END)" && { REASON="runs git clean, which deletes untracked files"; return 0; }
-  hit "$t" "${GIT}branch$ARGS +(-[a-zA-Z]*D[a-zA-Z]*|-df|-fd)$END" \
-    || hit "$t" "${GIT}branch$ARGS +(-d|$DELETE)$ARGS +(-f|--force)$END" \
-    || hit "$t" "${GIT}branch$ARGS +(-f|--force)$ARGS +(-d|$DELETE)$END" \
+  hit "$a" "${GIT}reset$ARGS +$HARD$END" && { REASON="is a hard reset"; return 0; }
+  hit "$a" "${GIT}clean$ARGS +(-[a-zA-Z]*[fxX]|--f(o(r(c(e)?)?)?)?$END)" && { REASON="runs git clean, which deletes untracked files"; return 0; }
+  hit "$a" "${GIT}branch$ARGS +(-[a-zA-Z]*D[a-zA-Z]*|-df|-fd)$END" \
+    || hit "$a" "${GIT}branch$ARGS +(-d|$DELETE)$ARGS +(-f|--force)$END" \
+    || hit "$a" "${GIT}branch$ARGS +(-f|--force)$ARGS +(-d|$DELETE)$END" \
     && { REASON="force-deletes a branch"; return 0; }
-  hit "$t" "${GIT}checkout$ARGS +(\.|\./|:/|-[a-zA-Z]*f[a-zA-Z]*|--force)$END" \
+  hit "$a" "${GIT}checkout$ARGS +(\.|\./|:/|-[a-zA-Z]*f[a-zA-Z]*|--force)$END" \
     && { REASON="discards uncommitted changes in the working tree"; return 0; }
   # restore of the whole tree with --staged alone only unstages, so it passes.
   while IFS= read -r line; do
@@ -543,7 +538,7 @@ rules() {
       REASON="discards uncommitted changes in the working tree"; return 0
     fi
   done <<RESTORE
-$(printf '%s\n' "$t" | grep -E -e "${GIT}restore$ARGS +(\.|\./|:/)$END")
+$(printf '%s\n' "$a" | grep -E -e "${GIT}restore$ARGS +(\.|\./|:/)$END")
 RESTORE
   if [ "$HAVE_TEXT" = true ] && recursive_delete "$q"; then
     if [ "$SCRATCH_HIT" = true ]; then
@@ -553,8 +548,8 @@ RESTORE
     fi
     return 0
   fi
-  hit "$t" "${GH}repo +sync$END" && { REASON="runs gh repo sync, which publishes to a remote branch"; return 0; }
-  hit "$t" "${GH}pr +merge$END" && { REASON="runs gh pr merge, which publishes to the base branch"; return 0; }
+  hit "$a" "${GH}repo +sync$END" && { REASON="runs gh repo sync, which publishes to a remote branch"; return 0; }
+  hit "$a" "${GH}pr +merge$END" && { REASON="runs gh pr merge, which publishes to the base branch"; return 0; }
   # gh api sends a POST by default once a field is given.
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -563,9 +558,9 @@ RESTORE
       REASON="calls the GitHub API to change a git ref or a file on a branch"; return 0
     fi
   done <<GHAPI
-$(printf '%s\n' "$t" | grep -E -e "${GH}api( |$)" | grep -E -e 'git/refs|/contents/')
+$(printf '%s\n' "$a" | grep -E -e "${GH}api( |$)" | grep -E -e 'git/refs|/contents/')
 GHAPI
-  if hit "$t" "${GH}api +graphql" && hit "$t" 'updateRef|createCommitOnBranch|mergePullRequest|deleteRef'; then
+  if hit "$a" "${GH}api +graphql" && hit "$a" 'updateRef|createCommitOnBranch|mergePullRequest|deleteRef'; then
     REASON="sends a GitHub GraphQL mutation that changes a branch or merges a pull request"; return 0
   fi
   return 1
@@ -589,16 +584,16 @@ check_text() {
   if [ "$HAVE_TEXT" = true ] && guard_write "$n"; then
     deny "writes to this guard: this plugin's hooks folder or a library the hook sources"
   fi
-  # The joined text is read only when git and push both appear, which saves its pass on most calls.
-  # A joined option value, as in `git -C "a b" push`, can make a push that the plain text misses.
+  # The joined text is read only when git or gh appears, which saves its pass on most calls. A
+  # joined option value, as in `git -C "a b" push`, can make a command that the plain text misses.
   a="$n"
-  [ "$SHELL_WORD" = true ] || ! hit "$n" "(^|[^A-Za-z0-9_.-])git .*push" || a="$(normalise "$(quoted_words "$text" args)")"
+  [ "$SHELL_WORD" = true ] || ! hit "$n" "(^|[^A-Za-z0-9_.-])(git|gh) " || a="$(normalise "$(quoted_words "$text" args)")"
   # On a line that starts a shell, a quoted string may be a command, so the delete rule reads the
   # plain text, as the push rule does.
   q="$n"
   [ "$SHELL_WORD" = true ] || q="$(normalise "$(quoted_words "$text")")"
   REASON=""
-  rules "$n" "$q" "$a" && ask "$REASON"
+  rules "$q" "$a" && ask "$REASON"
 }
 
 check_text "$CMD"

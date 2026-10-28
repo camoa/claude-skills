@@ -48,5 +48,14 @@ expect "a quoted heredoc to python names a git verb in backticks: no question" \
 expect "a push or a delete of home inside su -c or sudo -s is asked about" \
   "$(decision "$(out "$(bash_call "$(printf "su -c '%s'" "$PUSH")" default)")")|$(decision "$(out "$(bash_call "$(printf "sudo -s '%s'" "$PUSH")" default)")")|$(decision "$(out "$(bash_call "$(printf "sudo -s 'rm -%s ~'" rf)" default)")")" \
   "ask|ask|ask"
+RESET="$(printf 'git reset --%s' hard)"
+RF=rf
+expect "a role's grep for a hard reset in a document is not a command" \
+  "$(decision "$(out "$(bash_call "grep -n \"$RESET\" docs/x.md" default agent-1)")")" allow
+expect "a role's hard reset is refused and stops it" \
+  "$(decision "$(out "$(bash_call "$RESET" default agent-1)")")" "deny stop"
+expect "a recursive delete of home through su -c, sudo su -c, eval, a pipe to sh or /bin/sh -c is asked about" \
+  "$(for c in "su -c 'rm -$RF ~'" "sudo su -c 'rm -$RF ~'" "eval 'rm -$RF ~'" "echo 'rm -$RF ~' | sh" "/bin/sh -c 'rm -$RF ~'"; do
+       printf '%s,' "$(decision "$(out "$(bash_call "$c" default)")")"; done)" "ask,ask,ask,ask,ask,"
 
 finish
