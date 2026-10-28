@@ -19,9 +19,13 @@ full, is on [the design check](../stages/design/check.md).
     after every `tests` order. See [clean up a test suite](../task/test-cleanup.md);
   - a tests-only order, or a `tests` order whose owned files are all tests, that owns a test
     another open task froze;
-  - on a light task, an order that owns a file of the registered demo-path script.
+  - on a light task, an order that owns a file of the registered demo-path script, or adds a
+    file under a folder that the script's command names. An order may edit a file that is
+    already there.
 - **Unattended only, exit 5 or 7: what a person would read first.** A criterion with no serving
-  order, no owner or two owners. A research finding no order accounts for (exit 7). With you
+  order, no owner or two owners. A machine-verified criterion that a `confirm`, `observe` or
+  `record` order rests on a run line nobody approved. A research finding no order accounts for
+  (exit 7). With you
   present, each is a warning. A confirm order that is code on a task with tests, or that owns a
   test file, stops in both modes.
 - **Warnings.** Two orders that declare one owned file, an order that serves nothing, a supporting

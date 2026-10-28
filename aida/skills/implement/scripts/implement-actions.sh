@@ -7138,19 +7138,8 @@ br_verify_runs() {
 # only the entries that name a criterion. The build, the tests brief and the freeze all read this,
 # because a line that names a criterion proves it only when it runs.
 brv_kept() {
-  local argv_json='[]' rec_path rows
-  if [ -f "${IMPL_DIR:-}/baseline.json" ]; then
-    rows="$(mktemp)" || die3 "${BRC_WHO:-implement-actions}: could not create a temporary file"
-    while IFS= read -r rec_path; do
-      [ -n "$rec_path" ] && [ -f "$rec_path" ] || continue
-      : >"$rows"
-      cc_parse_recipe "$rec_path" "Check commands" "check_commands" "$rows"
-      argv_json="$(jq -s -c --argjson a "$argv_json" '$a + [ .[] | select(has("argv")) | .argv | join(" ") ]' "$rows")"
-    done <<BRV_CHECK_RECIPES
-$(jq -r '(.checkRecipes // [])[].path' "$IMPL_DIR/baseline.json" 2>/dev/null)
-BRV_CHECK_RECIPES
-    rm -f "$rows"
-  fi
+  local argv_json
+  argv_json="$(cc_check_argv "${IMPL_DIR:-}/baseline.json")" || die3 "${BRC_WHO:-implement-actions}: could not read the check recipes in ${IMPL_DIR:-}/baseline.json"
   printf '%s' "$1" | jq -c --argjson recipe "$argv_json" --arg only "${2:-}" '
     [ (.verify // [])[]
       | select(has("run") and (.binding != false or has("approved") or (.run as $r | $recipe | index($r) != null)))

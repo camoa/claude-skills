@@ -59,7 +59,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - on a light task, every work order but wo1, the walking skeleton, reaches wo1 through its
 #     dependsOn chain, so the skeleton is built first (gap row 197);
 #   - on a light task, no work order owns a file of the registered script that walks the demo path,
-#     wo1 included: review runs that script, and a light order never extends it (audit/24);
+#     wo1 included, and none adds a file under a folder that script's command names: review runs
+#     that script, and a light order never extends it (audit/24, gap row 458);
+#   - no confirm, observe or record order spares a machine criterion on a research run line that
+#     never runs: one not binding, with no person's stamp, and not a check command (gap row 458).
+#     An unattended close stops on it, and a person who closes reads it;
 #   - ownedFiles do not overlap between work orders, a warning, compared as declared strings only, the same
 #     bound version 5's own overlap check carried (ideal/design.md, "What a work order holds"):
 #     this is not a glob-intersection check, and it proves nothing about what a builder actually
@@ -95,7 +99,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     and the paths each freeze of another open task holds
 #   <project folder>/tasks/*/task.json: whether the task that wrote such a freeze is complete
 #   <project folder>/test-cleanup/run-*/groups.json: the tests of the cleanup run the goal names
-#   <plugin root>/scripts/lib/recipes.sh: tf_path_matches_catalog_glob, sourced in a subshell
+#   <project folder>/tasks/*/implementation*/baseline.json: the check recipes each baseline read,
+#     whose check_commands argv lines run with no person's stamp
+#   <plugin root>/scripts/lib/recipes.sh: tf_path_matches_catalog_glob, cc_check_argv and
+#     path_script_state's library, sourced in a subshell
+#   the task's worktree, or the code path: the surface file, and on a light task the git objects
+#     at the task's base
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
 # folder otherwise, so a person can run it directly.
@@ -121,11 +130,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      other or that does not come after every tests order, such an order or a tests order of
 #      test files only that owns a test another open task froze, a machine criterion an observe
 #      or record order owns with no run line proving it, or a light order that owns the
-#      registered script that walks the demo path. Implementation's `start` refuses on this code.
+#      registered script that walks the demo path or adds a file under a folder it names.
+#      Implementation's `start` refuses on this code.
 #
 # `open` sorts every finding by what it does, one line each. Both callers print these lines, so
 # they are written once, here. `stop` raises exit 4. `unattended` stops an autonomous close and
-# is a warning when a person closes: a criterion with no serving order, no owner or two owners.
+# is a warning when a person closes: a criterion with no serving order, no owner or two owners,
+# and a machine criterion an order spares on a research run line that never runs.
 # `warn` never stops: an
 # order that serves nothing, a supporting order no owner reaches, a light order not after wo1,
 # two orders that declare one owned file, and an order with more than eight done-when rows or
@@ -181,6 +192,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 confirmOrdersOnTaskWithTests: [ {id, path, machineOwned} ],
 #                 confirmOrdersOwningTestFiles: [ {id, path, glob} ],   path is the owned test file
 #                 testsOnlyRowsUnmatched: [ {id, item, problem} ],   item is an owned file or a row
+#                 unstampedRunProofs: [ {id, path, criterionId} ],
 #                 textOnlyTestOrders: [ {id, path} ],
 #                 machineCriteriaOnTextOnlyOrders: [ {id, path, criterionId} ],
 #                 machineCriteriaOnLookOrRecordOrders: [ {id, path, criterionId, proof} ],
@@ -192,7 +204,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #              dependencyCycles: [ id, ... ],
 #              orphanSupportOrders: [ id, ... ],
 #              ordersNotAfterSkeleton: [ id, ... ],   a light task only
-#              lightOrdersOwningPathScript: [ {id, path} ],   a light task only
+#              lightOrdersOwningPathScript: [ {id, path, folder} ],   a light task only; folder
+#                                                when the order adds path under it
 #              overlappingOwnedFiles: [ {ids: [id, id], path} ],
 #              ordersPastHandfulOfRows: [ {id, path, count, owned} ],   a warning
 #              globbedOwnedFiles: [ {id, path} ],
@@ -350,6 +363,18 @@ fi
 FILES_JSON='[]'
 RAW_IDS_JSON='[]'
 WORK_ORDERS_JSON='[]'
+PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
+TAB="$(printf '\t')"
+
+# The check_commands argv of each check recipe that a baseline in this project read, for the
+# projection's criteriaByUnstampedRun: brv_kept runs a line that equals one (gap row 370).
+# recipes.sh empties TASK_PATH when it loads, so it loads only inside this subshell.
+CHECK_ARGV_JSON="$(
+  [ -z "${ZSH_VERSION:-}" ] || setopt NULL_GLOB
+  # shellcheck source=/dev/null
+  source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
+  cc_check_argv "$PROJECT_PATH"/tasks/*/implementation*/baseline.json
+)" || die3 "could not read the check recipes that this project's baselines record"
 FILE_ISSUE_COUNT=0
 CONTENT_ISSUE_COUNT=0
 
@@ -461,12 +486,18 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             doneWhen: [ (.doneWhen // [])[]? | select(type == "string" and length > 0) ],
             doneWhenCount: ([ (.doneWhen // [])[]? | select(type == "string" and length > 0) ] | length),
             criteriaByRun: [ (.verify // [])[]? | select(type == "object" and has("run")) | .criterion? | strings ],
+            # The criteria that only lines brv_kept never runs name: not binding, no stamp, and no
+            # check command of the same words (gap row 458).
+            criteriaByUnstampedRun: ( [ (.verify // [])[]? | select(type == "object" and has("run")) ] as $runs
+              | [ $runs[] | select(.binding != false or has("approved") or (.run as $r | $checkArgv | index($r) != null))
+                  | .criterion? | strings ] as $running
+              | [ $runs[] | .criterion? | strings | select(. as $c | $running | index($c) == null) ] | unique ),
             # A test counts on its description alone. The level is optional and design does not set
             # one: choosing a tier belongs to the stage that writes the test.
             testsCount: ( [ (.tests // [])[]? | select(type == "object")
                             | select((.description? | type) == "string" and (.description | length) > 0) ] | length )
           }
-        ' --arg path "$wfile" "$wfile")"
+        ' --arg path "$wfile" --argjson checkArgv "$CHECK_ARGV_JSON" "$wfile")"
         WORK_ORDERS_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq --argjson e "$THIS_ORDER" '. + [$e]')"
       fi
     fi
@@ -594,8 +625,7 @@ UNKNOWN_CRITERIA_IDS_JSON='[]'
 UNKNOWN_NONGOAL_IDS_JSON='[]'
 COVERAGE_ISSUE_COUNT=0
 TESTS_ONLY_ROWS_UNMATCHED_JSON='[]'
-PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
-TAB="$(printf '\t')"
+UNSTAMPED_RUN_PROOFS_JSON='[]'
 
 # Every freeze record in the project, read once. Each freeze recorded the implement recipe's test
 # globs, so the records say which path is a test with no lookup. A project that froze no test yet
@@ -768,6 +798,20 @@ else
         | . as $o | [ ($o.criteriaOwned // [])[] | select(($vbOf[.] // "") == "machine") ] as $machine
         | select(($machine | length) == 0 or any($machine[]; . as $c | ($o.criteriaByRun | index($c)) == null))
         | {id: .id, path: .path, machineOwned: ($machine | length)} ]
+  ')"
+  # The three lists above spare a machine criterion on a run line that names it. A research line runs
+  # only when it is binding, a person stamped it at the close, or it equals a check command. One that
+  # runs on none of those grounds may never run, so nothing proves the criterion (gap row 458). An
+  # attended close stamps it with --approve-runs, after the person reads this line. An unattended
+  # close stops on it.
+  UNSTAMPED_RUN_PROOFS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" --arg tests "$(automated_tests "$TASK_PATH")" --argjson testsOnly "$TESTS_ONLY_IDS_JSON" '
+    ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
+    | [ $orders[] | . as $o
+        | select($o.slot == "observed" or $o.slot == "done-when"
+            or ($o.slot == "confirm-at-review" and $tests != "no" and ($o.textOnly | not) and ($testsOnly | index($o.id)) == null))
+        | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
+        | select(($o.criteriaByUnstampedRun | index($cid)) != null)
+        | {id: $o.id, path: $o.path, criterionId: $cid} ]
   ')"
   # A confirm order is built with no test. So a test file it owns is written as plain code that no
   # check runs and the freeze never sees (gap row 367). Which path is a test is the framework's to
@@ -950,24 +994,46 @@ else
   ORDERS_NOT_AFTER_SKELETON_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.notAfterSkeleton')"
 
   # A light task never extends the registered script that walks the demo path, wo1 included (audit/24,
-  # "Light mode"). path_script_state names its files the way review reads them. recipes.sh empties
-  # TASK_PATH when it loads, so it loads only inside this subshell.
+  # "Light mode"). path_script_state names its files and folders the way review reads them. An owned
+  # entry is listed when it is such a file or holds one, or when it lies under such a folder and the
+  # task's base lacks it: an order may edit a file the path runs, never add one (gap row 458). The
+  # base is the task's fork point, or HEAD when task.json records none. recipes.sh empties TASK_PATH
+  # when it loads, so it loads only inside this subshell. It prints the state, then one
+  # `file`, `dir` or `added` line per finding, tab separated.
   if [ "$LIGHT_TASK" = true ]; then
     PATH_SCRIPT="$(
       PS_TASK="$TASK_PATH"
       # shellcheck source=/dev/null
       source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
       path_script_state "$PS_TASK"
-      printf '%s\n%s' "$PS_STATE" "$PS_FILES"
+      printf '%s\n' "$PS_STATE"
+      [ "$PS_STATE" = registered ] || exit 0
+      printf '%s' "$PS_FILES" | sed "s/^/file$TAB/"
+      [ -n "$PS_DIRS" ] || exit 0
+      printf '%s' "$PS_DIRS" | sed "s/^/dir$TAB/"
+      PS_BASE="$(task_fork_point "$PS_TASK" "$PS_TREE")"
+      printf '%s' "$WORK_ORDERS_JSON" | jq -r '.[] | .id as $id | .ownedFiles[] | [$id, (ltrimstr("./") | rtrimstr("/"))] | @tsv' \
+        | while IFS="$TAB" read -r PS_ID PS_PATH; do
+            while IFS= read -r PS_DIR; do
+              case "$PS_PATH" in "$PS_DIR"|"$PS_DIR"/*) ;; *) continue ;; esac
+              git -C "$PS_TREE" cat-file -e "${PS_BASE:-HEAD}:$PS_PATH" 2>/dev/null \
+                || printf 'added\t%s\t%s\t%s\n' "$PS_ID" "$PS_PATH" "$PS_DIR"
+              break
+            done <<PS_FOLDERS
+$PS_DIRS
+PS_FOLDERS
+          done
     )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"
     if [ "${PATH_SCRIPT%%$'\n'*}" = registered ]; then
       LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON="$(printf '%s' "$PATH_SCRIPT" | sed 1d | jq -R -s -c --argjson orders "$WORK_ORDERS_JSON" '
-        (split("\n") | map(select(length > 0))) as $files
+        [ split("\n")[] | select(length > 0) | split("\t") ] as $rows
+        | [ $rows[] | select(.[0] == "file") | .[1] ] as $files
         | [ $orders[] | .id as $id | (.ownedFiles // [])[]
             | (ltrimstr("./") | rtrimstr("/")) as $p
             | select(any($files[]; . == $p or startswith($p + "/")))
-            | {id: $id, path: $p} ]')"
-      [ -n "$(printf '%s' "$PATH_SCRIPT" | sed 1d)" ] || PATH_SCRIPT_UNREAD=true
+            | {id: $id, path: $p} ]
+          + [ $rows[] | select(.[0] == "added") | {id: .[1], path: .[2], folder: .[3]} ]')"
+      printf '%s' "$PATH_SCRIPT" | sed 1d | grep -q . || PATH_SCRIPT_UNREAD=true
     fi
   fi
 
@@ -1056,7 +1122,7 @@ if [ "$CONTRACT_READABLE" = "true" ] && [ -z "$CONFIRM_TEST_GLOBS" ] \
   NOT_CHECKED_ITEMS+=("whether a confirm order owns a test file: no freeze in this project recorded a test glob, so nothing here says which path is a test.")
 fi
 if [ "$PATH_SCRIPT_UNREAD" = true ]; then
-  NOT_CHECKED_ITEMS+=("whether a light order owns the registered script that walks the demo path: that surface names no file of the tree, such as a page surface, so no file is known to compare.")
+  NOT_CHECKED_ITEMS+=("whether a light order owns the registered script that walks the demo path: that surface names no file or folder of the tree, such as a page surface, so nothing is known to compare.")
 fi
 if [ "$DESIGN_STARTED" != "true" ]; then
   NOT_CHECKED_ITEMS+=("the graph checks between work orders: $GRAPH_NOTE")
@@ -1102,7 +1168,9 @@ def open: {
     ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
     ((.graph.unknownDependsOnIds // [])[] | "file " + .path + " depends on an unknown work order id " + .id),
     ((.graph.globbedOwnedFiles // [])[] | "order " + .id + " owns " + .path + ", which is not one literal path"),
-    ((.graph.lightOrdersOwningPathScript // [])[] | "order " + .id + " owns " + .path + ", the registered script that walks the demo path, and on a light task no order extends it: remove-owned-file"),
+    ((.graph.lightOrdersOwningPathScript // [])[] | if has("folder")
+      then "order " + .id + " adds " + .path + " under " + .folder + ", which the registered demo-path command runs, and a light order never extends it: remove-owned-file, or register a change through /aida:surfaces"
+      else "order " + .id + " owns " + .path + ", the registered script that walks the demo path, and on a light task no order extends it: remove-owned-file" end),
     ((.coverage.testsOnlyRowsUnmatched // [])[] | "order " + .id + " deletes the tests of a cleanup run, and "
       + (if .problem == "owned file named in no done-when row" then "no done-when row names its file " + .item + ": add-done-when"
          else "its done-when row \"" + .item + "\" names no file it owns: remove-done-when, or name the file in it" end)),
@@ -1112,7 +1180,8 @@ def open: {
   unattended: [
     ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
     ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
-    ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order")
+    ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
+    ((.coverage.unstampedRunProofs // [])[] | "order " + .id + " rests criterion " + .criterionId + " on a research run line that runs only when a person approves it: close attended with --approve-runs, or give " + .criterionId + " another proof")
   ],
   warn: [
     ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
@@ -1156,6 +1225,7 @@ jq -n \
   --argjson confirmOrdersOnTaskWithTests "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" \
   --argjson confirmOrdersOwningTestFiles "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" \
   --argjson testsOnlyRowsUnmatched "$TESTS_ONLY_ROWS_UNMATCHED_JSON" \
+  --argjson unstampedRunProofs "$UNSTAMPED_RUN_PROOFS_JSON" \
   --argjson textOnlyTestOrders "$TEXT_ONLY_TEST_ORDERS_JSON" \
   --argjson machineCriteriaOnTextOnlyOrders "$MACHINE_ON_TEXT_ONLY_JSON" \
   --argjson machineCriteriaOnLookOrRecordOrders "$MACHINE_ON_LOOK_OR_RECORD_JSON" \
@@ -1204,6 +1274,7 @@ jq -n \
       confirmOrdersOnTaskWithTests: $confirmOrdersOnTaskWithTests,
       confirmOrdersOwningTestFiles: $confirmOrdersOwningTestFiles,
       testsOnlyRowsUnmatched: $testsOnlyRowsUnmatched,
+      unstampedRunProofs: $unstampedRunProofs,
       textOnlyTestOrders: $textOnlyTestOrders,
       machineCriteriaOnTextOnlyOrders: $machineCriteriaOnTextOnlyOrders,
       machineCriteriaOnLookOrRecordOrders: $machineCriteriaOnLookOrRecordOrders,

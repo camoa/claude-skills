@@ -37,7 +37,8 @@ holds for light too.
 - The code review of each order, and the project's own checks, its security check included.
 - One script that walks the demo path. That is the project's end to end setup for that one path.
   With end to end on and no such script registered, `wo1` writes it. Once one is registered, no
-  order writes or extends it. A project that declined end to end keeps no such script. A missing
+  order writes or extends it. An order may edit a file the script runs. The design check refuses
+  an order that adds a file under a folder the script's command names. A project that declined end to end keeps no such script. A missing
   script is not a failure at review: the acceptance verifier's evidence is the task's acceptance.
   See [sources](../sources/).
 - A budget, when you set one. See [set a budget](budget.md).

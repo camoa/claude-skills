@@ -31,6 +31,22 @@ expect "the check refuses a machine criterion a record order owns" "$(record_ref
 record_run() ( source "$HERE/records.bash"; design_as record run )
 expect "a run line that proves it lets a record order own it" "$(record_run)" '0|'
 
+# readme_only <proof> <verifiedBy>: wo1 owns only README.md, proved by <proof>, and c1 is verified
+# by <verifiedBy>. Prints the check's exit, the orders on the text-only tests list, and the orders
+# and criteria on the text-only machine list.
+readme_only() (
+  source "$HERE/records.bash"
+  task_records branch
+  jq --arg v "$2" '.criteria[0].verifiedBy = $v' "$TASK/alignment.json" >"$ROOT/a.json" && mv "$ROOT/a.json" "$TASK/alignment.json"
+  jq --arg p "$1" '.proof = $p | .ownedFiles = ["README.md"] | if $p == "tests" then . else .tests = [] end' \
+    "$TASK/design/wo1.json" >"$ROOT/w.json" && mv "$ROOT/w.json" "$TASK/design/wo1.json"
+  bash "$PLUGIN/scripts/check-design.sh" "$TASK" >"$ROOT/check.json" 2>/dev/null
+  printf '%s|%s|%s\n' "$?" "$(jq -r '[ .coverage.textOnlyTestOrders[].id ] | join(",")' "$ROOT/check.json")" \
+    "$(jq -r '[ .coverage.machineCriteriaOnTextOnlyOrders[] | .id + " " + .criterionId ] | join(",")' "$ROOT/check.json")"
+)
+expect "the check refuses a tests order that owns only README.md" "$(readme_only tests person)" '4|wo1|'
+expect "the check refuses a text-only confirm order that owns a machine criterion" "$(readme_only confirm machine)" '4||wo1 c1'
+
 # closed_task: wo1 closed with its frozen test, a green suite, and a review record that holds a
 # pending finding and a departure, as review-record writes them in 6.1.0.
 closed_task() {

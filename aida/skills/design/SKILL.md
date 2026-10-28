@@ -502,7 +502,9 @@ one script that walks the demo path. `start` prints the `path-script:` line, and
 says the case. `create`: `wo1` also owns that script. For a page, it sits where the harness reads
 its tests. For a command surface, it is the file the command runs. A person registers it with
 `/aida:surfaces`. `registered`: the project has the script, and no order writes or extends it.
-`check` refuses an order that owns one of its files, `wo1` included.
+`check` refuses an order that owns one of its files, `wo1` included. It also refuses an order
+that adds a file under a folder the registered command names, such as `test/` for
+`npx playwright test`. An order may edit a file that the task's base already holds there.
 `declined` or `off`: no order writes one. A change to the script goes through `/aida:surfaces`
 with a person.
 
@@ -730,10 +732,13 @@ never stops. The report holds:
   configuration, a `gate` order excepted;
 - every machine-verified criterion owned by an `observe` or `record` order, unless a run line
   proves it;
+- every machine-verified criterion that a `confirm`, `observe` or `record` order rests on a
+  research run line that never runs: not binding, not approved, and not a check command. This
+  stops only an unattended close;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - on a light task, every work order that owns a file of the registered script that walks the demo
-  path;
+  path, or adds a file under a folder that the script's command names;
 - two work orders sharing a declared owned file that one of them does not mark `--shared`;
 - any criterion, non-goal, or work order id named anywhere that resolves to nothing real.
 
@@ -745,7 +750,8 @@ every run mode. The approval is the person's answer, recorded with the task skil
 `person-answer.sh`, step `design close`, with the lines as the words. Then pass `--approve-runs` to
 the close, and the close stamps each such entry. Without the answer, `--approve-runs` refuses with
 exit 70 and prints the command. Autonomous: the line and the rendered order carry it to a person
-later.
+later. When a `confirm`, `observe` or `record` order rests a machine-verified criterion on such a
+line, the autonomous close stops instead, because nothing would prove that criterion.
 
 `check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
 proof is `tests` that owns criteria of which none is machine-verified. The design still closes with
@@ -843,8 +849,11 @@ lines are not enough, and fix the specific order each line names. The same repai
     entry point that is not a screen belongs in the order that builds the feature, as above, not
     in an order of its own; an order for it alone needs a criterion that names it;
   - a cycle needs one of the `dependsOn` edges in it removed;
-  - a light order that owns the registered demo-path script needs `remove-owned-file` for it. A
-    change to that script goes through `/aida:surfaces` with a person;
+  - a light order that owns the registered demo-path script, or adds a file under a folder its
+    command names, needs `remove-owned-file` for it. A change to that script goes through
+    `/aida:surfaces` with a person;
+  - a criterion that rests on a research run line nobody approved needs the person's yes at an
+    attended close, with `--approve-runs`, or another proof;
   - overlapping owned files need one order's `ownedFiles` narrowed so the paths do not repeat,
     or `--shared` on both orders when each only adds to the file;
   - a wildcard in an owned file needs the directory named instead, or each file added, because

@@ -30,6 +30,8 @@
 #   recipe_block_into <recipe> <heading> <key> <file>   cuts one YAML block out; prints the state
 #   tc_parse_recipe <recipe> <out>            one JSON object per `## Test commands` row
 #   cc_parse_recipe <recipe> <heading> <key> <out>      the same for a check or surface block
+#   cc_check_argv <baseline>...               each check_commands argv the baselines' check recipes
+#                                             declare, words joined by one space, as one JSON array
 #   cc_markers_in_text <text>                 the literal markers in one silent-pass text
 #   cc_failure_signal_markers <recipe> <key>  the same, from one key of a test recipe's failure_signal
 #   cc_silent_pass_markers <recipe>           the same, from the file-level key of a test recipe
@@ -550,6 +552,29 @@ cc_parse_recipe() {
   done <"$block_file"
   cc_flush_entry "$out"
   rm -f "$block_file"
+}
+
+# Prints, as one JSON array, each check_commands argv of the check recipes that the baseline files
+# $@ record in checkRecipes, its words joined by one space. The project's review recipe runs such a
+# command on every build, so a run line that equals one runs with no person's stamp (gap row 370).
+# A baseline or a recipe that is not there adds nothing. Returns 3 when it cannot make its
+# temporary file.
+cc_check_argv() {
+  local argv_json='[]' baseline rec_path rows
+  rows="$(mktemp)" || return 3
+  for baseline in "$@"; do
+    [ -f "$baseline" ] || continue
+    while IFS= read -r rec_path; do
+      [ -n "$rec_path" ] && [ -f "$rec_path" ] || continue
+      : >"$rows"
+      cc_parse_recipe "$rec_path" "Check commands" "check_commands" "$rows"
+      argv_json="$(jq -s -c --argjson a "$argv_json" '$a + [ .[] | select(has("argv")) | .argv | join(" ") ]' "$rows")"
+    done <<CC_CHECK_RECIPES
+$(jq -r '(.checkRecipes // [])[].path' "$baseline" 2>/dev/null)
+CC_CHECK_RECIPES
+  done
+  rm -f "$rows"
+  printf '%s' "$argv_json"
 }
 
 # Prints, one per line, the literal markers in the silent-pass text $1. A marker is a backtick-quoted

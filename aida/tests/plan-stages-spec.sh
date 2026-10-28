@@ -174,29 +174,51 @@ recipe_case() (
 )
 expect "a recipe entry with a shell character is skipped, with a warning" "$(recipe_case)" "0|ok|1"
 
-# light_case <owner> [playwright]: the design check's status on a light task whose project registers
-# the command `bash tests/demo.sh` as the script that walks the demo path. <owner> is the order that
-# owns that script, or none. With playwright, the command is `npx playwright test`, the tree holds
-# a test/ folder, and <owner> owns that folder.
+# light_case <owner> <path> [playwright]: the design check's status, and the paths its light list
+# names, on a light task whose project registers the command `bash tests/demo.sh tests/demo.d` as
+# the script that walks the demo path. The task's base holds tests/demo.sh, tests/demo.d/a.sh and
+# test/a.spec. <owner> is the order that owns <path>, or none. With playwright, the command is
+# `npx playwright test`, which names the folder test/.
 light_case() (
-  local command='["bash", "tests/demo.sh"]' owned=tests/demo.sh
-  [ "${2:-}" != playwright ] || { command='["npx", "playwright", "test"]'; owned=test/; }
+  local command='["bash", "tests/demo.sh", "tests/demo.d"]'
+  [ "${3:-}" != playwright ] || command='["npx", "playwright", "test"]'
   source "$HERE/records.bash"
   task_records branch wo2
   jq '.runMode = "light"' "$TASK/task.json" >"$ROOT/t" && mv "$ROOT/t" "$TASK/task.json"
-  mkdir -p "$WT/tests" && printf 'echo ok\n' >"$WT/tests/demo.sh"
-  mkdir -p "$WT/test" && printf 'x\n' >"$WT/test/a.spec"
+  mkdir -p "$WT/tests/demo.d" "$WT/test"
+  printf 'echo ok\n' >"$WT/tests/demo.sh"; printf 'echo a\n' >"$WT/tests/demo.d/a.sh"; printf 'x\n' >"$WT/test/a.spec"
+  git -C "$WT" add tests test && git -C "$WT" commit -qm "the demo path" && git -C "$WT" branch -f main HEAD
   jq -n --argjson c "$command" '{schemaVersion: 1, surfaces: [{id: "demo", command: $c, kinds: ["e2e"],
       enabled: true, masks: [], critical: true, reason: "walks the demo path"}]}' >"$WT/surfaces.json"
   jq '.surfaces = {e2e: {enabled: true}, registryPath: "surfaces.json"}' "$PROJECT/project.json" >"$ROOT/p" \
     && mv "$ROOT/p" "$PROJECT/project.json"
-  [ "$1" = none ] || { jq --arg o "$owned" '.ownedFiles += [$o]' "$TASK/design/$1.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/$1.json"; }
+  [ "$1" = none ] || { jq --arg o "$2" '.ownedFiles += [$o]' "$TASK/design/$1.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/$1.json"; }
   run "$DESIGN" check "$TASK"
-  sed -n 's/^status: //p' "$OUT"
+  printf '%s|%s\n' "$(sed -n 's/^status: //p' "$OUT")" \
+    "$(jq -r '[ .graph.lightOrdersOwningPathScript[] | .id + " " + .path ] | join(",")' "$TASK/records/design-check.json")"
 )
-expect "a light order that owns the registered demo-path script does not pass the design check" "$(light_case wo2)" "5"
-expect "a light first order that owns the registered demo-path script does not pass either" "$(light_case wo1)" "5"
-expect "a light design that leaves the registered script alone passes" "$(light_case none)" "0"
-expect "a folder the registered command names is not its script" "$(light_case wo2 playwright)" "0"
+expect "a light order that owns the registered demo-path script does not pass the design check" "$(light_case wo2 tests/demo.sh)" "5|wo2 tests/demo.sh"
+expect "a light first order that owns the registered demo-path script does not pass either" "$(light_case wo1 tests/demo.sh)" "5|wo1 tests/demo.sh"
+expect "a light design that leaves the registered script alone passes" "$(light_case none -)" "0|"
+expect "a light order may own a folder the registered command names when the base holds it" "$(light_case wo2 test/ playwright)" "0|"
+expect "a light order that adds a file under a folder the command names does not pass" "$(light_case wo2 tests/demo.d/new.sh)" "5|wo2 tests/demo.d/new.sh"
+expect "a light order may edit a file the base holds under that folder" "$(light_case wo2 tests/demo.d/a.sh)" "0|"
+expect "a light order that adds a spec under the folder npx playwright test names does not pass" "$(light_case wo2 test/b.spec playwright)" "5|wo2 test/b.spec"
+
+# unstamped_case <verify entry>: an autonomous design close's exit, whether it closed, and whether it
+# named the line, when wo1 is a confirm order whose one run line, <verify entry>, names c1.
+unstamped_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  rm -f "$TASK/design-closed.json"
+  jq --argjson v "$1" '.proof = "confirm" | .tests = [] | .verify = [$v]' "$TASK/design/wo1.json" >"$ROOT/w" \
+    && mv "$ROOT/w" "$TASK/design/wo1.json"
+  run "$DESIGN" --run-mode autonomous close "$TASK" --no-recipe
+  printf '%s|%s|%s\n' "$RC" "$(closed)" "$(grep -c 'rests criterion c1 on a research run line' "$OUT")"
+)
+expect "an unattended close stops on a confirm order that rests c1 on an unstamped research line" \
+  "$(unstamped_case '{"run": "true", "pass": "exit 0", "cites": "research/s1.json", "binding": false, "criterion": "c1"}')" "5|open|1"
+expect "an unattended close takes the same order when the line is binding" \
+  "$(unstamped_case '{"run": "true", "pass": "exit 0", "cites": "a recipe", "binding": true, "criterion": "c1"}')" "0|closed|0"
 
 finish
