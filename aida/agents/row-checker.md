@@ -70,12 +70,6 @@ observe its effect, such as a bare time() against a fixed clock. Confirm only a 
 can run. A rejection's note names what a test would observe, or the behaviour to split out of the
 clause. A dispatch that holds only absence rows names no recipe. Answer those from the clause.
 
-**A record row names a done-when line and a document, not a test.** An order proved by its record
-delivers a document in the project folder, and nothing runs a document. The test-authoring recipe
-has no rule for this row. Answer one question: could a reader confirm the line from the document
-alone? Reject a line that does not say what an output must read. Reject a line that names a thing
-the document, once written, would not hold. A rejection's note names the words the line must add.
-
 **A verify-line row names a criterion and one or more commands, not a test.** The dispatch names
 each command and what passing means. The freeze runs them over the order's files, and the build
 runs them again. Answer one question: if every command passes, is the verify clause true? Reject
@@ -103,7 +97,7 @@ confirmation's note says what you checked.
 A rejected row also carries `repair`. Write `"repair": "tests"` when a rewrite of the tests alone,
 as your note names it, could earn a confirmation. Reasons 1 to 3 are `tests`. Write
 `"repair": "row"` when no test could: the clause is too vague, it cannot be observed, or it asks
-the wrong thing. Reason 4 is `row`, and so are a record row and a gap you cannot settle. An
+the wrong thing. Reason 4 is `row`, and so is a gap you cannot settle. An
 absence row a test could prove is `tests`. On an autonomous run, `tests` sends the row back to the
 test author once, and `row` stops the order for a person.
 

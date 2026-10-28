@@ -126,16 +126,14 @@ BR_HARNESS_JQ="$BR_ORDER_FACTS_JQ"'
 # A fixer is not listed: an open finding decides it, not a kind. `point: implement` is on every
 # kind, because the tests step takes the oracle globs from it and a gate order runs its
 # `## Configuration gate`. The test author and the row-checker read `point: test-authoring`.
-# The row-checker takes the recipe path on every dispatch (agents/row-checker.md), a record
-# order's done-when row included, so a `record` order asks for it too.
+# The row-checker takes the recipe path only when it judges tests (agents/row-checker.md).
 #
 # Three rules keep roles on these lists. Do not cut them to save a dispatch.
 # - The per-order reviewer is on every kind. A passing check says the order met its own check;
 #   only the reviewer reads the diff against the contract.
-# - The row-checker stays on a `record` order. Its done-when row is that order's only check, so
-#   without the checker nothing judges the deliverable before the build.
-# - The row-checker is on every other kind too. It judges each absence clause the order routes
-#   (gap row 273). Such a dispatch carries no test-authoring recipe, so those kinds do not ask for it.
+# - The row-checker is on every kind. On a kind with no tests it judges each absence clause the
+#   order routes (gap row 273) and each verify-line row. Such a dispatch carries no test-authoring
+#   recipe, so those kinds do not ask for it. A `record` order has no checkpoint (row 464).
 # - No top-tier critic leaves because an order is small. A small diff can still break a criterion,
 #   and a missed defect costs the same whatever the size.
 # shellcheck disable=SC2034 # read by the sourcing script
@@ -146,7 +144,6 @@ br_order_needs() {
   br_order_facts "$1"
   case "$BR_ORDER_SLOT" in
     order-tests) BR_ORDER_ROLES="test-author row-checker implementer reviewer"; BR_ORDER_LOOKUPS="test-authoring implement" ;;
-    done-when)   BR_ORDER_ROLES="row-checker implementer reviewer";             BR_ORDER_LOOKUPS="test-authoring implement" ;;
     *)           BR_ORDER_ROLES="row-checker implementer reviewer";             BR_ORDER_LOOKUPS="implement" ;;
   esac
 }

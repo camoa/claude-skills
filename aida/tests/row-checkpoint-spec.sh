@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# row-checkpoint-spec.sh: a rejection puts back to the row checker only the rows it rejected, and
-# the next freeze carries a confirmed row whose test file only the repair edited.
+# row-checkpoint-spec.sh: a rejection puts back to the row checker only the rows it rejected, the
+# next freeze carries a confirmed row whose test file only the repair edited, and a record order
+# has no checkpoint.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
@@ -61,5 +62,22 @@ carry_case() (
     "$(jq -r '[.rows[] | select(.criterion == "c2") | .criterion] | join(",")' "$IMPL/tests-wo1.json" 2>/dev/null)"
 )
 expect "a confirmed row in a file only the repair edited is carried into the frozen record" "$(carry_case)" 'c2|c2'
+
+# A record order has no checkpoint: it freezes with no --row, and no row is put to anyone.
+record_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  jq '.criteria[0].verifiedBy = "person"' "$TASK/alignment.json" >"$ROOT/a.json" && mv "$ROOT/a.json" "$TASK/alignment.json"
+  jq --arg f "$TASK/deliverables/note.md" '.proof = "record" | .ownedFiles = [$f] | .tests = []' \
+    "$TASK/design/wo1.json" >"$ROOT/w.json" && mv "$ROOT/w.json" "$TASK/design/wo1.json"
+  jq --arg h "$(records_hash_for "$TASK")" '.hash = $h' "$TASK/design-closed.json" >"$ROOT/d.json" \
+    && mv "$ROOT/d.json" "$TASK/design-closed.json"
+  git -C "$PROJECT" commit -qam "wo1 is a record"
+  order_records planned
+  suite_records ""
+  run "$IMPLEMENT" tests-freeze "$TASK" wo1 --checklist "c1=a person reads the note"
+  printf '%s|%s\n' "$RC" "$(jq -r '.proof' "$IMPL/tests-wo1.json" 2>/dev/null)"
+)
+expect "a record order freezes with no row" "$(record_case)" '0|record'
 
 finish

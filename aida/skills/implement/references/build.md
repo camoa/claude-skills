@@ -448,14 +448,15 @@ This step runs the three deciding checks. The record holds every one.
   for this check. The section's second `sh` block is the put-back line. It runs after a gate
   that reached its fourth line, whatever the verdict, and never changes the verdict. When it
   fails, the detail starts with its exit. Tell the person to run that line again by hand.
-  On an order whose proof is `record` this slot is `done-when`. It reads the judgement the
-  checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
+  On an order whose proof is `record` this slot is `done-when`. It reads deferred. Nothing runs:
+  the order's reviewer reads the document against its done-when rows, and review checks its
+  criteria.
   On an order whose proof is `observe` this slot is `observed`. It reads the record you wrote
   above, met when every row is met, naming the judge, a model. One unmet row stops the attempt
   the way a failing test does.
   On an order whose proof is `confirm` this slot is `confirm-at-review`. It reads deferred. The task has
   no automated tests, so nothing runs, and the person confirms the order's done-when rows at
-  review. Deferred passes here, in this slot alone. On every kind but `gate`, the order's own
+  review. Deferred passes here, and in `done-when`. On every kind but `gate`, the order's own
   `verify` run entries
   then run in this slot, from the code worktree. The slot is met only when its own answer and
   every line are. The detail names the source.

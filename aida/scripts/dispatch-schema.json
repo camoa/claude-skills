@@ -54,12 +54,6 @@
       "maximum": 2,
       "description": "Present on an implementer's record (gap row 301): 2 when the order's diffBudget in the frozen snapshot starts with the word `large`, else 1. `dispatch-open` derives it and never takes it by hand. Absent means 1. The runtime reads `maxTurns` from the agent definition alone. The Agent tool takes no turn cap per call. So a larger turn budget is one more resume at the same cap."
     },
-    "rowsToCheck": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "type": "string", "pattern": "^wo[1-9][0-9]*:[1-9][0-9]*$" },
-      "description": "Present on a row-checker's record for an order proved by its record (gap row 361): the done-when rows, keyed <order id>:<n>, that `dispatch-open` put to the checker. `dispatch-close` keeps the checker's verdicts on these rows alone, beside each row's line."
-    },
     "reportPath": {
       "type": "string",
       "minLength": 1,

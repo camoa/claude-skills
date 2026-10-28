@@ -173,7 +173,7 @@
             "owned-files",
             "frozen-tests"
           ],
-          "description": "Which of the three checks this is. The first is the order's own proof, and its id names the proof kind. order-tests is 'Every test of this order passes'. configuration-gate takes that slot on an order whose proof is gate: the `## Configuration gate` lines of the implement recipe, run in the worktree, met when every line exits 0, unmet naming the first line that did not, unknown when the task records no environment, no implement recipe was passed, or the recipe carries no such block (live-run row 65). done-when takes it on an order whose proof is record: the judgement the checkpoint left on the order's ledger entry from its `--row <unit_id>=...`, met when confirmed, carrying `judgedBy` so close can copy the judge (nyc defect 17). observed takes it on an order whose proof is observe: the record the orchestrator wrote after a model looked at the page the order builds at one size, met when every row is met, carrying `judgedBy: model` (live-run row 104). confirm-at-review takes it on an order whose proof is confirm: it reads deferred, because a person confirms the order's done-when rows at review (gap row 196). owned-files and frozen-tests are 'The order's commits touch only files this order owns' and 'Every frozen test file is unchanged'."
+          "description": "Which of the three checks this is. The first is the order's own proof, and its id names the proof kind. order-tests is 'Every test of this order passes'. configuration-gate takes that slot on an order whose proof is gate: the `## Configuration gate` lines of the implement recipe, run in the worktree, met when every line exits 0, unmet naming the first line that did not, unknown when the task records no environment, no implement recipe was passed, or the recipe carries no such block (live-run row 65). done-when takes it on an order whose proof is record: it reads deferred, because the order's reviewer reads the document against its done-when rows and review checks its criteria (nyc defect 17, row 464). observed takes it on an order whose proof is observe: the record the orchestrator wrote after a model looked at the page the order builds at one size, met when every row is met, carrying `judgedBy: model` (live-run row 104). confirm-at-review takes it on an order whose proof is confirm: it reads deferred, because a person confirms the order's done-when rows at review (gap row 196). owned-files and frozen-tests are 'The order's commits touch only files this order owns' and 'Every frozen test file is unchanged'."
         },
         "verdict": {
           "type": "string",
@@ -184,7 +184,7 @@
             "undeclared",
             "deferred"
           ],
-          "description": "The four words every verdict in this stage uses, and one more that only confirm-at-review carries. deferred means the task has no automated tests, and the person answers at review; it passes the floor. undeclared means no resolved recipe carried a command for this check, or the recipe declared that row absent, or this order froze no test file so frozen-tests had nothing to hash, so the row did not apply here; undeclared is never satisfied and never a pass. The order's own proof carries a floor the others do not: it must have run and answered met, so undeclared or unknown there stops the attempt whatever the rest said, because an order nothing executed never reaches checks-passed. unknown means the check ran but nothing here can decide from it: its output held the --nothing-ran marker, so a selected-nothing exit 0 proved nothing; or the command holds {paths} while this order declares no ownedFiles. Neither reads as met, and every unmet or unknown spends the attempt."
+          "description": "The four words every verdict in this stage uses, and one more that only confirm-at-review and done-when carry. deferred means no test proves the order: on confirm-at-review the person answers at review, and on done-when the order's reviewer reads the document and review checks its criteria. It passes the floor. undeclared means no resolved recipe carried a command for this check, or the recipe declared that row absent, or this order froze no test file so frozen-tests had nothing to hash, so the row did not apply here; undeclared is never satisfied and never a pass. The order's own proof carries a floor the others do not: it must have run and answered met, so undeclared or unknown there stops the attempt whatever the rest said, because an order nothing executed never reaches checks-passed. unknown means the check ran but nothing here can decide from it: its output held the --nothing-ran marker, so a selected-nothing exit 0 proved nothing; or the command holds {paths} while this order declares no ownedFiles. Neither reads as met, and every unmet or unknown spends the attempt."
         },
         "detail": {
           "type": "string",
@@ -232,8 +232,8 @@
         },
         "judgedBy": {
           "type": "string",
-          "enum": ["person", "model"],
-          "description": "Present only on done-when and observed. On done-when, who judged the order's done-when row at the checkpoint, copied from the ledger's own doneWhenJudgement so `close` writes the same judge on the criteria the order owns (nyc defect 17). On observed, always model: a model looked at the page, and the record says so (live-run row 104)."
+          "enum": ["model"],
+          "description": "Present only on observed, and always model: a model looked at the page, and the record says so (live-run row 104)."
         }
       }
     }

@@ -1011,8 +1011,8 @@ RW_CHANGED
 # holds a row: a model judged the order's done-when rows at each surface and viewport, and no
 # test names such a criterion (live-run row 104).
 #
-# A criterion owned by an order whose proof is gate or record is covered by the judgement `close`
-# wrote onto the ledger from the order's configuration-gate or done-when check. No test names such
+# A criterion owned by an order whose proof is gate is covered by the judgement `close` wrote onto
+# the ledger from the order's configuration-gate check. No test names such
 # a criterion either, and reading it as covered by nothing said "each was signed off on nothing"
 # about a criterion somebody had signed off (live-run row 167).
 #
@@ -1043,7 +1043,7 @@ rw_check_coverage_verdict() {
       judged_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
         [ (.workOrders // [])[]
           | orderFacts.slot as $slot
-          | select($slot == "configuration-gate" or $slot == "done-when")
+          | select($slot == "configuration-gate")
           | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
       [ -n "$judged_owner" ] \
         && covered="$(jq -r --arg id "$cid" --arg unit "$judged_owner" '

@@ -76,25 +76,10 @@ no `proof` at all is proved by tests; `start` names it on its `proofAbsent:` lin
 `update --proof gate` is the way onto the gate.
 
 `record` means its deliverable is a document in the project folder, and nothing runs a document.
-Its done-when rows are its checkpoint. Put them to the `row-checker`, or to the person, the way
-the checkpoint below puts a test's rows. The question is whether each row names something a reader
-can confirm from the deliverable alone.
-Key each row `<order id>:<n>`, with n its done-when row counted from 1.
-`dispatch-open` prints the rows to put to the checker. Put those rows and no other.
-It leaves out a row that the last checker to judge it confirmed. That holds while three things
-are unchanged: the line's text, the order's owned files and the checker's rules.
-The checker's verdict drifts from pass to pass, so a second reading of an unchanged line buys a new
-rejection and no new judgement (gap row 361). The match is on the text, because a reworded line
-shifts the numbers. `dispatch-close` keeps verdicts only on the rows `dispatch-open` named.
-A line whose meaning rests on another line's wording keeps its verdict when only that line changes.
-Put it back with `--recheck <order id>:<n>`, which puts back any row the person asks for.
-A person's answer on a row is not carried, because no record keeps it per line.
-When no row is left, nothing opens.
-`tests-freeze` refuses a model's confirmed `--row` while any line's latest checker verdict is not
-a confirmation. It names on the judgement the rows carried from an earlier pass.
-Freeze with no `--test`, one `--row <order id>=...` carrying that judgement, and a `--checklist`
-for each criterion a person verifies. The build reads that row as the order's own check,
-`done-when`. `close` writes the row's judge, person or model, on the criteria the order owns.
+It has no checkpoint. Put no row to anyone. Freeze with no `--test` and no `--row`, and a
+`--checklist` for each criterion a person verifies. The build's own check, `done-when`, reads
+deferred. The order's reviewer reads the document against its done-when rows, and review checks
+its criteria.
 
 An order that freezes no test file leaves the build's `frozen-tests` row undeclared. The row
 hashed nothing. So it says the row did not apply, rather than that a hash matched.
@@ -486,9 +471,9 @@ script reads its `## Unit declaration` block itself, for the one exception below
 
 This refuses outright (exit 74) when the order serves and owns no criterion at all: there is
 nothing for a test to prove and nothing here to freeze, and the repair is the work order, not this
-step. A `gate`, `record` or `observe` order freezes with no test row, and each refuses a `--test`. A
-`record` order owes its done-when row, `--row <order id>=...`, and refuses without it (exit 64).
-An `observe` order owes no row but its absence rows: the freeze accepts it with nothing else.
+step. A `gate`, `record` or `observe` order freezes with no test row, and each refuses a `--test`.
+A `record` or `observe` order owes no row but its absence rows: the freeze accepts it with nothing
+else.
 It also refuses (exit 76) when the order has already left `tests-frozen`: a second freeze
 would rewind the step and leave a spent attempt counter and a stale build record for tests that no
 longer exist. Use `references/finish.md`'s redo when the design or a test is wrong; otherwise
