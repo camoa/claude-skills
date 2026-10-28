@@ -5327,7 +5327,11 @@ TF_EOF
   # --- 27 also: a repair's test is a new file, so no earlier freeze of this order holds it ---------
   local tf_frozen_before="" tf_refrozen=""
   if [ -n "$tf_repair" ]; then
-    tf_frozen_before="$(im_with_repair_tests "$unit_id" "$(jq -c '.' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)" \
+    # A record that does not parse would leave this list empty, and every file would read as new.
+    tf_frozen_before="$(im_with_repair_tests "$unit_id" "$(jq -c '.' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)")"
+    [ -n "$tf_frozen_before" ] \
+      || die3 "tests-freeze: $IMPL_DIR/tests-$unit_id.json or a repair record tests-$unit_id-repair-*.json beside it could not be read as JSON, so the files an earlier freeze of $unit_id holds are unknown. Repair or remove it by hand. Nothing is frozen."
+    tf_frozen_before="$(printf '%s' "$tf_frozen_before" \
       | jq -r '[ (.rows // [])[] | (.tests // [])[] | .path ] + [ (.support // [])[] | .path ] | unique | .[]')"
     while IFS= read -r p; do
       [ -n "$p" ] || continue
@@ -8076,7 +8080,8 @@ br_require_observed() {
   br_require_observed_images "$who" "$observed" before "$IMPL_DIR/observed-$unit_id-before"
   bad_surfaces="$(jq -r --argjson unit "$UNIT_JSON" '
       ($unit.surfaces // []) as $named
-      | [ .rows[].surface | select(. as $s | ($named | index($s)) == null) ] | unique | join(", ")' "$observed")"
+      | [ .rows[].surface | select(. as $s | ($named | index($s)) == null) ] | unique | join(", ")' "$observed")" \
+    || die3 "$who: could not compare the surfaces in $observed with the ones $unit_id names. Nothing is recorded."
   [ -z "$bad_surfaces" ] \
     || die 95 "$who: the observed record names surfaces $unit_id does not: $bad_surfaces. The order's own surfaces are $(printf '%s' "$UNIT_JSON" | jq -r '(.surfaces // []) | join(", ")'). A look at another page proves nothing about this order."
   # A row's sentence is a done-when row or a live-site verify check of the order, verbatim.
@@ -8087,7 +8092,8 @@ br_require_observed() {
   # with no kind.
   bad_done_when="$(jq -r --argjson unit "$UNIT_JSON" '
       (($unit.doneWhen // []) + [ ($unit.verify // [])[] | select(.kind == "live-site") | .check // empty ]) as $held
-      | [ .rows[].doneWhen | select(. as $d | ($held | index($d)) == null) | "\"" + . + "\"" ] | unique | join(" | ")' "$observed")"
+      | [ .rows[].doneWhen | select(. as $d | ($held | index($d)) == null) | "\"" + . + "\"" ] | unique | join(" | ")' "$observed")" \
+    || die3 "$who: could not compare the sentences in $observed with the ones $unit_id holds. Nothing is recorded."
   [ -z "$bad_done_when" ] \
     || die 96 "$who: the observed record judges a sentence $unit_id does not hold: $bad_done_when. A row is one of the order's own done-when rows or live-site verify checks, verbatim."
   # Every row the order owes: each done-when row and live-site verify check, once, at one surface

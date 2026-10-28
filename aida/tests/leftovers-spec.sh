@@ -101,4 +101,108 @@ fix_case() (
 )
 expect "fix-record records the round, and nothing stops the order" "$(fix_case)" '0|fixed|none'
 
+# redo on wo1, after wo1 and then wo2 each committed: wo1's change is reverted, wo2's stays, and
+# no revert names wo2's commit.
+redo_case() (
+  source "$HERE/records.bash"
+  task_records branch wo2
+  order_records code-written '["build"]'
+  order_commit
+  printf 'b\n' >"$WT/b.php"
+  git -C "$WT" add b.php && git -C "$WT" commit -qm "build wo2"
+  local wo2_commit
+  wo2_commit="$(git -C "$WT" rev-parse HEAD)"
+  jq --arg c "$wo2_commit" '(.orders[] | select(.id == "wo2")).unrecordedCommits = [$c]' \
+    "$IMPL/ledger.json" >"$IMPL/ledger.new" && mv "$IMPL/ledger.new" "$IMPL/ledger.json"
+  answer "implement redo" wo1 "start again"
+  run "$IMPLEMENT" redo "$TASK" wo1 --because "start again"
+  printf '%s|%s|%s|%s\n' "$RC" "$(cat "$WT/a.php")" "$(cat "$WT/b.php" 2>/dev/null)" \
+    "$(git -C "$WT" log --format=%B | grep -c "This reverts commit $wo2_commit")"
+)
+expect "redo reverts its own order's commit and leaves another order's" "$(redo_case)" '0|a|b|0'
+
+# build-record on a record order, whose own check reads deferred: the floor accepts it.
+record_build_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  jq --arg doc "$PROJECT/notes/a.md" '.proof = "record" | .tests = [] | .interface = "" | .ownedFiles = [$doc]' \
+    "$TASK/design/wo1.json" >"$ROOT/w.json" && mv "$ROOT/w.json" "$TASK/design/wo1.json"
+  jq '.criteria[0].verifiedBy = "person"' "$TASK/alignment.json" >"$ROOT/a.json" && mv "$ROOT/a.json" "$TASK/alignment.json"
+  git -C "$PROJECT" commit -qam "wo1 is a record order"
+  order_records tests-frozen
+  jq -n --arg c "$(git -C "$WT" rev-parse HEAD)" \
+    '{schemaVersion: 1, takenAt: "2026-10-28", unit: "wo1", commit: $c, testGlobs: [], rows: [],
+      proof: "record", support: [], freezeCommits: []}' >"$IMPL/tests-wo1.json"
+  local start
+  start="$(git -C "$PROJECT" rev-parse HEAD)"
+  mkdir -p "$PROJECT/notes" && printf 'a note\n' >"$PROJECT/notes/a.md"
+  git -C "$PROJECT" add notes/a.md && git -C "$PROJECT" commit -qm "build wo1"
+  printf 'Stop: none\nDeviation: none\n' >"$IMPL/answers-wo1-attempt1.md"
+  run "$IMPLEMENT" build-record "$TASK" wo1 --report "$IMPL/answers-wo1-attempt1.md" --interface "$IMPL/interface-wo1.md" \
+    --started-at "$start"
+  printf '%s|%s|%s\n' "$RC" "$(ledger '.lastStep')" "$(jq -r '[ .checks[] | select(.id == "done-when") | .verdict ][0]' "$IMPL/build-wo1.json" 2>/dev/null)"
+)
+expect "build-record passes a record order at deferred" "$(record_build_case)" '0|checks-passed|deferred'
+
+# A repair's test freeze, with an earlier repair record of wo1 that does not parse: the freeze
+# cannot tell which files an earlier freeze holds, so it refuses and freezes nothing.
+repair_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  jq '.ownedFiles = ["a.php", "tests/*_test.sh"]' "$TASK/design/wo1.json" >"$ROOT/w.json" && mv "$ROOT/w.json" "$TASK/design/wo1.json"
+  jq --arg h "$(records_hash_for "$TASK")" '.hash = $h' "$TASK/design-closed.json" >"$ROOT/d.json" \
+    && mv "$ROOT/d.json" "$TASK/design-closed.json"
+  git -C "$PROJECT" commit -qam "wo1 owns its tests folder"
+  order_records closed
+  suite_records ""
+  tests_record
+  local range
+  range="$(jq -r '.startedFrom' "$IMPL/ledger.json")..$(git -C "$WT" rev-parse HEAD)"
+  jq -n '{schemaVersion: 1, unit: "wo1", findings: []}' >"$IMPL/review-wo1.json"
+  jq -n --arg r "$range" '{schemaVersion: 1, commitRange: $r}' >"$IMPL/finished.json"
+  mkdir -p "$TASK/review"
+  jq -n --arg r "$range" '{verdict: "failed", reviewedRange: $r,
+      findings: [{id: "f1", disposition: "criterion", severity: "high", file: "a.php", lines: "",
+        linkedTo: "c1", lens: "correctness", evidence: "a.php still says a"}]}' >"$TASK/review/review.json"
+  run "$IMPLEMENT" reopen "$TASK"
+  printf 'not json\n' >"$IMPL/tests-wo1-repair-9.json"
+  printf 'echo a still says a\nexit 1\n' >"$WT/tests/a_bug_test.sh"
+  printf 'a still says a\n' >"$IMPL/red-bug.txt"
+  run "$IMPLEMENT" tests-freeze "$TASK" wo1 --test-glob 'tests/*_test.sh' --test-recipe "fake=$RECIPE" \
+    --test "tests/a_bug_test.sh::bug=c1" --red "bug=$IMPL/red-bug.txt" --row "c1=confirmed::model::observes the bug"
+  printf '%s|%s\n' "$RC" "$(ls "$IMPL"/tests-wo1-repair-*.json | wc -l | tr -d ' ')"
+)
+expect "a repair freeze refuses on an earlier repair record that does not parse" "$(repair_case)" '3|1'
+
+# observe_build <jq filter on wo1>: wo1 proved by a look at surface home, changed by the filter,
+# after one look whose row judges "the page shows b". Prints build-record's exit and whether it
+# wrote a build record.
+observe_build() {
+  task_records branch
+  jq '.proof = "observe" | .surfaces = ["home"] | .tests = [] | .interface = "" | .doneWhen = ["the page shows b"]' \
+    "$TASK/design/wo1.json" | jq "$1" >"$ROOT/w.json" && mv "$ROOT/w.json" "$TASK/design/wo1.json"
+  jq '.criteria[0].verifiedBy = "person"' "$TASK/alignment.json" >"$ROOT/a.json" && mv "$ROOT/a.json" "$TASK/alignment.json"
+  order_records tests-frozen
+  jq -n --arg c "$(git -C "$WT" rev-parse HEAD)" \
+    '{schemaVersion: 1, takenAt: "2026-10-28", unit: "wo1", commit: $c, testGlobs: [], rows: [],
+      proof: "observe", support: [], freezeCommits: []}' >"$IMPL/tests-wo1.json"
+  printf 'b\n' >"$WT/a.php" && git -C "$WT" commit -qam "build wo1"
+  mkdir -p "$IMPL/observed-wo1"
+  : >"$IMPL/observed-wo1/home-wide.png"
+  jq -n --arg s "$IMPL/observed-wo1/home-wide.png" '{order: "wo1", observedAt: "2026-10-28", judgedBy: "model",
+      rows: [{doneWhen: "the page shows b", surface: "home", viewport: "wide", screenshot: $s, verdict: "met", note: "b shows"}]}' \
+    >"$IMPL/observed-wo1.json"
+  printf 'Stop: none\nDeviation: none\n' >"$IMPL/answers-wo1-attempt1.md"
+  run "$IMPLEMENT" build-record "$TASK" wo1 --report "$IMPL/answers-wo1-attempt1.md" --interface "$IMPL/interface-wo1.md" \
+    --started-at "$(git -C "$WT" rev-parse HEAD~1)" --observed "$IMPL/observed-wo1.json"
+  printf '%s|%s\n' "$RC" "$([ -f "$IMPL/build-wo1.json" ] && echo written || echo none)"
+}
+
+# The surfaces the order names cannot be read as a list, so the surface rows cannot be compared.
+surfaces_case() ( source "$HERE/records.bash"; observe_build '.surfaces = 5' )
+expect "a failure to compare the look's surfaces refuses, and records no attempt" "$(surfaces_case)" '3|none'
+# The done-when rows cannot be joined with the verify checks, so the sentences cannot be compared.
+done_when_case() ( source "$HERE/records.bash"; observe_build '.doneWhen = {first: "the page shows b"}' )
+expect "a failure to compare the look's sentences refuses, and records no attempt" "$(done_when_case)" '3|none'
+
 finish
