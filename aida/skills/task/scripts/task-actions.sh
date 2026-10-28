@@ -1812,10 +1812,14 @@ $capture"
   [ -n "$changes_doc" ] || die3 "environment: $task_json could not be read, so the files the recipe changed are not recorded and nothing was brought up. Repair $task_json, then run task environment $id up again. The recipe's files are committed, so the rerun commits nothing"
   write_atomic "$task_json" "$changes_doc"
   # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
-  # refuses by the token's name at 4, before any bring-up line runs.
+  # refuses by the token's name at 4, before any bring-up line runs. The values go into the marker
+  # and the record, so `down` fills them into a tear-down line too, such as the removal of a seed
+  # the bring-up took in the main checkout (gap row 468).
+  local token_doc='{}'
   if [ -z "$adopt" ]; then
     recipe_tokens_run environment "$RECIPE" "$outfile" "$wt" "$TOKENS" "$ENV_TOKENS_HINT" \
       || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$RT_FAILED" >&2; recipe_output_summary 4 "$outfile" "$((RT_BEFORE + 2))"; exit 4; }
+    token_doc="$(printf '%s' "${RT_TOKENS#"$TOKENS"}" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')"
     TOKENS="$RT_TOKENS"
   fi
   rm -rf "$tokens_dir"
@@ -1828,9 +1832,9 @@ $capture"
   # of an adopted site are dropped, because `up` replaces them. An adopted site was up before this run,
   # so it needs no marker.
   if [ -z "$adopt" ]; then
-    marker_doc="$(jq --arg r "$RECIPE" --arg t "$marker_at" \
+    marker_doc="$(jq --arg r "$RECIPE" --arg t "$marker_at" --argjson tok "$token_doc" \
       '.environment = ((.environment // {}) | del(.["not-applicable"], .adopted, .adoptedRecipe, .tearDown))
-         + {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
+         + $tok + {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
     [ -n "$marker_doc" ] || die3 "environment: $task_json could not be read, so no marker can name the site $RECIPE brings up. Nothing was brought up"
     write_atomic "$task_json" "$marker_doc"
     printf 'environment: coming-up\n'
@@ -1852,7 +1856,8 @@ $capture"
   # `adopted` tells `down` and prune that the database is no copy of the main checkout's.
   up_doc="$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg ad "$adopt" \
     --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \
-    '.environment = ($k + {address: $a, recipe: $r, upAt: $t} + (if $ad == "" then {} else {adopted: true} end))' "$task_json")"
+    --argjson tok "$token_doc" \
+    '.environment = ($tok + $k + {address: $a, recipe: $r, upAt: $t} + (if $ad == "" then {} else {adopted: true} end))' "$task_json")"
   [ -n "$up_doc" ] || die3 "environment: the site of $id is up at $value. $task_json could not be written. The marker this run wrote before the bring-up still names $RECIPE. Run task environment $id down to tear this site down. It fills a tear-down token from the address command's lines in $outfile"
   write_atomic "$task_json" "$up_doc"
   if [ -z "$adopt" ]; then

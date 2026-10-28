@@ -199,7 +199,8 @@ that content. A site brought up before this record existed has none. Run `up` ag
 files already committed are not committed again. Then
 each `## Tokens` command, whose first output line is the token's value. A token command that
 prints nothing or fails refuses at 4 by the token's name. Then it writes the marker into
-`environment`: `state: coming-up`, the recipe, and the time. The record names the site before the
+`environment`: `state: coming-up`, the recipe, the time and each token's value. `down` fills those
+values into the tear-down, so it can remove what the bring-up made in the main checkout. The record names the site before the
 site exists, so a failure during the bring-up leaves a site `down` can still find. The marker
 keeps every other field the record held, so a second `up` over a site that is up does not drop
 that site's address while the bring-up runs again. Then the

@@ -39,7 +39,7 @@ skills/review/references/acceptance.md 124
 skills/scope/SKILL.md 489
 skills/surfaces/SKILL.md 168
 skills/surfaces/references/discover.md 60
-skills/task/SKILL.md 526
+skills/task/SKILL.md 527
 skills/test-cleanup/SKILL.md 105
 skills/tool/SKILL.md 211
 skills/tool/references/reading-a-recipe.md 58

@@ -324,4 +324,52 @@ bad_id_case() (
 )
 expect "next refuses a path as a task id at 3" "$(bad_id_case)" '3'
 
+# --- the site ---
+
+# token_down_case: a bring-up that fails after its address, from a recipe whose tear-down line
+# names a `## Tokens` value, as the seed-snapshot removal of gap row 468 does. Then down. The exit
+# of up, the exit of down, and whether the tear-down line ran with the value filled.
+token_down_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  cat >"$ROOT/env.md" <<'EOR'
+# fake worktree environment
+
+## Tokens
+
+```sh mainProject
+echo main-site
+```
+
+## Bring up
+
+```sh
+true
+```
+
+## Address
+
+```sh
+echo address: http://t1.test
+```
+
+## Bring up
+
+```sh
+false
+```
+
+## Tear down
+
+```sh
+echo removed main-seed-of {mainProject}
+```
+EOR
+  run "$TASK_ACTIONS" environment --project "$PROJECT" t1 up --recipe "fake=$ROOT/env.md"
+  local up="$RC"
+  run "$TASK_ACTIONS" environment --project "$PROJECT" t1 down
+  printf '%s|%s|%s\n' "$up" "$RC" "$(grep -c '^removed main-seed-of main-site$' "$TASK/records/environment-down.txt" 2>/dev/null)"
+)
+expect "a tear-down line fills a token value the bring-up recorded" "$(token_down_case)" '4|0|1'
+
 finish
