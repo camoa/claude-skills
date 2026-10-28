@@ -2,8 +2,9 @@
 # hard-stops-spec.sh: each of the four hard stops refuses, and allows the right case. Nobody but the
 # order's test author writes a frozen test. The implementer writes only its order's files. The
 # build never lands on the trunk. Only the person's own prompt records an answer, and one answer
-# serves one call. Each case sources the helper in a subshell, so it starts from fresh records,
-# and its setup never takes the guarded step itself.
+# serves one call. The write rules hold through Bash, in the main checkout, and from a folder
+# outside every code path. Each case sources the helper in a subshell, so it starts from fresh
+# records, and its setup never takes the guarded step itself.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
@@ -11,32 +12,46 @@ source "$HERE/records.bash"
 HOOK="$PLUGIN/hooks/deny-frozen-test-writes.sh"
 TASK_ACTIONS="$PLUGIN/skills/task/scripts/task-actions.sh"
 
-# write_hook <tool input> [<agent type>]: the write hook's decision on one call from the worktree,
-# deny, ask or allow. A command in the input makes it a Bash call, else a Write. With no agent
-# type, the call is the main session's.
+# write_hook <tool input> [<agent type>]: the write hook's decision on one call from $HOOK_CWD, else
+# the worktree, deny, ask or allow. A command in the input makes it a Bash call, else a Write. With
+# no agent type, the call is the main session's. The hook's output stays in $ROOT/hook.json.
 write_hook() {
   local tool=Write
   [ "$(printf '%s' "$1" | jq 'has("command")')" = true ] && tool=Bash
-  jq -nc --arg t "$tool" --argjson i "$1" --arg c "$WT" --arg a "${2:-}" \
+  jq -nc --arg t "$tool" --argjson i "$1" --arg c "${HOOK_CWD:-$WT}" --arg a "${2:-}" \
     '{tool_name: $t, tool_input: $i, cwd: $c, permission_mode: "default", session_id: "s1"}
      + (if $a == "" then {} else {agent_type: $a, agent_id: "a1"} end)' \
-    | CLAUDE_PLUGIN_ROOT="$PLUGIN" bash "$HOOK" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
+    | CLAUDE_PLUGIN_ROOT="$PLUGIN" bash "$HOOK" | tee "$ROOT/hook.json" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
 }
 file() { jq -nc --arg f "$1" '{file_path: $f}'; }
 exists() { [ -e "$1" ] && echo yes || echo no; }
 
-# frozen_case <role> <path>: the hook's decision on <role>'s write to <path>, with wo1's tests frozen
-# and <role> dispatched for wo1. tests/a_test.sh is frozen and owned by wo1, so only the frozen
-# rule can refuse it.
-frozen_case() (
+# guarded_case <role> <folder> <file or command>: the hook's decision on <role>'s call from <folder>,
+# with wo1's tests frozen and <role> dispatched for wo1. A refusal names the rule that refused it:
+# frozen, owned or main. tests/a_test.sh is frozen and owned by wo1, so only the frozen rule can
+# refuse it. In the arguments, @WT, @CODE, @ROOT and @NOTES stand for this case's worktree, main
+# checkout, folder and a notes folder outside every code path. An argument with a space is a command.
+guarded_case() (
   source "$HERE/records.bash"
   task_records branch
   order_records tests-frozen
   suite_records ""
   tests_record
   dispatch_record "$1"
-  write_hook "$(file "$WT/$2")" "aida:$1"
+  mkdir -p "$ROOT/notes"
+  local arg input decision
+  arg="${3//@WT/$WT}"; arg="${arg//@CODE/$CODE}"; arg="${arg//@ROOT/$ROOT}"
+  case "$arg" in *' '*) input="$(jq -nc --arg c "$arg" '{command: $c}')" ;; *) input="$(file "$arg")" ;; esac
+  HOOK_CWD="${2//@WT/$WT}"; HOOK_CWD="${HOOK_CWD//@CODE/$CODE}"; HOOK_CWD="${HOOK_CWD//@NOTES/$ROOT/notes}"
+  decision="$(write_hook "$input" "aida:$1")"
+  case "$decision:$(jq -r '.hookSpecificOutput.permissionDecisionReason // ""' "$ROOT/hook.json")" in
+    deny:*"froze this test"*) decision="deny frozen" ;;
+    deny:*"not a file"*) decision="deny owned" ;;
+    deny:*"main checkout"*) decision="deny main" ;;
+  esac
+  printf '%s\n' "$decision"
 )
+frozen_case() { guarded_case "$1" @WT "@WT/$2"; }
 # build_case [branch]: build-brief's exit, and whether it wrote a brief, on wo1 with its tests frozen.
 build_case() (
   source "$HERE/records.bash"
@@ -83,12 +98,35 @@ run_mode_case() (
 )
 
 echo "--- frozen: an implementer cannot write a frozen test; the order's test author can"
-expect "the implementer's write to a frozen test it owns is refused" "$(frozen_case implementer tests/a_test.sh)" deny
+expect "the implementer's write to a frozen test it owns is refused" "$(frozen_case implementer tests/a_test.sh)" "deny frozen"
 expect "the test author of the order writes its frozen test" "$(frozen_case test-author tests/a_test.sh)" allow
 
 echo "--- owned: the implementer writes its order's files and nothing else"
 expect "an owned file is allowed" "$(frozen_case implementer a.php)" allow
-expect "a file the order does not own is refused" "$(frozen_case implementer b.php)" deny
+expect "a file the order does not own is refused" "$(frozen_case implementer b.php)" "deny owned"
+
+echo "--- bash: the frozen and the owned rules read a write through Bash"
+expect "a redirect into the frozen test is refused" "$(guarded_case implementer @WT 'echo exit 0 > tests/a_test.sh')" "deny frozen"
+expect "sed -i on the frozen test is refused" "$(guarded_case implementer @WT 'sed -i s/1/0/ tests/a_test.sh')" "deny frozen"
+expect "a copy of the frozen test out to a scratch file is allowed" \
+  "$(guarded_case implementer @WT 'cp tests/a_test.sh @ROOT/copy.sh')" allow
+expect "a redirect into a file the order does not own is refused" "$(guarded_case implementer @WT 'echo b > b.php')" "deny owned"
+expect "cp onto a file the order does not own is refused" "$(guarded_case implementer @WT 'cp a.php b.php')" "deny owned"
+expect "sed -i on an owned file is allowed" "$(guarded_case implementer @WT 'sed -i s/a/b/ a.php')" allow
+expect "a redirect into an owned file, its errors piped to head, is allowed" \
+  "$(guarded_case implementer @WT 'echo b > a.php 2>&1 | head -1')" allow
+
+echo "--- main: a role does not write in the project's main checkout"
+expect "the implementer's Write in the main checkout is refused" "$(guarded_case implementer @CODE @CODE/a.php)" "deny main"
+expect "git -C the main checkout commit is refused" "$(guarded_case implementer @WT 'git -C @CODE commit -qam b')" "deny main"
+expect "git -C the worktree commit is allowed" "$(guarded_case implementer @WT 'git -C @WT commit -qam b')" allow
+
+echo "--- outside: from a folder outside every code path, the rules hold the same"
+expect "the implementer's Write of the frozen test is refused" "$(guarded_case implementer @NOTES @WT/tests/a_test.sh)" "deny frozen"
+expect "a redirect into a file the order does not own is refused" \
+  "$(guarded_case implementer @NOTES 'echo b > @WT/b.php')" "deny owned"
+expect "the implementer's Write in the main checkout is refused" "$(guarded_case implementer @NOTES @CODE/a.php)" "deny main"
+expect "the implementer's Write of an owned file is allowed" "$(guarded_case implementer @NOTES @WT/a.php)" allow
 
 echo "--- trunk: start and the build refuse on the trunk, and run on a work branch"
 expect "on the trunk, start refuses and writes no ledger" "$(start_case)" "6|no"
