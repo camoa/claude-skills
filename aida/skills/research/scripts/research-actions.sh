@@ -718,8 +718,7 @@ do_runner() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# check: calls check-research.sh and remaps its exit code onto this script's own vocabulary, so
-# exit 1 keeps one meaning across every action here (see the exit-code table above).
+# check: calls check-research.sh and maps its exit code onto this script's own table above.
 # ------------------------------------------------------------------------------------------------
 
 do_check() {

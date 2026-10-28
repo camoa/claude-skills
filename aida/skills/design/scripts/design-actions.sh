@@ -148,8 +148,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      not run or could not reach the contract or the graph. Nothing was written.
 #   5  `check` or `close` found what stops the design: check-design.sh's own exit 4, or a
 #      design-removed.json out of its shape. An unattended `close` also stops on a criterion with
-#      no serving order, no owner or two owners, and on a confirm order on a task with tests or
-#      one that owns a test file. A person's close records those as warnings.
+#      no serving order, no owner or two owners. A person's close records those as warnings.
 #   7  an unattended `close` found a research finding no work order accounts for (gap row 223).
 #      Each one prints as `<search>#<n>: <the first line of its text>`. `account` is the way
 #      through. A person's close records them as warnings, and `check` prints them.
@@ -1201,9 +1200,8 @@ do_add_test() {
 
   # A test on a `tests` order is a file a test author writes, red then green. A description that
   # names one of the order's own surfaces reads as review's surface row over that page. That row
-  # is no file and runs after every order closes (live-run row 97). The design check counts tests and
-  # reads no sentence, so the refusal sits here. The id must appear as a whole word, case as
-  # written; an order with no surfaces is never refused.
+  # is no file and runs after every order closes (live-run row 97). A script cannot judge wording, so
+  # the match is a warning. The id must appear as a whole word, case as written.
   local proof surface_hit
   proof="$(jq -r '.proof // "tests"' "$file")"
   if [ "$proof" = "tests" ]; then
@@ -1211,7 +1209,7 @@ do_add_test() {
       '[$d | match("[A-Za-z0-9_-]+"; "g").string] as $words
        | [(.surfaces // [])[] | select(. as $s | any($words[]; . == $s))] | first // ""' "$file")"
     [ -z "$surface_hit" ] \
-      || die3 "add-test: the description names the surface $surface_hit, so it reads as the review stage's surface row over that page. That row is not a test a test author writes as a file. The surface proves the page at review. Describe here the behaviour beneath it, one behaviour, which a test can prove before the code exists (skills/implement/references/what-a-test-is.md)"
+      || task_warn "$TASK_PATH" "design add-test" "$id" "the test description names the surface $surface_hit, so it may be the review stage's surface row over that page. Describe the behaviour beneath it, one behaviour a test can prove before the code exists (skills/implement/references/what-a-test-is.md)"
   fi
   if is_blank "$level"; then
     doc="$(jq --arg d "$description" \
@@ -1404,7 +1402,12 @@ verify_flush_entry() {
   [ -n "$VF_PASS" ] || die3 "verify: the verifier: entry ${VF_ID:-with no id} in $1 holds no pass. Nothing here guesses what passing means"
   verify_pass_ok "verify" "$VF_PASS"
   verify_kind_ok "verify" "$VF_KIND"
-  refuse_if_unsafe "design-actions" "$1" "$VF_RUN" || die3 "verify: the run line above is refused"
+  # A run line with a shell character never runs. One such entry skips that entry, not the recipe.
+  if ! refuse_if_unsafe "design-actions" "$1" "$VF_RUN" 2>/dev/null; then
+    task_warn "$TASK_PATH" "design verify" "$id" "the verifier: entry ${VF_ID:-with no id} in $1 carries a shell character, so it was not carried: $VF_RUN"
+    VF_ID=""; VF_KIND=""; VF_RUN=""; VF_PASS=""
+    return 0
+  fi
   VF_ENTRIES="$(printf '%s' "$VF_ENTRIES" | jq -c --arg id "$VF_ID" --arg kind "$VF_KIND" --arg run "$VF_RUN" --arg pass "$VF_PASS" \
     '. + [ (if $id == "" then {} else {id: $id} end) + (if $kind == "" then {} else {kind: $kind} end)
            + {run: $run, pass: $pass} ]')"
@@ -1776,8 +1779,7 @@ do_render() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# check: calls check-design.sh and remaps its exit code onto this script's own vocabulary, so
-# exit 1 keeps one meaning across every action here (see the exit-code table above).
+# check: calls check-design.sh and maps its exit code onto this script's own table above.
 # ------------------------------------------------------------------------------------------------
 
 do_check() {
@@ -2339,7 +2341,7 @@ do_dispose() {
     elif [ "$distance" = "same-layer" ]; then
       outcome=extend; rule="downgraded: a candidate sharing only a layer is not absorbed by a replacement"
     elif [ "$RUN_MODE" = "interactive" ]; then
-      rule="stands: a person was asked about the supersede"
+      rule="stands: the supersede was recorded in an interactive run"
     else
       outcome=extend; rule="downgraded: a supersede with no person present; it re-surfaces on the next attended run"
     fi

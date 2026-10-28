@@ -125,8 +125,8 @@ every one of them:
 ```
 Without `--set-aside`, the order uses the finding, and the build brief carries its text. A
 second call for the same finding on the same order replaces the entry. `--remove` in place of
-`--set-aside` deletes it. `check` prints an `unaccounted:` line for a finding in no order's list,
-for a finding whose text research changed after it was recorded, and for an entry naming a
+`--set-aside` deletes it. `check` prints an `unaccounted:` line for each of three cases. A finding
+is in no order's list. Research changed a finding's text after it was recorded. An entry names a
 finding research no longer holds. A person's `close` writes each one to the task record as a
 warning. An unattended `close` refuses, exit 7. Both modes account the same way.
 
@@ -439,8 +439,8 @@ through the script with its reason:
 ```
 The script deletes the order's files and records the id and the reason in
 `design-removed.json`. The close copies that list into `design-closed.json`. A removed id is
-never minted again. Move a dependency or a criterion with `update` first: the design check
-refuses a dependsOn that names nothing and names a criterion left with no serving order or
+never minted again. Move a dependency or a criterion with `update` first. The design check
+refuses a dependsOn that names nothing. It also names a criterion left with no serving order or
 owner. For an order implementation started, fold it into the order that takes its work with
 `merge`. Implementation's `start` stops it for design drift, and `drop` sets its records aside.
 A finding that the removed order accounted for shows in `check`. Account for it again.
@@ -589,8 +589,8 @@ A test is what this page defines:
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`. Add its file to the order
 with `add-owned-file`. The test author writes into it, and the freeze refuses a test in a
 file the order does not own. Each description names the one behaviour its test proves, and that
-page says what a test is not. `add-test` refuses a description naming one of a `tests` order's own
-surfaces.
+page says what a test is not. `add-test` writes a warning for a description that names one of a
+`tests` order's own surfaces.
 
 To change a scalar or an id list on an order already created, `update` takes the same flags as
 `create`, replacing whichever are given:
@@ -658,7 +658,8 @@ A line runs unattended when it equals, word for word, an `argv` in the project's
 `check_commands`. Any other research line needs the person's approval at the close.
 `--clear` empties the list, and `--recipe` replaces it.
 
-A run line is argv, never a shell, so the script refuses a shell character. It also refuses a
+A run line is argv, never a shell, so `--run` refuses a shell character. A recipe entry with one is
+skipped, with a warning. It also refuses a
 pass outside the three forms. Read the refusal and write the entry again, or leave it out and
 say why in the `reasoning`.
 

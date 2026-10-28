@@ -17,7 +17,7 @@ agents/test-author.md 175
 agents/test-reader.md 77
 skills/completion/SKILL.md 114
 skills/completion/references/close.md 120
-skills/design/SKILL.md 983
+skills/design/SKILL.md 984
 skills/implement/SKILL.md 295
 skills/implement/references/build.md 501
 skills/implement/references/finish.md 308
@@ -27,7 +27,7 @@ skills/implement/references/start.md 151
 skills/implement/references/tests.md 583
 skills/implement/references/what-a-test-is.md 76
 skills/next/SKILL.md 201
-skills/next/references/handoff.md 13
+skills/next/references/handoff.md 14
 skills/playbooks/SKILL.md 97
 skills/project/SKILL.md 640
 skills/research/SKILL.md 591

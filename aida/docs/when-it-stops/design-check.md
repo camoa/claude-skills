@@ -10,8 +10,9 @@ full, is on [the design check](../stages/design/check.md).
   that names nothing, an owned path that is not one literal path, a dependency cycle, or an order
   whose proof does not fit its tests, rows or files. AIDA repairs the orders and checks again.
 - **Unattended only, exit 5 or 7: what a person would read first.** A criterion with no serving
-  order, no owner or two owners. A confirm order on a task with tests, or one that owns a test
-  file. A research finding no order accounts for (exit 7). With you present, each is a warning.
+  order, no owner or two owners. A research finding no order accounts for (exit 7). With you
+  present, each is a warning. A confirm order that is code on a task with tests, or that owns a
+  test file, stops in both modes.
 - **Warnings.** Two orders that declare one owned file, an order that serves nothing, a
   supporting order no owner reaches, and a reuse decision a second agent did not confirm. Design
   shows them, the close writes them to the task record, and review lists them.

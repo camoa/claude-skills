@@ -106,14 +106,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   4  a finding stops the design in either run mode: a file or the guides-read record that does
 #      not match its shape, a list item that fails its own check, an id that resolves to nothing,
 #      an owned path that is not one literal path, a dependency cycle, an order whose proof does
-#      not fit its tests, rows or files, a machine criterion an observe or record order owns with
+#      not fit its tests, rows or files, a confirm order that is code on a task with tests or that
+#      owns a test file, a machine criterion an observe or record order owns with
 #      no run line proving it, or a light order that owns the registered script that walks the
 #      demo path. Implementation's `start` refuses on this code.
 #
 # `open` sorts every finding by what it does, one line each. Both callers print these lines, so
 # they are written once, here. `stop` raises exit 4. `unattended` stops an autonomous close and
-# is a warning when a person closes: a criterion with no serving order, no owner or two owners,
-# and a confirm order on a task with tests or one that owns a test file. `warn` never stops: an
+# is a warning when a person closes: a criterion with no serving order, no owner or two owners.
+# `warn` never stops: an
 # order that serves nothing, a supporting order no owner reaches, a light order not after wo1,
 # and two orders that declare one owned file.
 #
@@ -768,7 +769,7 @@ CONFIRM_GLOBS
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
   GATE_WITH_TESTS_COUNT="$(printf '%s' "$GATE_ORDERS_DECLARING_TESTS_JSON" | jq 'length')"
   TEXT_ONLY_COUNT="$(jq -n --argjson a "$TEXT_ONLY_TEST_ORDERS_JSON" --argjson b "$MACHINE_ON_TEXT_ONLY_JSON" --argjson c "$MACHINE_ON_LOOK_OR_RECORD_JSON" '($a | length) + ($b | length) + ($c | length)')"
-  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length)')"
+  RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" --argjson e "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" --argjson f "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length) + ($e | length) + ($f | length)')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
   UNKNOWN_NONGOAL_COUNT="$(printf '%s' "$UNKNOWN_NONGOAL_IDS_JSON" | jq 'length')"
 
@@ -884,7 +885,7 @@ else
         (split("\n") | map(select(length > 0))) as $files
         | [ $orders[] | .id as $id | (.ownedFiles // [])[]
             | (ltrimstr("./") | rtrimstr("/")) as $p
-            | select(any($files[]; . == $p or startswith($p + "/") or ($p | startswith(. + "/"))))
+            | select(any($files[]; . == $p or startswith($p + "/")))
             | {id: $id, path: $p} ]')"
       [ -n "$(printf '%s' "$PATH_SCRIPT" | sed 1d)" ] || PATH_SCRIPT_UNREAD=true
     fi
@@ -988,6 +989,9 @@ def open: {
     ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests, so a test would only read the text back: update --proof confirm, or record for a document under the project folder"),
     ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope, or give it to an order that builds code"),
     ((.coverage.machineCriteriaOnLookOrRecordOrders // [])[] | "order " + .id + " is " + prover(.proof) + " and owns the machine-verified criterion " + .criterionId + ", which neither a look nor a reading judges: make it person-verified in scope, add a run line that proves it, or give it to an order that builds code"),
+    ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person on a task with tests and owns code, "
+      + (if .machineOwned == 0 then "which gets tests even with no machine criterion" else "and run lines do not prove every machine criterion it owns" end) + ": update --proof tests"),
+    ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests"),
     ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
     ((.graph.unknownDependsOnIds // [])[] | "file " + .path + " depends on an unknown work order id " + .id),
     ((.graph.globbedOwnedFiles // [])[] | "order " + .id + " owns " + .path + ", which is not one literal path"),
@@ -996,10 +1000,7 @@ def open: {
   unattended: [
     ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
     ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
-    ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
-    ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person on a task with tests and owns code, "
-      + (if .machineOwned == 0 then "which gets tests even with no machine criterion" else "and run lines do not prove every machine criterion it owns" end) + ": update --proof tests"),
-    ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests")
+    ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order")
   ],
   warn: [
     ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),

@@ -18,7 +18,8 @@ lines. Design writes a run line only when the source gives the command. A source
 a result in words gives a check line. A line from research is not binding, because this project
 never accepted that source.
 
-A run line is a list of arguments, never a shell. Design refuses a shell character in it.
+A run line is a list of arguments, never a shell. Design refuses a shell character in a line you
+give. A recipe entry with one is skipped, with a warning.
 
 ## A run line that proves a criterion
 

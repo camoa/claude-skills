@@ -30,12 +30,14 @@ design_case() (
 overlap='jq ".ownedFiles += [\"a.php\"]" "$TASK/design/wo2.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/wo2.json"'
 unserved='jq ".criteria += [.criteria[0] | .id = \"c3\"] | .nextCriterionId = 4" "$TASK/alignment.json" >"$ROOT/a" && mv "$ROOT/a" "$TASK/alignment.json"'
 unconfirmed='jq ".dispositions = [{candidate: \"lib/x.php\", disposition: \"reuse\", runMode: \"autonomous\"}]" "$TASK/design/wo1.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/wo1.json"'
+confirm='jq ".proof = \"confirm\" | .tests = []" "$TASK/design/wo1.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/wo1.json"'
 finding='mkdir -p "$TASK/research" && jq -n "{schemaVersion: 1, search: \"s1\", searchedFor: \"a\", findings: [{text: \"a.php exists\", source: \"a.php\", lookedAt: \"2026-10-28\", criteriaServed: [\"c1\"]}]}" >"$TASK/research/s1.json"'
 
 expect "an overlap of owned files closes the design, with a warning" "$(design_case interactive "$overlap")" "0|closed|1"
 expect "a criterion no order serves closes an attended design, with a warning" "$(design_case interactive "$unserved")" "0|closed|2"
 expect "a criterion no order serves stops an unattended design" "$(design_case autonomous "$unserved")" "5|open|0"
 expect "an unconfirmed reuse closes an unattended design, with a warning" "$(design_case autonomous "$unconfirmed")" "0|closed|1"
+expect "a confirm order that owns code on a task with tests stops an attended design" "$(design_case interactive "$confirm")" "5|open|0"
 expect "a research finding no order accounts for closes an attended design, with a warning" "$(design_case interactive "$finding")" "0|closed|1"
 expect "a research finding no order accounts for stops an unattended design" "$(design_case autonomous "$finding")" "7|open|0"
 
@@ -161,24 +163,51 @@ confirmer_case() (
 )
 expect "the confirmer may rewrite its own verdict file" "$(confirmer_case)" "allow"
 
-# light_case <owner>: the design check's status on a light task whose project registers the command
-# `bash tests/demo.sh` as the script that walks the demo path. <owner> is the order that owns that
-# script, or none.
+# add_test_case: add-test's exit and its warnings, for a tests order whose description names its own
+# surface. The wording is a warning, never a refusal.
+add_test_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  jq '.surfaces = ["home"]' "$TASK/design/wo1.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/wo1.json"
+  run "$DESIGN" add-test "$TASK" --id wo1 --level unit --description "the home page shows b"
+  printf '%s|%s\n' "$RC" "$(warned "design add-test")"
+)
+expect "a test that names its order's surface is added, with a warning" "$(add_test_case)" "0|1"
+
+# recipe_case: verify --recipe's exit, the entries it carried and its warnings, from a recipe whose
+# second verifier entry holds a shell character.
+recipe_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  printf '## Verifier\n\nverifier:\n  - id: ok\n    run: true\n    pass: exit 0\n  - id: bad\n    run: true; false\n    pass: exit 0\n' >"$ROOT/recipe.md"
+  run "$DESIGN" verify "$TASK" --id wo1 --recipe "$ROOT/recipe.md"
+  printf '%s|%s|%s\n' "$RC" "$(jq -r '[.verify[]?.id] | join(",")' "$TASK/design/wo1.json")" "$(warned "design verify")"
+)
+expect "a recipe entry with a shell character is skipped, with a warning" "$(recipe_case)" "0|ok|1"
+
+# light_case <owner> [playwright]: the design check's status on a light task whose project registers
+# the command `bash tests/demo.sh` as the script that walks the demo path. <owner> is the order that
+# owns that script, or none. With playwright, the command is `npx playwright test`, the tree holds
+# a test/ folder, and <owner> owns that folder.
 light_case() (
+  local command='["bash", "tests/demo.sh"]' owned=tests/demo.sh
+  [ "${2:-}" != playwright ] || { command='["npx", "playwright", "test"]'; owned=test/; }
   source "$HERE/records.bash"
   task_records branch wo2
   jq '.runMode = "light"' "$TASK/task.json" >"$ROOT/t" && mv "$ROOT/t" "$TASK/task.json"
   mkdir -p "$WT/tests" && printf 'echo ok\n' >"$WT/tests/demo.sh"
-  jq -n '{schemaVersion: 1, surfaces: [{id: "demo", command: ["bash", "tests/demo.sh"], kinds: ["e2e"],
+  mkdir -p "$WT/test" && printf 'x\n' >"$WT/test/a.spec"
+  jq -n --argjson c "$command" '{schemaVersion: 1, surfaces: [{id: "demo", command: $c, kinds: ["e2e"],
       enabled: true, masks: [], critical: true, reason: "walks the demo path"}]}' >"$WT/surfaces.json"
   jq '.surfaces = {e2e: {enabled: true}, registryPath: "surfaces.json"}' "$PROJECT/project.json" >"$ROOT/p" \
     && mv "$ROOT/p" "$PROJECT/project.json"
-  [ "$1" = none ] || { jq '.ownedFiles += ["tests/demo.sh"]' "$TASK/design/$1.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/$1.json"; }
+  [ "$1" = none ] || { jq --arg o "$owned" '.ownedFiles += [$o]' "$TASK/design/$1.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/$1.json"; }
   run "$DESIGN" check "$TASK"
   sed -n 's/^status: //p' "$OUT"
 )
 expect "a light order that owns the registered demo-path script does not pass the design check" "$(light_case wo2)" "5"
 expect "a light first order that owns the registered demo-path script does not pass either" "$(light_case wo1)" "5"
 expect "a light design that leaves the registered script alone passes" "$(light_case none)" "0"
+expect "a folder the registered command names is not its script" "$(light_case wo2 playwright)" "0"
 
 finish

@@ -626,8 +626,8 @@ task_is_light() {
 # and PS_FILES. PS_STATE is `registered`: the surface file holds an enabled critical end to end
 # surface, which is that script, so no order writes or extends it. `create`: end to end is on and
 # none is registered, so wo1 writes it. `declined` and `off`: no order writes one. PS_FILES holds the
-# registered command's own files, one per line: each argv token that is a relative path in the
-# tree, the rule review reads them by. A page surface records no file, so PS_FILES is empty for it.
+# registered command's own files, one per line: each argv token that names a file in the tree. A
+# folder the command names, such as a test runner's test/, is not the script. A page surface records no file, so PS_FILES is empty for it.
 # The surface file is read in the task's worktree, or the code path when the task has none, the
 # tree review reads. The caller sources recipes.sh. $1 the task folder.
 path_script_state() {
@@ -655,7 +655,7 @@ path_script_state() {
     PS_STATE=registered
     for tok in $(printf '%s' "$SF_SURFACES" | jq -r '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ][0].command // [] | .[]'); do
       case "$tok" in -*|/*|*..*) continue ;; esac
-      [ ! -e "$tree/$tok" ] || PS_FILES="$PS_FILES$tok
+      [ ! -f "$tree/$tok" ] || PS_FILES="$PS_FILES$tok
 "
     done
   else
