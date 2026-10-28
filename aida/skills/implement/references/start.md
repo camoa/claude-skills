@@ -107,16 +107,17 @@ has not had yet, never into the build it already had. So is one that dropped an 
 path that names no file now and named none where the build started. Such a path never existed.
 A started order whose done-when only gained rows after its frozen rows is taken in place too.
 Tests are frozen against criteria, and only the done-when row reads the done-when text. When that
-row was judged, the order keeps its tests only at `tests-frozen`. The judgement leaves its ledger
-entry, and `doneWhenGained` lists the new rows. Its next step judges the row again and freezes
+row was judged, the order keeps its tests only at `tests-frozen`. The judgement stays for the
+frozen rows, and `doneWhenGained` lists the new rows. Its next step judges the row again and freezes
 the same tests. Past `tests-frozen` it is a change mid-build, because a build already rests on
 the old text. An order with no done-when row keeps its tests until review. From `reviewed` on it
 is a change mid-build, because nothing would read the new row.
 A removed owned file the code holds or held, or any other change, is a change mid-build, as above.
 So is a reasoning whose earlier text changed, and a changed or removed done-when row. A person
 keeps the change, redoes such an order once design closes on the change, or puts the design back.
-A kept change that took out a row listed under `doneWhenGained` removes it from that list. When
-the list is empty, no judgement is owed, and the order builds.
+A kept change sets `doneWhenGained` to the kept rows that are not frozen rows. A gained row taken
+out leaves the list, and a reworded row joins it. When the list is empty, no judgement is owed,
+and the order builds.
 An order the live design no longer holds, because design merged or removed it, has no live copy
 to take. When it has not started, it is dropped from the snapshot and the ledger, and the
 `removed:` line names it. That line prints only when an order was dropped. When it has started,

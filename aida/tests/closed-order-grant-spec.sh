@@ -59,6 +59,18 @@ frozen_case() (
 )
 expect "a grant of the closed order's frozen test refuses" "$(frozen_case)" '3|closed'
 
+# A dropped owner releases the order that granted it a file: its next fix round opens.
+dropped_case() (
+  source "$HERE/records.bash"
+  in_review closed
+  answer "implement fix-brief" wo2 "a.php"
+  run "$IMPLEMENT" fix-brief "$TASK" wo2 --allow a.php
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).lastStep = "dropped"'
+  run "$IMPLEMENT" fix-brief "$TASK" wo2
+  printf '%s|%s\n' "$RC" "$([ -f "$IMPL/brief-wo2-fix-1.json" ] && echo brief || echo none)"
+)
+expect "a dropped owner no longer holds the order that granted it a file" "$(dropped_case)" '0|brief'
+
 # A builder's stop on a defect in the closed tests order's file reopens it the same way: its
 # failing test comes first.
 builder_case() (

@@ -296,7 +296,7 @@
           "type": "array",
           "minItems": 1,
           "items": { "type": "string", "minLength": 1 },
-          "description": "The done-when rows design appended after this order's tests were frozen, each verbatim. Written by `start` when it takes the live copy in place with the frozen tests kept, on an order at tests-frozen whose done-when row was judged. That judgement read the shorter text, so `start` removes it. `build-brief` and `dispatch-open implementer` refuse while this stands (exit 120). The next freeze with the same tests judges the done-when row again and removes it (gap row 409)."
+          "description": "The done-when rows design appended after this order's tests were frozen, each verbatim. Written by `start` when it takes the live copy in place with the frozen tests kept, on an order at tests-frozen whose done-when row was judged. That judgement read the shorter text, and it stays for the frozen rows. `go-on keep` sets the list again to the kept rows that are not frozen rows, and removes it when none is left (gap row 439). `build-brief` and `dispatch-open implementer` refuse while this stands (exit 120). The next freeze with the same tests judges the done-when row again and removes it (gap row 409)."
         },
         "doneWhenGainedAt": {
           "type": "string",

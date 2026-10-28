@@ -1119,7 +1119,7 @@ def open: {
     ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
     ((.graph.ordersNotAfterSkeleton // [])[] | "order " + . + " does not come after wo1, the walking skeleton: add wo1 to its dependsOn"),
     ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
-    ((.graph.ordersPastHandfulOfRows // [])[] | "order " + .id + " holds " + (.count | tostring) + " done-when rows for " + (.owned | tostring) + " owned criteria, more than a handful of behaviours: remove-done-when for a row no criterion needs, or split the order")
+    ((.graph.ordersPastHandfulOfRows // [])[] | "order " + .id + " holds " + (.count | tostring) + " done-when rows for " + (if .owned == 0 then "no owned criterion" elif .owned == 1 then "1 owned criterion" else (.owned | tostring) + " owned criteria" end) + ", more than a handful of behaviours: remove-done-when for a row no criterion needs, or split the order")
   ]
 };
 '

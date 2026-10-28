@@ -24,11 +24,10 @@ full, is on [the design check](../stages/design/check.md).
   order, no owner or two owners. A research finding no order accounts for (exit 7). With you
   present, each is a warning. A confirm order that is code on a task with tests, or that owns a
   test file, stops in both modes.
-- **Warnings.** Two orders that declare one owned file, an order that serves nothing, a
-  supporting order no owner reaches, an order with more than eight done-when rows or more than three for each criterion it
-  owns, and a reuse
-  decision a second agent did not confirm. Design
-  shows them, the close writes them to the task record, and review lists them.
+- **Warnings.** Two orders that declare one owned file, an order that serves nothing, a supporting
+  order no owner reaches, an order with more than eight done-when rows or more than three for each
+  criterion it owns, and a reuse decision a second agent did not confirm. Design shows them, the
+  close writes them to the task record, and review lists them.
 
 ## A command that proves a criterion
 

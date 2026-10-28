@@ -687,9 +687,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      rows 390 and 449). Nothing is written.
 #
 # 120  `build-brief` or `dispatch-open implementer` found `doneWhenGained` on the order's ledger
-#      entry. Design appended done-when rows after the freeze, and start removed the done-when
-#      judgement made on the shorter text. The next freeze with the same tests judges it again and
-#      removes the list (gap row 409). Nothing is written.
+#      entry. Design appended done-when rows after the freeze, and the done-when judgement read
+#      the shorter text. The next freeze with the same tests judges it again and removes the list
+#      (gap row 409). Nothing is written.
 #
 # 121  `fix-brief` found the order owes a test first. `reopen` sent it a task review's finding.
 #      Its test author writes one test that fails on the bug, or corrects a frozen test a person
@@ -1398,7 +1398,7 @@ im_next_step() {
     | (($snap.workOrders // []) | map({(.id): (.dependsOn // [])}) | add // {}) as $deps
     # An order that stopped on a closed order'"'"'s defect, or granted one of its files, waits until
     # that repair closes (gap rows 286 and 433).
-    | ([ $orders[] | select(.lastStep != "closed") | (.repairs // [])[] | .by ]) as $waiting
+    | ([ $orders[] | select(.lastStep != "closed" and .lastStep != "dropped") | (.repairs // [])[] | .by ]) as $waiting
     | ([ $live[] | select(.id as $i | $waiting | index($i) | not)
          | select(.lastStep == "checks-passed" or .lastStep == "reviewed" or .lastStep == "fixed") ] | .[0]) as $rv
     | ([ $live[] | select(.id as $i | $waiting | index($i) | not) | select(.lastStep == "tests-frozen"
@@ -1437,11 +1437,11 @@ im_repair_owed() {
     | [ (.repairs // []) | to_entries[] | select(.value.testOwed == true) | .key + 1 ][0] // empty' 2>/dev/null
 }
 
-# The orders in ledger document $1 that are not closed and hold a repair order $2 opened, comma
-# separated, or nothing. Order $2 waits on each (gap rows 286 and 433).
+# The orders in ledger document $1 that are neither closed nor dropped and hold a repair order $2
+# opened, comma separated, or nothing. Order $2 waits on each (gap rows 286 and 433).
 im_repairing() {
   printf '%s' "$1" | jq -r --arg u "$2" \
-    '[ (.orders // [])[] | select(.lastStep != "closed") | select(any((.repairs // [])[]; .by == $u)) | .id ] | join(", ")'
+    '[ (.orders // [])[] | select(.lastStep != "closed" and .lastStep != "dropped") | select(any((.repairs // [])[]; .by == $u)) | .id ] | join(", ")'
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -2099,7 +2099,8 @@ REMOVED_PATHS
       # Done-when rows appended after the frozen ones are taken in place too (gap row 409). Tests
       # are frozen against criteria, and only the done-when row is judged against the done-when
       # text. An order with that judgement keeps its tests only while a second freeze can still
-      # run (exit 76): `doneWhenGained` below drops the judgement, and the order is judged again.
+      # run (exit 76): `doneWhenGained` below lists the rows that judgement did not read, and the
+      # order is judged again. The judgement stays for the frozen rows (gap row 439).
       # An order still owed that judgement counts as judged, so a second append joins the list.
       # Past tests-frozen a build rests on the old text, so it stops. An order with no done-when
       # row keeps its tests until review, which reads the rows from the snapshot. From `reviewed`
@@ -2349,8 +2350,9 @@ REMOVED_PATHS
     # reason, and a start run repeated on the same drift adds nothing it holds already.
     # An unstarted order the design removed leaves the order list here, as it left the snapshot,
     # and an order the design added enters it not started.
-    # An order whose done-when gained rows loses the judgement made on the shorter text, and lists
-    # the rows its next freeze is judged on (gap row 409). The time is what that freeze reads: the
+    # An order whose done-when gained rows lists the rows its next freeze is judged on, and keeps
+    # the judgement of its frozen rows, so a kept change that takes the rows out restores the order
+    # (gap rows 409 and 439). The time is what that freeze reads: the
     # checker's verdict file must be newer, so an old verdict on the shorter text clears nothing.
     # Unattended, a change stops every order it touches. Attended, it is a warning, and each order
     # goes on with its frozen copy until a person takes go-on keep or redo. A removed order stops in
@@ -2370,7 +2372,7 @@ REMOVED_PATHS
         | map(. as $o | select(($gone | index($o.id)) == null)) | map(
           . as $o | start_stops($drifted) | start_changes($changes)
           | (([ $widened[] | select(.id == $o.id) | .gained // empty ])[0]) as $g
-          | if $g == null then . else (del(.doneWhenJudgement) | .doneWhenGained = ((.doneWhenGained // []) + $g) | .doneWhenGainedAt = $now) end
+          | if $g == null then . else (.doneWhenGained = ((.doneWhenGained // []) + $g) | .doneWhenGainedAt = $now) end
         )
       ')"
     # A drift stop outlives the drift that wrote it (live-run row 143). The design goes back to
@@ -6519,7 +6521,7 @@ IM_DEPS
   local dw_gained
   dw_gained="$(printf '%s' "$order_entry" | jq -r '(.doneWhenGained // []) | join(" | ")')"
   [ -z "$dw_gained" ] \
-    || die 120 "$who: design appended done-when rows to $unit_id after its tests were frozen: $dw_gained. The done-when row was judged on the shorter text, so start removed that judgement. Put the rows to the row-checker again, then run tests-freeze with the same tests and the new verdicts. Nothing is handed over."
+    || die 120 "$who: design appended done-when rows to $unit_id after its tests were frozen: $dw_gained. The done-when row was judged on the shorter text. Put the rows to the row-checker again, then run tests-freeze with the same tests and the new verdicts. Nothing is handed over."
 
   # --- a build starts or resumes only where `read` routes one -----------------------------------
   # tests-frozen is the first build. code-written is a failed attempt, rebuilt while attempts
@@ -10134,7 +10136,7 @@ FB_FROZEN
     if [ -z "$ap_owned" ] && [ -n "$other" ] \
       && [ "$(printf '%s' "$RV_LEDGER_DOC" | jq -r --arg id "${other%%	*}" '.orders[] | select(.id == $id) | .lastStep // ""')" = "closed" ]; then
       [ -z "$closed_grant" ] \
-        || die3 "fix-brief: --allow names two files closed orders own. Grant one closed order's file per call. Nothing is written."
+        || die3 "fix-brief: --allow names two files closed orders own. Grant one closed order's file per call. A second grant waits (exit 40) until that order closes again. Nothing is written."
       closed_grant="$other	$ap_abs"
       continue
     fi
@@ -12488,13 +12490,18 @@ GO_OWNS
         new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$WAY_UNIT" --arg from "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash')" \
           --arg to "$(printf '%s' "$keep_snapshot" | jq -r '.hash')" --arg at "$today" '
           .snapshotHash = $to | .resnapshots = ((.resnapshots // []) + [{id: $id, from: $from, to: $to, at: $at}])')"
-        # A row design added after the freeze and took out again is owed no judgement (gap row 439).
-        new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$WAY_UNIT" \
+        # The rows owed a judgement are the kept rows that are not frozen rows: a row design added
+        # after the freeze and took out again is owed none, and a reworded row is owed one (gap
+        # row 439). The frozen rows are the old snapshot's rows less the rows it had gained.
+        new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$WAY_UNIT" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          --argjson old "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg id "$WAY_UNIT" '[ .workOrders[] | select(.id == $id) ][0].doneWhen // []')" \
           --argjson dw "$(printf '%s' "$keep_snapshot" | jq -c --arg id "$WAY_UNIT" '[ .workOrders[] | select(.id == $id) ][0].doneWhen // []')" '
-          .orders = (.orders | map(if .id == $id and .doneWhenGained != null
-            then .doneWhenGained = [ .doneWhenGained[] | select(. as $r | $dw | index($r) != null) ]
-              | if .doneWhenGained == [] then del(.doneWhenGained, .doneWhenGainedAt) else . end
-            else . end))')"
+          .orders = (.orders | map(if .id != $id then . else
+            ($old - (.doneWhenGained // [])) as $frozen
+            | ($dw - $frozen) as $gained
+            | if $gained == [] then del(.doneWhenGained, .doneWhenGainedAt)
+              elif $gained == (.doneWhenGained // []) then .
+              else .doneWhenGained = $gained | .doneWhenGainedAt = $now end end))')"
         state_note="the snapshot holds the live design of $WAY_UNIT, and nothing is reverted"
       fi ;;
   esac
