@@ -670,14 +670,6 @@ task_warn() {
   printf 'warning: %s%s: %s\n' "$2" "${3:+ $3}" "$4"
 }
 
-# True when the text names an end-to-end check or a browser test. Such a check is a surface, which review
-# runs after the build, and a test proves the behaviour beneath it (gap rows 451 to 453). scope's
-# verify clauses and design's test descriptions warn on it. Visual regression is left out: scope
-# itself drafts a criterion on that check. The words are English, not a framework's. $1 the text.
-names_a_surface_check() {
-  printf '%s' "$1" | grep -Eiq '(^|[^[:alnum:]])(e2e|end[- ]to[- ]end|browser tests?)([^[:alnum:]]|$)'
-}
-
 # Warns when one run of an order's frozen tests took more than TEST_WEIGHT_SECONDS (gap row 454).
 # The whole run is timed, so one heavy test is not hidden in an average. A test the recipes run
 # every attempt takes milliseconds or seconds. The heavy periplus tests ran a whole flow, 116 to

@@ -188,7 +188,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 recordOrdersOwningOutsideProjectFolder: [ {id, path, reason} ],
 #                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record, observe and confirm orders
 #                 observeOrdersWithNoSurface: [ {id, path} ],
-#                 confirmOrdersOnTaskWithTests: [ {id, path} ],
+#                 confirmOrdersOnTaskWithTests: [ {id, path, machineOwned} ],
 #                 confirmOrdersOwningTestFiles: [ {id, path, glob} ],   path is the owned test file
 #                 textOnlyTestOrders: [ {id, path} ],
 #                 machineCriteriaOnTextOnlyOrders: [ {id, path, criterionId} ],
@@ -703,7 +703,7 @@ else
     | [ $orders[] | select(.slot == "confirm-at-review") | select($tests != "no") | select(.textOnly | not)
         | . as $o | [ ($o.criteriaOwned // [])[] | select(($vbOf[.] // "") == "machine") ] as $machine
         | select(($machine | length) == 0 or any($machine[]; . as $c | ($o.criteriaByRun | index($c)) == null))
-        | {id: .id, path: .path} ]
+        | {id: .id, path: .path, machineOwned: ($machine | length)} ]
   ')"
   # A confirm order is built with no test. So a test file it owns is written as plain code that no
   # check runs and the freeze never sees (gap row 367). Which path is a test is the framework's to

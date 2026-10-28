@@ -106,8 +106,9 @@ the order's surfaces in a browser after the implementer returns. It reads that r
 order's own check, `observed`. `close` writes `model` on the criteria the order owns.
 
 `confirm` means no test proves the order: its task has no automated tests, it is text only, or
-run lines prove its machine criteria. Put no row to anyone, and dispatch no test author. Freeze with no `--test` and no `--row`, and a `--checklist` for each criterion a person
-verifies. The build's own check, `confirm-at-review`, reads deferred. `finish` turns each
+run lines prove its machine criteria. Dispatch no test author. Put one row to the checker for
+each criterion a verify run line names, and freeze with a `--row` for each, no `--test`, and a
+`--checklist` for each criterion a person verifies. The build's own check, `confirm-at-review`, reads deferred. `finish` turns each
 done-when row into a checklist row. The row sits under each criterion the order owns, or serves
 when it owns none, and the person answers those criteria at review.
 

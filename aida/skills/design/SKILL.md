@@ -212,9 +212,7 @@ AIDA cannot know on its own:
   page at each viewport. Such an order is created with `--proof observe`. It names at least one
   `--surface` and declares no test. Each done-when row is the sentence a model judges. After
   the build, the orchestrator opens each surface at each viewport in a browser. It judges the
-  row against what renders, with a screenshot as the evidence. The look also judges the
-  verification clause of each machine criterion the order owns, as a row of its own. So the
-  rows describe the page, and the clause is still judged. Write each row as one thing
+  row against what renders, with a screenshot as the evidence. Write each row as one thing
   the page must show. The judge is a model, and completion puts each such criterion to the
   person to accept.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
@@ -245,8 +243,9 @@ and pick the kind from that answer:
   created with no `--proof` whose first file is code. The person may pick another kind with
   `update --proof`.
 
-A machine-verified criterion does not mean `tests`. Every kind proves one in its own way: the
-tests, the gate lines, the checks on the record, the look, or the person's confirmation.
+A machine-verified criterion does not mean `tests`. Tests prove one, and so do the gate lines, the
+look, and run lines on a `confirm` order. A text-only order proves none, so the check refuses it.
+Code with logic gets tests even when it owns no machine-verified criterion.
 `create` and `update` print `impliedProof:` beside the proof the order declares. It says
 `record` when every owned file lies under the project folder. It says `confirm` on a task with no
 automated tests, and when every owned file is a document or configuration. Otherwise it says

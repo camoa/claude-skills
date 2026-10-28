@@ -74,14 +74,17 @@ br_order_facts() {
 # confirmCriteria. Review's close and set-run-mode read it, so the two never disagree (gap row 328).
 #
 # `textOnly`, on one work order, is true when the order owns files and each is a document or
-# configuration, read by its extension. Such an order holds no logic for a test to prove, so a
+# configuration, read by its extension or, for a dotfile such as .gitignore, its name. CMakeLists.txt
+# holds build logic, so it is code. Such an order holds no logic for a test to prove, so a
 # reading proves it (gap row 461). add-owned-file marks it `confirm`, and the design check refuses
 # it as a `tests` order and refuses a machine criterion it owns. A `gate` order is never text only:
 # a configuration export that tools produce is YAML, and its gate lines prove it.
 BR_ORDER_FACTS_JQ='
   def textOnly:
     (.proof // "") != "gate" and ((.ownedFiles // []) | length > 0
-      and all(test("\\.(md|markdown|rst|adoc|txt|json|ya?ml|toml|ini|cfg|conf)$"; "i")));
+      and all((test("(^|/)CMakeLists\\.txt$") | not)
+        and (test("\\.(md|markdown|rst|adoc|txt|json|ya?ml|toml|ini|cfg|conf|xml|neon|dist)$"; "i")
+             or test("(^|/)\\.[A-Za-z0-9_-]+(\\.(example|sample|dist))?$"))));
   def orderFacts:
     (.proof // "tests") as $p
     | if   $p == "gate"    then {slot: "configuration-gate", range: "code",    ownsCode: true}

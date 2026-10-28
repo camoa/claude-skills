@@ -459,9 +459,8 @@ wo_summary() {
 # lies under the project folder produces a document, so it implies `record`, the rule
 # add-owned-file applies. On a task with no automated tests any other order implies `confirm`, the
 # same rule's other half. So does a text-only order elsewhere (gap row 461). Otherwise the line
-# reads criteriaOwned alone. Every kind proves a
-# machine-verified criterion in its own way, so owning one implies any kind: what the order
-# produces decides. The line said `tests` here once, and pushed a report or an update onto an
+# reads criteriaOwned alone. Owning a machine-verified criterion implies any kind that proves one:
+# tests, the gate lines, a look, or run lines on a confirm order. What the order produces decides. The line said `tests` here once, and pushed a report or an update onto an
 # invented test. An order owning criteria of which none is machine-verified implies a proof
 # other than `tests`. An order owning nothing implies nothing. Printed on every create and
 # update, not only on a disagreement, so one line says what the contract says about this order.
@@ -500,7 +499,7 @@ implied_proof_line() {
       *,*) word="criteria" ;;
       *)   word="criterion" ;;
     esac
-    echo "impliedProof: any kind, because $2 owns the machine-verified $word $machine, which every kind proves in its own way. What $2 produces decides"
+    echo "impliedProof: any kind, because $2 owns the machine-verified $word $machine, which tests, gate lines, a look or run lines prove. What $2 produces decides"
   else
     echo "impliedProof: not tests, because no criterion $2 owns is machine-verified"
   fi
@@ -523,7 +522,8 @@ open_summary_of() {
         ((.coverage.recordOrdersOwningOutsideProjectFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " " + .reason),
         ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
         ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
-        ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person on a task with tests, owns code, and run lines do not prove every machine criterion it owns: update --proof tests"),
+        ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person on a task with tests and owns code, "
+          + (if .machineOwned == 0 then "which gets tests even with no machine criterion" else "and run lines do not prove every machine criterion it owns" end) + ": update --proof tests"),
         ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests, so a test would only read the text back: update --proof confirm, or record for a document under the project folder"),
         ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope, or give it to an order that builds code"),
         ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests"),
