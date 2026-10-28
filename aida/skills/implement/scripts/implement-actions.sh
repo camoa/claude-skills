@@ -7780,12 +7780,23 @@ br_build_checks() {
   done <<BR_DIFF
 $diff_output
 BR_DIFF
+  # A tests-only order deletes whole files and edits none (audit/24a). So a path any of its commits
+  # changes with a status other than deleted reads unmet, whatever the role says. A restore reads
+  # unmet too: redo reverts the commits, and the person changes the design.
+  local edited=""
+  if tests_only_order "$TASK_PATH" "$BRC_UNIT_JSON"; then
+    edited="$(im_commits_paths "$BRC_CODEPATH" "$(jq -cn --argjson a "$BRC_COMMITS_BEFORE" --argjson b "$BRC_COMMITS" '$a + $b')" \
+      "$BRC_SCOPE" d | LC_ALL=C sort -u | paste -sd, - | sed 's/,/, /g')"
+  fi
   if [ -n "$unmatched" ]; then
     ofc_verdict="unmet"
     ofc_detail="these changed files match none of $(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')'s own ownedFiles: ${unmatched%, }"
     [ "$BRC_ALLOWED_JSON" = "[]" ] || ofc_detail="${ofc_detail%.}, nor the paths allowed for this round: $(printf '%s' "$BRC_ALLOWED_JSON" | jq -r 'join(", ")')"
     rerun_step="$(task_env_rerun_step "$TASK_PATH" "${unmatched%, }")"
     [ -z "$rerun_step" ] || ofc_detail="${ofc_detail%.}.$rerun_step"
+  elif [ -n "$edited" ]; then
+    ofc_verdict="unmet"
+    ofc_detail="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') deletes the tests of a cleanup run and edits none, and its commits change these files without deleting them: $edited. Run redo to revert them, then change the design."
   elif [ -n "$env_aside" ]; then
     ofc_verdict="met"
     ofc_detail="every other file the commits on the record's list ($commit_count) change matches this order's own ownedFiles."
@@ -9032,12 +9043,12 @@ im_sorted_commits() {
 # The paths the commits in JSON array $2 change in the repository $1, one per line, sorted.
 # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
 # the new path, so a deleted file the order does not own would never appear. $3 a path to scope
-# the read to, or empty.
+# the read to, or empty. $4 a git --diff-filter value, or nothing for every change.
 im_commits_paths() {
   local c
   printf '%s' "$2" | jq -r '.[]' | while IFS= read -r c; do
-    if [ -n "$3" ]; then git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames "$c" -- "$3"
-    else git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames "$c"; fi
+    if [ -n "$3" ]; then git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames ${4:+"--diff-filter=$4"} "$c" -- "$3"
+    else git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames ${4:+"--diff-filter=$4"} "$c"; fi
   done | LC_ALL=C sort -u
 }
 

@@ -87,11 +87,17 @@ the person did not give. Nothing in the code changes in this step.
 ## 7. Hand the cleanup to a task
 
 When every group is answered, and at least one change was approved, offer a task. With a yes, run
-`/aida:task create`. Propose the name `test-cleanup`. Propose this goal: "Apply the test cleanup
-the person approved in `<run folder>/decisions.md`. A behaviour that only a removed test checked
-keeps one small test. A removed end-to-end test that is a registered surface goes with
-`surfaces-actions.sh unregister <id>`." Then ask whether to run it light, and on a yes run
-`/aida:task set-run-mode <task-id> light`. The task skill asks for the person's answer there.
+`/aida:task create`. Propose the name `test-cleanup`. Propose this goal, with the run folder as
+`groups` printed it: "Apply the test cleanup the person approved in `<run folder>/decisions.md`.
+A merge, a shrink or a rewrite of a test is a `tests` order that owns only test files. So is one
+small test kept for a behaviour that only a removed test checked. A check script that is
+rewritten is code, with tests of its own. Whole files to delete, check scripts included, are one
+`confirm` order that owns only those files. It names each file in a done-when row and depends on
+every `tests` order. A runner configuration or script entry that names a deleted file goes to
+another order, which depends on the deletion order. On a light run, wo1 is the first `tests`
+order, or the deletion order when there is none. A removed end-to-end test that is a registered
+surface goes with `surfaces-actions.sh unregister <id>`." Then ask whether to run it light, and
+on a yes run `/aida:task set-run-mode <task-id> light`. The task skill asks for the person's answer there.
 
 With no approved change, say that nothing will change, and stop.
 

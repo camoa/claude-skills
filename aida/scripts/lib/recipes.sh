@@ -45,6 +45,7 @@
 #   tf_with_repair_tests <action> <order>     the order's frozen record with its repairs', into TF_REPAIR_TESTS_DOC
 #   tf_path_matches_glob <path> <glob>        one segment against one glob segment
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob, or its file name when the glob has no /
+#   tests_only_order <task folder> <order>    true when the order deletes test files of the one cleanup run its goal names
 #   tr_find_tool_row <recipes> <id> <label>   one tool row of the resolved recipes, or why it runs nothing
 #   tr_run_tool_row <row> <dir> <paths> <values> <out>   runs one tool row, its streams joined
 #   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>] [<log>]   runs one resolved command,
@@ -1054,6 +1055,25 @@ tf_path_matches_catalog_glob() {
     "$glob"/*) return 0 ;;
   esac
   return 1
+}
+
+# True when work order $2, as JSON text, of task folder $1 is a tests-only order (audit/24a): its
+# proof is confirm, and each file it owns is a test of the one cleanup run its contract's goal names.
+# A test there is a path that run's groups.json lists, relative to the code repository root, as an
+# owned file is. A goal that names no run, or two, makes no order tests-only. The run must lie in
+# this project's test-cleanup folder, so a goal cannot point at a list someone else wrote.
+tests_only_order() {
+  local project runs run
+  [ "$(printf '%s' "$2" | jq -r '.proof // ""')" = confirm ] || return 1
+  project="$(cd "$1/../.." 2>/dev/null && pwd -P)" || return 1
+  runs="$(jq -r '.goal // ""' "$1/alignment.json" 2>/dev/null \
+    | grep -oE "[^[:space:]\`'\"]*/test-cleanup/run-[^/[:space:]\`'\"]+/decisions\.md" | LC_ALL=C sort -u)"
+  [ -n "$runs" ] && [ "$(printf '%s\n' "$runs" | wc -l)" -eq 1 ] || return 1
+  run="$(cd "${runs%/decisions.md}" 2>/dev/null && pwd -P)" || return 1
+  [ "${run%/*}" = "$project/test-cleanup" ] && [ -r "$run/groups.json" ] || return 1
+  printf '%s' "$2" | jq -e --slurpfile g "$run/groups.json" '
+    [ $g[0][]?.files[]? ] as $tests
+    | (.ownedFiles // []) | length > 0 and all(ltrimstr("./") as $p | $tests | index($p) != null)' >/dev/null
 }
 
 

@@ -33,7 +33,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     task whose contract says it has no automated tests, or it is text only, or run lines prove
 #     every machine criterion it owns (gap row 461). Any other confirm order is code with no test.
 #     It owns no file that a test glob of this project's earlier freezes matches: a test file on
-#     such an order is plain code that no check runs (gap row 367);
+#     such an order is plain code that no check runs (gap row 367). A tests-only order is exempt
+#     from both rules (audit/24a): tests_only_order in scripts/lib/recipes.sh decides it;
+#   - a tests-only order names each owned file in a done-when row, and each row names an owned
+#     file, so the rows a person confirms at review list every file in its reach. It reaches every
+#     `tests` order of its task through dependsOn, so the kept tests are frozen first (audit/24a);
+#   - no order owns a test that a freeze of another task holds while that task is not complete
+#     (audit/24a);
 #   - a work order whose proof is tests is not text only, and no text-only order owns a criterion
 #     whose verifiedBy is machine. A document or configuration holds no logic, so a test of it only
 #     reads the text back, and nothing tests the criterion: it is a person's (gap row 461);
@@ -84,7 +90,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/lib/proof.sh: what one order's proof kind means, sourced, never run
 #   <plugin root>/scripts/lib/task-helpers.sh: automated_tests and task_is_light, sourced, never run
 #   <project folder>/tasks/*/implementation*/tests-*.json: the test globs each freeze recorded,
-#     read only when an order's proof is confirm
+#     read only when an order's proof is confirm, and the paths each freeze of another open task holds
+#   <project folder>/tasks/*/task.json: whether the task that wrote such a freeze is complete
+#   <project folder>/test-cleanup/run-*/groups.json: the tests of the cleanup run the goal names
 #   <plugin root>/scripts/lib/recipes.sh: tf_path_matches_catalog_glob, sourced in a subshell
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
@@ -107,7 +115,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      not match its shape, a list item that fails its own check, an id that resolves to nothing,
 #      an owned path that is not one literal path, a dependency cycle, an order whose proof does
 #      not fit its tests, rows or files, a confirm order that is code on a task with tests or that
-#      owns a test file, a machine criterion an observe or record order owns with
+#      owns a test file, a tests-only order whose done-when rows and owned files do not name each
+#      other or that does not come after every tests order, an order that owns a test another
+#      open task froze, a machine criterion an observe or record order owns with
 #      no run line proving it, or a light order that owns the registered script that walks the
 #      demo path. Implementation's `start` refuses on this code.
 #
@@ -167,6 +177,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 observeOrdersWithNoSurface: [ {id, path} ],
 #                 confirmOrdersOnTaskWithTests: [ {id, path, machineOwned} ],
 #                 confirmOrdersOwningTestFiles: [ {id, path, glob} ],   path is the owned test file
+#                 testsOnlyRowsUnmatched: [ {id, item, problem} ],   item is an owned file or a row
 #                 textOnlyTestOrders: [ {id, path} ],
 #                 machineCriteriaOnTextOnlyOrders: [ {id, path, criterionId} ],
 #                 machineCriteriaOnLookOrRecordOrders: [ {id, path, criterionId, proof} ],
@@ -181,6 +192,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #              lightOrdersOwningPathScript: [ {id, path} ],   a light task only
 #              overlappingOwnedFiles: [ {ids: [id, id], path} ],
 #              globbedOwnedFiles: [ {id, path} ],
+#              testsOnlyOrdersBeforeTests: [ {id, testsOrder} ],
+#              ordersOwningFrozenPaths: [ {id, path, task} ],
 #              unrecordedIds: [ id, ... ] },   advisory, never raises the exit code
 #     fileIssueCount, contentIssueCount,
 #     notChecked: [...]
@@ -441,6 +454,7 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             ownsCode: $f.ownsCode,
             textOnly: textOnly,
             surfacesCount: ([ (.surfaces // [])[]? | select(type == "string" and length > 0) ] | length),
+            doneWhen: [ (.doneWhen // [])[]? | select(type == "string" and length > 0) ],
             doneWhenCount: ([ (.doneWhen // [])[]? | select(type == "string" and length > 0) ] | length),
             criteriaByRun: [ (.verify // [])[]? | select(type == "object" and has("run")) | .criterion? | strings ],
             # A test counts on its description alone. The level is optional and design does not set
@@ -575,6 +589,23 @@ TEST_ORDERS_OWNING_NO_MACHINE_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
 UNKNOWN_NONGOAL_IDS_JSON='[]'
 COVERAGE_ISSUE_COUNT=0
+TESTS_ONLY_ROWS_UNMATCHED_JSON='[]'
+PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
+TAB="$(printf '\t')"
+
+# The tests-only orders (audit/24a), by the one classifier the build's owned-files check calls too.
+# recipes.sh empties TASK_PATH when it loads, so it loads only inside this subshell.
+TESTS_ONLY_IDS_JSON='[]'
+if printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .proof == "confirm")' >/dev/null; then
+  TESTS_ONLY_IDS_JSON="$(
+    TO_TASK="$TASK_PATH"
+    # shellcheck source=/dev/null
+    source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
+    printf '%s' "$WORK_ORDERS_JSON" | jq -c '.[] | select(.proof == "confirm")' | while IFS= read -r TO_ORDER; do
+      if tests_only_order "$TO_TASK" "$TO_ORDER"; then printf '%s' "$TO_ORDER" | jq -r '.id'; fi
+    done | jq -R -s -c 'split("\n") | map(select(length > 0))'
+  )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"
+fi
 
 if [ "$CONTRACT_READABLE" != "true" ]; then
   COVERAGE_NOTE="$CONTRACT_NOTE"
@@ -662,12 +693,10 @@ else
   RECORD_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "done-when" or .slot == "observed" or .slot == "confirm-at-review") | select(.testsCount > 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
-  PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
   RECORD_ORDERS_OWNING_OUTSIDE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg p "$PROJECT_PATH/" '
     [ $orders[] | .id as $id | select(.range == "project") | (.ownedFiles // [])[]
       | select(startswith($p) | not) | {id: $id, path: ., reason: "outside the project folder"} ]
   ')"
-  TAB="$(printf '\t')"
   while IFS="$TAB" read -r REC_ID REC_PATH; do
     [ -n "$REC_PATH" ] || continue
     git -C "$TASK_PATH" check-ignore -q -- "$REC_PATH" 2>/dev/null || continue
@@ -687,9 +716,10 @@ else
   # order that is text only, and for one whose run lines prove every machine criterion it owns
   # (gap row 461). The answer can move to yes after design, and a confirm can be set by hand. Any
   # other confirm order on a task with tests is code that needs a test.
-  CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" --arg tests "$(automated_tests "$TASK_PATH")" '
+  CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" --arg tests "$(automated_tests "$TASK_PATH")" --argjson testsOnly "$TESTS_ONLY_IDS_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
     | [ $orders[] | select(.slot == "confirm-at-review") | select($tests != "no") | select(.textOnly | not)
+        | select(.id as $i | $testsOnly | index($i) == null)
         | . as $o | [ ($o.criteriaOwned // [])[] | select(($vbOf[.] // "") == "machine") ] as $machine
         | select(($machine | length) == 0 or any($machine[]; . as $c | ($o.criteriaByRun | index($c)) == null))
         | {id: .id, path: .path, machineOwned: ($machine | length)} ]
@@ -715,8 +745,9 @@ else
   CONFIRM_ORDERS_OWNING_TEST_FILES_JSON="$(
     # shellcheck source=/dev/null
     [ -z "$CONFIRM_TEST_GLOBS" ] || source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
-    jq -r -n --argjson orders "$WORK_ORDERS_JSON" '
-      $orders[] | select(.slot == "confirm-at-review") | .id as $id | (.ownedFiles // [])[] | [$id, .] | @tsv' \
+    jq -r -n --argjson orders "$WORK_ORDERS_JSON" --argjson testsOnly "$TESTS_ONLY_IDS_JSON" '
+      $orders[] | select(.slot == "confirm-at-review") | .id as $id | select($testsOnly | index($id) == null)
+      | (.ownedFiles // [])[] | [$id, .] | @tsv' \
     | while IFS="$TAB" read -r REC_ID REC_PATH; do
         while IFS= read -r TEST_GLOB; do
           [ -n "$TEST_GLOB" ] || continue
@@ -734,6 +765,16 @@ $CONFIRM_TEST_GLOBS
 CONFIRM_GLOBS
       done | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {id: .[0], path: .[1], glob: .[2]})'
   )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"
+
+  # A person confirms a tests-only order's done-when rows at review. So each row names an owned
+  # file, and each owned file is named in a row: the rows then list every file in its reach.
+  TESTS_ONLY_ROWS_UNMATCHED_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson testsOnly "$TESTS_ONLY_IDS_JSON" '
+    [ $orders[] | . as $o | select($testsOnly | index($o.id) != null)
+      | ( ($o.ownedFiles[] | . as $p | select(any($o.doneWhen[]; contains($p)) | not)
+            | {id: $o.id, item: $p, problem: "owned file named in no done-when row"}),
+          ($o.doneWhen[] | . as $r | select(any($o.ownedFiles[]; . as $p | $r | contains($p)) | not)
+            | {id: $o.id, item: $r, problem: "done-when row names no owned file"}) ) ]
+  ')"
 
   # The same question asked the other way (live-run row 145). The list above asks whether an order
   # owning a machine-verified criterion declares a test. This one asks whether an order left at the
@@ -816,6 +857,8 @@ LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON='[]'
 PATH_SCRIPT_UNREAD=false
 OVERLAPPING_OWNED_FILES_JSON='[]'
 GLOBBED_OWNED_FILES_JSON='[]'
+TESTS_ONLY_BEFORE_TESTS_JSON='[]'
+ORDERS_OWNING_FROZEN_PATHS_JSON='[]'
 UNRECORDED_IDS_JSON='[]'
 GRAPH_ISSUE_COUNT=0
 
@@ -836,7 +879,9 @@ else
   # dependsOn chain (gap row 197). Any other task leaves the list empty.
   LIGHT_TASK=false
   task_is_light "$TASK_PATH" && LIGHT_TASK=true
-  GRAPH_RESULT_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$KNOWN_WO_IDS_JSON" --argjson light "$LIGHT_TASK" '
+  # A tests-only order reaches every `tests` order of its task, so the kept tests are frozen while
+  # the old ones still exist (audit/24a).
+  GRAPH_RESULT_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$KNOWN_WO_IDS_JSON" --argjson light "$LIGHT_TASK" --argjson testsOnly "$TESTS_ONLY_IDS_JSON" '
     def reach($adj; $start):
       def go($frontier; $visited):
         if ($frontier | length) == 0 then $visited
@@ -862,7 +907,9 @@ else
           | select( ( ([$x] + ($revClosure[$x] // [])) | any(. as $y | $owners | index($y) != null) ) | not )
           | $x ],
         notAfterSkeleton: (if $light then [ $ids[] | . as $x | select($x != "wo1")
-          | select(($fwdClosure[$x] // []) | index("wo1") == null) ] else [] end)
+          | select(($fwdClosure[$x] // []) | index("wo1") == null) ] else [] end),
+        testsOnlyBeforeTests: [ $testsOnly[] as $x | $orders[] | select(.slot == "order-tests") | .id as $t
+          | select(($fwdClosure[$x] // []) | index($t) == null) | {id: $x, testsOrder: $t} ]
       }
   ')"
   DEPENDENCY_CYCLES_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.cycles')"
@@ -911,6 +958,28 @@ else
     ]
   ')"
 
+  TESTS_ONLY_BEFORE_TESTS_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.testsOnlyBeforeTests')"
+
+  # No order owns a test that a freeze of another task holds while that task is not complete: its
+  # build would change a file that task's frozen-tests check still reads (audit/24a). A freeze path
+  # and an owned file are both relative to the code repository root. This task's own freezes are
+  # left out, because the frozen-test hook guards them. A task with no task.json counts as open.
+  FROZEN_ELSEWHERE="$(
+    [ -z "${ZSH_VERSION:-}" ] || setopt NULL_GLOB
+    for FROZEN_RECORD in "$PROJECT_PATH"/tasks/*/implementation*/tests-*.json; do
+      [ -f "$FROZEN_RECORD" ] || continue
+      FROZEN_TASK="${FROZEN_RECORD%/implementation*}"
+      [ "$FROZEN_TASK" != "$TASK_PATH" ] || continue
+      [ "$(jq -r '.state // ""' "$FROZEN_TASK/task.json" 2>/dev/null)" != complete ] || continue
+      jq -r --arg t "${FROZEN_TASK##*/}" '((.rows // [])[]?.tests // [])[]?.path?, (.support // [])[]?.path?
+        | strings | [$t, .] | @tsv' "$FROZEN_RECORD" 2>/dev/null
+    done)"
+  ORDERS_OWNING_FROZEN_PATHS_JSON="$(printf '%s\n' "$FROZEN_ELSEWHERE" | jq -R -s -c --argjson orders "$WORK_ORDERS_JSON" '
+    [ split("\n")[] | select(length > 0) | split("\t") | {task: .[0], path: .[1]} ] as $frozen
+    | [ $orders[] | .id as $id | (.ownedFiles // [])[] | (ltrimstr("./") | rtrimstr("/")) as $p
+        | $frozen[] | select(.path == $p or (.path | startswith($p + "/")))
+        | {id: $id, path: .path, task: .task} ] | unique')"
+
   # Each wo<n> below the highest id, live or recorded, that has no order file and no entry in
   # <task_folder>/design-removed.json (gap row 245). An order folded before merge kept a record
   # leaves such a gap. Only a person knows the survivor, so the list never raises the exit code.
@@ -931,6 +1000,9 @@ else
 fi
 
 CONTENT_ISSUE_COUNT=$((CONTENT_ISSUE_COUNT + GRAPH_ISSUE_COUNT))
+# The tests-only rows stop in either run mode (audit/24a).
+CONTENT_ISSUE_COUNT=$((CONTENT_ISSUE_COUNT + $(jq -n --argjson a "$TESTS_ONLY_ROWS_UNMATCHED_JSON" \
+  --argjson b "$TESTS_ONLY_BEFORE_TESTS_JSON" --argjson c "$ORDERS_OWNING_FROZEN_PATHS_JSON" '($a + $b + $c) | length')))
 
 # ---------------------------------------------------------------------------
 # 9. What this script could not check, named on stdout rather than silently skipped.
@@ -995,7 +1067,10 @@ def open: {
     ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
     ((.graph.unknownDependsOnIds // [])[] | "file " + .path + " depends on an unknown work order id " + .id),
     ((.graph.globbedOwnedFiles // [])[] | "order " + .id + " owns " + .path + ", which is not one literal path"),
-    ((.graph.lightOrdersOwningPathScript // [])[] | "order " + .id + " owns " + .path + ", the registered script that walks the demo path, and on a light task no order extends it: remove-owned-file")
+    ((.graph.lightOrdersOwningPathScript // [])[] | "order " + .id + " owns " + .path + ", the registered script that walks the demo path, and on a light task no order extends it: remove-owned-file"),
+    ((.coverage.testsOnlyRowsUnmatched // [])[] | "order " + .id + " deletes the tests of a cleanup run, and its " + .problem + ": " + .item + ". Each owned file needs a done-when row that names it"),
+    ((.graph.testsOnlyOrdersBeforeTests // [])[] | "order " + .id + " deletes the tests of a cleanup run and does not come after the tests order " + .testsOrder + ": add " + .testsOrder + " to its dependsOn"),
+    ((.graph.ordersOwningFrozenPaths // [])[] | "order " + .id + " owns " + .path + ", a test that task " + .task + " froze and has not completed: remove-owned-file, or wait until " + .task + " is complete")
   ],
   unattended: [
     ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
@@ -1042,6 +1117,7 @@ jq -n \
   --argjson observeOrdersWithNoSurface "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" \
   --argjson confirmOrdersOnTaskWithTests "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" \
   --argjson confirmOrdersOwningTestFiles "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" \
+  --argjson testsOnlyRowsUnmatched "$TESTS_ONLY_ROWS_UNMATCHED_JSON" \
   --argjson textOnlyTestOrders "$TEXT_ONLY_TEST_ORDERS_JSON" \
   --argjson machineCriteriaOnTextOnlyOrders "$MACHINE_ON_TEXT_ONLY_JSON" \
   --argjson machineCriteriaOnLookOrRecordOrders "$MACHINE_ON_LOOK_OR_RECORD_JSON" \
@@ -1057,6 +1133,8 @@ jq -n \
   --argjson lightOrdersOwningPathScript "$LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON" \
   --argjson overlappingOwnedFiles "$OVERLAPPING_OWNED_FILES_JSON" \
   --argjson globbedOwnedFiles "$GLOBBED_OWNED_FILES_JSON" \
+  --argjson testsOnlyOrdersBeforeTests "$TESTS_ONLY_BEFORE_TESTS_JSON" \
+  --argjson ordersOwningFrozenPaths "$ORDERS_OWNING_FROZEN_PATHS_JSON" \
   --argjson unrecordedIds "$UNRECORDED_IDS_JSON" \
   --argjson fileIssueCount "$FILE_ISSUE_COUNT" \
   --argjson contentIssueCount "$CONTENT_ISSUE_COUNT" \
@@ -1086,6 +1164,7 @@ jq -n \
       observeOrdersWithNoSurface: $observeOrdersWithNoSurface,
       confirmOrdersOnTaskWithTests: $confirmOrdersOnTaskWithTests,
       confirmOrdersOwningTestFiles: $confirmOrdersOwningTestFiles,
+      testsOnlyRowsUnmatched: $testsOnlyRowsUnmatched,
       textOnlyTestOrders: $textOnlyTestOrders,
       machineCriteriaOnTextOnlyOrders: $machineCriteriaOnTextOnlyOrders,
       machineCriteriaOnLookOrRecordOrders: $machineCriteriaOnLookOrRecordOrders,
@@ -1103,6 +1182,8 @@ jq -n \
       lightOrdersOwningPathScript: $lightOrdersOwningPathScript,
       overlappingOwnedFiles: $overlappingOwnedFiles,
       globbedOwnedFiles: $globbedOwnedFiles,
+      testsOnlyOrdersBeforeTests: $testsOnlyOrdersBeforeTests,
+      ordersOwningFrozenPaths: $ordersOwningFrozenPaths,
       unrecordedIds: $unrecordedIds
     },
     fileIssueCount: $fileIssueCount,

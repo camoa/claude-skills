@@ -243,6 +243,10 @@ and pick the kind from that answer:
   done-when row at review. `add-owned-file` sets this value itself on such a task, on an order
   created with no `--proof` whose first file is code. The person may pick another kind with
   `update --proof`.
+- Changes to tests alone, from an approved test cleanup. A merge, a shrink or a rewrite is a
+  `tests` order that owns only test files, and it `reuses` the code its tests call. Whole files
+  to delete are one tests-only order: `confirm`, owning only files of the cleanup run the goal
+  names. Name each file in a done-when row, and make the order depend on every `tests` order.
 
 A machine-verified criterion does not mean `tests`. Tests prove one, and so do the gate lines and
 run lines. A text-only order proves none, so the check refuses it. A look or a record order's
@@ -714,9 +718,12 @@ never stops. The report holds:
   no done-when row;
 - every work order whose proof is `confirm` and that declares a test, or has no done-when row;
 - every work order whose proof is `confirm` and that owns a file a test glob matches. The globs
-  are the ones this project's earlier freezes recorded;
-- every work order whose proof is `confirm` on a task with tests, unless it is text only or run
-  lines prove every machine criterion it owns;
+  are the ones this project's earlier freezes recorded. A tests-only order is exempt;
+- every work order whose proof is `confirm` on a task with tests, unless it is text only, run
+  lines prove every machine criterion it owns, or it is a tests-only order;
+- every tests-only order with an owned file no done-when row names, or a row that names no owned
+  file, and every one that does not depend on each `tests` order of its task;
+- every work order that owns a test another task froze, while that task is not complete;
 - every work order whose proof is `tests` and whose every owned file is a document or
   configuration;
 - every machine-verified criterion owned by an order whose every owned file is a document or

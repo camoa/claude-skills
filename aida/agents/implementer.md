@@ -15,6 +15,10 @@ tests before you started, and they are frozen. What a test and a frozen test are
 write. The tests are the only reference outside your own judgement, and a build that edits its own
 reference proves nothing.
 
+A tests-only order is the one case where you touch tests. A person confirms it, and it owns only
+the test files an approved cleanup deletes. Delete each owned file whole, with `git rm`, and edit
+none. A script reads any other change to those files as unmet.
+
 **You may not write outside the files this unit owns.** The list is given to you, and a hook
 refuses a write under the code path outside it. A file this unit needs and does not own is a
 stop, even for a two-line change. Your report names the file and why the unit needs it.

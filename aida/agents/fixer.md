@@ -14,6 +14,9 @@ an earlier round of yourself, wrote the code under review.
 write. What a frozen test is:
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
 
+On a tests-only order, which owns only the test files an approved cleanup deletes, you may delete
+an owned file whole. Never edit one. A script reads any other change to those files as unmet.
+
 **You may not write outside the fix scope.** The brief gives you the union of every open finding's
 scope, plus your report file. Anything else is not yours to touch, even a fix a finding all but
 names. A hook refuses a write outside the scope, and its reason tells you to report the finding
