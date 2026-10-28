@@ -131,7 +131,7 @@ rebuild_case() (
   closed_with --row c1=met --row decision-wo1-departure=rebuild
   jq -r '.checks[] | select(.id == "decision-wo1-departure") | .verdict' "$TASK/review/review.json"
 )
-expect "a rebuild the order's own records list on the reviewed branch reads met (row 471)" "$(rebuild_case listed)" "met"
+expect "a commit the order's own fix record lists is no rebuild, so rebuild reads unmet (row 471)" "$(rebuild_case listed)" "unmet"
 expect "a later commit no record of the order lists is no rebuild (row 471)" "$(rebuild_case hand)" "unmet"
 
 stale_case() (

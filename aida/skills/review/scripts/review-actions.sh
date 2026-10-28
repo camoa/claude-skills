@@ -3233,40 +3233,9 @@ RW_ROWS
 $rows
 RW_ROWS
 )"
-  # A rebuild the reviewed branch already holds is done, so the departure reads met (gap row 471).
-  # The rebuild is the order's own work after its review record held the departure: a commit its
-  # build or fix records list, later than that record and inside the reviewed range, that changes a
-  # file the order owns. A person's commit or another order's never counts.
-  local rebuilt='{}' rb_unit rb_from rb_files rb_one rb_glob rb_hit rb_head rb_c
-  rb_head="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')"
-  for rb_unit in $(printf '%s' "$check_rows" | jq -r '.[] | select(.word == "rebuild" and (.id | endswith("-departure"))) | .id | ltrimstr("decision-") | rtrimstr("-departure")'); do
-    rb_from="$(jq -r '.reviewedAt // empty' "$IMPL_DIR/review-$rb_unit.json" 2>/dev/null)"
-    [ -n "$rb_from" ] || continue
-    rb_files="$(for rb_c in $(cat "$IMPL_DIR/build-$rb_unit.json" "$IMPL_DIR"/fix-"$rb_unit"-*.json 2>/dev/null | jq -r '(.commits // [])[]' 2>/dev/null); do
-        [ "$rb_c" != "$(git -C "$RV_CODEPATH" rev-parse "$rb_from" 2>/dev/null)" ] \
-          && git -C "$RV_CODEPATH" merge-base --is-ancestor "$rb_from" "$rb_c" 2>/dev/null \
-          && git -C "$RV_CODEPATH" merge-base --is-ancestor "$rb_c" "$rb_head" 2>/dev/null \
-          && git -C "$RV_CODEPATH" show --no-renames --name-only --format= "$rb_c" 2>/dev/null
-      done | sort -u)"
-    rb_hit=""
-    while IFS= read -r rb_one; do
-      [ -n "$rb_one" ] && [ -z "$rb_hit" ] || continue
-      for rb_glob in $(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg u "$rb_unit" '.workOrders[] | select(.id == $u) | (.ownedFiles // [])[]'); do
-        tf_path_matches_catalog_glob "$rb_one" "$rb_glob" && { rb_hit="$rb_one"; break; }
-      done
-    done <<RW_REBUILT
-$rb_files
-RW_REBUILT
-    [ -z "$rb_hit" ] || rebuilt="$(printf '%s' "$rebuilt" | jq -c --arg u "$rb_unit" --arg from "${rb_from:0:12}" --arg f "$rb_hit" '.[$u] = "a commit the order'"'"'s own records list changes \($f) after its record at \($from)"')"
-  done
-  updated="$(printf '%s' "$updated" | jq -c --argjson given "$check_rows" --argjson rebuilt "$rebuilt" '
+  updated="$(printf '%s' "$updated" | jq -c --argjson given "$check_rows" '
     .checks = [ .checks[] | . as $c | ([ $given[] | select(.id == $c.id) ][0]) as $g
-      | ($c.id | ltrimstr("decision-") | rtrimstr("-departure")) as $u
       | if $g == null then $c
-        elif $g.word == "rebuild" and ($c.id | endswith("-departure")) and $rebuilt[$u] != null then
-          $c | .verdict = "met" | .answeredBy = "person" | .answer = $g.word
-          | .detail = ((.detail | sub(" The person (ruled|deferred|kept|did not keep|accepted|rejected) .*$"; ""))
-                       + " The person did not keep the departure, and the rebuild is already done: " + $rebuilt[$u] + ".")
         elif ($c.id | startswith("decision-")) then
           $c | .verdict = $g.verdict | .answeredBy = "person" | .answer = $g.word
           | .detail = ((.detail | sub(" The person (ruled|deferred|kept|did not keep|accepted|rejected) .*$"; ""))
@@ -3275,7 +3244,7 @@ RW_REBUILT
                            "load-bearing": " The person ruled it load-bearing, so the check reads unmet. Fix it on the task branch, then finish and review again.",
                            "test-wrong": " The person ruled a frozen test wrong, so the check reads unmet. The implement skill'"'"'s reopen sends it to the order'"'"'s test author.",
                            "keep": " The person kept the departure.",
-                           "rebuild": " The person did not keep the departure, so the check reads unmet. Rebuild the order on the task branch, then finish and review again.",
+                           "rebuild": " The person did not keep the departure, so the check reads unmet. Redo the order in the implement skill, which builds it again and sets the departure aside, then finish and review again.",
                            "accept": " The person accepted the live text.",
                            "reject": (" The person rejected the live text, so the check reads unmet. "
                                       + (if $c.liveText == null then "scope remove retired the id, so redo the orders it bounds in the implement skill, then review again."

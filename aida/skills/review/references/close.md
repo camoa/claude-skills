@@ -36,14 +36,14 @@ The answer decides what happens next:
 - `test-wrong`: the check reads unmet, which is a warning. The implement skill's `reopen` sends
   the finding to the test author of the order that froze the test, the same way as a finding
   ruled `test-wrong`. Nobody corrects a frozen test by hand.
-- `load-bearing` or `rebuild`: the check reads unmet, which is a warning. The
-  order is closed, so the routes inside implement no longer reach it. The route is a fix
-  commit on the task branch, then finish again, per "Finish runs again after a failed review"
-  in `skills/implement/references/finish.md`. A load-bearing finding is fixed. A departure is
-  rebuilt to the design. That finish carries no decision the person already answered, so the
-  next review asks it no more.
-  A `rebuild` reads met when the reviewed branch already holds it: a commit the order's own build
-  or fix records list, after its review record, changes a file the order owns.
+- `rebuild`: the check reads unmet, which is a warning. The route is `redo` in the implement
+  skill. It builds the order again and moves its records aside, the departure with them, so the
+  next finish carries no departure. No record names any other commit as a rebuild.
+- `load-bearing`: the check reads unmet, which is a warning. The order is closed, so the routes
+  inside implement no longer reach it. The route is a fix commit on the task branch, then finish
+  again, per "Finish runs again after a failed review" in `skills/implement/references/finish.md`.
+  That finish carries no decision the person already answered, so the next review asks it no
+  more.
 
 `close` writes no verdict while a `decision-` check is unanswered. The record keeps every row,
 and a later `close` with the person present answers each one with no fresh pass. Autonomous,
