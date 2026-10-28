@@ -45,5 +45,8 @@ expect "AIDA_ALLOW_DANGEROUS=1 lets the push through" \
   "$(decision "$(out "$(bash_call "$PUSH" bypassPermissions)" AIDA_ALLOW_DANGEROUS=1)")" allow
 expect "a quoted heredoc to python names a git verb in backticks: no question" \
   "$(decision "$(out "$(bash_call "$(printf 'python3 - <<%sEOF%s\nprint("a \140git archive\140 export")\nEOF' "'" "'")" default)")")" allow
+expect "a push or a delete of home inside su -c or sudo -s is asked about" \
+  "$(decision "$(out "$(bash_call "$(printf "su -c '%s'" "$PUSH")" default)")")|$(decision "$(out "$(bash_call "$(printf "sudo -s '%s'" "$PUSH")" default)")")|$(decision "$(out "$(bash_call "$(printf "sudo -s 'rm -%s ~'" rf)" default)")")" \
+  "ask|ask|ask"
 
 finish

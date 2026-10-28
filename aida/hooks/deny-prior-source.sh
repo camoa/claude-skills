@@ -136,22 +136,41 @@ case $? in
 esac
 PROJECT_PATH="$DISPATCH_PROJECT"
 DISPATCH_FILE="$DISPATCH_RECORD"
-# With no record for this tree, the note is said only for a read in a task's worktree
-# (scripts/lib/paths.sh, in_task_worktree): the folder Read or Grep names, else the shell's folder.
+# The folders the read lands in: the one Read or Grep names, else the shell's folder and each
+# folder a literal cd or git -C moves it to. With no record for the shell's folder, each of them is
+# asked for one, so a role in the main checkout that reads after `cd <worktree>` meets its record
+# while two are open. With none, the note is said only for a read in a task's worktree
+# (scripts/lib/paths.sh, in_task_worktree).
 if [ -z "$DISPATCH_FILE" ]; then
-  if [ "$DISPATCH_OPEN_COUNT" -gt 0 ]; then
-    READ_DIR="$(jq -r '.tool_input.file_path // .tool_input.path // empty' <<<"$INPUT" 2>/dev/null)"
-    if [ -n "$READ_DIR" ]; then
-      READ_DIR="$(normalize_abs "$(resolve_against "$READ_DIR" "$CWD_CANON")")"
-      [ -d "$READ_DIR" ] || READ_DIR="$(dirname -- "$READ_DIR")"
-      READ_DIR="$(cd "$READ_DIR" 2>/dev/null && pwd -P || printf '%s' "$READ_DIR")"
-    else
-      READ_DIR="$CWD_CANON"
+  READ_DIRS="$(jq -r '.tool_input.file_path // .tool_input.path // empty' <<<"$INPUT" 2>/dev/null)"
+  if [ -n "$READ_DIRS" ]; then
+    READ_DIRS="$(normalize_abs "$(resolve_against "$READ_DIRS" "$CWD_CANON")")"
+    [ -d "$READ_DIRS" ] || READ_DIRS="$(dirname -- "$READ_DIRS")"
+  else
+    READ_DIRS="$CWD_CANON"
+    if [ "$TOOL" = Bash ]; then
+      while IFS= read -r op; do
+        [ -z "$op" ] || READ_DIRS="$READ_DIRS
+$(shell_dir_after "$CWD_CANON" cd "$op")"
+      done < <(cd_operands "$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)")
     fi
-    ! in_task_worktree "$PROJECT_PATH" "$READ_DIR" \
-      || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $READ_DIR, so this read was allowed without being checked"
   fi
-  echo '{}'; exit 0
+  while IFS= read -r READ_DIR; do
+    [ -n "$READ_DIR" ] || continue
+    READ_DIR="$(cd "$READ_DIR" 2>/dev/null && pwd -P || printf '%s' "$READ_DIR")"
+    if [ "$READ_DIR" != "$CWD_CANON" ] \
+       && dispatch_record_resolve "$READ_DIR" "$AGENT" "$(jq -r '.session_id // empty' <<<"$INPUT" 2>/dev/null)" \
+       && [ -n "$DISPATCH_RECORD" ]; then
+      PROJECT_PATH="$DISPATCH_PROJECT"; DISPATCH_FILE="$DISPATCH_RECORD"; break
+    fi
+    [ "$DISPATCH_OPEN_COUNT" -gt 0 ] && in_task_worktree "$PROJECT_PATH" "$READ_DIR" \
+      && NOTE_DIR="${NOTE_DIR:-$READ_DIR}"
+  done <<<"$READ_DIRS"
+  if [ -z "$DISPATCH_FILE" ]; then
+    [ -z "${NOTE_DIR:-}" ] \
+      || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $NOTE_DIR, so this read was allowed without being checked"
+    echo '{}'; exit 0
+  fi
 fi
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
   || not_enforced "$DISPATCH_FILE could not be read as JSON"

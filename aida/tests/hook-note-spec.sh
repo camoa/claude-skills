@@ -50,6 +50,8 @@ expect "a write after a cd into a task's worktree, from the main checkout, print
   "$(note_case deny-frozen-test-writes no "@/code" Bash "$(cmd "cd @/wt2 && echo x > a.php")")" "note naming wt2"
 expect "a command that writes nothing, in a task's worktree, prints nothing" \
   "$(note_case deny-frozen-test-writes no "@/wt2" Bash "$(cmd ls)")" silent
+expect "a run of a test script, in a task's worktree, prints nothing" \
+  "$(note_case deny-frozen-test-writes no "@/wt2" Bash "$(cmd "bash tests/a_test.sh")")" silent
 
 echo "--- the prior-source hook's note"
 expect "a read outside every task's worktree prints nothing" \

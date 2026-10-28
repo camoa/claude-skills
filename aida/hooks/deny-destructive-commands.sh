@@ -345,19 +345,28 @@ skip_wrappers() {
   done
 }
 
-# Sets SHELL_WORD to true when a segment of normalised text $1 starts a shell or `eval`. A quoted
-# string or a heredoc body on that line can then be commands, so it is read as commands. Each loop
-# in this file first drops, with one grep, the segments that cannot hit its rule. A bash loop over
-# every segment of a long command took most of a minute (live-run row 255).
+# Sets SHELL_WORD to true when a segment of normalised text $1 starts a shell or `eval`. `su`, and
+# `sudo` with `-s`, `-i`, `--shell` or `--login`, start one too. A quoted string or a heredoc body
+# on that line can then be commands, so it is read as commands. Each loop in this file first drops,
+# with one grep, the segments that cannot hit its rule. A bash loop over every segment of a long
+# command took most of a minute (live-run row 255).
 starts_shell() {
-  local seg
+  local seg k sudo
   SHELL_WORD=false
   while IFS= read -r seg; do
     set -f; read_words "$seg"; set +f
     skip_wrappers
-    case "${w[$I]:-}" in bash|sh|zsh|dash|ksh|source|.|eval) SHELL_WORD=true; return 0 ;; esac
+    sudo=false; k=0
+    while [ "$k" -lt "$I" ]; do
+      case "${w[$k]}" in
+        sudo) sudo=true ;;
+        --shell|--login|-[si]*|-[!-]*[si]*) [ "$sudo" = false ] || { SHELL_WORD=true; return 0; } ;;
+      esac
+      k=$((k + 1))
+    done
+    case "${w[$I]:-}" in bash|sh|zsh|dash|ksh|source|.|eval|su) SHELL_WORD=true; return 0 ;; esac
   done <<SEGMENTS
-$(printf '%s\n' "$1" | tr ';&|(){}`' '\n\n\n\n\n\n\n\n' | grep -E -e 'sh|source|eval|(^| )\.( |$)')
+$(printf '%s\n' "$1" | tr ';&|(){}`' '\n\n\n\n\n\n\n\n' | grep -E -e 'sh|su|source|eval|(^| )\.( |$)')
 SEGMENTS
 }
 
@@ -564,7 +573,7 @@ GHAPI
 
 # Checks command text $1: refuses a write to the guard, and asks about a rule's command.
 check_text() {
-  local text="$1" stripped n a
+  local text="$1" stripped n a q
   # BSNL comes from scripts/lib/command-text.sh. The default keeps the join when that file cannot
   # be read. It is set unquoted, because inside double quotes $'...' is not expanded.
   local bsnl=${BSNL:-$'\\\n'}
@@ -584,8 +593,12 @@ check_text() {
   # A joined option value, as in `git -C "a b" push`, can make a push that the plain text misses.
   a="$n"
   [ "$SHELL_WORD" = true ] || ! hit "$n" "(^|[^A-Za-z0-9_.-])git .*push" || a="$(normalise "$(quoted_words "$text" args)")"
+  # On a line that starts a shell, a quoted string may be a command, so the delete rule reads the
+  # plain text, as the push rule does.
+  q="$n"
+  [ "$SHELL_WORD" = true ] || q="$(normalise "$(quoted_words "$text")")"
   REASON=""
-  rules "$n" "$(normalise "$(quoted_words "$text")")" "$a" && ask "$REASON"
+  rules "$n" "$q" "$a" && ask "$REASON"
 }
 
 check_text "$CMD"

@@ -14,6 +14,7 @@
 #                              the bodies whose opening line matches the extended regex pattern
 #   read_words <line>          fills array w with the whitespace-separated words of the line
 #   split_segments <command>   prints the command with one segment per line, split outside quotes
+#   cd_operands <command>      prints each operand of a literal cd or git -C, one per line
 #
 # Public value:
 #
@@ -91,4 +92,12 @@ split_segments() {
     }
     print out
   }'
+}
+
+# Prints each operand of a literal cd or git -C in command $1, one per line, quotes dropped. An
+# operand holding a variable is left out. Both permission hooks read where a command moves the
+# shell from it: the write hook for a task record and its note, the read hook for its record.
+cd_operands() {
+  printf '%s\n' "${1//$'\\\n'/}" | grep -oE "(^|[;&|(]|[[:space:]])(cd|-C)[[:space:]]+[^[:space:];&|]+" \
+    | sed -E 's/^[;&|([:space:]]*(cd|-C)[[:space:]]+//' | tr -d "\"'" | grep -v '\$'
 }

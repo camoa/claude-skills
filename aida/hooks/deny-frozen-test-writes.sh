@@ -141,7 +141,8 @@ is_test_author() {
 # Rule four, added for gap row 293, runs before every other rule and needs no project. Five roles
 # each write one kind of record, and that role alone writes it, through the file tools. The Bash
 # door is not this rule's: a script's own write runs there. The acceptance verifier alone of the
-# five holds Bash, to run the product, so a write it makes through Bash is not held here.
+# five holds Bash, to run the product. Its Bash writes are held to its records by the Bash door
+# below (VERIFIER).
 #   disposition-confirmer  records/disposition-<order>.json
 #   design-critic          records/design-critique-<lens>.md
 #   distiller              records/<stage>-distill.json
@@ -174,14 +175,21 @@ deny_own_record() {
 # for the person's answer names.
 ANSWER_REFUSAL="person-answers.json holds the person's answers, and only person-answer.sh writes it, after Claude Code asks. Run that script, or let the step stand."
 TASK_REFUSAL="task.json holds the run mode a person's check reads, and only the task scripts write it. Change the run mode with task-actions.sh set-run-mode, after a person's answer."
-# Returns 0 when segment $1 holds a write signal: a redirect other than 2> or one to /dev/null, a
-# write verb, sed -i, awk -i, find -delete, git checkout or restore, or an interpreter word. The
-# answers are committed, so a checkout of an older copy would make a used answer usable again.
+# Returns 0 when segment $1 holds a write signal: write_signal's, or an interpreter word. An
+# interpreter can write the answer record, so the person rules count it. A run of a script is not
+# a write, so the record note below reads write_signal alone.
 answer_write_signal() {
+  write_signal "$1" && return 0
+  printf '%s' "$1" | grep -Eq '(^|[[:space:];&|(`/])(python[0-9.]*|node|perl|ruby|php|sh|bash)([[:space:];&|)`]|$)'
+}
+# Returns 0 when segment $1 holds a redirect other than 2> or one to /dev/null, a write verb,
+# sed -i, awk -i, find -delete, or git checkout or restore. The answers are committed, so a checkout
+# of an older copy would make a used answer usable again.
+write_signal() {
   local s
   s="$(printf '%s' "$1" | sed -E 's#[0-9]*>&[0-9-]+##g; s#(&|[0-9])?>>?[[:space:]]*/dev/null##g; s#2>>?[[:space:]]*[^[:space:]]*##g')"
   case "$s" in *'>'*) return 0 ;; esac
-  printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])(tee|cp|mv|install|dd|rm|sponge|truncate|ln|rsync|patch|ed|python[0-9.]*|node|perl|ruby|php|sh|bash)([[:space:];&|)`]|$)' && return 0
+  printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])(tee|cp|mv|install|dd|rm|sponge|truncate|ln|rsync|patch|ed)([[:space:];&|)`]|$)' && return 0
   printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+(checkout|restore)([[:space:]]|$)' && return 0
   printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])g?awk[[:space:]].*(-i[[:space:]]*inplace|--inplace)' && return 0
   printf '%s' "$s" | grep -Eq '(^|[[:space:]])-delete([[:space:]]|$)' && return 0
@@ -255,20 +263,18 @@ is_task_record() {
   dir="$(cd "${p%/*}" 2>/dev/null && pwd -P)" || dir="${p%/*}"
   [ "$(basename "$(dirname "$dir")")" = tasks ] && [ -f "$(dirname "$(dirname "$dir")")/project.json" ]
 }
-# Prints each operand of a literal cd or git -C in command $1, one per line, quotes dropped. An
-# operand holding a variable is left out.
-cd_operands() {
-  printf '%s\n' "${1//$'\\\n'/}" | grep -oE "(^|[;&|(]|[[:space:]])(cd|-C)[[:space:]]+[^[:space:];&|]+" \
-    | sed -E 's/^[;&|([:space:]]*(cd|-C)[[:space:]]+//' | tr -d "\"'" | grep -v '\$'
-}
 # True when ROLE_CMD, heredoc bodies included, names a task's own copy of record $1. A word holding a
 # variable counts when it ends in /tasks/<id>/$1, and for person-answers.json, a name only AIDA
 # uses, whatever it holds; the bare name counts for that file too. Any other word counts when
 # is_task_record accepts it, read as it stands and, when relative, from each folder the command
-# names with a literal cd or git -C. So `cd <task folder> && echo {} > task.json` counts.
+# names with a literal cd or git -C (cd_operands, scripts/lib/command-text.sh). So
+# `cd <task folder> && echo {} > task.json` counts. A command library that cannot be read counts
+# as a name, so deny_named_segment refuses the command.
 names_task_record() {
   local w d name_re bases
   case "$ROLE_CMD" in *"$1"*) ;; *) return 1 ;; esac
+  # shellcheck source=/dev/null
+  source "$PLUGIN_ROOT/scripts/lib/command-text.sh" 2>/dev/null || return 0
   name_re="$(printf '%s' "$1" | sed 's/\./\\./g')"
   bases="$(cd_operands "$ROLE_CMD")"
   while IFS= read -r w; do
@@ -398,44 +404,53 @@ CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 # projects, and the main session is not held to rule one (gap row 358).
 CWD_CANON="$(cd "$CWD" 2>/dev/null && pwd -P)"
 [ -n "$CWD_CANON" ] || CWD_CANON="$(normalize_abs "$CWD")"
-dispatch_record_resolve "$CWD_CANON" "$AGENT" "$(jq -r '.session_id // empty' <<<"$INPUT" 2>/dev/null)"
-case $? in
-  1) echo '{}'; exit 0 ;;
-  2) not_enforced "the matched project row carries no path" ;;
-esac
-PROJECT_PATH="$DISPATCH_PROJECT"
-DISPATCH_FILE="$DISPATCH_RECORD"
-MAIN_SESSION=false
-[ -n "$AGENT_ID" ] || MAIN_SESSION=true
-# What the record path says when no record answers for this tree. It is said only for a write in a
-# task's worktree (scripts/lib/paths.sh, in_task_worktree). A file tool writes in its target's
-# folder. A command that holds a write signal writes in the shell's folder, or in a folder a literal
-# cd or git -C names. The note names the folder. The main session goes on to rule one, and the note
-# is said only when nothing refused the write and the payload names an agent type.
-RECORD_NOTE=""
-if [ -z "$DISPATCH_FILE" ]; then
-  write_dirs=""
-  if [ "$DISPATCH_OPEN_COUNT" -eq 0 ]; then :
-  elif [ "$TOOL" != Bash ]; then
-    [ -z "${RECORD_TARGET:-}" ] \
-      || write_dirs="$(dirname -- "$(normalize_abs "$(resolve_against "$RECORD_TARGET" "$CWD_CANON")")")"
-  elif answer_write_signal "$ROLE_CMD"; then
-    write_dirs="$CWD_CANON"
-    while IFS= read -r op; do
-      [ -z "$op" ] || write_dirs="$write_dirs
+# The acceptance verifier holds no dispatch record. Its Bash writes are held to its own records
+# below, through the write targets the frozen-test rule reads (owner_of_arg), so it skips the
+# record lookup. Its file-tool writes are held by rule four above.
+VERIFIER=false
+[ "$TOOL" = Bash ] && [ -n "$AGENT_ID" ] && [ "${AGENT##*:}" = acceptance-verifier ] && VERIFIER=true
+if [ "$VERIFIER" = true ]; then
+  PROJECT_PATH=""; DISPATCH_FILE=""; MAIN_SESSION=false; RECORD_NOTE=""
+else
+  dispatch_record_resolve "$CWD_CANON" "$AGENT" "$(jq -r '.session_id // empty' <<<"$INPUT" 2>/dev/null)"
+  case $? in
+    1) echo '{}'; exit 0 ;;
+    2) not_enforced "the matched project row carries no path" ;;
+  esac
+  PROJECT_PATH="$DISPATCH_PROJECT"
+  DISPATCH_FILE="$DISPATCH_RECORD"
+  MAIN_SESSION=false
+  [ -n "$AGENT_ID" ] || MAIN_SESSION=true
+  # What the record path says when no record answers for this tree. It is said only for a write in a
+  # task's worktree (scripts/lib/paths.sh, in_task_worktree). A file tool writes in its target's
+  # folder. A command that holds a write signal writes in the shell's folder, or in a folder a literal
+  # cd or git -C names. The note names the folder. The main session goes on to rule one, and the note
+  # is said only when nothing refused the write and the payload names an agent type.
+  RECORD_NOTE=""
+  if [ -z "$DISPATCH_FILE" ]; then
+    write_dirs=""
+    if [ "$DISPATCH_OPEN_COUNT" -eq 0 ]; then :
+    elif [ "$TOOL" != Bash ]; then
+      [ -z "${RECORD_TARGET:-}" ] \
+        || write_dirs="$(dirname -- "$(normalize_abs "$(resolve_against "$RECORD_TARGET" "$CWD_CANON")")")"
+    elif write_signal "$ROLE_CMD"; then
+      write_dirs="$CWD_CANON"
+      while IFS= read -r op; do
+        [ -z "$op" ] || write_dirs="$write_dirs
 $(shell_dir_after "$CWD_CANON" cd "$op")"
-    done < <(cd_operands "$ROLE_CMD")
-  fi
-  while IFS= read -r d; do
-    [ -n "$d" ] || continue
-    d="$(cd "$d" 2>/dev/null && pwd -P || printf '%s' "$d")"
-    in_task_worktree "$PROJECT_PATH" "$d" || continue
-    RECORD_NOTE="$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $d, so this write was allowed without being checked"
-    break
-  done <<<"$write_dirs"
-  if [ "$MAIN_SESSION" = false ] || [ -z "$PROJECT_PATH" ]; then
-    [ -z "$RECORD_NOTE" ] || not_enforced "$RECORD_NOTE"
-    echo '{}'; exit 0
+      done < <(cd_operands "$ROLE_CMD")
+    fi
+    while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      d="$(cd "$d" 2>/dev/null && pwd -P || printf '%s' "$d")"
+      in_task_worktree "$PROJECT_PATH" "$d" || continue
+      RECORD_NOTE="$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $d, so this write was allowed without being checked"
+      break
+    done <<<"$write_dirs"
+    if [ "$MAIN_SESSION" = false ] || [ -z "$PROJECT_PATH" ]; then
+      [ -z "$RECORD_NOTE" ] || not_enforced "$RECORD_NOTE"
+      echo '{}'; exit 0
+    fi
   fi
 fi
 # The allow for a write no rule refused.
@@ -552,7 +567,7 @@ $(jq -r '.ownedFiles[]? // empty' "$DISPATCH_FILE" 2>/dev/null)
 OWNED_EOF
 fi
 
-if [ -z "$FROZEN" ] && [ -z "$OWNED" ] && [ -z "$MAIN_CANON" ]; then
+if [ -z "$FROZEN" ] && [ -z "$OWNED" ] && [ -z "$MAIN_CANON" ] && [ "$VERIFIER" = false ]; then
   [ -z "$DISPATCH_FILE" ] || not_enforced "no unit has frozen tests yet for this task"
   allow_end
 fi
@@ -621,6 +636,13 @@ OWNER_UNIT=""
 OWNER_ABS=""
 owner_of_arg() {
   local arg="$1" cand u
+  # The acceptance verifier's own test: a target outside its records is a hit. /dev is not a file.
+  if [ "$VERIFIER" = true ]; then
+    cand="$(normalize_abs "$(resolve_against "$arg" "$RUN_DIR")")"
+    case "$cand" in /dev/*) return 1 ;; esac
+    [ "$(own_record_owner "$cand")" != acceptance-verifier ] || return 1
+    OWNER_UNIT=""; OWNER_ABS="$cand"; return 0
+  fi
   cand="$(normalize_abs "$(resolve_against "$arg" "$CODE_CANON")")"
   if u="$(owner_of "$cand")"; then
     OWNER_UNIT="$u"; OWNER_ABS="$cand"; return 0
@@ -974,7 +996,7 @@ sed
           # and MAIN_HIT are put back to what they were, and rule one keeps its own check. The
           # operand is where later relative targets resolve.
           stray_before="$STRAY"; main_before="$MAIN_HIT"
-          if owner_of_arg "${w[1]:-}" && printf '%s' "$CMD" | grep -q '>'; then
+          if [ "$VERIFIER" = false ] && owner_of_arg "${w[1]:-}" && printf '%s' "$CMD" | grep -q '>'; then
             take_hit "${w[1]}"
           fi
           STRAY="$stray_before"; MAIN_HIT="$main_before"
@@ -990,6 +1012,8 @@ sed
       esac
     done < <(split_segments "$(strip_heredocs "$CMD")")
     if [ -n "$HIT" ]; then
+      [ "$VERIFIER" = false ] \
+        || deny "$OWNER_ABS through Bash: the acceptance verifier writes only records/evidence.json and files under review/evidence/, as with the file tools."
       [ "$MAIN_SESSION" = false ] || deny_main "$HIT through Bash" "$HIT_OWNER"
       deny "$HIT through Bash: $(frozen_reason "$HIT_OWNER")"
     fi

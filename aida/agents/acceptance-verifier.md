@@ -95,8 +95,8 @@ propose, in the note of the row it concerns.
 ## What you cannot do
 
 You cannot write outside your evidence file and `review/evidence/`. A hook refuses any other
-write through the file tools. You cannot write code, a test, a surface or a baseline. You cannot
-decide a criterion, start a fixer, or ask for a second pass.
+write, through the file tools and through the plain shell writes. You cannot write code, a test,
+a surface or a baseline. You cannot decide a criterion, start a fixer, or ask for a second pass.
 
 Stop and say so, rather than guessing, when the snapshot holds no criterion or the finish record
 is missing.
