@@ -268,8 +268,7 @@ tc_indent() {
 # The state the two recipe parsers last read: undeclared, unparseable or ok. A global rather than a
 # printed value, because a `$(...)` capture runs the parser in a subshell, and the refusal each one
 # makes on a row it cannot record would exit that subshell alone and let the caller carry on with a
-# tool recorded undeclared. That is the same rule br_seven_checks states, and both parsers were
-# written the wrong way round.
+# tool recorded undeclared. Both parsers were written the wrong way round once.
 RECIPE_STATE=""
 
 # Cuts the YAML block a recipe writes under one H2 into the file $4, and prints the section own
@@ -609,8 +608,7 @@ cc_unit_declaration_globs() {
 #
 # A global rather than a printed value, because a `$(...)` capture runs this in a subshell and a
 # refusal inside it would exit that subshell alone, leaving the caller to carry on with an empty
-# entry. That is the same rule br_seven_checks states above, and this function was written the
-# wrong way round once already.
+# entry. This function was written the wrong way round once already.
 CR_PAIR=""
 cr_recipe_pair() {
   local who="$1" flag="$2" value="$3" fw rp
@@ -686,7 +684,7 @@ cr_take_flag() {
 
 # Resolves the recipes into the commands the checks run. The caller sets these globals first,
 # because a `$(...)` capture would run this in a subshell and a refusal inside it would exit that
-# subshell alone, which is the rule br_seven_checks already states.
+# subshell alone.
 #   CR_WHO              the action's own name, for a message
 #   CR_TEST_RECIPES     newline list of <framework><TAB><path>, the `## Test commands` source
 #   CR_CHECK_RECIPES    the same, for `## Check commands`
@@ -1289,8 +1287,8 @@ br_line_keys() {
 # The lines of the run at $2 whose key is absent from the run at $1: the first 20, in their own
 # words and order, written to $3, and the count of all of them in BR_NEW_COUNT. A line whose key
 # comes out empty is never new. A global for the count and a file for the lines, never a printed
-# value, for the reason br_seven_checks states: a refusal inside a `$(...)` exits that subshell
-# alone. Moved from implement-actions.sh; $CR_WHO names the caller, the way cr_resolve does.
+# value, because a refusal inside a `$(...)` exits that subshell alone. Moved from
+# implement-actions.sh; $CR_WHO names the caller, the way cr_resolve does.
 BR_NEW_COUNT=0
 br_lines_not_in() {
   local base="$1" now="$2" out="$3" base_keys now_keys nums picks
@@ -1460,6 +1458,55 @@ rw_baseline_path_for() {
     static-analysis)  printf '["staticAnalysis"]' ;;
     security)         printf '["security"]' ;;
     *) jq -cn --arg id "$1" '["toolRows", $id]' ;;
+  esac
+}
+
+# The verdict of one tool row that ran, for the freeze's coding-standards run and for review's
+# tool rows alike. $1 the row id, $2 its exit status, $3 its `signal`, $4 the bytes it printed on
+# standard output, $5 its output file, $6 the baseline file, $7 the paths it read, a JSON array,
+# $8 the code repository, $9 whose change it judged, such as "this task".
+#
+# Exit 0 is met, unless the row's signal is empty-stdout and it printed: gofmt -l cannot fail by
+# exit status. A failure is compared against the same tool's baseline, because a finding already
+# there at the commit the build started from is not this change's. A baseline that was met makes
+# it unmet. One that was unmet has its output subtracted line by line (br_subtract_baseline). One
+# that was unknown or undeclared reads unknown, except over files absent at its commit
+# (br_new_files_only). Sets BR_SUB_VERDICT, BR_SUB_DETAIL, BR_SUB_NEW and BR_SUB_COUNT.
+# shellcheck disable=SC2034 # read by the sourcing script
+br_judge_tool_run() {
+  local row_id="$1" rc="$2" signal="$3" stdout_len="$4" out="$5" baseline_file="$6" paths="$7" repo="$8" whose="$9"
+  local how field baseline_doc="" was="" kept=""
+  BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
+  if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$stdout_len" -gt 0 ]; then
+    how="exited 0 and printed on standard output, which its row's own signal empty-stdout makes a finding"
+  elif [ "$rc" != "0" ]; then
+    how="exited $rc"
+  else
+    BR_SUB_VERDICT="met"
+    BR_SUB_DETAIL="the $row_id command exited 0 over the files $whose changed."
+    return 0
+  fi
+  field="$(rw_baseline_path_for "$row_id")"
+  [ ! -f "$baseline_file" ] || baseline_doc="$(jq -c '.' "$baseline_file" 2>/dev/null)"
+  if [ -n "$baseline_doc" ]; then
+    was="$(printf '%s' "$baseline_doc" | jq -r --argjson f "$field" 'getpath($f).verdict // ""')"
+    kept="$(printf '%s' "$baseline_doc" | jq -r --argjson f "$field" 'getpath($f).outputFile // ""')"
+    [ -z "$kept" ] || kept="$(dirname -- "$baseline_file")/$kept"
+  fi
+  case "$was" in
+    met)
+      BR_SUB_VERDICT="unmet"
+      BR_SUB_DETAIL="the $row_id command $how, and the baseline recorded this tool met at the commit the build started from; $whose introduced the finding." ;;
+    unmet)
+      br_subtract_baseline "$kept" "$out" "$row_id" "$how" ;;
+    unknown|undeclared)
+      br_new_files_only "$row_id" "$how" "$was" "$repo" \
+        "$(printf '%s' "$baseline_doc" | jq -r '.commit // ""')" "$paths" "$out" "$rc" ;;
+    *)
+      # The file could not be read, or it holds no result for this row, which is a baseline taken
+      # before toolRows existed. The detail tells the two apart.
+      BR_SUB_VERDICT="unknown"
+      BR_SUB_DETAIL="the $row_id command $how, and $([ -n "$baseline_doc" ] && printf 'the baseline holds no result for this row' || printf '%s could not be read for the baseline verdict of this tool' "$baseline_file"), so this cannot tell a finding $whose introduced from one that predates it." ;;
   esac
 }
 
@@ -2305,7 +2352,7 @@ rv_is_finding_id() {
 # It sets a global rather than printing, and every caller calls it as a plain statement. A function
 # that refuses must never be called with `$(...)`: a command substitution runs in a subshell, so the
 # refusal would exit that subshell alone and the caller would carry on with an empty list. That is
-# the same rule br_seven_checks states above, and this function was written the wrong way once.
+# the rule, and this function was written the wrong way once.
 RV_FINDINGS_ARRAY=""
 # Refuses a hand-written JSON file that names one key twice. jq resolves a duplicate to the last
 # occurrence and says nothing, so a findings file carrying `findings` twice silently discards the

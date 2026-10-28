@@ -1064,13 +1064,13 @@ do_set_run_mode() {
 # ------------------------------------------------------------------------------------------------
 # set-budget: the ceiling on one implementation run (task-schema.json, budget). Written only when
 # a person sets one. Nothing here asks. Either number alone is a ceiling. A number this call does
-# not name keeps the value it had. A person raising the dispatches of a halted run must not lose
+# not name keeps the value it had. A person raising the dispatches of a stopped run must not lose
 # the minutes they set earlier.
 # ------------------------------------------------------------------------------------------------
 
 # Refuses the value $2 of the flag $1 unless it is a whole number of 1 or more. scripts/lib/
 # schema-check.sh states that it does not read `minimum`, so a 0 written here passes check-task.sh
-# and then halts the first dispatch. This is the only guard. Called as a plain statement: die3 in a
+# and then stops the first dispatch. This is the only guard. Called as a plain statement: die3 in a
 # command substitution would end the subshell alone.
 budget_number_or_die() {
   case "$2" in

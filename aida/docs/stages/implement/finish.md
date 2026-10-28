@@ -31,9 +31,8 @@ no suite, so this is its first run. When the suite fails or cannot be decided, f
 warning, records the verdict, and goes on. The warning names the file that holds the whole output,
 `implementation/finished-suite.txt`. Review reads that result and lists the warning.
 
-**Runner warnings and no failed test** read `warned`, and are a warning too. You may accept them:
-run finish with `--accept-warnings <your reason>`, with your answer on record, and review reports
-the suite as your answer. The recipe must name which output lines are warnings. When it does not,
+**Runner warnings and no failed test** read `warned`, and are a warning too, which review lists.
+The recipe must name which output lines are warnings. When it does not,
 the same failure reads `unknown` or `unmet`, and the detail names the missing key. Add it to your
 project's copy of the recipe. When the recipe is a catalog copy, copy it into your recipe folder
 first, under `process-recipes/<framework>/test-execution.md`. Declare the folder with the project

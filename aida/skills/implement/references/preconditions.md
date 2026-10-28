@@ -265,9 +265,9 @@ a warning unless the baseline subtraction clears it. The summary's `baselineRed:
 framework whose suite read unmet or unknown. When that line is not `none`, put it to the person
 before the first order. Interactive, open with: "The suite already fails before this build
 starts. Finish will warn on that failure at the end unless it is decided now." When the red is
-runner warnings and no failed test, the person may accept them at `finish`
-(`references/finish.md`). A failed test is repaired outside this task. In an unattended run the
-build goes on, and a person meets the warning at review.
+runner warnings and no failed test, `finish` records it as a warning (`references/finish.md`).
+A failed test is repaired outside this task. In an unattended run the build goes on, and a
+person meets the warning at review.
 
 What each run printed is kept whole, one file per run under `implementation/baseline-output/`,
 and the baseline names each file. `finish` and review subtract those lines from a later run, so a

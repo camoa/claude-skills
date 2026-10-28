@@ -499,7 +499,7 @@ implied_proof_line() {
       *,*) word="criteria" ;;
       *)   word="criterion" ;;
     esac
-    echo "impliedProof: any kind, because $2 owns the machine-verified $word $machine, which tests, gate lines, a look or run lines prove. What $2 produces decides"
+    echo "impliedProof: any kind, because $2 owns the machine-verified $word $machine, which tests, gate lines or run lines prove. What $2 produces decides"
   else
     echo "impliedProof: not tests, because no criterion $2 owns is machine-verified"
   fi
@@ -526,6 +526,7 @@ open_summary_of() {
           + (if .machineOwned == 0 then "which gets tests even with no machine criterion" else "and run lines do not prove every machine criterion it owns" end) + ": update --proof tests"),
         ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests, so a test would only read the text back: update --proof confirm, or record for a document under the project folder"),
         ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope, or give it to an order that builds code"),
+        ((.coverage.machineCriteriaOnLookOrRecordOrders // [])[] | "order " + .id + " is " + prover(.proof) + " and owns the machine-verified criterion " + .criterionId + ", which neither a look nor a reading judges: make it person-verified in scope, add a run line that proves it, or give it to an order that builds code"),
         ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),

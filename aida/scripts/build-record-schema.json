@@ -42,7 +42,7 @@
     "commit": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The code repository's HEAD at the moment `build-record` ran, read fresh with `git rev-parse HEAD`, never assumed. Together with `attempt`, this is what exit 45 compares a new call against to refuse recording the same attempt twice."
+      "description": "The code repository's HEAD at the moment `build-record` ran, read fresh with `git rev-parse HEAD`, never assumed."
     },
     "commits": {
       "type": "array",

@@ -243,8 +243,10 @@ and pick the kind from that answer:
   created with no `--proof` whose first file is code. The person may pick another kind with
   `update --proof`.
 
-A machine-verified criterion does not mean `tests`. Tests prove one, and so do the gate lines, the
-look, and run lines on a `confirm` order. A text-only order proves none, so the check refuses it.
+A machine-verified criterion does not mean `tests`. Tests prove one, and so do the gate lines and
+run lines. A text-only order proves none, so the check refuses it. A look or a record order's
+reading proves none either, so the check refuses one an `observe` or `record` order owns, unless a
+run line proves it.
 Code with logic gets tests even when it owns no machine-verified criterion.
 `create` and `update` print `impliedProof:` beside the proof the order declares. It says
 `record` when every owned file lies under the project folder. It says `confirm` on a task with no
@@ -716,6 +718,8 @@ zero it adds one `open:` line naming what is open. The report holds:
   configuration;
 - every machine-verified criterion owned by an order whose every owned file is a document or
   configuration, a `gate` order excepted;
+- every machine-verified criterion owned by an `observe` or `record` order, unless a run line
+  proves it;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file that one of them does not mark `--shared`;
@@ -818,6 +822,8 @@ problem. Read the report file when the line is not enough, and fix the specific 
   - a machine-verified criterion on an order that owns only documents or configuration is a
     person's. Change it to `person` with scope's `update --verified-by person`, or give it to an
     order that builds code;
+  - a machine-verified criterion on an `observe` or `record` order is a person's too. Change it
+    the same way, add a run line that proves it, or give it to an order that builds code;
   - a `confirm` order that owns a test file needs `remove-owned-file` for it. Nothing runs that
     file, and the freeze never sees it. When the task does have tests, a person answers yes in
     scope instead, and the order takes `update --proof tests` and its tests;

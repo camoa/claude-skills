@@ -10,7 +10,7 @@ goes on.
   reason, a site action, a test confirmation, a tool install, or a project write such as the task
   rule.
 - **Exit 68.** A person's judgement in the build: the three ways out of a stop, `go-on`, `redo`
-  and `drop`, and `start --leftovers keep` or `--accept-warnings`. These
+  and `drop`, and `start --leftovers keep`. These
   refuse in every run mode until your answer is on record.
 - **Exit 55 or 100.** A ruling on a finding, or an `--allow` for a fix round, in every run mode.
 - **Exit 70 from `set-run-mode`.** A change of run mode needs your answer, in every run mode.

@@ -37,6 +37,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - a work order whose proof is tests is not text only, and no text-only order owns a criterion
 #     whose verifiedBy is machine. A document or configuration holds no logic, so a test of it only
 #     reads the text back, and nothing tests the criterion: it is a person's (gap row 461);
+#   - no order whose proof is observe or record owns a criterion whose verifiedBy is machine,
+#     unless a run line proves it. The look judges a page and the reviewer reads a document, and
+#     neither judges a machine criterion, so it is a person's;
 #   - a work order whose proof is tests owns at least one criterion whose verifiedBy is machine,
 #     when it owns any criterion at all. The rule above asks whether an order owning a machine
 #     criterion declares a test. This asks the same question the other way, so the default proof is
@@ -135,7 +138,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      that declares a test, names no surface or has no done-when row, an order whose proof is
 #      confirm and that declares a test, has no done-when row, owns a test file, or is code on a
 #      task with tests whose run lines do not prove every machine criterion it owns, a text-only
-#      order whose proof is tests, a machine criterion a text-only order owns, an order that owns nothing
+#      order whose proof is tests, a machine criterion a text-only order owns, a machine criterion
+#      an observe or record order owns with no run line proving it, an order that owns nothing
 #      and reaches no owner, an order of a light task that does not come after wo1, a
 #      dependency cycle, two orders sharing
 #      a declared owned file, or an id named anywhere that resolves to nothing. Each is named in
@@ -192,6 +196,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 confirmOrdersOwningTestFiles: [ {id, path, glob} ],   path is the owned test file
 #                 textOnlyTestOrders: [ {id, path} ],
 #                 machineCriteriaOnTextOnlyOrders: [ {id, path, criterionId} ],
+#                 machineCriteriaOnLookOrRecordOrders: [ {id, path, criterionId, proof} ],
 #                 testOrdersOwningNoMachineCriterion: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
 #                 unknownNonGoalIds: [ {path, id} ] },
@@ -591,6 +596,7 @@ CONFIRM_ORDERS_OWNING_TEST_FILES_JSON='[]'
 CONFIRM_TEST_GLOBS=""
 TEXT_ONLY_TEST_ORDERS_JSON='[]'
 MACHINE_ON_TEXT_ONLY_JSON='[]'
+MACHINE_ON_LOOK_OR_RECORD_JSON='[]'
 TEST_ORDERS_OWNING_NO_MACHINE_JSON='[]'
 CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
@@ -666,6 +672,16 @@ else
     | [ $orders[] | . as $o | select($o.textOnly)
         | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
         | {id: $o.id, path: $o.path, criterionId: $cid} ]
+  ')"
+  # The look judges what a page shows, and an observe order's reviewer reads the page. A record
+  # order has no checkpoint, and its reviewer reads a document. Neither judges a machine criterion,
+  # so one such an order owns is a person's, unless a run line proves it.
+  MACHINE_ON_LOOK_OR_RECORD_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
+    ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
+    | [ $orders[] | . as $o | select($o.slot == "observed" or $o.slot == "done-when")
+        | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
+        | select(($o.criteriaByRun | index($cid)) == null)
+        | {id: $o.id, path: $o.path, criterionId: $cid, proof: $o.proof} ]
   ')"
   GATE_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "configuration-gate") | select(.testsCount > 0) | {id: .id, path: .path} ]
@@ -794,7 +810,7 @@ CONFIRM_GLOBS
   SERVES_NOTHING_COUNT="$(printf '%s' "$ORDERS_SERVING_NOTHING_JSON" | jq 'length')"
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
   GATE_WITH_TESTS_COUNT="$(printf '%s' "$GATE_ORDERS_DECLARING_TESTS_JSON" | jq 'length')"
-  TEXT_ONLY_COUNT="$(jq -n --argjson a "$TEXT_ONLY_TEST_ORDERS_JSON" --argjson b "$MACHINE_ON_TEXT_ONLY_JSON" '($a | length) + ($b | length)')"
+  TEXT_ONLY_COUNT="$(jq -n --argjson a "$TEXT_ONLY_TEST_ORDERS_JSON" --argjson b "$MACHINE_ON_TEXT_ONLY_JSON" --argjson c "$MACHINE_ON_LOOK_OR_RECORD_JSON" '($a | length) + ($b | length) + ($c | length)')"
   RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" --argjson e "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" --argjson f "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length) + ($e | length) + ($f | length)')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
   UNKNOWN_NONGOAL_COUNT="$(printf '%s' "$UNKNOWN_NONGOAL_IDS_JSON" | jq 'length')"
@@ -1007,6 +1023,7 @@ jq -n \
   --argjson confirmOrdersOwningTestFiles "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" \
   --argjson textOnlyTestOrders "$TEXT_ONLY_TEST_ORDERS_JSON" \
   --argjson machineCriteriaOnTextOnlyOrders "$MACHINE_ON_TEXT_ONLY_JSON" \
+  --argjson machineCriteriaOnLookOrRecordOrders "$MACHINE_ON_LOOK_OR_RECORD_JSON" \
   --argjson testOrdersOwningNoMachineCriterion "$TEST_ORDERS_OWNING_NO_MACHINE_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
   --argjson unknownNonGoalIds "$UNKNOWN_NONGOAL_IDS_JSON" \
@@ -1050,6 +1067,7 @@ jq -n \
       confirmOrdersOwningTestFiles: $confirmOrdersOwningTestFiles,
       textOnlyTestOrders: $textOnlyTestOrders,
       machineCriteriaOnTextOnlyOrders: $machineCriteriaOnTextOnlyOrders,
+      machineCriteriaOnLookOrRecordOrders: $machineCriteriaOnLookOrRecordOrders,
       testOrdersOwningNoMachineCriterion: $testOrdersOwningNoMachineCriterion,
       unknownCriteriaIds: $unknownCriteriaIds,
       unknownNonGoalIds: $unknownNonGoalIds

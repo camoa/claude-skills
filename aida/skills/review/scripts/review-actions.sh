@@ -1240,15 +1240,14 @@ rw_run_mutation() {
 # flag: a caller retyping a row drops a key, and a dropped `signal` turns a tool that cannot fail by
 # exit status into a check that always passes. A failure is compared against the baseline step two
 # took, because a finding that predates this build is not this task's, and blocking on it blocks
-# every task forever. A baseline that was unmet has its kept output subtracted line by line
-# (br_subtract_baseline, the build's own), so only a finding absent then reads as this task's.
+# every task forever. br_judge_tool_run decides it, the same rule the freeze's coding-standards run
+# applies.
 #
 # $2 `frozen` runs the row over the frozen tests alone and prints nothing when the change touched
 # none. The caller turns that row into a follow-up finding, never a check, so it blocks nothing.
 rw_tool_row_check() {
   local row="$1" only_frozen="${2:-}" row_id framework argv signal exts scoped scoped_count has_paths
-  local frozen left_out left_note rc failed how
-  local verdict detail field baseline_doc baseline_verdict baseline_output new_json new_count
+  local frozen left_out left_note rc verdict detail new_json new_count
   row_id="$(printf '%s' "$row" | jq -r '.id')"
   framework="$(printf '%s' "$row" | jq -r '.framework // ""')"
   verdict=""; detail=""; rc=""; new_json="[]"; new_count=0
@@ -1268,7 +1267,7 @@ rw_tool_row_check() {
   has_paths=false
   br_argv_takes_paths "$argv" && has_paths=true
   # The frozen tests are the reference this stage judges against, and no role after the freeze may
-  # write them. So they come out first, as they do from the build's tool rows (br_tool_check). A
+  # write them. So they come out first. A
   # static analyser reads a test's guard as always true once the guarded code exists, and nobody
   # could repair that (gap row 270). The tests step ran the coding-standards row over them.
   frozen="$(br_frozen_test_paths "$RW_TEST_ROWS")"
@@ -1291,8 +1290,7 @@ rw_tool_row_check() {
 
   if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ] && [ "$RW_OWNS_IN_CODE" = "no" ]; then
     # No order owns a file in the code repository, so no file this tool reads was ever going to be
-    # here. The build stage answers the same question the same way (br_tool_check), and the two
-    # stages answering it in opposite words failed a task that legitimately touched no code
+    # here. Undeclared, never unknown: unknown failed a task that legitimately touched no code
     # (live-run row 167).
     rw_check_row "$row_id" "undeclared" "no order in this task owns a file in the code repository, so the $row_id command would read no file this task wrote, and the row does not apply to it." "" "" "$framework"
     return 0
@@ -1318,48 +1316,11 @@ rw_tool_row_check() {
   verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
   if [ -z "$verdict" ]; then
     rc="$RW_RUN_RC"
-    failed=false; how=""
-    if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$RW_RUN_STDOUT_LEN" -gt 0 ]; then
-      failed=true
-      how="exited 0 and printed on standard output, which its row's own signal empty-stdout makes a finding"
-    elif [ "$rc" != "0" ]; then
-      failed=true
-      how="exited $rc"
-    fi
-    if [ "$failed" = "false" ]; then
-      verdict="met"
-      detail="the $row_id command exited 0 over the files this change touched."
-    else
-      field="$(rw_baseline_path_for "$row_id")"
-      baseline_doc=""; baseline_verdict=""; baseline_output=""
-      if [ -f "$BASELINE_FILE" ]; then
-        baseline_doc="$(jq -c '.' "$BASELINE_FILE" 2>/dev/null)"
-        [ -z "$baseline_doc" ] || baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --argjson f "$field" 'getpath($f).verdict // ""')"
-        [ -z "$baseline_doc" ] || baseline_output="$(printf '%s' "$baseline_doc" | jq -r --argjson f "$field" 'getpath($f).outputFile // ""')"
-        [ -z "$baseline_output" ] || baseline_output="$(dirname -- "$BASELINE_FILE")/$baseline_output"
-      fi
-      case "$baseline_verdict" in
-        met)
-          verdict="unmet"
-          detail="the $row_id command $how, and the baseline recorded this tool met at the commit the build started from; this task introduced the finding." ;;
-        unmet)
-          br_subtract_baseline "$baseline_output" "$RW_RUN_OUTFILE" "$row_id" "$how"
-          verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
-          new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT" ;;
-        unknown|undeclared)
-          # A command with no {paths} reads the whole repository, so no path list is handed over.
-          br_new_files_only "$row_id" "$how" "$baseline_verdict" "$RV_CODEPATH" \
-            "$(printf '%s' "$baseline_doc" | jq -r '.commit // ""')" "$([ "$has_paths" = "true" ] && printf '%s' "$scoped" || printf '[]')" \
-            "$RW_RUN_OUTFILE" "$rc"
-          verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
-          new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT" ;;
-        *)
-          # Two ways to get here, and the detail tells them apart: the file could not be read, or
-          # it holds no result for this row, which is a baseline taken before toolRows existed.
-          verdict="unknown"
-          detail="the $row_id command $how, and $([ -n "$baseline_doc" ] && printf 'the baseline holds no result for this row' || printf '%s could not be read for the baseline verdict of this tool' "$BASELINE_FILE"), so this cannot tell a finding this task introduced from one that predates it." ;;
-      esac
-    fi
+    # A command with no {paths} reads the whole repository, so no path list is handed over.
+    br_judge_tool_run "$row_id" "$rc" "$signal" "$RW_RUN_STDOUT_LEN" "$RW_RUN_OUTFILE" "$BASELINE_FILE" \
+      "$([ "$has_paths" = "true" ] && printf '%s' "$scoped" || printf '[]')" "$RV_CODEPATH" "this task"
+    verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
+    new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
   fi
   verdict="$(rw_worse "$verdict" "$RW_LOOKUP_FLOOR")"
   verdict="$(rw_worse "$verdict" "$RW_CHECK_FLOOR")"
@@ -1368,125 +1329,25 @@ rw_tool_row_check() {
   rw_run_done
 }
 
-# Check 8: the whole suite, at the final commit, once per framework. It reads the recipe's own
-# outcome words and not the exit status alone: three of the five frameworks print that nothing was
-# selected and exit zero, and a silent pass reads unknown, never met. A failure on a framework the
-# baseline recorded unmet has that baseline's kept output subtracted (br_subtract_baseline, the
-# build's own), on the lines the suite row's failure_line selects when it declares one, so a test
-# red then and red now is not this task's. The record names the selector under failureLine.
-#
-# When finished.json holds a `suite`, finish already ran the whole suite once at this same commit
-# (do_checks refuses any other HEAD), so this row reads that result and runs nothing (nyc defect
-# 18). finish refuses a test newly broken there, so its verdict is never unmet. It is met, also
-# when a person recorded each new failure as not caused by this task, undeclared or not-needed. It
-# can be unknown or warned, which finish records as a warning. A warned that a person accepted at
-# finish reads met here, and the detail says it is the person's answer and gives their reason (gap
-# row 261). The sidecar
-# is inlined the way this row inlines its own run. The loop below stays for a record with no
-# `suite` key.
+# Check 8: the whole suite, at the final commit. finish ran it once at this same commit (do_checks
+# refuses any other HEAD), so this row reads that result from finished.json and runs nothing (nyc
+# defect 18). finish refuses a test newly broken there, so its verdict is never unmet. It is met,
+# also when a person recorded each new failure as not caused by this task, undeclared or
+# not-needed. It can be unknown or warned, which finish records as a warning. The sidecar is
+# inlined, and the record names each framework's failure_line selector.
 rw_check_suite() {
-  local fw_count fwi fw_obj fw cmd outfile rc selector
-  local verdict detail marker combined outputs_file exit_max
-  local baseline_doc baseline_verdict baseline_output new_json new_count selectors
-  local finished_suite
+  local finished_suite combined detail outfile selectors
   finished_suite="$(printf '%s' "$RW_FINISHED_DOC" | jq -c '.suite // {}')"
-  if [ "$(printf '%s' "$finished_suite" | jq -r '.verdict // ""')" != "" ]; then
-    combined="$(printf '%s' "$finished_suite" | jq -r '.verdict')"
-    detail="finish ran the suite once at this commit: $(printf '%s' "$finished_suite" | jq -r '.detail')"
-    if [ "$combined" = "warned" ] && [ "$(printf '%s' "$finished_suite" | jq -r 'has("warningsAccepted")')" = "true" ]; then
-      combined="met"
-      detail="$detail This row is a person's answer, not the suite's: at finish a person accepted the runner warnings, because: $(printf '%s' "$finished_suite" | jq -r '.warningsAccepted.because')"
-    fi
-    combined="$(rw_worse "$combined" "$RW_LOOKUP_FLOOR")"
-    combined="$(rw_worse "$combined" "$RW_TEST_FLOOR")"
-    detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
-    outfile="$(printf '%s' "$finished_suite" | jq -r 'if .outputFile == null then "" else .outputFile end')"
-    [ -z "$outfile" ] || outfile="$IMPL_DIR/$outfile"
-    selectors="$(printf '%s' "$finished_suite" | jq -r '[ (.runs // [])[] | select(.failureLine != null) | .framework + ": " + .failureLine ] | join("\n")')"
-    rw_check_row "$CHECK_SUITE" "$combined" "$(pc_trim "$detail")" \
-      "$(printf '%s' "$finished_suite" | jq -r '.exitCode // ""')" "${outfile:-/dev/null}" "" "" "[]" 0 "$selectors"
-    return 0
-  fi
-  combined=""; detail=""; exit_max=""; new_json="[]"; new_count=0; selectors=""
-  # Every framework's output, joined, travels to the row by file (rw_check_row).
-  outputs_file="$(mktemp)" || die 3 "a temporary file for the suite outputs could not be created"
-  fw_count="$(printf '%s' "$CR_DOC" | jq '(.frameworks // []) | length')"
-  case "$fw_count" in ''|*[!0-9]*) fw_count=0 ;; esac
-  fwi=0; marker=""
-  while [ "$fwi" -lt "$fw_count" ]; do
-    fw_obj="$(printf '%s' "$CR_DOC" | jq -c --argjson i "$fwi" '.frameworks[$i]')"
-    fw="$(printf '%s' "$fw_obj" | jq -r '.framework')"
-    cmd="$(printf '%s' "$fw_obj" | jq -c '.suite // {}')"
-
-    verdict=""; rc=""
-    if [ "$(printf '%s' "$cmd" | jq -r 'has("argv")')" != "true" ]; then
-      verdict="undeclared"
-      detail="$detail $fw: $(printf '%s' "$cmd" | jq -r '.absent // .missing')"
-    else
-      rw_run_row "$(printf '%s' "$cmd" | jq -c '.argv')" '[]' "$RW_VALUES" ""
-      rw_run_fault "suite" "$fw"
-      outfile="$RW_RUN_OUTFILE"
-      if [ -n "$RW_RUN_VERDICT" ]; then
-        verdict="$RW_RUN_VERDICT"
-        detail="$detail $fw: $RW_RUN_DETAIL"
-      else
-        rc="$RW_RUN_RC"
-        cat "$outfile" >>"$outputs_file"
-        printf '\n' >>"$outputs_file"
-        # The worst exit status across the frameworks, never the last one. Two frameworks where the
-        # first fails and the second passes would otherwise record a zero beside a verdict of unmet.
-        if [ -z "$exit_max" ] || [ "$rc" -gt "$exit_max" ]; then exit_max="$rc"; fi
-        # The first marker the recipe declares that this output holds, asked once. The markers are
-        # the recipe's own words for a run that selected nothing, harvested by the library.
-        marker="$(jq -rn --argjson m "$(printf '%s' "$fw_obj" | jq -c '.silentPass // []')" \
-          --rawfile out "$outfile" '[ $m[] as $one | select($out | contains($one)) | $one ][0] // ""')"
-        if [ -n "$marker" ]; then
-          verdict="unknown"
-          detail="$detail $fw: the suite output holds the recipe's own silent-pass marker ('$marker'), so an exit status cannot decide a run that selected nothing."
-        elif [ "$rc" = "0" ]; then
-          verdict="met"
-          detail="$detail $fw: the suite exited 0 at the final commit."
-        else
-          baseline_doc=""; baseline_verdict=""; baseline_output=""
-          [ ! -f "$BASELINE_FILE" ] || baseline_doc="$(jq -c '.' "$BASELINE_FILE" 2>/dev/null)"
-          if [ -n "$baseline_doc" ]; then
-            baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg fw "$fw" \
-              '[ (.suite // [])[] | select(.framework == $fw) ][0].verdict // ""')"
-            baseline_output="$(printf '%s' "$baseline_doc" | jq -r --arg fw "$fw" \
-              '[ (.suite // [])[] | select(.framework == $fw) ][0].outputFile // ""')"
-            [ -z "$baseline_output" ] || baseline_output="$(dirname -- "$BASELINE_FILE")/$baseline_output"
-          fi
-          if [ "$baseline_verdict" = "unmet" ]; then
-            selector="$(pc_unquote "$(printf '%s' "$cmd" | jq -r '.failureLine // ""')")"
-            [ -z "$selector" ] || selectors="$selectors$fw: $selector
-"
-            br_subtract_baseline "$baseline_output" "$outfile" "suite" "exited $rc on $fw at the final commit" "$selector"
-            verdict="$BR_SUB_VERDICT"
-            detail="$detail $fw: $BR_SUB_DETAIL"
-            new_json="$(jq -nc --argjson have "$new_json" --argjson add "$BR_SUB_NEW" '($have + $add) | .[:20]')"
-            new_count=$((new_count + BR_SUB_COUNT))
-          else
-            verdict="unmet"
-            detail="$detail $fw: the suite exited $rc at the final commit, so the finished task fails its own tests."
-          fi
-        fi
-      fi
-      rw_run_done
-    fi
-    combined="$(rw_worse "$combined" "$verdict")"
-    fwi=$((fwi + 1))
-  done
-  if [ -z "$combined" ]; then
-    combined="undeclared"
-    detail=" no framework recipe was resolved, so the suite was not run."
-  fi
+  combined="$(printf '%s' "$finished_suite" | jq -r '.verdict // "unknown"')"
+  detail="finish ran the suite once at this commit: $(printf '%s' "$finished_suite" | jq -r '.detail // "finished.json holds no suite result"')"
   combined="$(rw_worse "$combined" "$RW_LOOKUP_FLOOR")"
   combined="$(rw_worse "$combined" "$RW_TEST_FLOOR")"
   detail="$detail $RW_LOOKUP_NOTE $RW_BLOCK_NOTE"
-  rw_check_row "$CHECK_SUITE" "$combined" "$(pc_trim "$detail")" "$exit_max" "$outputs_file" "" "" \
-    "$new_json" "$new_count" "${selectors%
-}"
-  rm -f "$outputs_file"
+  outfile="$(printf '%s' "$finished_suite" | jq -r 'if .outputFile == null then "" else .outputFile end')"
+  [ -z "$outfile" ] || outfile="$IMPL_DIR/$outfile"
+  selectors="$(printf '%s' "$finished_suite" | jq -r '[ (.runs // [])[] | select(.failureLine != null) | .framework + ": " + .failureLine ] | join("\n")')"
+  rw_check_row "$CHECK_SUITE" "$combined" "$(pc_trim "$detail")" \
+    "$(printf '%s' "$finished_suite" | jq -r '.exitCode // ""')" "${outfile:-/dev/null}" "" "" "[]" 0 "$selectors"
 }
 
 do_checks() {
@@ -2614,8 +2475,8 @@ rw_surface_kind() {
   if [ -z "$row_verdict" ]; then
     ran=true
     rc="$RW_RUN_RC"
-    # The row's own silent-pass markers, read before the exit status the way rw_check_suite reads
-    # the file-level ones: a suite that selected nothing and exited 0 decided nothing.
+    # The row's own silent-pass markers, read before the exit status: a suite that selected
+    # nothing and exited 0 decided nothing.
     marker="$(jq -rn --argjson m "$(printf '%s' "$row" | jq -c '.silentPass // []')" \
       --rawfile out "$RW_RUN_OUTFILE" '[ $m[] as $one | select($out | contains($one)) | $one ][0] // ""')"
     if [ -n "$marker" ]; then

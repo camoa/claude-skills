@@ -42,7 +42,7 @@
     "commit": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The code repository's HEAD at the moment `fix-record` ran, read fresh with `git rev-parse HEAD`, never assumed. Together with `round`, this is what exit 45 compares a new call against to refuse recording the same round twice."
+      "description": "The code repository's HEAD at the moment `fix-record` ran, read fresh with `git rev-parse HEAD`, never assumed. A call on a round already recorded at this commit reports that record and records nothing twice."
     },
     "commits": {
       "type": "array",
@@ -52,7 +52,7 @@
     "round": {
       "type": "integer",
       "minimum": 1,
-      "description": "Which fix round this is, one more than the ledger's own roundsUsed before this call. `fix-record` increments roundsUsed after writing this record, whether the checks below were met or not: a round is a fixer that ended, not a fixer that succeeded. The cap is FIX_ROUNDS_ALLOWED, two, and at the cap a round that did not pass halts the order."
+      "description": "Which fix round this is, one more than the ledger's own roundsUsed before this call. `fix-record` increments roundsUsed after writing this record, whether the checks below were met or not: a round is a fixer that ended, not a fixer that succeeded. The cap is FIX_ROUNDS_ALLOWED, two, and at the cap a round that did not pass stops the order."
     },
     "reportPath": {
       "type": "string",

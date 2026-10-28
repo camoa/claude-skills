@@ -128,7 +128,7 @@
             "unmet",
             "unknown"
           ],
-          "description": "The worst of runs[].verdict, the same fold build-record-schema.json describes. warned: a suite failed with no failed test, only on lines its recipe's warning_line names; when a person accepted that with `finish --accept-warnings`, warningsAccepted is present (gap row 261). met: every framework's suite exited 0, or failed only on lines the baseline already held or a person recorded as not caused by this task. undeclared: no framework's recipe carries a suite row to run, or the recipe declares it absent, and the record says so rather than claiming a pass. not-needed: every order in the snapshot is proved by its record, so no test exists and no suite baseline was taken. The suite was not run, and runs is absent (live-run row 136). unmet: a line failed that the baseline did not hold. `finish` stops on each one, so a record never holds unmet. unknown: nothing here could decide, such as no baseline or a run that selected nothing. A warning in the task record goes with unmet and unknown, and with warned when no person accepted it."
+          "description": "The worst of runs[].verdict, the same fold build-record-schema.json describes. warned: a suite failed with no failed test, only on lines its recipe's warning_line names (gap row 261). met: every framework's suite exited 0, or failed only on lines the baseline already held or a person recorded as not caused by this task. undeclared: no framework's recipe carries a suite row to run, or the recipe declares it absent, and the record says so rather than claiming a pass. not-needed: every order in the snapshot is proved by its record, so no test exists and no suite baseline was taken. The suite was not run, and runs is absent (live-run row 136). unmet: a line failed that the baseline did not hold. `finish` stops on each one, so a record never holds unmet. unknown: nothing here could decide, such as no baseline or a run that selected nothing. A warning in the task record goes with unmet and unknown, and with warned."
         },
         "detail": {
           "type": "string",
@@ -201,16 +201,6 @@
             }
           },
           "description": "The tests that passed in the implement-start baseline and fail at the final commit, which a person recorded as not caused by this task with `finish --regression not-caused=<item>`. An item is a failing line, or `the suite on <framework>` for a run whose suite row declares no failure_line or that printed no new line. Each is also a warning in the task record. Review lists the warning, and the pull request body names each line."
-        },
-        "warningsAccepted": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["because", "judgedBy"],
-          "properties": {
-            "because": { "type": "string", "minLength": 1, "description": "The person's reason, as `--accept-warnings` gave it." },
-            "judgedBy": { "type": "string", "enum": ["person"], "description": "Always person: finish refuses the flag on an autonomous implement stage (exit 68)." }
-          },
-          "description": "Present only when the verdict is warned. A person answered the suite in place of its exit status, and review reports the row as that person's answer."
         },
         "outputFile": {
           "type": "string",

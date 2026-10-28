@@ -78,7 +78,6 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            at reviewed or at any round)
 #   implement-actions.sh close <task_folder> <unit_id>
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
-#                            [--accept-warnings <the person's reason>]
 #                            [--regression <order id|not-caused>=<failing line>]...
 #                            [--because <the person's words>] (with --regression alone)
 #   implement-actions.sh reopen <task_folder>
@@ -472,8 +471,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      names the choices every reason allows. `redo` found no live copy of the order in the design,
 #      so drop is the route. Nothing is written. An order that is not stopped, or is closed or
 #      dropped, has nothing to leave, so the way out exits 0 and names the next step.
-#  68  `go-on`, `redo`, `drop`, `start --leftovers keep`, `finish --accept-warnings` or
-#      `finish --regression` was called
+#  68  `go-on`, `redo`, `drop`, `start --leftovers keep` or `finish --regression` was called
 #      with no matching answer in the task's answer record. Each is a person's judgement, in every
 #      run mode. The step of a go-on names its choice, `implement go-on <choice>`, so a yes to one
 #      choice passes no other. One number, because it is one fact. Keeping a builder's deviation or
@@ -532,8 +530,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the value does not, or a commit between the two is on no other branch, or an order has
 #      committed (gap row 401). The run has no ledger.
 #  86  retired in 6.1.0. `finish` runs the suite once at HEAD and records its verdict. A verdict
-#      other than met, undeclared or not-needed is a warning. A person may record acceptance of
-#      runner warnings with --accept-warnings, which review reads.
+#      other than met, undeclared or not-needed is a warning, which review lists.
 #
 # The code the record proof added (nyc defect 17).
 #
@@ -814,8 +811,8 @@ BUILD_ATTEMPTS_ALLOWED=2
 
 # The default above is what an order gets when its own ledger entry carries no `attemptsAllowed`.
 # `go-on --continue build` writes that field, one higher, when the attempts are spent. The count
-# used never goes down, so the grant raises the allowance instead (ideal/implementation.md, "What a
-# halt at the attempt cap leads to"). $1 the order's own ledger entry. Prints the number.
+# used never goes down, so the grant raises the allowance instead. $1 the order's own ledger
+# entry. Prints the number.
 attempts_allowed_for() {
   local entry="$1" value
   value="$(printf '%s' "$entry" | jq -r --argjson d "$BUILD_ATTEMPTS_ALLOWED" '.attemptsAllowed // $d')"
@@ -1596,7 +1593,7 @@ do_read() {
           one_open="$(jq '[ (.findings // [])[] | select(.actionable == true and .status == "open") ] | length' "$one_file" 2>/dev/null)"
           case "$one_open" in ''|*[!0-9]*) one_open=0 ;; esac
           # What waits for the person at the task review (gap row 279).
-          one_pending="$(jq '((.deviationPending.findings // []) as $w | [ (.findings // [])[] | select(.status == "pending" and (.id as $i | $w | index($i) | not)) ] | length) + (if has("deviationPending") then 1 else 0 end)' "$one_file" 2>/dev/null)"
+          one_pending="$(jq '([ (.findings // [])[] | select(.status == "pending") ] | length) + (if has("deviationPending") then 1 else 0 end)' "$one_file" 2>/dev/null)"
           case "$one_pending" in ''|*[!0-9]*) one_pending=0 ;; esac
           one_note="ok"
         else
@@ -1753,6 +1750,9 @@ do_start() {
             ((.coverage.criteriaWithUnusableVerifiedBy // [])[] | "criterion " + .id + " has a verifiedBy of " + (.verifiedBy | tostring) + ", which is neither machine nor person"),
             ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
             ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " " + .problem),
+            ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests"),
+            ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId),
+            ((.coverage.machineCriteriaOnLookOrRecordOrders // [])[] | "order " + .id + " is proved by " + (if .proof == "observe" then "a look" else "its record" end) + " and owns the machine-verified criterion " + .criterionId + " with no run line that proves it"),
             ((.coverage.unknownCriteriaIds // [])[] | "file " + .path + " names an unknown criterion id " + .id + " in " + .field),
             ((.coverage.unknownNonGoalIds // [])[] | "file " + .path + " names an unknown non-goal id " + .id),
             ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
@@ -3037,9 +3037,9 @@ bl_run_suite() {
 # (design's sizing rule), and phpcs and phpstan refuse a missing path, so every configuration
 # order that deleted a file failed the tool rows by construction (live-run row 85). Sets
 # BR_INSIDE_JSON to what is kept, BR_OUTSIDE_COUNT to how many lay outside and BR_DELETED_COUNT
-# to how many were absent. Both the build's tool rows and the baseline's read it, so the two
-# answer over the same files; at the baseline's commit a file the order later deletes still
-# exists, so the second filter only matters there for a file already absent.
+# to how many were absent. The baseline's tool rows read it. At the baseline's commit a file the
+# order later deletes still exists, so the second filter only matters there for a file already
+# absent.
 BR_INSIDE_JSON="[]"; BR_OUTSIDE_COUNT=0; BR_DELETED_COUNT=0
 # The first filter alone: prints the entries of $1 that lie in the code repository at $2.
 br_inside_repository() {
@@ -3063,24 +3063,6 @@ br_scope_to_repository() {
     fi
     pi=$((pi + 1))
   done
-}
-
-# One sentence for a tool row's detail when br_scope_to_repository dropped something, or nothing.
-br_outside_note() {
-  case "$BR_OUTSIDE_COUNT" in
-    0) printf '' ;;
-    1) printf ' 1 owned file lies outside the code repository and was left out.' ;;
-    *) printf ' %s owned files lie outside the code repository and were left out.' "$BR_OUTSIDE_COUNT" ;;
-  esac
-}
-
-# The same, for the owned files that no longer exist in the tree the tool would run in.
-br_deleted_note() {
-  case "$BR_DELETED_COUNT" in
-    0) printf '' ;;
-    1) printf ' 1 owned file deleted by this order was not passed.' ;;
-    *) printf ' %s owned files deleted by this order were not passed.' "$BR_DELETED_COUNT" ;;
-  esac
 }
 
 # Runs one baseline tool command over the baseline scope and prints the field object baseline.json
@@ -4974,6 +4956,40 @@ $recorded
 RF_EOF
 }
 
+# The coding-standards row over the files $1, a JSON array of paths relative to the code repository
+# $2. br_judge_tool_run decides a run, the rule review applies to every tool row. The output of an
+# unmet run is kept at $3. Reads CR_DOC and BRC_BASELINE_FILE. Sets TF_CS_VERDICT and TF_CS_DETAIL.
+TF_CS_VERDICT=""; TF_CS_DETAIL=""
+tf_coding_standards() {
+  local files="$1" codepath="$2" exts outfile
+  TF_CS_VERDICT="unknown"; TF_CS_DETAIL=""
+  tr_find_tool_row "$CR_DOC" coding-standards coding-standards
+  if [ -n "$TR_SKIP" ]; then
+    TF_CS_VERDICT="undeclared"; TF_CS_DETAIL="$TR_SKIP"
+    return 0
+  fi
+  exts="$(printf '%s' "$TR_ROW" | jq -c 'if has("extensions") then .extensions else empty end')"
+  [ -z "$exts" ] || files="$(br_filter_extensions "$files" "$exts")"
+  if [ "$files" = "[]" ] && br_argv_takes_paths "$(printf '%s' "$TR_ROW" | jq -c '.argv // []')"; then
+    TF_CS_VERDICT="undeclared"
+    TF_CS_DETAIL="the coding-standards command reads only $(printf '%s' "$exts" | jq -r 'join(", ")'), and none of these files has one of those extensions."
+    return 0
+  fi
+  outfile="$(mktemp)" || die3 "tests-freeze: could not create a temporary file"
+  tr_run_tool_row "$TR_ROW" "$codepath" "$files" "" "$outfile"
+  if [ "$TR_KIND" = "UNRESOLVED" ]; then
+    TF_CS_DETAIL="the token {$TR_PAYLOAD} in the coding-standards command $BR_NO_VALUE."
+  elif [ "$TR_KIND" = "EMPTY" ] || [ "$TR_PAYLOAD" = "126" ]; then
+    TF_CS_DETAIL="the coding-standards command came out empty, so nothing ran and nothing was decided."
+  else
+    br_judge_tool_run coding-standards "$TR_PAYLOAD" "$TR_SIGNAL" "$TR_STDOUT_LEN" "$outfile" "$BRC_BASELINE_FILE" \
+      "$files" "$codepath" "this order"
+    TF_CS_VERDICT="$BR_SUB_VERDICT"; TF_CS_DETAIL="$BR_SUB_DETAIL"
+    [ "$TF_CS_VERDICT" != "unmet" ] || cp "$outfile" "$3"
+  fi
+  rm -f "$outfile"
+}
+
 # The freeze's temporary files sit in the implementation folder, each named for this process. A
 # refusal exits through die, so the EXIT trap removes them. find, not a glob: zsh stops on a glob
 # with no match.
@@ -6149,11 +6165,11 @@ TF_EOF
   # No role may write a frozen file, and review leaves the frozen tests out of its tool rows. So the
   # row runs here, and the freeze is the one place the tests' own standards are judged (gap row
   # 408). A finding is a warning, so a person sees it before the build. It
-  # runs over the files the commit below takes, through build-record's own check. A finding the
+  # runs over the files the commit below takes, through tf_coding_standards. A finding the
   # baseline already held in a changed file is subtracted the same way, so it never refuses here.
   # The files absent at the baseline commit run apart from the ones it held. One file it held
   # makes the whole run read unknown under an undeclared baseline, and a new file is then unjudged.
-  local frozen_rel_paths tf_cs_new="[]" tf_cs_old="[]" tf_cs_at tf_cs_p tf_cs_group tf_cs_json tf_cs_out tf_cs_verdict
+  local frozen_rel_paths tf_cs_new="[]" tf_cs_old="[]" tf_cs_at tf_cs_p tf_cs_group tf_cs_out
   frozen_rel_paths="$(jq -nr --argjson tests "$tests_json" --argjson support "$support_json" \
     '(($tests | map(.relPath)) + ($support | map(.path))) | unique | .[]')"
   tf_cs_at="$(jq -r '.commit // ""' "$IMPL_DIR/baseline.json" 2>/dev/null)"
@@ -6171,21 +6187,17 @@ TF_CS_EOF
     CR_WHO="tests-freeze"; CR_TEST_RECIPES=""
     CR_CHECK_RECIPES="$(base_check_recipes "$IMPL_DIR/baseline.json")"
     cr_resolve
-    BRC_WHO="tests-freeze"; BRC_CODEPATH="$codepath"; BRC_RECIPES="$CR_DOC"; BRC_SELECTED_JSON="[]"; BRC_VALUES=""
     brc_use_baseline "tests-freeze"
+    tf_cs_out="$IMPL_DIR/coding-standards-$unit_id-freeze.txt"
     for tf_cs_group in "$tf_cs_new" "$tf_cs_old"; do
       [ "$tf_cs_group" != "[]" ] || continue
-      BRC_UNIT_JSON="$(jq -cn --argjson owned "$tf_cs_group" '{ownedFiles: $owned}')"
-      tf_cs_json="$(br_tool_check "coding-standards" "codingStandards" "coding-standards")" || exit "$?"
-      tf_cs_verdict="$(printf '%s' "$tf_cs_json" | jq -r '.verdict')"
-      case "$tf_cs_verdict" in
+      tf_coding_standards "$tf_cs_group" "$codepath" "$tf_cs_out"
+      case "$TF_CS_VERDICT" in
         unmet)
-          tf_cs_out="$IMPL_DIR/coding-standards-$unit_id-freeze.txt"
-          printf '%s' "$tf_cs_json" | jq -r '.output // ""' >"$tf_cs_out"
-          task_warn "$TASK_PATH" tests-freeze "$unit_id" "the coding-standards row fails over $(printf '%s' "$tf_cs_group" | jq -r 'join(", ")'): $(printf '%s' "$tf_cs_json" | jq -r '.detail | sub(" newLines holds the first 20[.]$"; "")' | tr '\n' ' ') The output is in $tf_cs_out" ;;
+          task_warn "$TASK_PATH" tests-freeze "$unit_id" "the coding-standards row fails over $(printf '%s' "$tf_cs_group" | jq -r 'join(", ")'): $(printf '%s' "$TF_CS_DETAIL" | sed 's/ newLines holds the first 20[.]$//' | tr '\n' ' ') The output is in $tf_cs_out" ;;
         unknown|undeclared)
           printf 'tests-freeze: the coding-standards row over %s reads %s, so it judged nothing: %s\n' \
-            "$(printf '%s' "$tf_cs_group" | jq -r 'join(", ")')" "$tf_cs_verdict" "$(printf '%s' "$tf_cs_json" | jq -r '.detail')" >&2 ;;
+            "$(printf '%s' "$tf_cs_group" | jq -r 'join(", ")')" "$TF_CS_VERDICT" "$TF_CS_DETAIL" >&2 ;;
       esac
     done
   fi
@@ -6813,7 +6825,7 @@ im_freeze_holds_work() {
 # The three deciding checks (ideal/implementation.md, "The deciding checks run before anything
 # judges"): the order's own proof, owned-files and frozen-tests. `build-record`, `fix-record` and
 # go-on's check run them through one function, so the steps cannot drift into checking different
-# things. The tool helpers below serve the freeze and `finish`.
+# things. The test check below serves the freeze and `finish`.
 #
 # Redirect this function's stdout to a file. Never capture it with `$(...)`: a command substitution
 # runs in a subshell, and a refusal inside this function would then exit that subshell alone and
@@ -6834,12 +6846,10 @@ im_freeze_holds_work() {
 #   BRC_TESTS_DOC       the frozen test record for this order
 #   BRC_BASELINE_FILE   where step two wrote the baseline
 #   BRC_RECIPES         the resolved recipe document cr_resolve wrote (CR_DOC): one entry per
-#                       framework with its suite and selected-tests commands, and one entry per
-#                       tool row with its argv, its signal and its extensions. Every command this
-#                       function runs comes from here, never from a flag a caller typed
+#                       framework with its suite and selected-tests commands. Every test command
+#                       runs from here, never from a flag a caller typed
 #   BRC_SELECTED_JSON   the paths a `{paths}` or `{file}` token in the selected-tests row expands
-#                       to: this order's own frozen test files, relative to codePath. The three
-#                       tool rows leave these same paths out of their own expansion
+#                       to: this order's own frozen test files, relative to codePath
 #   BRC_VALUES          the tab-separated `--value` list every other placeholder is read from
 #   BRC_NOTHING_RAN, BRC_HAVE_NOTHING_RAN   the caller's own marker for a green run that selected
 #                       nothing, used only where the framework's recipe declares none of its own
@@ -6866,197 +6876,6 @@ BRC_NOTHING_RAN=""; BRC_HAVE_NOTHING_RAN=false; BRC_NOT_CAUSED=""
 BRC_GATE_RECIPES=""
 BRC_END_OF_TASK=false
 BRC_OBSERVED=""
-
-# One tool check: coding standards, static analysis, or the security tool. $1 the check id, $2 the
-# baseline field holding the same tool's own verdict, $3 a word for the message. The command itself
-# comes from the resolved recipe in BRC_RECIPES, never from a flag: a caller retyping a recipe row
-# drops a key, and a dropped `signal` key turns a tool that cannot fail by exit status into a check
-# that always passes. Prints the check object.
-#
-# Exit 0 is met. Any other exit is compared against the baseline for that tool, the same rule
-# suite-regression already applies: a baseline that was met makes this unmet, because this order
-# introduced the finding; a baseline that was unmet has its own output subtracted line by line
-# (br_subtract_baseline), so a finding already there at the commit the build started from is not
-# this order's; a baseline that was unknown or undeclared makes this unknown, naming which,
-# because there is nothing to subtract from. One case reads otherwise: an undeclared baseline over
-# files that did not exist at its commit held no finding in them (br_new_files_only).
-#
-# Two optional keys change that (dev-guides, process-recipes, `## Check commands` is parsed).
-# `extensions` narrows what {paths} expands to; a row whose expansion comes out empty did not apply
-# to this order and is recorded undeclared, never met. `empty-stdout` marks a tool that cannot fail
-# by exit status, gofmt -l being the case it was written for: a zero exit with anything on standard
-# output counts as a failure. Both ways of failing then go through the same baseline comparison,
-# because a finding this tool already reported at the commit the build started from is not one this
-# order introduced, and which of the two ways the tool used to say so changes nothing about that.
-br_tool_check() {
-  local check_id="$1" field="$2" label="$3"
-  local row argv_json signal exts_json
-  local verdict detail exit_json out_src outfile rc has_paths
-  local owned_json owned_count scoped_json scoped_count stdout_len failed how
-  local baseline_doc baseline_verdict baseline_output kind payload new_json new_count
-  local left_out_json paths_json expanded_json oi entry
-  verdict=""; detail=""; exit_json="null"; out_src="/dev/null"; outfile=""; new_json="[]"; new_count=0
-  left_out_json="[]"; paths_json="null"
-
-  tr_find_tool_row "$BRC_RECIPES" "$check_id" "$label"
-  if [ -n "$TR_SKIP" ]; then
-    # A recipe that declares this framework has no such tool answered the question, and its own
-    # reason text is what a person reads when they ask why the check never ran. A row nobody
-    # resolved answered nothing. Both are undeclared, because undeclared is never satisfied either
-    # way, and `absent` is what tells the two apart.
-    jq -n --arg id "$check_id" --arg detail "$TR_SKIP" --argjson absent "$TR_ABSENT" \
-      '{id: $id, verdict: "undeclared", detail: $detail} + (if $absent then {absent: true} else {} end)'
-    return 0
-  fi
-  row="$TR_ROW"
-
-  argv_json="$(printf '%s' "$row" | jq -c '.argv // []')"
-  signal="$(printf '%s' "$row" | jq -r '.signal // ""')"
-  exts_json="$(printf '%s' "$row" | jq -c 'if has("extensions") then .extensions else empty end')"
-
-  has_paths=false
-  br_argv_takes_paths "$argv_json" && has_paths=true
-  owned_json="$(printf '%s' "$BRC_UNIT_JSON" | jq -c '.ownedFiles // []')"
-  owned_count="$(printf '%s' "$owned_json" | jq 'length')"
-  # The tools judge the files the builder may write. A frozen test is owned, so the diff may touch
-  # it, but the implementer may not: hooks/deny-frozen-test-writes.sh refuses the write, and the
-  # only role that may edit it has already returned (live-run row 71). So the frozen paths, which
-  # the caller already resolved into BRC_SELECTED_JSON, come out of the expansion first, and the
-  # record names both what the token expanded to and what was left out. An owned entry may be a
-  # directory (design-schema.json), and a whole-string subtraction would hand the tool the frozen
-  # tests under it, so a directory is expanded to the files the repository tracks under it first.
-  expanded_json="[]"
-  oi=0
-  while [ "$oi" -lt "$owned_count" ]; do
-    entry="$(printf '%s' "$owned_json" | jq -r --argjson i "$oi" '.[$i]')"
-    if [ -d "$BRC_CODEPATH/$entry" ]; then
-      expanded_json="$(git -C "$BRC_CODEPATH" ls-files -- "$entry" 2>/dev/null \
-        | jq -Rsc --argjson acc "$expanded_json" '$acc + (split("\n") | map(select(length > 0)))')"
-    else
-      expanded_json="$(printf '%s' "$expanded_json" | jq -c --arg e "$entry" '. + [$e]')"
-    fi
-    oi=$((oi + 1))
-  done
-  if [ "$has_paths" = "true" ]; then
-    left_out_json="$(jq -cn --argjson owned "$expanded_json" --argjson frozen "$BRC_SELECTED_JSON" \
-      '[ $owned[] | select(. as $p | $frozen | index($p) != null) ]')"
-  fi
-  scoped_json="$(jq -cn --argjson owned "$expanded_json" --argjson frozen "$BRC_SELECTED_JSON" \
-    '[ $owned[] | select(. as $p | $frozen | index($p) == null) ]')"
-  if [ -n "$exts_json" ]; then
-    scoped_json="$(br_filter_extensions "$scoped_json" "$exts_json")"
-  fi
-  br_scope_to_repository "$scoped_json" "$BRC_CODEPATH"
-  scoped_json="$BR_INSIDE_JSON"
-  scoped_count="$(printf '%s' "$scoped_json" | jq 'length')"
-
-  if [ "$has_paths" = "true" ] && [ "$owned_count" -eq 0 ]; then
-    # A tool handed no path at all reads that as its own default scope, so it would answer about
-    # the whole repository under this order's name. That is a wrong verdict, not a missing one.
-    verdict="unknown"
-    detail="the $label command holds a path placeholder, and this order declares no ownedFiles, so the command would run over no path at all."
-  elif [ "$has_paths" = "true" ] && [ "$scoped_count" -eq 0 ]; then
-    # The order owns files, and none of them is a file this tool judges: every one is a frozen test,
-    # or none carries an extension the tool reads, or every one lies outside the repository, or
-    # every one was deleted by this order. The row did not apply here.
-    verdict="undeclared"
-    if [ "$BR_OUTSIDE_COUNT" -gt 0 ]; then
-      detail="the $label command would read no file this order owns inside the code repository ($BR_OUTSIDE_COUNT owned outside it), so the row does not apply to it.$(br_deleted_note)"
-    elif [ "$BR_DELETED_COUNT" -gt 0 ]; then
-      detail="the $label command would read no file this order owns that still exists at the attempt's head, so the row does not apply to it.$(br_deleted_note)"
-    elif [ -n "$exts_json" ]; then
-      detail="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and this order owns no file with one of those extensions outside its frozen tests, so the row does not apply to it."
-    else
-      detail="every file this order owns is a frozen test, which the implementer may not write, so the row does not apply to it."
-    fi
-  else
-    [ "$has_paths" = "false" ] || paths_json="$scoped_json"
-    outfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
-    tr_run_tool_row "$row" "$BRC_CODEPATH" "$scoped_json" "$BRC_VALUES" "$outfile"
-    kind="$TR_KIND"; payload="$TR_PAYLOAD"; stdout_len="$TR_STDOUT_LEN"
-    if [ "$kind" = "UNRESOLVED" ]; then
-      verdict="unknown"
-      detail="the token {$payload} in the $label command $BR_NO_VALUE; pass --value $payload=<value>."
-    elif [ "$kind" = "EMPTY" ]; then
-      verdict="unknown"
-      detail="the $label command came out with no token at all, so nothing ran and nothing was decided."
-    else
-      rc="$payload"
-      out_src="$outfile"
-      exit_json="$rc"
-      failed=false; how=""
-      if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$stdout_len" -gt 0 ]; then
-        failed=true
-        how="exited 0 and printed on standard output, which its row's own signal empty-stdout makes a finding"
-      elif [ "$rc" = "126" ]; then
-        verdict="unknown"
-        detail="the $label command list came out empty, so nothing ran and nothing was decided."
-      elif [ "$rc" != "0" ]; then
-        failed=true
-        how="exited $rc"
-      fi
-      if [ -z "$verdict" ]; then
-        if [ "$failed" = "false" ]; then
-          verdict="met"
-          if [ -n "$signal" ]; then
-            detail="the $label command exited 0 with nothing on standard output, which is what signal empty-stdout asks for."
-          else
-            detail="the $label command exited 0 over this order's own files."
-          fi
-        else
-          baseline_verdict=""; baseline_output=""
-          if [ -f "$BRC_BASELINE_FILE" ]; then
-            baseline_doc="$(jq -c '.' "$BRC_BASELINE_FILE" 2>/dev/null)"
-            if [ -n "$baseline_doc" ]; then
-              baseline_verdict="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].verdict // ""')"
-              baseline_output="$(printf '%s' "$baseline_doc" | jq -r --arg f "$field" '.[$f].outputFile // ""')"
-              [ -z "$baseline_output" ] || baseline_output="$(dirname -- "$BRC_BASELINE_FILE")/$baseline_output"
-            fi
-          fi
-          case "$baseline_verdict" in
-            met)
-              verdict="unmet"
-              detail="the $label command $how, and the baseline recorded this tool met at the commit the build started from; this order introduced the finding."
-              ;;
-            unmet)
-              br_subtract_baseline "$baseline_output" "$outfile" "$label" "$how"
-              verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
-              new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
-              ;;
-            unknown|undeclared)
-              br_new_files_only "$label" "$how" "$baseline_verdict" "$BRC_CODEPATH" \
-                "$(printf '%s' "$baseline_doc" | jq -r '.commit // ""')" "$paths_json" "$outfile" "$rc"
-              verdict="$BR_SUB_VERDICT"; detail="$BR_SUB_DETAIL"
-              new_json="$BR_SUB_NEW"; new_count="$BR_SUB_COUNT"
-              ;;
-            *)
-              verdict="unknown"
-              detail="the $label command $how, and $BRC_BASELINE_FILE could not be read for this tool's own baseline verdict, so this cannot tell an old finding from a new one."
-              ;;
-          esac
-        fi
-      fi
-    fi
-    [ "$has_paths" = "false" ] || detail="$detail$(br_outside_note)$(br_deleted_note)"
-  fi
-  # The output is read from its file, never passed as an argument (nyc defect 9).
-  jq -n --arg id "$check_id" --arg verdict "$verdict" --arg detail "$detail" \
-        --argjson exitCode "$exit_json" --rawfile output "$out_src" \
-        --arg signal "$signal" --arg exts "${exts_json:-}" \
-        --argjson newLines "$new_json" --argjson newLineCount "$new_count" \
-        --argjson paths "$paths_json" --argjson leftOut "$left_out_json" \
-        --arg framework "$(printf '%s' "$row" | jq -r '.framework // ""')" '
-    {id: $id, verdict: $verdict, detail: $detail}
-    + (if $framework == "" then {} else {framework: $framework} end)
-    + (if $exitCode == null then {} else {exitCode: $exitCode, output: $output} end)
-    + (if $newLineCount == 0 then {} else {newLines: $newLines, newLineCount: $newLineCount} end)
-    + (if $signal == "" then {} else {signal: $signal} end)
-    + (if $exts   == "" then {} else {extensions: ($exts | fromjson)} end)
-    + (if $paths == null then {} else {paths: $paths} end)
-    + (if ($leftOut | length) == 0 then {} else {frozenTestsLeftOut: $leftOut} end)
-  '
-  [ -z "$outfile" ] || rm -f "$outfile"
-}
 
 # The clause a finish suite detail ends with when no line matched the selector and the row has no
 # warning_line (gap row 268). $1 the row's warning_line, $2 the framework entry. Prints nothing
@@ -7717,7 +7536,7 @@ br_confirm_check() {
 # the record the orchestrator wrote after looking at the page through a browser: met when every
 # row is met, unmet naming the first row that is not, unknown when the record at BRC_OBSERVED is
 # not there to read. The judge is always a model, and the check carries
-# it as judgedBy so `close` copies it onto the criteria the order owns. `build-record` checks the
+# it as judgedBy. `build-record` checks the
 # record's shape and its rows against the order before any check runs (exits 93 to 96), so a fix
 # round or go-on's check reads a file the build step already refused or accepted. Prints the check
 # object.
@@ -8032,7 +7851,7 @@ BR_DIFF
     # This order froze no test file, so the row hashed nothing and does not apply to it. met read
     # as a hash that was taken and matched, and the executed count then counted a check that ran
     # nothing, which is the one thing that count exists to stop (live-run row 167). undeclared is
-    # the word the suite row and the three tool rows already carry on such an order.
+    # the word for a row that does not apply.
     ftc_verdict="undeclared"
     ftc_detail="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id') froze no test file, so there is nothing to hash and the row does not apply to it."
   else
@@ -8637,7 +8456,7 @@ do_build_record() {
     [ -n "$ledger_doc" ] || die3 "build-record: the builder's commits on $unit_id could not be written."
     $is_deviation \
       || br_open_repair "$unit_id" "$stop_value" "$report_path" "$attempt_number" "$ledger_file" "$ledger_doc" "$stop_commits"
-    local keep_route="" halt_front="$BR_STOP_PREFIX a Stop: line says so" row_n row_text row_note="" stop_allows='["build"]'
+    local keep_route="" stop_front="$BR_STOP_PREFIX a Stop: line says so" row_n row_text row_note="" stop_allows='["build"]'
     case "$stop_value" in
       "$BR_ROW_KIND:"*)
         row_n="$(printf '%s' "${stop_value#*:}" | sed -e 's/:.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
@@ -8649,7 +8468,7 @@ do_build_record() {
         if [ -n "$row_text" ]; then
           # The text too, because design rewords a row by removing it and adding it last, so the
           # number alone stops naming the row the builder meant.
-          halt_front="$BR_STOP_PREFIX a Stop: line says done-when row $row_n is wrong, which reads \"$row_text\""
+          stop_front="$BR_STOP_PREFIX a Stop: line says done-when row $row_n is wrong, which reads \"$row_text\""
           row_note=" Done-when row $row_n of $unit_id reads: $row_text A person rules on the row. A wrong row is reworded in design, design closes again, start names the change on $unit_id, and redo answers it. A row that stands goes back to the builder."
         else
           row_note=" The line must read '$BR_ROW_KIND: <done-when row number>: <the evidence>', and $unit_id has no done-when row '$row_n'."
@@ -8657,11 +8476,11 @@ do_build_record() {
     esac
     if $is_deviation; then
       keep_route=" Or a person keeps the deviation with go-on --continue keep, and build-record runs again."
-      halt_front="$BR_DEVIATION_PREFIX a Deviation: line or heading says so"
+      stop_front="$BR_DEVIATION_PREFIX a Deviation: line or heading says so"
       stop_allows='["build","keep"]'
     fi
     local stop_ledger_doc
-    stop_ledger_doc="$(stop_order_in "$ledger_doc" "$unit_id" build-record "$halt_front, at $stop_file.$stop_commit_text" "$stop_allows")"
+    stop_ledger_doc="$(stop_order_in "$ledger_doc" "$unit_id" build-record "$stop_front, at $stop_file.$stop_commit_text" "$stop_allows")"
     [ -n "$stop_ledger_doc" ] || die3 "build-record: the stop on $unit_id could not be written."
     write_atomic "$ledger_file" "$stop_ledger_doc"
     [ -z "$stop_commit_text" ] \
@@ -8815,14 +8634,14 @@ do_build_record() {
   # A person may go on with one more build, or with the checks run again over the same code,
   # whichever check stopped the attempt. On unmoved code a second run is no free retry: the code is
   # what was judged, and the attempt cap still bounds new code.
-  local step_expr halt_why
-  halt_why=""
+  local step_expr stop_why
+  stop_why=""
   if [ "$all_met" = "true" ]; then
     step_expr='.attemptsUsed = (.attemptsUsed + 1) | .lastStep = "checks-passed"'
   else
     step_expr='.attemptsUsed = (.attemptsUsed + 1) | .lastStep = "code-written"'
     [ "$attempt_number" -lt "$attempts_allowed" ] \
-      || halt_why="attempts spent: $attempt_number of $attempts_allowed, and the last was stopped by $first_stopper"
+      || stop_why="attempts spent: $attempt_number of $attempts_allowed, and the last was stopped by $first_stopper"
   fi
   local new_ledger_doc
   new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
@@ -8831,8 +8650,8 @@ do_build_record() {
   # The kept deviation served this attempt, which now holds it as deviationAccepted.
   [ -z "$accepted_json" ] || new_ledger_doc="$(printf '%s' "$new_ledger_doc" | jq -c --arg id "$unit_id" \
     '.orders = (.orders | map(if .id == $id then del(.deviationKept) else . end))')"
-  if [ -n "$halt_why" ]; then
-    new_ledger_doc="$(stop_order_in "$new_ledger_doc" "$unit_id" build-record "$halt_why" '["build","check"]')"
+  if [ -n "$stop_why" ]; then
+    new_ledger_doc="$(stop_order_in "$new_ledger_doc" "$unit_id" build-record "$stop_why" '["build","check"]')"
     [ -n "$new_ledger_doc" ] || die3 "build-record: the stop on $unit_id could not be written."
   fi
   write_atomic "$ledger_file" "$new_ledger_doc"
@@ -8844,7 +8663,7 @@ do_build_record() {
   br_next="$(im_next_step "$new_ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")"
   im_print_summary "build-record" "$(printf '%s' "$record_json" | jq -c \
     --arg attempts "$attempt_number of $attempts_allowed" --arg state "$br_state" \
-    --arg halt "${halt_why:-none}" --arg record "$record_file" --arg next "$br_next" '
+    --arg stopped "${stop_why:-none}" --arg record "$record_file" --arg next "$br_next" '
     {order: .unit,
      attempt: $attempts,
      range: "\(.startedAt)..\(.commit)",
@@ -8852,7 +8671,7 @@ do_build_record() {
     + {executed: "\(.executed) of 3 ran a command, a diff or a hash",
      state: $state}
     + (if has("deviationAccepted") then {departureAccepted: .deviationAccepted.because} else {} end)
-    + {stopped: $halt,
+    + {stopped: $stopped,
      record: $record,
      next: $next}')"
   if [ "$all_met" != "true" ] && [ "$attempt_number" -ge "$attempts_allowed" ]; then
@@ -8869,7 +8688,7 @@ do_build_record() {
 # checks again over the round's own range (gap row 310). A pass addresses the open check finding verify-record opened.
 # A load-bearing finding leaves no round for the fix, so a person commits it, and the checks run
 # over the record's range extended to HEAD (live-run row 426). A pass moves the record's commit
-# there, so close reads a record at HEAD; a fail records nothing (exit 123).
+# there, so close reads a record at HEAD. A fail is recorded too, and the step does not move.
 # Call after rv_load_state. $1 the unit id, $2 the --interface path, $3 to $5 the recipe flags
 # (test, implement, values), $6 the --nothing-ran text, $7 whether it was given. Sets
 # GO_CHECK_PASS, true or false, GO_CHECK_LEDGER, the ledger document with the step it reached, and
@@ -9951,7 +9770,7 @@ do_review_record() {
   # one in it. A recipe the reviewer answers departed is the same fact (gap row 225), and that stop
   # reason carries the reviewer's own front. The reason names the file and the line. The recipe
   # reader already refused a line break in the reviewer's evidence.
-  local departure departure_file departure_line="" iface_file halt_why=""
+  local departure departure_file departure_line="" iface_file stop_why=""
   departure_file="$(printf '%s' "$RV_BUILD_DOC" | jq -r '.reportPath // ""')"
   departure="$(br_deviations "$departure_file" | head -n 1)"
   [ -z "$departure" ] || departure_line="$(sed 's/\*//g' "$departure_file" | grep -n -F -- "$departure" | head -n 1 | cut -d: -f1)"
@@ -9972,7 +9791,7 @@ do_review_record() {
   [ -z "$departure" ] || [ "$departure" != "$(printf '%s' "$build_accepted" | jq -r '.departure // ""')" ] \
     || { departure=""; kept="$(printf '%s' "$build_accepted" | jq -r '.because')"; }
   local declared=""
-  [ -z "$departure" ] || { declared=yes; halt_why="$RR_DEPARTURE_PREFIX, at line $departure_line of $departure_file"; }
+  [ -z "$departure" ] || { declared=yes; stop_why="$RR_DEPARTURE_PREFIX, at line $departure_line of $departure_file"; }
   # Gap row 303. A recipe the reviewer answers departed, paired by `finding` with an actionable
   # finding that has a fix scope, is one a fix round cures, so it opens that round and stops
   # nothing. The paired finding sits on a file the departed evidence names, so an unrelated finding
@@ -10009,7 +9828,7 @@ do_review_record() {
       [ $f[] | select(.actionable and (.fixScope | length) > 0) | .id ] as $cures
       | [ .[] | select(.verdict == "departed" and ((.finding // "") as $id | $cures | index($id)) == null) ]
       | .[0] // empty | "\(.ref): \(.evidence)"')"
-    [ -z "$departure" ] || halt_why="$RR_REVIEWER_PREFIX $departure"
+    [ -z "$departure" ] || stop_why="$RR_REVIEWER_PREFIX $departure"
   fi
   # Gap row 308. An information item marked departsFromDesign is a note, not a finding, so it
   # stops neither the order nor its dependents, in either mode. It waits as deviationPending, and
@@ -10020,14 +9839,14 @@ do_review_record() {
     departure="$(printf '%s' "$information_json" | jq -r \
       '[ .[] | select(.departsFromDesign) ] | .[0] // empty | "information item \(.id): \(.summary)"')"
     [ -z "$departure" ] \
-      || { departure_waits=yes; halt_why="$RR_REVIEWER_PREFIX the design, marked departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"; }
+      || { departure_waits=yes; stop_why="$RR_REVIEWER_PREFIX the design, marked departsFromDesign in $(printf '%s' "$departure" | cut -d: -f1) of $findings_path"; }
   fi
   # A departure stops the order in both run modes (the owner's ruling of 2026-10-26): what is wrong
   # is the design, or a recipe it relies on, so no fixer can repair it. An information item marked
   # departsFromDesign is a note and still waits as deviationPending (gap row 308).
   if [ -n "$departure" ] && [ -z "$accept" ] && [ -z "$departure_waits" ]; then
     local departure_ledger
-    departure_ledger="$(stop_order_in "$RV_LEDGER_DOC" "$unit_id" review-record "$halt_why" '["keep"]')"
+    departure_ledger="$(stop_order_in "$RV_LEDGER_DOC" "$unit_id" review-record "$stop_why" '["keep"]')"
     [ -n "$departure_ledger" ] || die3 "review-record: the stop on $unit_id could not be written."
     write_atomic "$RV_LEDGER_FILE" "$departure_ledger"
     die 107 "review-record: $unit_id is stopped for design drift. A departure from the design is named in $departure_file: $departure. What is wrong is the design, or a recipe it relies on, so no fixer can repair it, and no review record is written. Amend the order in design and close design, then redo the order. Or a person keeps the departure with go-on --continue keep, and review-record runs again."
@@ -10079,13 +9898,13 @@ do_review_record() {
   # The kept departure served this review, whose record now holds it as deviationAccepted.
   new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$unit_id" \
     '.orders = (.orders | map(if .id == $id then del(.departureKept) else . end))')"
-  halt_why=""
+  stop_why=""
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
-    halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
+    stop_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
   fi
   # One function writes every stop, so this reason never erases a reason the order already carried.
-  if [ -n "$halt_why" ]; then
-    new_ledger="$(stop_order_in "$new_ledger" "$unit_id" review-record "$halt_why" '["fix","close"]')"
+  if [ -n "$stop_why" ]; then
+    new_ledger="$(stop_order_in "$new_ledger" "$unit_id" review-record "$stop_why" '["fix","close"]')"
     [ -n "$new_ledger" ] || die3 "review-record: the stop on $unit_id could not be written."
   fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
@@ -10095,7 +9914,7 @@ do_review_record() {
   # One line per finding: its severity, whether it is actionable and what it cites. Its evidence
   # stays in the record, named by path.
   im_print_summary "review-record" "$(printf '%s' "$record_json" | jq -c --arg record "$review_file" \
-    --arg halt "${halt_why:-none}" --arg nongoals "${nongoal_hits:-none}" \
+    --arg stopped "${stop_why:-none}" --arg nongoals "${nongoal_hits:-none}" \
     --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     {order: .unit,
      commit: .reviewedAt,
@@ -10105,11 +9924,9 @@ do_review_record() {
      openActionable: ([ .findings[] | select(.actionable == true and .status == "open") | .id ]),
      nonGoalHits: $nongoals,
      state: "reviewed",
-     stopped: $halt}
+     stopped: $stopped}
     + (if has("deviationAccepted") then {departureAccepted: .deviationAccepted.because} else {} end)
-    + (if has("deviationPending") then {departurePending: ("the person decides at the task review, "
-         + (if .deviationPending | has("findings") then "with findings " + (.deviationPending.findings | join(", ")) + ", which are this departure, " else "" end)
-         + .deviationPending.departure)} else {} end)
+    + (if has("deviationPending") then {departurePending: ("the person decides at the task review, " + .deviationPending.departure)} else {} end)
     + {record: $record, next: $next}')"
   # Live-run row 96. A finding that cites no id never reaches a fixer, and nothing between here and
   # the close reads it. Interactive, the ones of medium or higher severity print after the summary,
@@ -10722,11 +10539,11 @@ RV_AC
   # A check answering unmet or unknown spends the round and leaves every finding open. order-tests
   # carries the same floor it carries at build-record: it must have run and answered met. A fix
   # round nothing executed proves nothing about the fix.
-  local all_met first_stopper halt_why=""
+  local all_met first_stopper stop_why=""
   all_met="$(br_checks_pass "$checks_json")"
   first_stopper="$(br_first_stopper "$checks_json")"
   if [ -n "$scope_list" ]; then
-    halt_why="$(printf '%s' "$RV_SCOPE_STOP" | jq -r '.[0]'), and a person decides whether the order owns more: ${scope_list%, }"
+    stop_why="$(printf '%s' "$RV_SCOPE_STOP" | jq -r '.[0]'), and a person decides whether the order owns more: ${scope_list%, }"
   fi
   # A check that stopped the round, at the cap too, does not stop the order here. verify-record
   # opens a finding for it, and the cap rules there decide: a ruling, a stop, or pending (gap row
@@ -10736,8 +10553,8 @@ RV_AC
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger" ] || die3 "fix-record: the ledger update for $unit_id failed."
-  if [ -n "$halt_why" ]; then
-    new_ledger="$(stop_order_in "$new_ledger" "$unit_id" fix-record "$halt_why" '["fix"]')"
+  if [ -n "$stop_why" ]; then
+    new_ledger="$(stop_order_in "$new_ledger" "$unit_id" fix-record "$stop_why" '["fix"]')"
     [ -n "$new_ledger" ] || die3 "fix-record: the stop on $unit_id could not be written."
   fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
@@ -10748,7 +10565,7 @@ RV_AC
   [ "$started_at_full" != "$current_commit" ] || fr_state="$fr_state, with no commit"
   im_print_summary "fix-record" "$(printf '%s' "$record_json" | jq -c --arg record "$record_file" \
     --arg rounds "$round_number of $FIX_ROUNDS_ALLOWED" --arg state "$fr_state" \
-    --arg scope "${scope_list:-none}" --arg halt "${halt_why:-none}" --argjson ac "$ac_json" \
+    --arg scope "${scope_list:-none}" --arg stopped "${stop_why:-none}" --argjson ac "$ac_json" \
     --arg next "$(im_next_step "$new_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     {order: .unit,
      round: $rounds,
@@ -10758,7 +10575,7 @@ RV_AC
      scopeInsufficient: ($scope | if endswith(", ") then .[0:-2] else . end),
      alreadyCorrect: (if $ac == [] then "none" else ($ac | join(", ")) end),
      state: $state,
-     stopped: $halt,
+     stopped: $stopped,
      record: $record,
      diff: .diffPath,
      next: $next}')"
@@ -10768,7 +10585,7 @@ RV_AC
   if [ "$all_met" != "true" ]; then
     echo "FIX-RECORD: round $round_number of $unit_id left every finding open. It was stopped by $first_stopper" >&2
   fi
-  [ -z "$halt_why" ] || echo "FIX-RECORD: $unit_id is stopped. $halt_why" >&2
+  [ -z "$stop_why" ] || echo "FIX-RECORD: $unit_id is stopped. $stop_why" >&2
   exit 0
 }
 
@@ -10938,7 +10755,7 @@ do_verify_record() {
   [ -z "$rulings_raw" ] \
     || task_require_answer 55 verify-record "a ruling on an open finding" "$TASK_PATH" "implement verify-record" "$unit_id" "$rulings_raw"
 
-  # Exit 45: a round is verified once. A second verification of the same round would record a
+  # A round is verified once. A second verification of the same round would record a
   # second set of verdicts over findings the first set already closed.
   local already ruled_doc ruled_ledger
   already="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --argjson r "$rounds_used" \
@@ -11193,21 +11010,21 @@ do_verify_record() {
       || die 57 "verify-record: the fix rounds are spent and these findings have no ruling: $unruled. Each one needs --ruling <id>=<wrong|deferred|load-bearing|test-wrong>::<reason>."
   fi
 
-  local halt_why="" halt_allows='["fix","close"]'
+  local stop_why="" stop_allows='["fix","close"]'
   if [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$nongoal_hits" ]; then
-    halt_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
+    stop_why="a finding hits a non-goal and nobody is present to rule on it: $nongoal_hits"
   elif [ -n "$RV_RULING_HALT" ]; then
-    halt_why="$RV_RULING_HALT"
-    halt_allows="$RV_RULING_ALLOWS"
+    stop_why="$RV_RULING_HALT"
+    stop_allows="$RV_RULING_ALLOWS"
   elif [ "$RV_RUN_MODE" = "autonomous" ] && [ -n "$disputed" ]; then
-    halt_why="a fixer reports $disputed already correct with the cited code unchanged since the review, and nobody is present to rule on it"
+    stop_why="a fixer reports $disputed already correct with the cited code unchanged since the review, and nobody is present to rule on it"
   fi
-  rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" "$halt_why" "$halt_allows"
+  rv_write_verification "$unit_id" "$updated_findings" "$rounds_used" "$verdict_rows" "$breakage_ids" "$outofscope_json" "$fix_file" "$stop_why" "$stop_allows"
 
-  rv_print_verification "$rounds_used" "verified" "${halt_why:-none}"
+  rv_print_verification "$rounds_used" "verified" "${stop_why:-none}"
   [ -z "$repair_ids" ] \
     || echo "VERIFY-RECORD: the fix rounds are spent, and one repair round may take $repair_ids. Run fix-brief; a finding the fixer reported scope-insufficient joins only with --allow, the paths a person grants. Or rule each one." >&2
-  [ -z "$halt_why" ] || echo "VERIFY-RECORD: $unit_id is stopped. $halt_why" >&2
+  [ -z "$stop_why" ] || echo "VERIFY-RECORD: $unit_id is stopped. $stop_why" >&2
   exit 0
 }
 
@@ -11307,9 +11124,9 @@ RV_RULINGS
 # "none".
 # Shared by the ordinary exit and the already-verified one, so the two print the same lines.
 rv_print_verification() {
-  local round="$1" state="$2" halt="$3"
+  local round="$1" state="$2" stop_why="$3"
   im_print_summary "verify-record" "$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson round "$round" \
-    --arg state "$state" --arg halt "$halt" --arg record "$RV_REVIEW_FILE" \
+    --arg state "$state" --arg stopped "$stop_why" --arg record "$RV_REVIEW_FILE" \
     --arg rounds "$round of $FIX_ROUNDS_ALLOWED" \
     --arg next "$(im_next_step "$RV_LEDGER_DOC" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     ([ (.rounds // [])[] | select(.round == $round) ] | .[0] // {}) as $r
@@ -11322,7 +11139,7 @@ rv_print_verification() {
        ruling: ([ .findings[] | select(.status == "ruled") | {id, ruling} ]),
        openActionable: ([ .findings[] | select(.actionable == true and .status == "open") | .id ]),
        state: $state,
-       stopped: $halt,
+       stopped: $stopped,
        record: $record,
        next: $next}')"
 }
@@ -11333,7 +11150,7 @@ rv_print_verification() {
 # $5 the new finding ids, $6 outOfScope, $7 the fix record path, $8 a stop reason or empty, $9 the
 # go-on choices it allows.
 rv_write_verification() {
-  local unit_id="$1" findings="$2" round="$3" verdicts="$4" breakage="$5" outofscope="$6" fix_file="$7" halt_why="$8" allows="${9:-[]}"
+  local unit_id="$1" findings="$2" round="$3" verdicts="$4" breakage="$5" outofscope="$6" fix_file="$7" stop_why="$8" allows="${9:-[]}"
   local round_entry new_doc step_expr new_ledger
   round_entry="$(jq -n --argjson round "$round" --arg fixRecord "$fix_file" \
     --argjson verdicts "$verdicts" --argjson newBreakage "$breakage" --argjson outOfScope "$outofscope" '
@@ -11355,8 +11172,8 @@ rv_write_verification() {
   new_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
     ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
   [ -n "$new_ledger" ] || die3 "verify-record: the ledger update for $unit_id failed."
-  if [ -n "$halt_why" ]; then
-    new_ledger="$(stop_order_in "$new_ledger" "$unit_id" verify-record "$halt_why" "$allows")"
+  if [ -n "$stop_why" ]; then
+    new_ledger="$(stop_order_in "$new_ledger" "$unit_id" verify-record "$stop_why" "$allows")"
     [ -n "$new_ledger" ] || die3 "verify-record: the stop on $unit_id could not be written."
   fi
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
@@ -11457,40 +11274,31 @@ do_close() {
     .orders = (.orders | map(if .id == $id then (.lastStep = "closed" | .commitRange = $range) else . end))')"
   [ -n "$new_ledger" ] || die3 "close: the ledger update for $unit_id failed."
 
-  # An order whose proof is gate froze no test, so the judgement of every machine
-  # criterion it owns is written here, from the check that took the order-tests slot in the record
-  # this close reads: the build record, or the last fix record. met is confirmed, and the derivation
-  # below then confirms the criterion the way it does for any owner. Not met writes nothing, and
-  # the row stays not-judged. A gate order is judged by `gate`, a third value: a model's row is
-  # weaker evidence queued for a person and a person's row claims a reader, and the recipe's own
-  # lines are neither (live-run row 65). An observe order is judged by `model`, which the observed check carries the same way: a
-  # model looked at the page, and completion puts the look to a person (live-run row 104).
-  # A confirm or record order writes nothing here: its check reads deferred, never met. The person
-  # answers a confirm order's criteria at review (gap row 196), and review checks a record order's
-  # (row 464).
-  local slot_check slot_verdict slot_judge slot_detail
+  # An order whose proof is gate froze no test, so the judgement of every machine criterion it owns
+  # is written here, from the configuration-gate check in the record this close reads: the build
+  # record, or the last fix record. met is confirmed, and the derivation below then confirms the
+  # criterion the way it does for any owner. Not met writes nothing, and the row stays not-judged.
+  # It is judged by `gate`, a third value: a model's row is weaker evidence queued for a person and
+  # a person's row claims a reader, and the recipe's own lines are neither (live-run row 65). An
+  # order proved by its own tests has its criteria judged by the rows it froze. Any other order
+  # writes nothing here. The person answers a confirm order's criteria at review (gap row 196), and
+  # review checks the criteria of a record or observe order: neither a reading nor a look judges a
+  # machine criterion, which the design check refuses on such an order unless a run line proves it.
+  local slot_verdict slot_detail
   br_order_facts "$RV_UNIT_JSON"
-  slot_check="$BR_ORDER_SLOT"
-  # An order proved by its own tests has its criteria judged by the checkpoint rows it froze.
-  [ "$slot_check" != "order-tests" ] || slot_check=""
-  if [ -n "$slot_check" ]; then
-    slot_verdict="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].verdict // ""' "$last_record" 2>/dev/null)"
-    slot_detail="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].detail // ""' "$last_record" 2>/dev/null)"
-    if [ "$slot_check" = "configuration-gate" ]; then
-      slot_judge="gate"
-    else
-      slot_judge="$(jq -r --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0].judgedBy // ""' "$last_record" 2>/dev/null)"
-    fi
-    if [ "$slot_verdict" = "met" ] && [ -n "$slot_judge" ]; then
-      new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg unit "$unit_id" --arg judge "$slot_judge" --arg note "$slot_detail" \
+  if [ "$BR_ORDER_SLOT" = "configuration-gate" ]; then
+    slot_verdict="$(jq -r '[ (.checks // [])[] | select(.id == "configuration-gate") ][0].verdict // ""' "$last_record" 2>/dev/null)"
+    slot_detail="$(jq -r '[ (.checks // [])[] | select(.id == "configuration-gate") ][0].detail // ""' "$last_record" 2>/dev/null)"
+    if [ "$slot_verdict" = "met" ]; then
+      new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg unit "$unit_id" --arg note "$slot_detail" \
         --argjson owned "$(printf '%s' "$RV_UNIT_JSON" | jq -c '.criteriaOwned // []')" \
         --argjson kinds "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id ]')" '
         .criteria = ((.criteria // []) | map(
           if ((.id as $i | $owned | index($i)) != null) and ((.id as $i | $kinds | index($i)) != null)
           then . + {judgements: ((((.judgements // []) | map(select(.unit != $unit))))
-                                 + [{unit: $unit, verdict: "confirmed", judgedBy: $judge, note: $note}])}
+                                 + [{unit: $unit, verdict: "confirmed", judgedBy: "gate", note: $note}])}
           else . end))')"
-      [ -n "$new_ledger" ] || die3 "close: the $slot_check judgement for $unit_id could not be written."
+      [ -n "$new_ledger" ] || die3 "close: the configuration-gate judgement for $unit_id could not be written."
     fi
   fi
 
@@ -11585,8 +11393,7 @@ CLOSE_FAKES
                        judgedBy: ("judgedBy=" + (([ (.judgements // [])[] | .judgedBy ] | unique) | if length == 0 then "nobody" else join(",") end))} ],
        rowsJudgedByModel: (([ (.criteria // [])[] | (.judgements // [])[] | select(.judgedBy == "model") ] | length)
                            + ([ (.orders // [])[] | select(.doneWhenJudgement.judgedBy == "model") ] | length)),
-       pendingForReview: (($review.deviationPending.findings // []) as $w
-                          | [ ($review.findings // [])[] | select(.status == "pending" and (.id as $i | $w | index($i) | not)) | .id ]
+       pendingForReview: ([ ($review.findings // [])[] | select(.status == "pending") | .id ]
                           + (if $review | has("deviationPending") then ["departure"] else [] end)),
        ledger: $ledger,
        next: $next}')"
@@ -11835,14 +11642,11 @@ FSN_NOT_CAUSED
 # stage next, and finished.json is what that stage receives.
 do_finish() {
   [ "$#" -ge 1 ] || die3 "finish: a task folder is required"
-  local task_arg="$1" values="" accept_warnings="" regressions='[]' because="" to
+  local task_arg="$1" values="" regressions='[]' because="" to
   shift
   while [ "$#" -gt 0 ]; do
     cr_take_flag "finish" "--value=values" "$@" || { shift "$?"; continue; }
     case "$1" in
-      --accept-warnings)
-        need_value "finish" "--accept-warnings" "$#" "${2:-}" text
-        accept_warnings="$2"; shift 2 ;;
       --regression)
         need_value "finish" "--regression" "$#" "${2:-}" text
         case "$2" in *=?*) ;; *) die3 "finish: --regression takes <order id>=<failing line> or not-caused=<failing line>; got: $2" ;; esac
@@ -11861,7 +11665,6 @@ do_finish() {
   im_load_task "$task_arg" "finish"
 
   fn_load_task_state "finish"
-  [ -z "$accept_warnings" ] || fn_require_answer "finish" "accepting a suite that failed on runner warnings alone" "" "$accept_warnings"
   [ "$regressions" = "[]" ] \
     || fn_require_answer "finish regression" "giving a test newly broken at finish to an order, or recording it as not caused by this task" "" "$because"
   for to in $(printf '%s' "$regressions" | jq -r '.[].to | select(. != "not-caused")'); do
@@ -11988,14 +11791,7 @@ FN_RECIPES
   case "$suite_verdict" in
     met|undeclared|not-needed) ;;
     warned)
-      # No test failed. Whether the runner's warnings count is a person's call: a person may
-      # record that they accept them with --accept-warnings, and review reads that answer.
-      if [ -n "$accept_warnings" ]; then
-        suite_json="$(printf '%s' "$suite_json" | jq -c --arg because "$accept_warnings" \
-          '. + {warningsAccepted: {because: $because, judgedBy: "person"}}')"
-      else
-        task_warn "$TASK_PATH" finish "" "the suite reads warned at $head_now, on runner warnings alone: $(printf '%s' "$suite_json" | jq -r '.detail')${sidecar:+ The whole output is at $IMPL_DIR/$sidecar.}"
-      fi
+      task_warn "$TASK_PATH" finish "" "the suite reads warned at $head_now, on runner warnings alone: $(printf '%s' "$suite_json" | jq -r '.detail')${sidecar:+ The whole output is at $IMPL_DIR/$sidecar.}"
       ;;
     *)
       task_warn "$TASK_PATH" finish "" "the suite reads $suite_verdict at $head_now: $(printf '%s' "$suite_json" | jq -r '.detail')${sidecar:+ The whole output is at $IMPL_DIR/$sidecar.}"
@@ -12031,17 +11827,13 @@ FN_RECIPES
                        evidence: (.evidence // ""), reason: (.rulingReason // "")} ]')"
       # What a build left for the person, which review puts to them (gap rows 279 and 308).
       pending_json="$(jq -cn --argjson have "$pending_json" --argjson doc "$one_review" --arg unit "$one_id" '
-          (($doc.deviationPending.findings // [])) as $withDeparture
-          | $have + [ ($doc.findings // [])[] | select(.status == "pending" and (.id as $i | $withDeparture | index($i) | not))
+          $have + [ ($doc.findings // [])[] | select(.status == "pending")
                     | {unit: $unit, kind: "ruling", finding: .id, severity: .severity, text: (.pendingBecause // .evidence // ""),
                        because: (if has("pendingBecause") then "a verifier answered and a person decides"
                                  elif ((.fixScope // []) | length) == 0 then "its fix scope is empty"
                                  else "a light task allows one fix round, and it is spent" end)} ]
                 + [ $doc.deviationPending // empty
-                    | {unit: $unit, kind: "departure", text: (.departure + ", in " + .file
-                        + (if has("findings") then "; the review findings that are this departure, which a rebuild answers: "
-                             + ([ ($doc.findings // [])[] | select(.id as $i | $withDeparture | index($i))
-                                  | "\(.id) (\(.severity)): \(.evidence)" ] | join("; ")) else "" end))} ]')"
+                    | {unit: $unit, kind: "departure", text: (.departure + ", in " + .file)} ]')"
     fi
     oi=$((oi + 1))
   done

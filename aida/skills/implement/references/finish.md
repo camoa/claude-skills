@@ -70,10 +70,7 @@ commit is outside every order and the frozen-test hook.
 A suite row may also declare `warning_line`, the lines a runner prints that fail no test. A
 failing suite where no line matches `failure_line` and at least one matches `warning_line` reads
 `warned`. No test failed. A `warning_line` with no `failure_line` is not read, and the suite's
-detail says so. A person may accept the warnings: record the person's answer with
-person-answer.sh, then run finish with `--accept-warnings <the person's reason>`. It refuses
-without that answer on record (exit 68). The record keeps the suite `warned`, with the reason and
-`judgedBy: person`, and review reports the suite row met as that person's answer.
+detail says so. A `warned` suite is a warning in the task record, and review lists it.
 
 A recipe can lack `warning_line`. Then the same red reads `unknown` over a red baseline, and
 `unmet` over a green or absent one. When no line matches `failure_line`, the detail names the
@@ -276,7 +273,7 @@ is not raised again.
 ## A person's answer
 
 Some calls are a person's decision only. In implement they are `go-on`, `redo`, `drop`,
-`start --leftovers keep`, `finish --accept-warnings` and `finish --regression` (exit 68). They are also `verify-record --ruling` (exit 55),
+`start --leftovers keep` and `finish --regression` (exit 68). They are also `verify-record --ruling` (exit 55),
 `fix-brief --allow` (exit 100), and `tests-freeze` with a row a person judged (exit 70). Each one
 refuses without the person's answer on record, in every run mode. The run mode does not decide
 whether a person answered.

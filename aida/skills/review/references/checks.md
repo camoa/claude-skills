@@ -98,10 +98,10 @@ line is met. A new line is unmet, and the record lists the first twenty under `n
 count.
 The check reads unknown only when the baseline kept no output or the run printed nothing.
 
-**Check 8 reads the recipe's outcome words, not the exit status.** Three of the five frameworks print
-that nothing was selected and exit zero. A silent pass reads unknown, never met. A failing suite on
-a framework the baseline recorded unmet subtracts the same way. When the suite row declares
-`failure_line`, only the lines it selects are compared, and the record names it under `failureLine`.
+**Check 8 reads the suite result that `finish` recorded, and runs nothing.** `finish` ran the whole
+suite once at this commit and subtracted the baseline. It stops on a newly broken test, so check 8
+never reads unmet. It reads warned or unknown when `finish` recorded a warning. The record names
+each framework's `failure_line` under `failureLine`.
 
 **Mutation testing runs only when the project opts in.** With no `review.mutation` in
 `project.json`, or with it false, the mutation command never runs. Check 4 then reads the

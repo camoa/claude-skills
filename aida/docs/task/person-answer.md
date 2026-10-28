@@ -8,7 +8,7 @@ what it does not.
 ## The steps that need your answer, in every run mode
 
 - In implementation: the three ways out of a stop, `go-on`, `redo` and `drop`,
-  `start --leftovers keep`, `finish --accept-warnings`, `verify-record --ruling`, `fix-brief --allow`, and a test row you judged at the freeze.
+  `start --leftovers keep`, `verify-record --ruling`, `fix-brief --allow`, and a test row you judged at the freeze.
 - In the task skill: `set-run-mode`, to any mode.
 
 The run mode does not decide whether you answered. An interactive run asks for your answer too.

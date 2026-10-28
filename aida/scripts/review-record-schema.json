@@ -84,13 +84,7 @@
       "required": ["departure", "file"],
       "properties": {
         "departure": { "type": "string", "minLength": 1 },
-        "file": { "type": "string", "minLength": 1 },
-        "findings": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string" },
-          "description": "In records written before 6.1.0, the ids of the open actionable findings the reviewer marked declaredDeparture. Each one is pending and waits with this departure, not as a ruling of its own, and `finish` names them in the decision's text (gap row 316)."
-        }
+        "file": { "type": "string", "minLength": 1 }
       },
       "description": "A departure no person has ruled on yet (gap row 279). An information item marked departsFromDesign is a note and stops nothing, in both modes: `departure` is what the reviewer marked, and `file` where. `finish` carries it to finished.json, and the review stage puts it to the person before its verdict (gap row 308). Present only on a review that found one and that no person accepted."
     }
@@ -188,7 +182,7 @@
         },
         "alreadyCorrectUnchangedSince": {
           "type": "string",
-          "description": "Beside `alreadyCorrectInRound`: the review's `reviewedAt` commit, when `fix-record` found the cited file unchanged between it and HEAD, or the finding cites no file (gap row 352). The claim then disputes the reviewer, so `verify-record` makes an addressed reading of it pending for a person, and halts an unattended order."
+          "description": "Beside `alreadyCorrectInRound`: the review's `reviewedAt` commit, when `fix-record` found the cited file unchanged between it and HEAD, or the finding cites no file (gap row 352). The claim then disputes the reviewer, so `verify-record` makes an addressed reading of it pending for a person, and stops an unattended order."
         },
         "defectInFile": {
           "type": "string",
@@ -198,7 +192,7 @@
         "declaredDeparture": {
           "type": "boolean",
           "const": true,
-          "description": "The reviewer's mark: this finding is the departure the builder declared in its report or its interface record. A departure stops the order, so no fixer undoes it before the person answers. When a person kept the departure with `go-on --continue keep`, here or at `build-record`, the finding is ruled wrong with their words (gap row 316). Records written before 6.1.0 may list it under deviationPending.findings. Present only when the reviewer marked it."
+          "description": "The reviewer's mark: this finding is the departure the builder declared in its report or its interface record. A departure stops the order, so no fixer undoes it before the person answers. When a person kept the departure with `go-on --continue keep`, here or at `build-record`, the finding is ruled wrong with their words (gap row 316). Present only when the reviewer marked it."
         },
         "departureFrom": {
           "type": "string",
@@ -269,7 +263,7 @@
         "round": {
           "type": "integer",
           "minimum": 1,
-          "description": "Which fix round this verification read. It matches the ledger's own roundsUsed at the moment `verify-record` ran, and a round is verified once: a second call on the same round refuses (exit 45)."
+          "description": "Which fix round this verification read. It matches the ledger's own roundsUsed at the moment `verify-record` ran, and a round is verified once: a second call on the same round verifies nothing and reports the record."
         },
         "fixRecord": {
           "type": "string",
