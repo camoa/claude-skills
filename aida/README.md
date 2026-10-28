@@ -57,12 +57,12 @@ make a decision once.
 
 ## Status
 
-Version 6. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. Every stage is
-built against behaviour fixtures. On every pull request, continuous integration runs the structure
-specs and the behaviour suite in `tests/behaviour`, under bash on Linux. The suite runs each stage
-end to end, and tests the hooks that guard commands, writes, reads, stops and compaction. The
-plugin's scripts run under bash, whatever shell the session uses. Live tasks on real projects have
-run since the betas, and each release fixes the defects they found. Copilot CLI, Codex, Cursor,
+Version 6. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. On every pull
+request, continuous integration runs the specs in `tests/`, under bash on Linux. The static specs
+read the scripts and the prose. The behaviour specs test the four hard stops, the three ways out of
+a stopped work order, the test freeze and the command hook. Each one calls one step directly, on
+records it writes itself. The plugin's scripts run under bash, whatever shell the session uses.
+Live tasks on real projects have run since the betas, and each release fixes the defects they found. Copilot CLI, Codex, Cursor,
 OpenCode and Antigravity are not supported yet. A task to support them is open.
 
 ## Installing it
