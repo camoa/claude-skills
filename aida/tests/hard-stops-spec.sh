@@ -9,21 +9,8 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
 source "$HERE/records.bash"
-HOOK="$PLUGIN/hooks/deny-frozen-test-writes.sh"
 TASK_ACTIONS="$PLUGIN/skills/task/scripts/task-actions.sh"
 
-# write_hook <tool input> [<agent type>]: the write hook's decision on one call from $HOOK_CWD, else
-# the worktree, deny, ask or allow. A command in the input makes it a Bash call, else a Write. With
-# no agent type, the call is the main session's. The hook's output stays in $ROOT/hook.json.
-write_hook() {
-  local tool=Write
-  [ "$(printf '%s' "$1" | jq 'has("command")')" = true ] && tool=Bash
-  jq -nc --arg t "$tool" --argjson i "$1" --arg c "${HOOK_CWD:-$WT}" --arg a "${2:-}" \
-    '{tool_name: $t, tool_input: $i, cwd: $c, permission_mode: "default", session_id: "s1"}
-     + (if $a == "" then {} else {agent_type: $a, agent_id: "a1"} end)' \
-    | CLAUDE_PLUGIN_ROOT="$PLUGIN" bash "$HOOK" | tee "$ROOT/hook.json" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
-}
-file() { jq -nc --arg f "$1" '{file_path: $f}'; }
 exists() { [ -e "$1" ] && echo yes || echo no; }
 
 # guarded_case <role> <folder> <file or command> [remembered]: the hook's decision on <role>'s call

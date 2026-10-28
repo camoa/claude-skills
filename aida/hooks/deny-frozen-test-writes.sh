@@ -60,7 +60,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # protected from everyone: the main session, a builder, a critic, all of them, because changing a
 # frozen test needs the design reopened, never a direct edit. The one exception is narrow and
 # role-specific: a test author dispatched for a unit may still write that same unit's own frozen
-# file, and never an earlier unit's (ideal/implementation.md's freeze). That exception is checked
+# file before its build, and never an earlier unit's (ideal/implementation.md's freeze). That exception is checked
 # per write, below, not as an upfront gate the way deny-prior-source.sh gates on agent_type.
 #
 # The main session is a payload with no agent_id, the test the person gate uses. It was allowed
@@ -494,7 +494,8 @@ fi
 
 # ---- collect the frozen paths: one "label<TAB>absolute path" line per frozen test or support file
 # Reads the tests records in implementation folder $1, resolves each path against code root $2, and
-# labels each line with the record's unit followed by $3.
+# labels each line with the record's unit followed by $3. A repair's record,
+# tests-<unit>-repair-<n>.json, is labelled with the unit it repairs.
 FROZEN=""
 collect_frozen() {
   local f base rec_unit paths rel abs
@@ -503,7 +504,7 @@ collect_frozen() {
     [ -e "$f" ] || continue
     jq empty "$f" >/dev/null 2>&1 || continue
     base="$(basename -- "$f")"
-    rec_unit="${base#tests-}"; rec_unit="${rec_unit%.json}"
+    rec_unit="${base#tests-}"; rec_unit="${rec_unit%.json}"; rec_unit="${rec_unit%%-repair-*}"
     paths="$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$f" 2>/dev/null)"
     [ -n "$paths" ] || continue
     while IFS= read -r rel; do
@@ -743,6 +744,16 @@ allow_unnamed_role() {
 frozen_reason() {
   printf 'this task froze this test for unit %s. Changing it needs the design reopened. If the test is wrong, stop and report it. Do not edit it.' "$1"
 }
+# True while the dispatched unit has not left the frozen state, read from its task's ledger. The
+# test author exception holds only then. A test author sent to a reopened order writes the repair's
+# one new test file, never a test frozen before the build.
+before_build() {
+  case "$(jq -r --arg id "$UNIT" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""' \
+    "$(dirname -- "$DISPATCH_FILE")/ledger.json" 2>/dev/null)" in
+    ""|tests-frozen) return 0 ;;
+  esac
+  return 1
+}
 # Rule three's exit, reached only when rule one found nothing, and before rule two's. $1 is a
 # suffix naming the door.
 main_exit() {
@@ -777,7 +788,7 @@ case "$TOOL" in
     TARGET_ABS="$OWNER_ABS"
     OWNER="$OWNER_UNIT"
     [ "$MAIN_SESSION" = false ] || deny_main "$TARGET_ABS" "$OWNER"
-    if is_test_author "$AGENT" && [ "$OWNER" = "$UNIT" ]; then
+    if is_test_author "$AGENT" && [ "$OWNER" = "$UNIT" ] && before_build; then
       if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
         echo '{}'; exit 0
       fi
@@ -978,7 +989,7 @@ sed
     done < <(split_segments "$(strip_heredocs "$CMD")")
     if [ -n "$HIT" ]; then
       [ "$MAIN_SESSION" = false ] || deny_main "$HIT through Bash" "$HIT_OWNER"
-      if is_test_author "$AGENT" && [ "$HIT_OWNER" = "$UNIT" ]; then
+      if is_test_author "$AGENT" && [ "$HIT_OWNER" = "$UNIT" ] && before_build; then
         if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
           echo '{}'; exit 0
         fi

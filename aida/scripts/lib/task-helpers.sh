@@ -841,7 +841,7 @@ started_orders_json() {
   [ -n "$ids" ] || ids='[]'
   # find, not a glob: zsh refuses a glob that matches nothing.
   while IFS= read -r f; do
-    f="$(basename -- "$f" .json)"
+    f="$(basename -- "$f" .json)"; f="${f%%-repair-*}"
     ids="$(printf '%s' "$ids" | jq -c --arg id "${f#*-}" 'if index($id) == null then . + [$id] else . end')"
   done < <(find "$impl" -mindepth 1 -maxdepth 1 -type f \( -name 'tests-wo*.json' -o -name 'build-wo*.json' \) 2>/dev/null)
   printf '%s' "$ids"

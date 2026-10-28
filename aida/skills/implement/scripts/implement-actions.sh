@@ -1360,8 +1360,9 @@ im_next_step() {
     return 0
   fi
   # How many actionable findings each reviewed order still has open, read once per order here so
-  # the jq below decides fix-or-close without opening a file itself.
-  local opens ids count i id file n
+  # the jq below decides fix-or-close without opening a file itself. The orders that owe a repair
+  # test are read in the same loop.
+  local opens owed='[]' ids count i id file n
   opens='{}'
   ids="$(printf '%s' "$ledger" | jq -c '[ (.orders // [])[] | .id ]')"
   count="$(printf '%s' "$ids" | jq 'length')"
@@ -1375,9 +1376,10 @@ im_next_step() {
       case "$n" in ''|*[!0-9]*) n=0 ;; esac
     fi
     opens="$(printf '%s' "$opens" | jq -c --arg id "$id" --argjson n "$n" '. + {($id): $n}')"
+    [ -z "$(im_repair_owed "$ledger" "$id")" ] || owed="$(printf '%s' "$owed" | jq -c --arg id "$id" '. + [$id]')"
     i=$((i + 1))
   done
-  printf '%s' "$ledger" | jq_files -r --argjson opens "$opens" --argjson snap "$snapshot" \
+  printf '%s' "$ledger" | jq_files -r --argjson opens "$opens" --argjson owed "$owed" --argjson snap "$snapshot" \
     --argjson allowed "$BUILD_ATTEMPTS_ALLOWED" --argjson precon "$precon" "$STOP_JQ"'
     (.orders // []) as $orders
     | ([ $orders[] | select(.lastStep == "closed") | .id ]) as $closed
@@ -1396,7 +1398,7 @@ im_next_step() {
     | if ($precon | not) and ($rv != null or $bd != null or ($ts != null and $removed == null)) then "preconditions"
       elif $rv != null then
         (if $rv.lastStep == "checks-passed" then "review \($rv.id): review the order"
-         elif any(($rv.repairs // [])[]; .testOwed == true) then
+         elif ($owed | index($rv.id)) != null then
            "tests \($rv.id): a failing test first, for the bug the task review found, then the fix round"
          elif (($opens[$rv.id] // 0) > 0) then "review \($rv.id): fix, then verify"
          else "review \($rv.id): close the order" end)
@@ -1413,6 +1415,14 @@ im_next_step() {
           + (if ($choices | length) > 0 then "go-on with " + ($choices | join(" or ")) + ", " else "" end) + "redo or drop"
       elif $orphan != null then "finish: \($orphan.id) depends on a dropped order, so redo it through design or drop it"
       else "none: nothing is ready, and every remaining order waits on a dependency that is not closed" end'
+}
+
+# The place, counted from 1, of the repair on order $2 in ledger document $1 that owes a failing
+# test first, or nothing. `reopen` marks a repair testOwed on an order proved by tests, and
+# `tests-freeze` removes the mark when it freezes that test.
+im_repair_owed() {
+  printf '%s' "$1" | jq -r --arg id "$2" '[ (.orders // [])[] | select(.id == $id) ][0]
+    | [ (.repairs // []) | to_entries[] | select(.value.testOwed == true) | .key + 1 ][0] // empty' 2>/dev/null
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -4594,15 +4604,16 @@ TB_OWNED
 
   # Another key, only while a failed task review's repair waits for its test: the findings
   # `reopen` put on the order's review record, which name the bug.
-  local repair_json
-  repair_json="$(jq -c --arg id "$unit_id" --slurpfile review <(cat "$IMPL_DIR/review-$unit_id.json" 2>/dev/null || echo '{}') '
-    [ (.orders // [])[] | select(.id == $id) | (.repairs // [])[] | select(.testOwed == true) ][0] // null
-    | if . == null then null
-      else .findings as $ids
-        | {findings: [ ($review[0].findings // [])[] | select(.id as $i | $ids | index($i)) | {id, file, lines, linkedTo, evidence} ],
-           whatToDo: "The task review found a bug in this closed order. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."} end' \
-    "$ledger_file")"
-  [ -n "$repair_json" ] || die3 "tests-brief: the repair of $unit_id could not be read from $ledger_file and $IMPL_DIR/review-$unit_id.json."
+  local repair_json=null repair_at
+  repair_at="$(im_repair_owed "$ledger_doc" "$unit_id")"
+  if [ -n "$repair_at" ]; then
+    repair_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --argjson n "$repair_at" \
+      --slurpfile review <(cat "$IMPL_DIR/review-$unit_id.json" 2>/dev/null || echo '{}') '
+      [ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1].findings as $ids
+      | {findings: [ ($review[0].findings // [])[] | select(.id as $i | $ids | index($i)) | {id, file, lines, linkedTo, evidence} ],
+         whatToDo: "The task review found a bug in this closed order. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."}')"
+    [ -n "$repair_json" ] || die3 "tests-brief: the repair of $unit_id could not be read from $ledger_file and $IMPL_DIR/review-$unit_id.json."
+  fi
 
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
@@ -5129,9 +5140,7 @@ do_tests_freeze() {
     if [ -n "$tf_prior_ledger" ]; then
       tf_prior_step="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" \
         '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""')"
-      tf_repair="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" '
-        [ (.orders // [])[] | select(.id == $id) ][0]
-        | [ (.repairs // []) | to_entries[] | select(.value.testOwed == true) | .key + 1 ][0] // empty')"
+      tf_repair="$(im_repair_owed "$tf_prior_ledger" "$unit_id")"
       [ -n "$tf_repair" ] || case "$tf_prior_step" in
         ""|null|tests-frozen) ;;
         *) die 76 "tests-freeze: $unit_id is at step $tf_prior_step, so it has already left tests-frozen. A second freeze rewinds the step and leaves the spent attempt counter and the stale build record where they are. When a person rules the design or a frozen test wrong, the route is redo, which takes the order back to its tests; otherwise this order goes forward, not back." ;;
@@ -10128,7 +10137,7 @@ do_fix_brief() {
 
   rv_load_state "fix-brief" "$unit_id"
   rv_require_step "fix-brief" "$unit_id" "reviewed fixed"
-  ! printf '%s' "$RV_ORDER_ENTRY" | jq -e 'any((.repairs // [])[]; .testOwed == true)' >/dev/null \
+  [ -z "$(im_repair_owed "$RV_LEDGER_DOC" "$unit_id")" ] \
     || die 121 "fix-brief: $unit_id owes a failing test first, for the bug the task review found. Run tests-brief on $unit_id, dispatch its test author, put the row to the checker, and run tests-freeze. Nothing is written."
   rv_load_review_record "fix-brief" "$unit_id"
 
@@ -12762,9 +12771,9 @@ do_dispatch_open() {
     # task review reopened that owes a failing test first: its author writes that one new test.
     if [ "$role_bare" = "test-author" ]; then
       local ta_step
-      ta_step="$(jq -r --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0]
-          | if any((.repairs // [])[]; .testOwed == true) then "repair test owed" else .lastStep // "not started" end' \
+      ta_step="$(jq -r --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // "not started"' \
         "$IMPL_DIR/ledger.json" 2>/dev/null)"
+      [ -z "$(im_repair_owed "$(cat "$IMPL_DIR/ledger.json" 2>/dev/null)" "$unit_id")" ] || ta_step="repair test owed"
       case "${ta_step:-not started}" in
         "not started"|tests-frozen|"repair test owed") ;;
         *) die3 "dispatch-open: $unit_id is at step $ta_step, and a test author is sent only before the build, at tests-frozen at the latest. To change a frozen test after a build, a person redoes the order. Nothing was dispatched." ;;

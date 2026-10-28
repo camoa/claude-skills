@@ -65,4 +65,28 @@ observe_case() (
 )
 expect "reopen on an observe order opens the fix round directly" "$(observe_case)" 'review wo1|false'
 
+# The repair's test author writes its new test file, and the hook refuses its write, by Write or by
+# Bash, to the order's first frozen test.
+author_case() (
+  source "$HERE/records.bash"
+  reopened tests
+  dispatch_record test-author
+  printf '%s|%s|%s\n' "$(write_hook "$(file "$WT/tests/a_test.sh")" aida:test-author)" \
+    "$(write_hook "$(jq -nc '{command: "printf x > tests/a_test.sh"}')" aida:test-author)" \
+    "$(write_hook "$(file "$WT/tests/a_bug_test.sh")" aida:test-author)"
+)
+expect "the repair's test author may write only its new test file" "$(author_case)" 'deny|deny|allow'
+
+# A repair's record names the order it repairs, so design and start read no other order from it.
+started_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records planned
+  jq -n '{unit: "wo1", rows: []}' >"$IMPL/tests-wo1-repair-1.json"
+  # shellcheck source=/dev/null
+  PLUGIN_ROOT="$PLUGIN" source "$PLUGIN/scripts/lib/task-helpers.sh"
+  started_orders_json "$TASK"
+)
+expect "a repair's record adds no order to the started list" "$(started_case)" '["wo1"]'
+
 finish
