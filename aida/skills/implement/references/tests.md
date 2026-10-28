@@ -355,11 +355,11 @@ row 273). An order with no test row dispatches the checker with these rows alone
 `--absence`, so the order's own proof covers the clause, or design splits it.
 
 **Dispatch `row-checker` in both modes.** It reads each named test against the test-authoring
-recipe and the sentence beside it. A person shown test names cannot see what it sees. It finds a
-case the recipe asks for that no test covers, and a test that measures something easier than the
-sentence. Asking the person every row added a turn and no judgement the checker had not given
-(live-run row 70). Pay the top tier. Open the dispatch record first, the same way every other role
-gets one:
+recipe and the sentence beside it. A person shown test names cannot see what it sees. It rejects a
+test for the four reasons in `what-a-test-is.md` only, and never asks for more cases than the
+behaviour needs. Asking the person every row added a turn and no judgement the checker had not
+given (live-run row 70). Pay the top tier. Open the dispatch record first, the same way every other
+role gets one:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh dispatch-open "<task_folder>" row-checker <order id> \
   --test-glob <pattern from the implement recipe>
@@ -396,12 +396,9 @@ Close the dispatch record as soon as it returns, per SKILL.md.
 (exit 64) a model's confirmed row that the verdict file rejects, because no model settles the
 checker's rejection (gap row 373). The done-when row is keyed
 by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. Do not put a
-confirmed row to the person. There is one exception: an interactive run where another row of this
-order goes back to the test author. Then list this order's confirmed rows, each with the checker's
-note, and ask once whether any of them goes back too. The author rewrites this order's tests
-anyway, so a doubt costs nothing to act on now (live-run row 208). A confirmed row the person sends
-back becomes `--row <criterion id>=rejected::person::<the person's words>`. The record says a model
-judged every other confirmed row, so a person can list those rows later and read any of them again.
+confirmed row to the person. The author edits only the rejected test, so a confirmed row stays as
+judged. The record says a model judged every confirmed row, so a person can list those rows later
+and read any of them again.
 
 **Interactive, a rejected row goes to the person, one question per row.** Open with: "The checker
 doubts that the new tests for one requirement prove what it asks. A model may not settle that
@@ -421,15 +418,16 @@ carries those rows under `rowsRejected`. Then open a new dispatch record and dis
 author fresh, with the same message as before. Do not resume the earlier author with a message: the
 brief is the one carrier. A role that stopped with no report is a different case, in SKILL.md.
 The refusal ends with a `checkAgain:` line, which names each row the next checker dispatch covers.
-Those are the rejected rows and each confirmed row with a test in a rejected row's file. The
-done-when row is there too when an owned criterion's row went back. The repair edits those files,
-so an earlier verdict on them no longer holds. The refusal records each other confirmed row on the
-order's ledger entry as `rowsConfirmed`. A checker's row keeps the note from the verdict file, so
-the note is the checker's own. The next checker writes the same verdict file, and that file holds
-only the rows put to it. So the next freeze takes a `--row` for each `checkAgain` row alone. It
-carries each recorded row itself and names them on a `rowsCarried:` line (gap row 259). It does
-not carry a recorded row whose test file changed after the verdict file was written. Exit 64 then
-names that row, and it goes to the checker again. Exit 64 for a missing row also records the confirmed rows it was given.
+Those are the rejected rows alone. A confirmed row is not read again, even when the repair edits
+its file, because a second reading buys a drifting verdict and no new judgement. The refusal
+records each confirmed row on the order's ledger entry as `rowsConfirmed`. A checker's row keeps
+the note from the verdict file, so the note is the checker's own. The next checker writes the same
+verdict file, and that file holds only the rows put to it. So the next freeze takes a `--row` for
+each `checkAgain` row alone. It carries each recorded row itself and names them on a
+`rowsCarried:` line (gap row 259). A file that holds a rejected row's test is the repair's own. A
+recorded row whose test file changed outside the repair is not carried. Exit 64 then names that
+row, and it goes to the checker again. Exit 64 for a missing row also records the confirmed rows
+it was given.
 Their notes then survive the next checker's verdict file. Freeze once every row for this order
 reads confirmed; that freeze clears both records.
 

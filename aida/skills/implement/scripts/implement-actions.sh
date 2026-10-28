@@ -458,11 +458,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      ledger entry as `rowsRejected`, which the next `tests-brief` carries to the test author. A
 #      rejection that lands on no ledger entry ends with a `redAgain: [<test name>, ...]` line
 #      instead, as JSON (gap row 258). Either way a
-#      `checkAgain: [<row key>, ...]` line names the rows the next checker dispatch covers: each
-#      rejected row, each confirmed row with a test in a rejected row's file, and the doneWhen row
-#      when an owned row is rejected. Each other confirmed row lands on the ledger entry as
+#      `checkAgain: [<row key>, ...]` line names the rows the next checker dispatch covers: the
+#      rejected rows alone (row 464). Each confirmed row lands on the ledger entry as
 #      `rowsConfirmed`, with its note, and the next freeze carries it when no `--row` gives it and
-#      its test files did not change since. A freeze that then writes prints a
+#      no file outside the repair changed since. A freeze that then writes prints a
 #      `rowsCarried: <row key>, ...` line naming the rows it carried. A repair round's checker
 #      judges only the rows put to it, so those notes are on disk nowhere else (gap row 259).
 #  66  `finish` found implementation is not finished for this task: an order that is neither closed
@@ -5486,11 +5485,16 @@ TF_EOF
   # A repair round's checker judges only the rows put to it, and writes the same verdict file, so a
   # row confirmed in an earlier round is on the ledger alone (gap row 259). Each one a --row does not
   # give is carried from there. A row whose test file changed after it was recorded is not carried,
-  # because the checker judged the file as it was then.
+  # because the checker judged the file as it was then. A file that holds a test of a row the last
+  # refusal sent back is the repair's own, so its change does not count (row 464).
   local tf_rec_src tf_recorded tf_rec_key tf_rec_at tf_rec_path tf_rec_keep tf_carried='[]' tf_changed=""
-  local tf_test_epoch TF_CONFIRMED_DOC TF_CARRY_NEXT=""
+  local tf_test_epoch TF_CONFIRMED_DOC TF_CARRY_NEXT="" tf_repair_files
   tf_rec_src="$tf_ledger_doc"
   [ -n "$tf_rec_src" ] || tf_rec_src='{}'
+  tf_repair_files="$(printf '%s' "$tf_rec_src" | jq -c --arg id "$unit_id" --argjson entries "$tf_red_entries" '
+      [ ([ (.orders // [])[] | select(.id == $id) ][0].checkAgain // [])[] | select(.verdict == "rejected") | .criterion ] as $sent
+      | [ $entries[] | select(.key as $k | $sent | index($k)) | .path ] | unique')"
+  [ -n "$tf_repair_files" ] || die3 "tests-freeze: could not list the test files the last repair of $unit_id edits."
   while IFS= read -r tf_recorded; do
     [ -n "$tf_recorded" ] || continue
     tf_rec_key="$(printf '%s' "$tf_recorded" | jq -r '.criterion')"
@@ -5501,7 +5505,9 @@ TF_EOF
       [ -n "$tf_rec_path" ] || continue
       tf_test_epoch="$(im_mtime "$tf_rec_path")"
       [ -n "$tf_test_epoch" ] || die3 "tests-freeze: could not read when $tf_rec_path was written."
-      [ "$tf_test_epoch" -gt "$tf_rec_at" ] && tf_rec_keep=false
+      [ "$tf_test_epoch" -gt "$tf_rec_at" ] \
+        && ! printf '%s' "$tf_repair_files" | jq -e --arg p "$tf_rec_path" 'index($p)' >/dev/null \
+        && tf_rec_keep=false
     done <<TF_REC_PATHS
 $(printf '%s' "$tf_red_entries" | jq -r --arg k "$tf_rec_key" '[ .[] | select(.key == $k) | .path ] | unique | .[]')
 TF_REC_PATHS
@@ -5564,20 +5570,12 @@ TF_RECORDED
       [ .[] | select(.verdict == "rejected") | .criterion + " (" + .judgedBy + "): " + .note ] | join("; ")')"
   if [ -n "$rejected_rows" ]; then
     # Each rejected row is repaired, which edits its test file and makes the other reds in it
-    # stale (gap row 258). red_again reads tf_red_entries to name them. The repair also moves what
-    # a confirmed row in that file was judged on, so the next checker dispatch covers it too. It
-    # covers the doneWhen row when an owned row is rejected, because that row names the owned
-    # verdicts it rests on.
+    # stale (gap row 258). red_again reads tf_red_entries to name them. The next checker dispatch
+    # covers the rejected rows alone. A confirmed row is not read again, though the repair edits
+    # its file: a second reading of an unchanged test buys a drifting verdict and no new
+    # judgement (row 464).
     local tf_check_again
-    tf_check_again="$(jq -nc --argjson rows "$rows_meta_json" --argjson entries "$tf_red_entries" \
-        --argjson owned "$owned_ids_json" --arg unit "$unit_id" '
-        ($rows | map(.criterion)) as $keys
-        | ([ $rows[] | select(.verdict == "rejected") | .criterion ]) as $rej
-        | ([ $entries[] | select(.key as $k | ($rej | index($k)) != null) | .path ] | unique) as $files
-        | $rej
-          + [ $entries[] | select(.path as $p | ($files | index($p)) != null) | .key ]
-          + (if [ $rej[] | select(. as $k | ($owned | index($k)) != null) ] == [] then [] else [$unit] end)
-        | map(select(. as $k | ($keys | index($k)) != null)) | unique')"
+    tf_check_again="$(printf '%s' "$rows_meta_json" | jq -c '[ .[] | select(.verdict == "rejected") | .criterion ] | unique')"
     [ -n "$tf_check_again" ] || die3 "tests-freeze: could not list the rows of $unit_id the checker judges again."
     # A rejected absence row has no test to repair, so the refusal names its two routes. An order
     # with no test author drops the --absence instead: its own check, the gate lines, the
@@ -5654,11 +5652,9 @@ TF_RECORDED
         tf_sent_back="$(printf '%s' "$tf_model_rows" | jq -c 'map(del(.cause))')"
       fi
     fi
-    # The confirmed rows the checker need not judge again are recorded. The next freeze carries them.
+    # The confirmed rows are recorded. The next freeze carries them.
     if [ -n "$tf_ledger_doc" ]; then
-      tf_record_confirmed "$tf_ledger_file" "$tf_ledger_doc" "$unit_id" \
-        "$(printf '%s' "$rows_meta_json" | jq -c --argjson again "$tf_check_again" \
-          'map(select(.criterion as $k | ($again | index($k)) == null))')"
+      tf_record_confirmed "$tf_ledger_file" "$tf_ledger_doc" "$unit_id" "$rows_meta_json"
       tf_ledger_doc="$TF_CONFIRMED_DOC"
     fi
     # Every rejected row lands on the order's ledger entry, with the checker's note from its verdict

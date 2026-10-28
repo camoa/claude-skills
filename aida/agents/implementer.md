@@ -74,9 +74,9 @@ name in the brief's `unit.interfaceNames` verbatim, in backticks. The check coun
 names. A name you did not build stays out, and your answers say why.
 
 Record the evidence: the command you ran, what it printed before, and what it printed after. Run the
-unit's own tests while you work, and the whole suite once before you stop. Run every tool that each
-recipe step names before you report. `build-record` runs them again, and a tool you skipped can
-spend the attempt.
+unit's own tests while you work. Do not run the whole suite: it runs once, at finish, after every
+order has closed. Run every tool that each recipe step names before you report. `build-record` runs
+them again, and a tool you skipped can spend the attempt.
 
 **Keep throw-away files in one folder of your own.** The orchestrator and every other agent share
 the session scratchpad. Make one folder under it, named for your unit and attempt, such as

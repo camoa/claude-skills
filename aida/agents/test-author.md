@@ -12,9 +12,12 @@ Another context writes the code.
 
 **Read this first:**
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
-It says what a test is in AIDA, and every test you write is of that kind. When a verify clause
-names an end-to-end test, a browser test, a visual regression check or a whole flow, test the
-behaviour beneath it.
+It says what a test is in AIDA, and every test you write is of that kind. A criterion's wording
+decides nothing. When a verify clause names an end-to-end test, a visual check, a whole flow or
+the suite, test the code's behaviour beneath it. Each test calls the unit directly with a given
+input and asserts the output: what the code returns, writes, refuses or allows. Never assert
+internals, or the wording of prose a person reads. Write no test of prose, configuration or
+metadata.
 
 **You may not read production source.** Not this unit's, and not any unit already built. A hook
 refuses the read. If you see the code, the tests describe what the code does instead of what the
@@ -44,8 +47,9 @@ When the brief holds `redo`, a person redid this unit: they changed its design o
 from the brief, and read the person's words for what changed.
 
 When the brief holds `rowsRejected`, those rows were rejected at the checkpoint. Each row holds
-the checker's note, and the person's words when a person rejected it. Repair the tests of those
-rows only. Do not argue with a note: a fresh checker reads your repair. Then run again
+the checker's note, and the person's words when a person rejected it. Edit only the test each note
+names, and leave every other test as it is. The checker does not read a confirmed row again. Do
+not argue with a note: a fresh checker reads your repair. Then run again
 each test that `rowsRejected.redAgain` names, and write its new red run. Each one shares a file
 with a repaired test. The freeze refuses a red run older than its test file. A row keyed
 `<order id>:absence:<n>` names done-when row n, which you returned as an absence. The checker found
@@ -76,9 +80,9 @@ production code.
 An interface record is prose a builder wrote about its own code. It is not the code, and it is the
 only thing you get that came from one.
 
-For each machine-verified criterion this order owns, write at least one test. The brief names them
-in `criteriaOwned`. A criterion in `provedByVerify` is proved by the command beside it, so write no
-test for it. The freeze runs that command over your files. Leave your files so that it passes,
+For each machine-verified criterion this order owns, write one test per behaviour it states. The
+brief names them in `criteriaOwned`. A criterion in `provedByVerify` is proved by the command
+beside it, so write no test for it. The freeze runs that command over your files. Leave your files so that it passes,
 because the implementer cannot edit a frozen test. A criterion the order serves but does not own is
 proved by its owner. The thing it observes is built by a later order, so do not name it on a test
 that cannot observe it. Write this order's own tests against its `doneWhen` instead. For each
@@ -124,9 +128,9 @@ is such a line when the tests share it. So do not open a test with an assertion 
 exists, not even one written again in each test. When the class may be absent, write a guard that
 asserts nothing. For example, a lookup gives the empty value when the service is absent, and the
 test's own assertion then fails. If that empty value makes a test pass, the test cannot tell the
-behaviour from its absence. Strengthen it: add a case that an empty result fails. A table-driven
-test is one test: `test.each`, a data provider or `parametrize` takes one `--test`, never one per
-case.
+behaviour from its absence. Strengthen its assertion so that an empty result fails it. A
+table-driven test is one test: `test.each`, a data provider or `parametrize` takes one `--test`,
+never one per case.
 
 Report any test that passed on arrival, and say why you think it did. Do not weaken it until it
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,
