@@ -68,8 +68,17 @@ names `reopen`. Run:
 It takes each review finding that fails a criterion, unless the person ruled it wrong. The finding
 goes to the closed order that owns its file and owns that criterion, else to one that serves it.
 When no such order exists, it goes to the one order that owns the file. That order gets one finding with origin `repair` per
-review finding, scoped to the file, and one more fix round. It goes back to its fix step. Its own
-fixer repairs it under a dispatch record, its owned files and the frozen-test hook. A fresh
+review finding, scoped to the file, and one more fix round. It goes back to its fix step.
+
+An order proved by tests first takes one failing test of the bug. `next:` names the tests step for
+it. Run `tests-brief`, and its brief holds the bug under `repair`. Dispatch the order's test
+author, put the row to the checker, then run `tests-freeze`. The test goes in a new test file the
+order owns. It freezes as a record of its own, `tests-<order>-repair-<n>.json`, and the order's
+first record is never rewritten. `fix-brief` refuses until then (exit 121). An order proved
+another way has no logic to test, so its fix round opens at once.
+
+The order's own fixer repairs it under a dispatch record, its owned files and the frozen-test
+hook. It makes the repair's test pass with the order's other tests. A fresh
 verifier then reads the round, and answers whether the failure arises in that file. The order
 closes again, and this step runs again. It rewrites `finished.json` with a range ending at the new
 head, and review runs from its first step. `reopen` removes `finished.json`, because an order is

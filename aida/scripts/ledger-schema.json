@@ -585,7 +585,8 @@
         "reviewFindings": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^f[1-9][0-9]*$"}, "description": "The task review's findings this order took: each fails a criterion this order serves, in a file it owns, or a file only it owns."},
         "findings": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^f[1-9][0-9]*$"}, "description": "The findings `reopen` added to this order's review record for them, with origin `repair`, in the same order."},
         "at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date the order was reopened. Set by the script, never typed."},
-        "closedRange": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$", "description": "The commitRange this order held when the review reopened it. `close` writes the range again, so this keeps the first one."}
+        "closedRange": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$", "description": "The commitRange this order held when the review reopened it. `close` writes the range again, so this keeps the first one."},
+        "testOwed": {"const": true, "description": "Present while the order, proved by tests, owes one failing test of the bug before its fixer runs. `reopen` writes it, and `tests-freeze` removes it when it freezes that test as `tests-<order>-repair-<n>.json`, n this entry's place in `repairs`. `fix-brief` refuses while it is present (exit 121)."}
       }
     },
     "ownRepair": {

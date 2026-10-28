@@ -57,6 +57,11 @@ that a test could prove it. Write that test, and do not return the clause as an 
 When the clause joins an absence to a behaviour, test the behaviour. Name the clause in your
 report, so design can split it.
 
+When the brief holds `repair`, the task review found a bug in this unit after it closed. Its
+`findings` name the file and what fails. Write one test that fails on that bug, in a new test
+file the unit owns, and write its red run. Do not change a frozen test: the freeze refuses a
+repair test in a file an earlier freeze holds. The fixer then makes your test pass.
+
 The dispatch message can name earlier tests. An earlier author wrote them before design reopened,
 and they are not in the tree. Read them. Write into your own test file only the tests the brief
 still asks for, changed where the brief changed. Then run each test and write its red run.

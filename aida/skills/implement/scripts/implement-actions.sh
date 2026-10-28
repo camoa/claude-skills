@@ -684,7 +684,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      judgement made on the shorter text. The next freeze with the same tests judges it again and
 #      removes the list (gap row 409). Nothing is written.
 #
-#
+# 121  `fix-brief` found the order owes a failing test first. `reopen` sent it a failed task
+#      review's finding, and the order is proved by tests, so its test author writes one test that
+#      fails on the bug, and `tests-freeze` freezes it, before the fixer runs. Nothing is written.
 #
 # 123  retired in 6.1.0. `go-on --continue check` over commits after the record records the
 #      checks whether or not they pass. A failed check leaves the order stopped, so close refuses it.
@@ -1394,6 +1396,8 @@ im_next_step() {
     | if ($precon | not) and ($rv != null or $bd != null or ($ts != null and $removed == null)) then "preconditions"
       elif $rv != null then
         (if $rv.lastStep == "checks-passed" then "review \($rv.id): review the order"
+         elif any(($rv.repairs // [])[]; .testOwed == true) then
+           "tests \($rv.id): a failing test first, for the bug the task review found, then the fix round"
          elif (($opens[$rv.id] // 0) > 0) then "review \($rv.id): fix, then verify"
          else "review \($rv.id): close the order" end)
       elif $bd != null then
@@ -4588,6 +4592,18 @@ TB_OWNED
   [ -z "$tb_lost" ] \
     || task_warn "$TASK_PATH" tests-brief "$unit_id" "checkAgain names rejected rows this brief does not carry, so the test author gets no note for them: $tb_lost"
 
+  # Another key, only while a failed task review's repair waits for its test: the findings
+  # `reopen` put on the order's review record, which name the bug.
+  local repair_json
+  repair_json="$(jq -c --arg id "$unit_id" --slurpfile review <(cat "$IMPL_DIR/review-$unit_id.json" 2>/dev/null || echo '{}') '
+    [ (.orders // [])[] | select(.id == $id) | (.repairs // [])[] | select(.testOwed == true) ][0] // null
+    | if . == null then null
+      else .findings as $ids
+        | {findings: [ ($review[0].findings // [])[] | select(.id as $i | $ids | index($i)) | {id, file, lines, linkedTo, evidence} ],
+           whatToDo: "The task review found a bug in this closed order. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."} end' \
+    "$ledger_file")"
+  [ -n "$repair_json" ] || die3 "tests-brief: the repair of $unit_id could not be read from $ledger_file and $IMPL_DIR/review-$unit_id.json."
+
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
   # would spend the orchestrator's own context on words only the test author reads.
@@ -4595,12 +4611,12 @@ TB_OWNED
   # older than it. A brief written again in the same round, for a rejected row, keeps
   # the first time, because a test file the repair leaves alone keeps its red runs. A red older
   # than its own test file is warned too, so each test in an edited file runs again (gap row 258).
-  # The round is the same only while the order and its criteria are. A redo moves the brief aside,
-  # so the next brief starts a new round.
+  # The round is the same only while the order, its criteria and its repair are. A redo moves the
+  # brief aside, so the next brief starts a new round.
   local brief_file brief_json round_started_at=""
   brief_file="$IMPL_DIR/brief-$unit_id-tests.json"
-  if [ -f "$brief_file" ] && [ "$(jq -c --argjson unit "$unit_out" --argjson criteria "$criteria_out" \
-      '.unit == $unit and .criteria == $criteria' "$brief_file" 2>/dev/null)" = "true" ]; then
+  if [ -f "$brief_file" ] && [ "$(jq -c --argjson unit "$unit_out" --argjson criteria "$criteria_out" --argjson repair "$repair_json" \
+      '.unit == $unit and .criteria == $criteria and (.repair // null) == $repair' "$brief_file" 2>/dev/null)" = "true" ]; then
     round_started_at="$(jq -r '.roundStartedAt // empty' "$brief_file" 2>/dev/null)"
     [ -n "$round_started_at" ] || round_started_at="$(im_iso_of "$(im_mtime "$brief_file")")"
   fi
@@ -4611,6 +4627,7 @@ TB_OWNED
         --argjson reuses "$reuses_out" \
         --argjson redo "$redo_json" --argjson absenceCandidates "$absence_out" \
         --argjson rowsRejected "$rows_rejected_json" --argjson deliverableIsTests "$deliverable_out" \
+        --argjson repair "$repair_json" \
         --arg testRecipePath "$test_recipe_path" --arg roundStartedAt "$round_started_at" \
         --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" --arg worktree "$RV_CODEPATH" \
         --arg reportPath "$IMPL_DIR/answers-$unit_id-tests.md" \
@@ -4622,6 +4639,7 @@ TB_OWNED
      | if $rowsRejected == null then . else .rowsRejected = $rowsRejected end
      | if $absenceCandidates == null then . else .absenceCandidates = $absenceCandidates end
      | if $deliverableIsTests == null then . else .deliverableIsTests = $deliverableIsTests end
+     | if $repair == null then . else .repair = $repair end
      | .worktree = $worktree')"
   [ -n "$brief_json" ] || die3 "tests-brief: could not assemble the brief for $unit_id."
   im_void_unsent_dispatch test-author "$unit_id"
@@ -4642,7 +4660,9 @@ TB_OWNED
      rowsRejected: (if has("rowsRejected") then ([ .rowsRejected.rows[] | .criterion ] | join(", ")) else null end),
      absenceCandidates: (if has("absenceCandidates") then (.absenceCandidates.clauses | length) else null end),
      deliverableIsTests: (if has("deliverableIsTests") then true else null end),
+     repair: (if has("repair") then ([ .repair.findings[] | .id ] | join(", ")) else null end),
      next: "dispatch test-author with the brief path and the test-authoring recipe path, then tests-freeze"}
+    | if .repair == null then del(.repair) else . end
     | if .absenceCandidates == null then del(.absenceCandidates) else . end
     | if .deliverableIsTests == null then del(.deliverableIsTests) else . end
     | if .redo == null then del(.redo) else . end
@@ -5099,16 +5119,25 @@ do_tests_freeze() {
   # --- 76: a re-freeze after the order has already left the frozen state ---------------------------
   # A re-freeze rewinds lastStep and leaves attemptsUsed and the build record where they are, so the
   # order would rebuild with a spent counter and a record for tests that no longer exist.
-  local tf_prior_step tf_prior_ledger tf_prior_halt=""
+  # The one freeze after the build is a repair's. A failed task review reopened this order, and it
+  # owes one failing test of the bug. That test freezes as a record of its own,
+  # tests-<order>-repair-<n>.json, n the repair's place in the order's repairs. The order stays at
+  # its fix step, and its first record is never rewritten.
+  local tf_prior_step tf_prior_ledger tf_prior_halt="" tf_repair=""
   if [ -f "$IMPL_DIR/ledger.json" ]; then
     tf_prior_ledger="$(jq -c '.' "$IMPL_DIR/ledger.json" 2>/dev/null)"
     if [ -n "$tf_prior_ledger" ]; then
       tf_prior_step="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" \
         '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""')"
-      case "$tf_prior_step" in
+      tf_repair="$(printf '%s' "$tf_prior_ledger" | jq -r --arg id "$unit_id" '
+        [ (.orders // [])[] | select(.id == $id) ][0]
+        | [ (.repairs // []) | to_entries[] | select(.value.testOwed == true) | .key + 1 ][0] // empty')"
+      [ -n "$tf_repair" ] || case "$tf_prior_step" in
         ""|null|tests-frozen) ;;
         *) die 76 "tests-freeze: $unit_id is at step $tf_prior_step, so it has already left tests-frozen. A second freeze rewinds the step and leaves the spent attempt counter and the stale build record where they are. When a person rules the design or a frozen test wrong, the route is redo, which takes the order back to its tests; otherwise this order goes forward, not back." ;;
       esac
+      [ -z "$tf_repair" ] || [ "$absence_json" = "[]" ] \
+        || die3 "tests-freeze: $unit_id is freezing the test of a repair, which proves a bug and routes no --absence clause. Drop the --absence."
       tf_prior_halt="$(stop_text "$(printf '%s' "$tf_prior_ledger" | jq -c --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0] // {}')")"
     fi
   fi
@@ -5263,6 +5292,21 @@ TF_EOF
     die 27 "tests-freeze: these --test paths are files $unit_id does not own: ${unowned_paths%, }. $owned_tests"
   fi
 
+  # --- 27 also: a repair's test is a new file, so no earlier freeze of this order holds it ---------
+  local tf_frozen_before="" tf_refrozen=""
+  if [ -n "$tf_repair" ]; then
+    tf_frozen_before="$(im_with_repair_tests "$unit_id" "$(jq -c '.' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)" \
+      | jq -r '[ (.rows // [])[] | (.tests // [])[] | .path ] + [ (.support // [])[] | .path ] | unique | .[]')"
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      printf '%s\n' "$tf_frozen_before" | grep -qxF -- "$p" && tf_refrozen="$tf_refrozen$p, "
+    done <<TF_EOF
+$unique_rel_paths
+TF_EOF
+    [ -z "$tf_refrozen" ] \
+      || die 27 "tests-freeze: the repair's test goes in a new test file, and an earlier freeze of $unit_id holds these: ${tf_refrozen%, }. Nobody changes a frozen test. The test author writes the test into a new file $unit_id owns, and this freeze runs again. Nothing is frozen."
+  fi
+
   # --- a --support path is a base class or a fixture the author wrote beside the tests -----------
   # It is resolved, checked and hashed the way a --test path is, and refused when it is missing
   # or when a test glob matches it: such a file is a test and belongs on --test (live-run row 90).
@@ -5339,7 +5383,9 @@ TF_EOF
           | select(($named | index($cid)) == null) | $cid ]
       | join(", ")
     ')"
-  [ -z "$missing_machine" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
+  # A repair's one test proves the bug, and the order's first record still proves its criteria, so
+  # neither warning below is read on a repair.
+  [ -z "$missing_machine" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] || [ -n "$tf_repair" ] \
     || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine"
 
   # --- every person-verified criterion the unit serves or owns needs a --checklist row, or a warning
@@ -5350,7 +5396,7 @@ TF_EOF
           | select(($named | index($cid)) == null) | $cid ]
       | join(", ")
     ')"
-  [ -z "$missing_person" ] \
+  [ -z "$missing_person" ] || [ -n "$tf_repair" ] \
     || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these person-verified criteria have no --checklist row, so they have no row: $missing_person"
 
   # --- a --test that names a criterion the unit does not serve or own is a warning ------------------
@@ -5965,6 +6011,7 @@ TF_EOF
   # --- 35: a record already exists for this unit at a different commit -----------------------------
   local record_file existing_doc existing_commit=""
   record_file="$IMPL_DIR/tests-$unit_id.json"
+  [ -z "$tf_repair" ] || record_file="$IMPL_DIR/tests-$unit_id-repair-$tf_repair.json"
   if [ -f "$record_file" ]; then
     existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
     [ -n "$existing_doc" ] \
@@ -6257,8 +6304,14 @@ TF_EOF
   # criterion judgement this order already left is replaced rather than added to. The routed
   # clauses are replaced the same way, and removed when this freeze routed none. A freeze that gets
   # here had no rejected row, so the rows a person rejected earlier are answered and removed.
-  ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c \
+  # A repair's row judges its test of the bug, and its verdict stays in row-check-<order>.json. The
+  # judgements and the routed clauses the first freeze wrote stay as they are.
+  ledger_with_judgements="$(printf '%s' "$ledger_doc_now" | jq -c --argjson repair "$([ -n "$tf_repair" ] && echo true || echo false)" \
     --arg unit "$unit_id" --argjson rows "$rows_meta_json" --argjson absences "$absence_json" '
+    if $repair then
+      .orders = ((.orders // []) | map(if .id != $unit then .
+        else del(.rowsRejected, .rowsConfirmed, .rowsSentBack, .checkAgain) end))
+    else
     ([ $rows[] | select(.criterion == $unit) ][0]) as $dw
     | .criteria = ((.criteria // []) | map(
       . as $c
@@ -6275,7 +6328,8 @@ TF_EOF
             | (if ($absences | length) == 0 then del(.absenceClauses)
                else .absenceClauses = $absences end)
             | del(.rowsRejected, .rowsConfirmed, .rowsSentBack, .checkAgain, .doneWhenGained, .doneWhenGainedAt))
-      end))')"
+      end))
+    end')"
   [ -n "$ledger_with_judgements" ] \
     || die3 "tests-freeze: the ledger update for $unit_id's judgements failed."
   write_atomic "$ledger_file_now" "$ledger_with_judgements"
@@ -6332,8 +6386,13 @@ TF_EOF
   write_atomic "$record_file" "$record_json"
   # The freeze is one step in this version: red was watched, the rows exist, and the hash is taken,
   # all checked above. So the order moves straight to tests-frozen and not through the four steps
-  # the ledger's vocabulary keeps for a finer grain.
-  tt_ledger_update "$IMPL_DIR/ledger.json" "$unit_id" '.lastStep = "tests-frozen"'
+  # the ledger's vocabulary keeps for a finer grain. A repair's freeze pays the test it owed, and
+  # the order stays at its fix step, so the fix round opens next.
+  if [ -n "$tf_repair" ]; then
+    tt_ledger_update "$IMPL_DIR/ledger.json" "$unit_id" '.repairs = [ .repairs[] | del(.testOwed) ]'
+  else
+    tt_ledger_update "$IMPL_DIR/ledger.json" "$unit_id" '.lastStep = "tests-frozen"'
+  fi
   task_answer_consume
   echo "TESTS-FREEZE: written (commit $current_commit)"
   printf '%s\n' "$record_file"
@@ -6365,6 +6424,22 @@ bb_load_unit() {
   BB_UNIT_JSON="$(printf '%s' "$snapshot_doc" | jq -c --arg id "$unit_id" \
     '(.workOrders // []) | map(select(.id == $id)) | .[0] // null')"
   [ "$BB_UNIT_JSON" != "null" ] || die3 "build-brief: $unit_id is not in the frozen copy. Run read to list the orders it holds."
+}
+
+# Order $1's frozen test record document $2, with the rows and the support files of each repair's
+# record appended. A repair's record, tests-<order>-repair-<n>.json, holds the failing test of a bug
+# a failed task review found. The fix round runs and hashes it with the order's own tests. Prints the
+# document, or nothing when a record does not read.
+im_with_repair_tests() {
+  local doc="$2" f
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    doc="$(printf '%s' "$doc" | jq -c --slurpfile r "$f" \
+      '.rows = ((.rows // []) + ($r[0].rows // [])) | .support = ((.support // []) + ($r[0].support // []))' 2>/dev/null)"
+  done <<IWR_EOF
+$(find "$IMPL_DIR" -maxdepth 1 -type f -name "tests-$1-repair-*.json" 2>/dev/null | sort)
+IWR_EOF
+  printf '%s' "$doc"
 }
 
 # The frozen tests record of unit $2, which step three writes. Sets IM_TESTS_DOC. $1 names the step
@@ -8809,7 +8884,7 @@ go_on_check() {
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
     || die3 "go-on: $tests_file not found, though a build record implies tests-freeze already ran for $unit_id."
-  tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
+  tests_doc="$(im_with_repair_tests "$unit_id" "$(jq -c '.' "$tests_file" 2>/dev/null)")"
   [ -n "$tests_doc" ] \
     || die3 "go-on: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
@@ -9052,7 +9127,9 @@ IPC_OWNED
 # code the tree holds, and both sit inside the range of an order built around them. And so are the
 # commits another order's stopped builder made, which its ledger entry lists. A record written
 # before the lists (6.1.0 batch 2a) names its own range instead, read in the repository $2: the
-# lists are new, and that range is the one thing such a record knows.
+# lists are new, and that range is the one thing such a record knows. A repair's freeze record of
+# order $1 itself, tests-<order>-repair-<n>.json, is listed too. Its test author made that commit,
+# not the fixer, so the fix round begins after it.
 im_others_listed() {
   local f repo="${2:-$RV_CODEPATH}"
   find "$TASK_PATH" -mindepth 2 -maxdepth 3 -type f \( -name 'build-wo*.json' -o -name 'fix-wo*-*.json' -o -name 'tests-wo*.json' \) 2>/dev/null \
@@ -9074,12 +9151,15 @@ im_others_listed() {
 }
 
 # The commits order $1's own records in the implementation folder list, one per line, sorted: its
-# freezes, its build and fix lists, the earlier attempts' lists, and the commits its stopped builder
-# made, which its ledger entry lists. $2 the repository, for a record written before the lists,
-# whose list is read from its own range.
+# freezes and its repairs' freezes, its build and fix lists, the earlier attempts' lists, and the
+# commits its stopped builder made, which its ledger entry lists. $2 the repository, for a record
+# written before the lists, whose list is read from its own range.
 im_own_listed() {
   local f
   { tf_freeze_commits "$IMPL_DIR/tests-$1.json" | jq -r '.[]'
+    find "$IMPL_DIR" -maxdepth 1 -type f -name "tests-$1-repair-*.json" 2>/dev/null | while IFS= read -r f; do
+      tf_freeze_commits "$f" | jq -r '.[]'
+    done
     for f in "$IMPL_DIR/build-$1.json" "$IMPL_DIR"/fix-"$1"-*.json; do
       [ -f "$f" ] || continue
       im_record_commits "$f" "$2" "$1" | jq -r '.[]'
@@ -9235,7 +9315,7 @@ rv_frozen_test_paths_json() {
   local unit_id="$1" tests_file tests_doc
   tests_file="$IMPL_DIR/tests-$unit_id.json"
   [ -f "$tests_file" ] || { printf '[]'; return 0; }
-  tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
+  tests_doc="$(im_with_repair_tests "$unit_id" "$(jq -c '.' "$tests_file" 2>/dev/null)")"
   [ -n "$tests_doc" ] || { printf '[]'; return 0; }
   printf '%s' "$tests_doc" | jq -c \
     '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique'
@@ -10048,6 +10128,8 @@ do_fix_brief() {
 
   rv_load_state "fix-brief" "$unit_id"
   rv_require_step "fix-brief" "$unit_id" "reviewed fixed"
+  ! printf '%s' "$RV_ORDER_ENTRY" | jq -e 'any((.repairs // [])[]; .testOwed == true)' >/dev/null \
+    || die 121 "fix-brief: $unit_id owes a failing test first, for the bug the task review found. Run tests-brief on $unit_id, dispatch its test author, put the row to the checker, and run tests-freeze. Nothing is written."
   rv_load_review_record "fix-brief" "$unit_id"
 
   local open_count rounds_used
@@ -10497,7 +10579,7 @@ RV_AC
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
     || die3 "fix-record: $tests_file not found, though a fix round implies tests-freeze already ran for $unit_id."
-  tests_doc="$(jq -c '.' "$tests_file" 2>/dev/null)"
+  tests_doc="$(im_with_repair_tests "$unit_id" "$(jq -c '.' "$tests_file" 2>/dev/null)")"
   [ -n "$tests_doc" ] \
     || die3 "fix-record: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
   if [ -z "$gate_recipes" ]; then
@@ -11768,6 +11850,7 @@ FN_RECIPES
 # 390). Each finding the review records as failing a criterion reopens the closed order that owns
 # its file and owns that criterion, then one that serves it, then the one order that owns the file. So the order's own
 # fixer, dispatch record, owned files and verifier bound the repair, as for a closed-order defect.
+# An order proved by tests first takes one failing test of the bug, frozen as a record of its own.
 # One repair entry per order, so one fix round is added however many findings it takes. A finding
 # no order takes is named and left. finished.json goes, because finish's condition no longer
 # holds and every field in it is derived. Exit 119 when the review over this finish did not fail,
@@ -11846,10 +11929,15 @@ RO_ONE
   [ "$routed" != "{}" ] \
     || die 119 "reopen: no finding of the failed review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns. A person fixes on the task branch, then runs finish again."
 
+  # An order proved by tests owes one failing test of the bug before its fixer runs (owner,
+  # 2026-10-28). Any other proof has no logic to test, so its fix round opens at once.
   ledger_doc="$FN_LEDGER_DOC"
   for order in $(printf '%s' "$routed" | jq -r 'keys[]'); do
+    br_order_facts "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg o "$order" '[ .workOrders[] | select(.id == $o) ][0]')"
     rf="$(printf '%s' "$routed" | jq -c --arg o "$order" --arg range "$reviewed" --arg at "$(date -u +%Y-%m-%d)" \
-      '{review: $range, reviewFindings: .[$o].reviewFindings, findings: .[$o].findings, at: $at}')"
+      --argjson owed "$([ "$BR_ORDER_SLOT" = "order-tests" ] && echo true || echo false)" '
+      {review: $range, reviewFindings: .[$o].reviewFindings, findings: .[$o].findings, at: $at}
+      + (if $owed then {testOwed: true} else {} end)')"
     ledger_doc="$(im_reopen_in "$ledger_doc" "$order" "$rf")"
     [ -n "$ledger_doc" ] || die3 "reopen: the repair on $order could not be written to the ledger."
   done
@@ -12670,13 +12758,15 @@ do_dispatch_open() {
     im_refuse_unneeded_role "$role_bare" "$unit_id"
     # The hook lets an order's own test author write its frozen tests, so it is sent only before the
     # build: before the freeze, or at tests-frozen for a second freeze. This is the
-    # error build-brief gives an implementer at the wrong step.
+    # error build-brief gives an implementer at the wrong step. The one exception is an order a
+    # task review reopened that owes a failing test first: its author writes that one new test.
     if [ "$role_bare" = "test-author" ]; then
       local ta_step
-      ta_step="$(jq -r --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // "not started"' \
+      ta_step="$(jq -r --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0]
+          | if any((.repairs // [])[]; .testOwed == true) then "repair test owed" else .lastStep // "not started" end' \
         "$IMPL_DIR/ledger.json" 2>/dev/null)"
       case "${ta_step:-not started}" in
-        "not started"|tests-frozen) ;;
+        "not started"|tests-frozen|"repair test owed") ;;
         *) die3 "dispatch-open: $unit_id is at step $ta_step, and a test author is sent only before the build, at tests-frozen at the latest. To change a frozen test after a build, a person redoes the order. Nothing was dispatched." ;;
       esac
     fi
