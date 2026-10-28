@@ -52,12 +52,13 @@ the close needs no reason.
 
 `read` printed one `observed(<criterion>)` line per criterion a model judged through a browser.
 It printed one `observedRow(<criterion>)` line per row. Each row carries the verdict, the surface
-and viewport, the before image, the screenshot after, and the done-when sentence the model
-judged. A model looked, not a person, so the person decides whether that look stands.
+and viewport, the screenshot after, and the done-when sentence the model judged. A row that says
+the page is as it was also carries the before image. A model looked, not a person, so the person
+decides whether that look stands.
 
 Interactive: ask one plain question per criterion whose record is on disk. Name the criterion,
-show its rows verbatim from the output, and name both images per row, before and after, so
-the person can open them. A row that says the page is as it was is judged between the two.
+show its rows verbatim from the output, and name each image per row, so the person can open
+them. A row that says the page is as it was is judged between the two.
 Ask whether they accept the observation. Their answer becomes one flag on `close`:
 `--observed-accepted <criterion>=yes|no`. Every such criterion needs an answer; the close
 refuses at exit 1 naming the ones without. A no needs a reason, the way a verdict that did not

@@ -247,8 +247,8 @@ CP_FINDINGS
 }
 
 # Every criterion owned by a frozen order whose proof is observe, with the observed record the
-# build read for that order: the rows a model judged at each surface and viewport, each with its
-# screenshot and its before image (live-run rows 104 and 114). The frozen snapshot names the
+# build read for that order: the rows a model judged, each with its screenshot, and its before
+# image where the row has one (live-run rows 104 and 114). The frozen snapshot names the
 # orders; a task with none, or with no snapshot, lists nothing. A record that is not there is a state the body says in words.
 # Sets CP_OBSERVED to [{criterion, order, record, rows: [{doneWhen, surface, viewport,
 # screenshot, before, verdict, note}]}]. $1 the action.
@@ -353,7 +353,7 @@ cp_print_summary() {
     + [ $followUps[] | line("followUp(\(.finding))"; "\(.severity) task=\(.task // "none")\(if (.reason // "") == "" then "" else " left=\(.reason)" end)") ]
     + [ line("followUps"; "\($followUps | length) with-task=\([ $followUps[] | select(.task != null) ] | length) without=\([ $followUps[] | select(.task == null) ] | length)") ]
     + [ $observed[] | line("observed(\(.criterion))"; "order=\(.order) record=\(.record) rows=\(.rows | length) met=\([ .rows[] | select(.verdict == "met") ] | length)") ]
-    + [ $observed[] | .criterion as $c | .rows[] | line("observedRow(\($c))"; "\(.verdict) \(.surface)@\(.viewport) before=\(.before) after=\(.screenshot) :: \(.doneWhen)") ]
+    + [ $observed[] | .criterion as $c | .rows[] | line("observedRow(\($c))"; "\(.verdict) \(.surface)@\(.viewport)" + (if .before then " before=\(.before)" else "" end) + " after=\(.screenshot) :: \(.doneWhen)") ]
     + [ line("completionRecord"; $record) ]
     + [ $extra | to_entries[] | line(.key; .value) ]
     | .[]'

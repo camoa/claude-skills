@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA observed record",
-  "description": "What a model saw when it looked at one work order's surfaces through a browser, at <task folder>/implementation/observed-<order id>.json, for an order whose proof is observe (live-run row 104). The orchestrator writes it after the implementer returns: it opens each surface the order names, at each viewport the surface file declares, judges each of the order's done-when rows against what renders, and saves each screenshot under implementation/observed-<order id>/<surface>-<viewport>.png. Before the implementer was dispatched it took the same surfaces at the same viewports into implementation/observed-<order id>-before/. A row that says the page is as it was is judged against that before (live-run row 114). `build-record --observed <path>` reads it as the order's own check, `observed`, met when every row is met. It refuses a file that does not match this shape (exit 93). It refuses a row whose screenshot or before image is not on disk or lies outside its folder (94). It refuses a surface the order does not name (95) and a doneWhen the order does not hold (96): a row's sentence is one of the order's done-when rows, or the verification clause of a machine criterion the order owns, named by `criterion` (live-run row 115). It refuses a row the order owes and nobody took (97), and owes one row per sentence, surface and viewport. The judge is always a model: a person accepts or rejects the observation at completion, and that answer lives in the completion record, never here.",
+  "description": "What a model saw when it looked at one work order's surfaces through a browser, at <task folder>/implementation/observed-<order id>.json, for an order whose proof is observe (live-run row 104). The orchestrator writes it after the implementer returns: it opens the page the order builds, at one surface the order names and one size, judges each of the order's done-when rows against what renders, and saves each screenshot under implementation/observed-<order id>/<surface>-<viewport>.png. Every surface at every viewport is the surface check, once, at review. For a row that says the page is as it was, it took the same page at the same size into implementation/observed-<order id>-before/ before the implementer was dispatched, and judges that row against it (live-run row 114). `build-record --observed <path>` reads it as the order's own check, `observed`, met when every row is met. It refuses a file that does not match this shape (exit 93). It refuses a row whose screenshot or before image is not on disk or lies outside its folder (94). It refuses a surface the order does not name (95) and a doneWhen the order does not hold (96): a row's sentence is one of the order's done-when rows, or the verification clause of a machine criterion the order owns, named by `criterion` (live-run row 115). It refuses a row the order owes and nobody took (97), and owes one row per sentence. The judge is always a model: a person accepts or rejects the observation at completion, and that answer lives in the completion record, never here.",
   "type": "object",
   "additionalProperties": false,
   "required": ["order", "observedAt", "judgedBy", "rows"],
@@ -25,14 +25,14 @@
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/$defs/row" },
-      "description": "One row per sentence per surface per viewport. The sentences are the order's done-when rows and the verification clause of each machine criterion the order owns; the rows may say less than the clause, so the look judges the clause too (live-run row 115). Every sentence is judged at every surface and viewport the order reaches; a row missing here is a look nobody took, and the check is met only when every row present is met."
+      "description": "One row per sentence, at one surface the order names and one size. The sentences are the order's done-when rows and the verification clause of each machine criterion the order owns; the rows may say less than the clause, so the look judges the clause too (live-run row 115). A sentence with no row is a look nobody took, and the check is met only when every row present is met."
     }
   },
   "$defs": {
     "row": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["doneWhen", "surface", "viewport", "screenshot", "before", "verdict", "note"],
+      "required": ["doneWhen", "surface", "viewport", "screenshot", "verdict", "note"],
       "properties": {
         "doneWhen": {
           "type": "string",
@@ -62,7 +62,7 @@
         "before": {
           "type": "string",
           "minLength": 1,
-          "description": "The image of the same surface at the same viewport, taken before the build at the first attempt's headNow. An absolute path under implementation/observed-<order id>-before/. A row that says the page is as it was is judged against this image. build-record refuses a row whose before image is not on disk or lies outside that folder (exit 94)."
+          "description": "The image of the same surface at the same viewport, taken before the build at the first attempt's headNow, only for a row that says the page is as it was. An absolute path under implementation/observed-<order id>-before/. That row is judged against this image. build-record refuses a row whose before image is not on disk or lies outside that folder (exit 94)."
         },
         "verdict": {
           "type": "string",

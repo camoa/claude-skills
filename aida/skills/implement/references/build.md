@@ -62,7 +62,7 @@ It reads the frozen copy and the frozen tests. It writes twelve things to
   `commitIn`, that repository's path: the code worktree, or the project folder for an order
   whose proof is `record`;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null;
-- `beforeLookPath`, on an order whose proof is `observe` only: the folder the before-look goes
+- `beforeLookPath`, on an order whose proof is `observe` only: the folder a before-look goes
   in, `implementation/observed-<order id>-before/`;
 - `deniedReads`, present only when the order's own text names a path the implementer's dispatch
   denies: another order's owned file. The deny stands. Do not tell the implementer to read one.
@@ -96,21 +96,20 @@ and act on it.
 
 That list is the withheld list.
 
-## On an order whose proof is `observe`, look before the build
+## On an order whose proof is `observe`, look before the build only when a row needs it
 
-A done-when row often says the page is as it was apart from one thing. That row needs a before
-to judge from, and a script cannot tell which rows say it. So every observe order gets a look
-before the build. Take the same surfaces at the same viewports as the look after, at the
+A done-when row can say the page is as it was apart from one thing. Only that row needs a before
+to judge from. A script cannot tell which rows say it, so you decide. When no row says it, take
+no before. When one does, take the page that row judges, at the size the look after uses, at the
 brief's `headNow`, before the implementer is dispatched. The viewport and destination rules are
-the look after's, below. Save each image as
+the look after's, below. Save the image as
 `<task_folder>/implementation/observed-<order id>-before/<surface>-<viewport>.png`. That is the
-brief's `beforeLookPath`. Write no verdict; the images are the before.
+brief's `beforeLookPath`. Write no verdict; the image is the before.
 
-One before-look per order, at the first attempt's `headNow`. The brief prints `beforeLook:`
-with `(owed)` while the folder holds no image and `(taken)` once it does. A later attempt and
-every fix round reuse the images that are there; take them once. Each row of the observed
-record names its before image, and `build-record` refuses one not on disk or outside that
-folder (exit 94).
+Take it once, at the first attempt's `headNow`. The brief prints `beforeLook:` with `(none)`
+while the folder holds no image and `(taken)` once it does. A later attempt and every fix round
+reuse the image that is there. The row that needs it names it in `before`, and `build-record`
+refuses one not on disk or outside that folder (exit 94).
 
 ## Open the dispatch record, then dispatch the implementer
 
@@ -218,8 +217,8 @@ tests are written against.
 **When the person rules that the test is wrong, the route is the tests step again, in this
 order.** The person rules it; a model never does. Open the test author's dispatch again for this
 order, per `references/tests.md`. The write hook lets that author edit the file its own order
-froze. It corrects the assertion and nothing else. Run the coding-standards row over the file it
-returned. Open the row-checker's dispatch again and put the affected rows to it. Then run
+froze. It corrects the assertion and nothing else. Open the row-checker's dispatch again and
+put the affected rows to it. Then run
 `tests-freeze` again, with every flag the first freeze took, the new red run, and the rows the
 checker returned. That freeze is
 allowed only while the order is still at `tests-frozen`. Once `build-record` has recorded an
@@ -238,12 +237,13 @@ order back to planned, under Rulings in `references/review.md`.
 
 Close the dispatch record as soon as the role returns, per SKILL.md.
 
-## On an order whose proof is `observe`, look at the pages
+## On an order whose proof is `observe`, look at the page
 
-The implementer does not look. You do. Read the surface file that `surfaces.registryPath` in
-`<projectPath>/project.json` names. Review's surface step reads the same file. Take each
-surface the order names, its `url`, and the file's `viewports` list. Open each surface at each
-viewport with the browser tool, against the task's own site.
+The implementer does not look. You do. Look at the page this order builds, once, at one size.
+Every surface at every viewport is the surface check's work, and it runs once, at review. Read
+the surface file that `surfaces.registryPath` in `<projectPath>/project.json` names. Take the
+surface the order builds, its `url`, and one viewport from the file's `viewports` list. Open it
+with the browser tool, against the task's own site.
 
 The viewport is the requirement: the page must render at the viewport's width. Resizing the
 browser window is not that, because the page can still render wider than the window. A tool
@@ -255,14 +255,13 @@ rebuild step has run, and the look waits for that step. A note on a row judged a
 content is a lie.
 
 Judge each of the order's done-when rows against what renders, and each `check` entry of its
-`verify` list whose `kind` is `live-site` the same way. A row that says the page is as it was is judged against the before
-image of that surface and viewport. Also judge the
+`verify` list whose `kind` is `live-site` the same way. A row that says the page is as it was is
+judged against the before image. Also judge the
 `verification` clause of each machine criterion the order owns, as a row of its own beside the
 done-when rows. The snapshot's criteria hold the clause. The done-when rows may say less than
 the clause, and no script can compare the two, so the look judges the clause itself. Such a row
 carries `criterion` with the id, and `build-record` refuses a clause row without it (exit 96).
-Give one verdict per row per surface per viewport, `met` or `unmet`, with one sentence on what
-you saw. Save each
+Give one verdict per row, `met` or `unmet`, with one sentence on what you saw. Save each
 screenshot under `<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`.
 The screenshot must lie under that folder, and `build-record` refuses one that does not (exit
 94). A tool that refuses to write there writes into a folder inside the worktree. Move the
@@ -271,14 +270,14 @@ Then write `<task_folder>/implementation/observed-<order id>.json`:
 ```
 { "order": "<order id>", "observedAt": "<YYYY-MM-DD>", "judgedBy": "model",
   "rows": [ { "doneWhen": "<the row, verbatim>", "surface": "<id>", "viewport": "<name>",
-              "screenshot": "<absolute path>", "before": "<absolute path of the before image>",
-              "verdict": "met|unmet", "note": "<what you saw>" },
+              "screenshot": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" },
             { "doneWhen": "<the criterion's verification clause, verbatim>", "criterion": "<c-id>",
               "surface": "<id>", "viewport": "<name>", "screenshot": "<absolute path>",
-              "before": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
+              "verdict": "met|unmet", "note": "<what you saw>" } ] }
 ```
-Every done-when row, every live-site verify check and every owned clause goes in, at every
-surface and viewport, and `build-record` refuses a record missing one (exit 97). The verdict is what the page
+A row that says the page is as it was also holds `"before": "<absolute path of the before
+image>"`. Every done-when row, every live-site verify check and every owned clause goes in
+once, and `build-record` refuses a record missing one (exit 97). The verdict is what the page
 showed, never what the report claims. Pass the record as `--observed` below. Nothing is frozen
 for such an order and no row was judged before the build, so this look is its check. The judge
 on the record is a model. Completion puts each such criterion to the person.

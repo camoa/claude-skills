@@ -211,8 +211,8 @@ AIDA cannot know on its own:
 - What is proved by what a page shows rather than by a test. A layout, a rendered block, a
   page at each viewport. Such an order is created with `--proof observe`. It names at least one
   `--surface` and declares no test. Each done-when row is the sentence a model judges. After
-  the build, the orchestrator opens each surface at each viewport in a browser. It judges the
-  row against what renders, with a screenshot as the evidence. Write each row as one thing
+  the build, the orchestrator opens the page the order builds at one size in a browser. It
+  judges the row against what renders, with a screenshot as the evidence. Write each row as one thing
   the page must show. The judge is a model, and completion puts each such criterion to the
   person to accept.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
