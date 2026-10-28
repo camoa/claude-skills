@@ -243,22 +243,16 @@ unresolved() {
   die3 "$action: no project is named $2"
 }
 
-# Succeeds when a registry row, other than the one whose project folder is <except>, holds <path>
-# as its code path or as its project folder.
-path_taken() {
-  printf '%s' "$1" | jq -e --arg c "$2" --arg x "${3:-}" '
-    any(.projects[]?; (.path // "" | sub("/+$"; "")) != $x
-      and ([.codePath, .path] | any((. // "" | sub("/+$"; "")) == $c)))' >/dev/null 2>&1
-}
-
-# The pickups' guard: refuses a code path or a project folder, read from a file this action did
-# not write, that another row already holds in either field.
-refuse_taken_paths() {
-  local snapshot p
-  snapshot="$(registry__current)" || die3 "switch: the registry could not be read; nothing was registered. See the error above."
-  for p in "$1" "$2"; do
-    ! path_taken "$snapshot" "$p" || die3 "switch: this path is already registered: $p. Nothing was registered."
-  done
+# Stops the script, having written nothing, when another registry row holds the name or a path.
+# registry_taken in scripts/lib/registry.sh is the one check; registry_add_project runs it too. An
+# unreadable store is not a clash, so it gets its own words. $1 the action, then registry_taken's
+# arguments.
+refuse_taken() {
+  local who="$1" hit rc
+  shift
+  hit="$(registry_taken "$@")"; rc=$?
+  [ "$rc" -ne 1 ] || die3 "$who: another project already holds the $hit. Nothing was written."
+  [ "$rc" -eq 0 ] || die3 "$who: the registry could not be read, so nothing was written. See the error above."
 }
 
 # The project folder's ignore file, written by create and by git-init on a version 5 pickup. A
@@ -366,17 +360,6 @@ check_after_write() {
   return 0
 }
 
-# The one name refusal, for every route that writes a registry row. $1 the name, $2 what to tell
-# the person when a row already holds it. Returns when the name is free, and stops the script
-# otherwise. The two outcomes stay apart. An unreadable store is not a name collision. Saying it
-# is would name the wrong cause, and send the person to rename a project that is fine.
-refuse_taken_name() {
-  local rc
-  registry_name_free "$1"; rc=$?
-  [ "$rc" -ne 1 ] || die3 "$2"
-  [ "$rc" -eq 0 ] || die3 "the registry could not be read, so nothing was written. See the error above."
-}
-
 # The one summary printer: one line per registry row. $1 the row, $2 an optional trailing note.
 project_line() {
   printf '%s' "$1" | jq -r --arg extra "${2:-}" '
@@ -420,18 +403,10 @@ do_create() {
     worktree_base="$(worktree_base_value "$worktree_base" "$code_path" create)" || exit 3
   fi
 
-  # The library's own reader, not a raw read of REGISTRY_FILE: registry__current tells a missing
-  # store (fine, nothing registered yet) apart from a corrupt one (refuses and fails loudly), so
-  # a store that will not parse stops creation here, before the folder, the git init or the first
-  # commit, rather than surfacing only when registry_add_project makes the same read again at the
-  # end (foundations.md, Honesty: a reader that cannot read fails loudly).
-  local registry_snapshot
-  registry_snapshot="$(registry__current)" || die3 "the registry could not be read; nothing was written. See the error above."
-
-  if path_taken "$registry_snapshot" "$code_path"; then
-    die3 "a project is already registered for $code_path. Nothing was written."
-  fi
-  refuse_taken_name "$name" "the name '$name' is already registered. Choose a different name."
+  # The uniqueness check reads the store through the library, which tells a missing store (fine,
+  # nothing registered yet) apart from a corrupt one, so a store that will not parse stops creation
+  # here, before the folder, the git init or the first commit (foundations.md, Honesty).
+  refuse_taken create "$name" "" "$code_path"
 
   [ -d "$code_path" ] || printf 'project-actions: %s does not exist yet; it will when the code is written there.\n' "$code_path" >&2
 
@@ -439,8 +414,7 @@ do_create() {
   local project_path
   project_path="$(canon_path "$projects_home/$name")"
   [ ! -e "$project_path" ] || die3 "the project folder $project_path already exists. Pick a different name or remove that folder first."
-  ! path_taken "$registry_snapshot" "$project_path" \
-    || die3 "a project is already registered for $project_path. Pick a different name."
+  refuse_taken create "" "" "$project_path"
 
   # The project folder and the code path are never the same folder (ideal/project.md, "What a
   # project is"). Both sides are canonicalised before they are compared. Comparing a concatenated
@@ -588,8 +562,7 @@ register_v5_folder() {
   # not an error anybody sees: check-project.sh then exits 4 for both projects, forever. The row
   # is always another folder's here. do_switch matched this folder's own path first, and a folder
   # this function accepts holds no project file to have been registered from.
-  refuse_taken_paths "$code_path" "$folder"
-  refuse_taken_name "$name" "switch: another project already holds the name '$name'. This folder has no row of its own, so rename $folder, then pick it up again."
+  refuse_taken switch "$name" "" "$code_path" "$folder"
   registry_add_project "$code_path" "$folder" "$name" || die3 "the registry row for $folder was not written; see the message above."
   # The folder's parent is the projects base when none is recorded yet. A first version 6 run on
   # a machine with version 5 projects then finds the rest of them. The helper keeps an existing base.
@@ -657,8 +630,7 @@ register_v6_folder() {
   # do_switch matched this folder's own path against the rows before reaching here, so the row
   # holding the name is always another folder's. A rename is the repair for that. For a folder
   # colliding with itself it would be the defect: the file would stop agreeing with its own row.
-  refuse_taken_paths "$code_path" "$folder"
-  refuse_taken_name "$name" "switch: another project already holds the name '$name'. This folder has no row of its own, so change its name in $folder/project.json, then pick it up again."
+  refuse_taken switch "$name" "" "$code_path" "$folder"
   registry_add_project "$code_path" "$folder" "$name" \
     || die3 "the registry row for $folder was not written; see the message above."
   PICKED_UP_NAME="$name"
@@ -830,9 +802,7 @@ do_set_code_path() {
 
   local registry_snapshot
   registry_snapshot="$(registry__current)" || die3 "the registry could not be read; nothing was changed. See the error above."
-  if path_taken "$registry_snapshot" "$new_path" "$(strip_slash "$project_path")"; then
-    die3 "a project is already registered for $new_path. Nothing was changed."
-  fi
+  refuse_taken set-code-path "" "$(strip_slash "$project_path")" "$new_path"
 
   local tmp
   write_project_field "$project_path" "could not update codePath in $project_path/project.json" \

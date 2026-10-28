@@ -265,6 +265,19 @@ elsewhere_case() (
 )
 expect "a surface file another branch holds is a warning, and the new file is written" "$(elsewhere_case)" '0|cli'
 
+# name_clash_case: the registry's writer adds a row whose name another row holds. Its exit, and
+# how many rows carry the name.
+name_clash_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  # shellcheck source=/dev/null
+  source "$PLUGIN/scripts/lib/registry.sh"
+  mkdir -p "$ROOT/other"
+  registry_add_project "$ROOT/other" "$ROOT/projects/q" p 2>/dev/null; local rc=$?
+  printf '%s|%s\n' "$([ "$rc" -eq 0 ] && echo written || echo refused)" "$(jq '[.projects[] | select(.name == "p")] | length' "$AIDA_REGISTRY_PATH")"
+)
+expect "the registry writer refuses a name another project holds, and writes nothing" "$(name_clash_case)" 'refused|1'
+
 # --- tool ---
 
 # absent_case: require over a process recipe naming a tool whose check command is not installed.
