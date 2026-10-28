@@ -12185,10 +12185,16 @@ im_way_load() {
   rv_load_state "$WAY_WHO" "$WAY_UNIT" '[""]'
   # A closed order takes a way out only while it is stopped, or while start names a change under
   # it. A defect found later in its files reaches it through another order's builder, or through
-  # reopen after a failed task review. A dropped order ended without code.
+  # reopen after a failed task review. A dropped order ended without code. One more: a redo of a
+  # closed order whose departure the person ruled rebuild at the closed task review of this
+  # finish, since redo is that ruling's route.
   case "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')" in
     closed)
       printf '%s' "$RV_ORDER_ENTRY" | jq -e '(.stopped // []) + (.changed // []) != []' >/dev/null \
+        || { [ "$WAY_WHO" = redo ] && jq -e --arg id "decision-$WAY_UNIT-departure" \
+               --arg r "$(jq -r '.commitRange // ""' "$IMPL_DIR/finished.json" 2>/dev/null)" \
+               'has("verdict") and .reviewedRange == $r and any((.checks // [])[]; .id == $id and .answer == "rebuild")' \
+               "$TASK_PATH/review/review.json" >/dev/null 2>&1; } \
         || rv_exit_nothing "$WAY_WHO" "$WAY_UNIT" "$WAY_UNIT is closed and not stopped, so there is nothing to leave" ;;
     dropped) rv_exit_nothing "$WAY_WHO" "$WAY_UNIT" "$WAY_UNIT is dropped, so it ended without code" ;;
   esac
@@ -12486,6 +12492,9 @@ do_redo() {
   [ -n "$new_ledger" ] || die3 "redo: the ledger update for $WAY_UNIT failed. Its commits were reverted and its records moved to $WAY_FOLDER; repair the ledger by hand."
   write_atomic "$IMPL_DIR/snapshot.json" "$new_snapshot"
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
+  # A redo after finish, for a departure ruled rebuild, opens an order again, so finish's
+  # condition no longer holds, as after reopen.
+  rm -f -- "$IMPL_DIR/finished.json" || die3 "redo: could not remove $IMPL_DIR/finished.json"
   im_print_summary "redo" "$(jq -cn --arg id "$WAY_UNIT" --argjson reverted "$WAY_REVERTED" --arg folder "$WAY_FOLDER" \
     --arg ledger "$RV_LEDGER_FILE" --argjson skipped "$WAY_SKIPPED" '
     {order: $id,

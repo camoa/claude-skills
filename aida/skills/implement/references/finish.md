@@ -244,6 +244,10 @@ must have closed on the live files (exit 13). Then run `start`, which refreshes 
 and takes in an order design added, as before. The tests brief carries the person's words under
 `redo`.
 
+A closed order that is not stopped takes a redo in one case: the closed task review of this finish
+holds its `decision-<order>-departure` answered `rebuild`. That redo is the ruling's route. It also
+removes `finished.json`, because an order is open again, so finish runs once the order closes.
+
 It takes any order that is not closed, and a closed order only while it is stopped or changed. It refuses an
 order the live design no longer holds: drop it instead (exit 67). It refuses a dirty tree (exit 61).
 It refuses when the records list a commit HEAD does not hold, as after a rebase, and on a merge
