@@ -6384,7 +6384,8 @@ im_require_tests_record() {
 # the tests record (exit $3, as above), the ledger, the trunk (exit 6), each dependency's completion
 # record (exit 40), the order's step (exit 3) and the attempt counter (exit 41). `dispatch-open implementer` runs the same checks before
 # it writes, so no builder opens for an order build-brief would refuse (gap row 281). The order's
-# frozen work order is $4. Sets IM_TESTS_DOC, IM_ATTEMPTS_USED and IM_ATTEMPTS_ALLOWED.
+# frozen work order is $4. Call after rv_load_codepath. Sets IM_TESTS_DOC, IM_ATTEMPTS_USED and
+# IM_ATTEMPTS_ALLOWED.
 IM_ATTEMPTS_USED=0; IM_ATTEMPTS_ALLOWED=0
 im_require_build_ready() {
   local who="$1" unit_id="$2" unit_json="$4" ledger_doc
@@ -6400,7 +6401,6 @@ im_require_build_ready() {
 
   # --- exit 6: start refused the trunk, and a checkout after start can bring the worktree back to it --
   local trunk
-  rv_load_codepath "$who"
   if trunk="$(derive_trunk_branch "$RV_CODEPATH")" \
     && [ "$(git -C "$RV_CODEPATH" symbolic-ref --short -q HEAD 2>/dev/null)" = "$trunk" ]; then
     die 6 "$who: $RV_CODEPATH is on $trunk, which is derived as its trunk branch. The build must not land there. Check out the task's branch again."
@@ -6507,7 +6507,8 @@ do_build_brief() {
   # --- the unit itself must be in the frozen copy --------------------------------------------------
   bb_load_unit "$snapshot_doc" "$unit_id"
 
-  # --- exits 40 and 41, and the ledger: the order's records must allow a build --------------------
+  # --- exits 6, 40 and 41, and the ledger: the order's records must allow a build -----------------
+  rv_load_codepath "build-brief"
   im_require_build_ready "build-brief" "$unit_id" 3 "$BB_UNIT_JSON"
   local attempts_used="$IM_ATTEMPTS_USED" attempts_allowed="$IM_ATTEMPTS_ALLOWED"
 
@@ -6574,7 +6575,6 @@ do_build_brief() {
   # the brief says so under commitIn (nyc defect 17).
   local bb_codepath bb_head
   bb_head=""
-  rv_load_codepath "build-brief"
   br_order_facts "$BB_UNIT_JSON"
   if [ "$BR_ORDER_RANGE" = "project" ]; then
     bb_codepath="$(resolve_project_folder "$TASK_PATH")"

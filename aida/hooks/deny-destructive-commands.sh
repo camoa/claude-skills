@@ -54,8 +54,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # read, also after `;` or `&&` on its line. The exception is a command line that also starts a
 # shell or runs a file. The unreadable-verb rule does not read a shell comment (live-run row 321).
 # Nor does it read the body of a heredoc with a quoted delimiter, such as `python3 - <<'EOF'`, on a
-# command that starts no shell: no shell expands that body (gap row 460).
-# Two rules find a
+# command that starts no shell: no shell expands that body (gap row 460). Nor does it read a quoted
+# argument after `-c` or `<<<` on such a command, as in `python3 -c '...'`. So a substitution in a
+# git verb that `su -c` or another unlisted shell runner runs is not refused. Two rules find a
 # command word: a command word from a variable, and a recursive delete. They read a quoted string
 # that opens and closes on one line as part of one word. So the message in `detail="$d $fw: ..."`
 # is not a command (live-run row 254). The push rules and the unreadable-verb rule read such a
@@ -255,7 +256,8 @@ segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
 # follows its line again, as lines of its own.
 # With $2 set to args, a string that is the value of an assignment is not joined, because a later
 # `$cmd` runs the text of `cmd="git push"`. With $2 set to code, it is args with each comment
-# dropped too. With $2 set to strip, each comment is dropped and no string is joined, for a command
+# dropped too, and a string after `-c` or `<<<` is joined: check_text sets code only on a command
+# that starts no shell, so no shell runs that string (gap row 460). With $2 set to strip, each comment is dropped and no string is joined, for a command
 # line that starts a shell, which can read a quoted string as commands. A `#` starts a comment at
 # the start of a word, outside a string, a backtick pair and `${...}`. A `$'...'` string takes
 # backslash escapes. A comment ends at its line, also after a backslash.
@@ -325,7 +327,7 @@ quoted_words() {
           if (j == 0) { out = out substr(line, i); q = c; qe = e; break }
           s = substr(line, i, j - i + 1)
           pre = substr(line, 1, i - 1)
-          if (join && pre !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</ && !(asg && pre ~ /(^|[ \t;&|(])[A-Za-z_][A-Za-z0-9_]*\+?=[^ \t;&|]*$/)) gsub(/[ \t;&|]/, "\037", s)
+          if (join && (strip || pre !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</) && !(asg && pre ~ /(^|[ \t;&|(])[A-Za-z_][A-Za-z0-9_]*\+?=[^ \t;&|]*$/)) gsub(/[ \t;&|]/, "\037", s)
           out = out s; i = j + 1; continue
         }
         if (c == "`") bt = !bt

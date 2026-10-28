@@ -37,7 +37,8 @@ way_case() (
   answer "$step" wo1 "$words"
   run "$IMPLEMENT" "$action" "$TASK" wo1 "$@" --because "$words"
   printf '%s|%s|%s|%s|%s' "$first" "$same" "$RC" "$(ledger "$LOOK")" "$(cat "$WT/a.php")"
-  [ -z "${AFTER:-}" ] || { run "$IMPLEMENT" tests-brief "$TASK" wo2; printf '|%s:%s' "$RC" "$([ -e "$IMPL/brief-wo2-tests.json" ] && echo brief || echo none)"; }
+  # Exit 3 is shared by many refusals and no field names this one, so its phrase identifies it.
+  [ -z "${AFTER:-}" ] || { run "$IMPLEMENT" tests-brief "$TASK" wo2; printf '|%s:%s:%s' "$RC" "$(grep -q 'depends on wo1, which has no completion record' "$OUT" && echo dependency || echo other)" "$([ -e "$IMPL/brief-wo2-tests.json" ] && echo brief || echo none)"; }
   echo
 )
 
@@ -56,6 +57,6 @@ echo "--- redo: refuses with no answer; with it, the order is planned again and 
 expect "redo" "$(ALLOWS='[]' LOOK='.lastStep' way_case redo "implement redo" "the test was wrong")" "68|same|0|null|a"
 
 echo "--- drop: refuses with no answer; with it, the order is dropped, reverted, and its dependent cannot start"
-expect "drop" "$(ALLOWS='[]' WO2=1 AFTER=1 LOOK='.lastStep' way_case drop "implement drop" "not needed")" "68|same|0|dropped|a|3:none"
+expect "drop" "$(ALLOWS='[]' WO2=1 AFTER=1 LOOK='.lastStep' way_case drop "implement drop" "not needed")" "68|same|0|dropped|a|3:dependency:none"
 
 finish
