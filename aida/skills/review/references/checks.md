@@ -79,9 +79,8 @@ this stage judges against, and no role after the freeze may change them. A row's
 test it left out. A row whose files are all frozen tests reads undeclared.
 
 **Each tool row has a time limit.** A tool row that runs past 600 seconds is stopped and reads
-unknown, naming the limit. The environment variable `AIDA_REVIEW_TOOL_LIMIT` sets another number
-of seconds. Preconditions already ran each tool once, so a tool that cannot run at all was found
-before the build.
+unknown, naming the limit. Preconditions already ran each tool once, so a tool that cannot run at
+all was found before the build.
 
 **The static-analysis row runs once more, over the frozen tests alone.** The project's own analyser
 reads the tests after the merge. A run that reads unmet or unknown becomes one finding on the

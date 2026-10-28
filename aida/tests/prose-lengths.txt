@@ -22,14 +22,14 @@ skills/implement/references/finish.md 262
 skills/implement/references/preconditions.md 317
 skills/implement/references/review.md 474
 skills/implement/references/start.md 151
-skills/implement/references/tests.md 599
+skills/implement/references/tests.md 597
 skills/implement/references/what-a-test-is.md 37
 skills/next/SKILL.md 201
 skills/playbooks/SKILL.md 97
 skills/project/SKILL.md 628
 skills/research/SKILL.md 602
 skills/review/SKILL.md 247
-skills/review/references/checks.md 153
+skills/review/references/checks.md 152
 skills/review/references/close.md 143
 skills/review/references/reviewer.md 179
 skills/review/references/surfaces.md 96

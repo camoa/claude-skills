@@ -537,8 +537,7 @@ three reads accepts is warned, naming the file, and recorded `redSignal: unread`
 declare no assertion marker and no `failure_line`, the freeze cannot read the file at all. It
 then freezes it as before, records `redSignal: unchecked` on the test, and says so in one summary
 line. A freeze with a `--red` and no recipe on record does the same, with a warning. Every other
-red carries the reading that accepted it. The freeze's own run of the tests, above, still refuses
-tests that do not fail. A `--locks-in` reason is
+red carries the reading that accepted it. A `--locks-in` reason is
 recorded beside the test, and the review brief says where it is.
 
 **Two tests that fail at one place have no red.** The freeze reads each red it accepted on an
@@ -588,8 +587,7 @@ which order froze it.
 
 Report a test that passed on arrival with `--green-on-arrival <test name>=<reason>`. The script
 writes a warning and goes on: a test nobody watched fail is not a reference, and the person decides
-whether to redo the order. When the order's tests with a red run pass on the freeze's own run, the
-freeze refuses (exit 80), whatever was flagged.
+whether to redo the order.
 
 A record is taken once. A second run with the same tests leaves it alone, whatever commit the
 tree is at now, because every freeze moves the tree. Different tests at a different commit

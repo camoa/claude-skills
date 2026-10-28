@@ -1,7 +1,7 @@
 # The tests for a work order are refused
 
 Each work order's tests are written first, watched failing, then frozen. The freeze refuses tests
-that cannot be protected or do not fail, and no test is frozen. Every other doubt about the tests
+it cannot protect, and no test is frozen. Every other doubt about the tests
 is a warning in the task record, and the freeze goes on. Review lists the warnings. Most refusals
 go back to the agent that writes the tests. A few come to you. How the tests are written is on
 [write the tests](../stages/implement/tests.md).

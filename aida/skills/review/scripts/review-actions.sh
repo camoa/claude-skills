@@ -830,8 +830,8 @@ RW_RUN_KIND=""; RW_RUN_PAYLOAD=""; RW_RUN_RC=""; RW_RUN_OUTPUT=""
 RW_RUN_STDOUT_LEN=0; RW_RUN_OUTFILE=""; RW_RUN_ERRFILE=""
 RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
 # The seconds one tool row may run before it is stopped (BR_RUN_LIMIT in recipes.sh), so a tool
-# that hangs reads unknown instead of holding the review. AIDA_REVIEW_TOOL_LIMIT sets another limit.
-RW_TOOL_LIMIT="${AIDA_REVIEW_TOOL_LIMIT:-600}"
+# that hangs reads unknown instead of holding the review.
+RW_TOOL_LIMIT=600
 # The surfaces a person accepted a baseline for and the accept rows that ran for them. Both are read
 # back after every kind has answered: a surface nothing accepted refuses, and a row that already
 # answered is not reported twice.

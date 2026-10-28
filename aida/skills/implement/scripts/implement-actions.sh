@@ -520,8 +520,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  80  `tests-freeze` ran the order-tests command build-record runs over the files it freezes, and
 #      the run passed though the order has tests with a red run: those tests do not fail when it
 #      runs them. Or the run failed and printed no line of any red file: it runs something other
-#      than the reds, and a correct build would fail (gap row 436). A red file the recipe's markers
-#      do not read as a failed assertion is a warning, recorded with `redSignal: unread`.
+#      than the reds, and a correct build would fail (gap row 436). A red file the recipe's markers do not read as
+#      a failed assertion is a warning, recorded with `redSignal: unread`.
 #
 # The codes a resumed `start` added (nyc defects 10 and 19).
 #  82  a resumed `start` found HEAD is not a descendant of the ledger's own startedFrom. The branch
@@ -3859,11 +3859,11 @@ PC_FOLDER
           # around the call would hold the same die in the same subshell. Without these three the
           # jq below fails on an empty --argjson, and write_atomic then refuses naming the
           # baseline file, which tells a person the wrong thing about what went wrong.
-          cs_json="$(bl_tool_result "coding-standards" "coding-standards" "$codepath" "$scope_json" "$task_folder/implementation")"
+          cs_json="$(bl_tool_result "coding-standards" "coding-standards" "$codepath" "$scope_json" "$task_folder/implementation")" || exit "$?"
           bl_require_ran "coding-standards" "$cs_json"
-          sa_json="$(bl_tool_result "static-analysis" "static-analysis" "$codepath" "$scope_json" "$task_folder/implementation")"
+          sa_json="$(bl_tool_result "static-analysis" "static-analysis" "$codepath" "$scope_json" "$task_folder/implementation")" || exit "$?"
           bl_require_ran "static-analysis" "$sa_json"
-          sec_json="$(bl_tool_result "security" "security" "$codepath" "$scope_json" "$task_folder/implementation")"
+          sec_json="$(bl_tool_result "security" "security" "$codepath" "$scope_json" "$task_folder/implementation")" || exit "$?"
           bl_require_ran "security" "$sec_json"
           # Review runs every row the check recipes declare, and a failing row subtracts its own
           # baseline. So every other row is taken here as well, keyed by its id under toolRows
@@ -3878,7 +3878,7 @@ PC_FOLDER
           tool_rows_json='{}'
           while IFS= read -r pc_row_id; do
             [ -n "$pc_row_id" ] || continue
-            pc_row_json="$(bl_tool_result "$pc_row_id" "$pc_row_id" "$codepath" "$scope_json" "$task_folder/implementation")"
+            pc_row_json="$(bl_tool_result "$pc_row_id" "$pc_row_id" "$codepath" "$scope_json" "$task_folder/implementation")" || exit "$?"
             bl_require_ran "$pc_row_id" "$pc_row_json"
             tool_rows_json="$(jq -nc --argjson have "$tool_rows_json" --arg id "$pc_row_id" --argjson r "$pc_row_json" '$have + {($id): $r}')"
           done <<PC_TOOL_ROWS
@@ -4042,7 +4042,7 @@ PC_TOOL_ROWS
                    else ([ $baselineSummary.suite[] | select(.verdict == "unmet" or .verdict == "unknown")
                            | .framework + "=" + .verdict ]
                          | if length == 0 then "none"
-                           else join(" ") + ": the suite already fails before the build. finish refuses on this red at the end unless the baseline subtraction clears it. Put it to the person now, before the first order." end) end),
+                           else join(" ") + ": the suite already fails before the build. finish warns on this red at the end unless the baseline subtraction clears it. Put it to the person now, before the first order." end) end),
      baselineTools: (if $baselineSummary == null then "none"
                      else "codingStandards=" + $baselineSummary.codingStandards.verdict
                           + " staticAnalysis=" + $baselineSummary.staticAnalysis.verdict
@@ -4197,10 +4197,11 @@ RR_EOF
         reads="$reads$fw	$tool_id	$verdict
 "
         # An undeclared row passes when the recipe declares it absent or the scope holds no file it
-        # reads. A row the recipe holds but whose argv did not parse is `missing`, and refuses.
+        # reads. A row the recipe holds but whose argv did not parse is `missing`: the recipe cannot
+        # be read, an error.
         [ "$verdict" != "undeclared" ] \
           || ! printf '%s' "$CR_DOC" | jq -e --arg id "$tool_id" 'any((.tools // [])[]; .id == $id and has("missing"))' >/dev/null \
-          || verdict="unknown"
+          || die3 "recipe-refresh: the review recipe $rp for $fw cannot be adopted: the argv of its $tool_id row does not parse. Nothing was written. Repair that row, then run recipe-refresh again."
         case "$verdict" in
           met|undeclared) ;;
           *) failed="$failed $tool_id reads $verdict ($(printf '%s' "$result" | jq -r 'if .reason then .reason else "exit \(.exitCode)" end'))." ;;
@@ -5703,6 +5704,8 @@ TF_RECORDED
     # the order id, the done-when row, lands the same way (gap row 447). A row sent back unattended
     # also joins rowsSentBack. checkAgain is kept beside them, so tests-brief can tell a rejected
     # row that did not land.
+    # A stopped order records its rejection too, so after a person's go-on the next tests-brief
+    # carries the note and dispatch-open's send-back exemption sees it.
     local tf_rejected_doc tf_all_rejected
     if [ -n "$tf_ledger_doc" ]; then
       tf_all_rejected="$(printf '%s' "$rows_meta_json" | jq -c --argjson check "$tf_check_doc" \
@@ -5940,8 +5943,7 @@ TF_EOF
     ri=$((ri + 1))
   done
   # A red file the recipe's markers do not read as a failed assertion is a warning. A harness
-  # marker alone is a setup gap: the run never reached the behaviour (live-run row 68). The freeze's
-  # own run below still refuses tests that do not fail.
+  # marker alone is a setup gap: the run never reached the behaviour (live-run row 68).
   if [ -n "$setup_gap_reds" ]; then
     task_warn "$TASK_PATH" tests-freeze "$unit_id" "these --red files hold the recipe's harness marker and no assertion marker, so the harness stopped before any assertion: ${setup_gap_reds%, }"
   elif [ -n "$unread_reds" ]; then
@@ -6176,7 +6178,7 @@ TF_CS_EOF
         unmet)
           tf_cs_out="$IMPL_DIR/coding-standards-$unit_id-freeze.txt"
           printf '%s' "$tf_cs_json" | jq -r '.output // ""' >"$tf_cs_out"
-          task_warn "$TASK_PATH" tests-freeze "$unit_id" "the coding-standards row fails over $(printf '%s' "$tf_cs_group" | jq -r 'join(", ")'). The output is in $tf_cs_out" ;;
+          task_warn "$TASK_PATH" tests-freeze "$unit_id" "the coding-standards row fails over $(printf '%s' "$tf_cs_group" | jq -r 'join(", ")'): $(printf '%s' "$tf_cs_json" | jq -r '.detail | sub(" newLines holds the first 20[.]$"; "")' | tr '\n' ' ') The output is in $tf_cs_out" ;;
         unknown|undeclared)
           printf 'tests-freeze: the coding-standards row over %s reads %s, so it judged nothing: %s\n' \
             "$(printf '%s' "$tf_cs_group" | jq -r 'join(", ")')" "$tf_cs_verdict" "$(printf '%s' "$tf_cs_json" | jq -r '.detail')" >&2 ;;
@@ -6184,7 +6186,7 @@ TF_CS_EOF
     done
   fi
 
-  # --- 80: the freeze runs the tests the way build-record will, and they fail (gap row 436) -------
+  # --- 80: build-record's order-tests check runs what the reds show (gap row 436) -----------------
   # The author runs each test on its own, and the build runs the frozen files whole, with the
   # recipe's order-tests command. So the freeze runs that check itself, through br_test_check, and
   # refuses when it passes: a test that does not fail now proves nothing a build could change. A
@@ -6208,7 +6210,7 @@ TF_CS_EOF
     tf_ot_names="$(printf '%s' "$reds_json" | jq -r 'map(.name) | unique | join(", ")')"
     tf_ot_argv="$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | (.orderTests.argv // []) | join(" ") ] | join("; ")')"
     [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" != "met" ] \
-      || die 80 "tests-freeze: the order-tests command build-record runs, $tf_ot_argv, over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), passes, so these tests with a red run do not fail when it runs them: $tf_ot_names. A frozen test fails before the build. The test author repairs the tests, or returns a locks-in reason for a test that passes against existing code, and this freeze runs again. Nothing is frozen."
+      || die 80 "tests-freeze: the order-tests command build-record runs, $tf_ot_argv, over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), passes, so these tests with a red run do not fail when it runs them: $tf_ot_names. A frozen test fails before the build (references/what-a-test-is.md). The test author repairs the tests, or returns a locks-in reason for a test that passes against existing code, and this freeze runs again. Nothing is frozen."
     tf_ot_out="$(mktemp)" || die3 "tests-freeze: could not create a temporary file"
     tf_ot_keys="$(mktemp)" || { rm -f "$tf_ot_out"; die3 "tests-freeze: could not create a temporary file"; }
     tf_ot_red_keys="$(mktemp)" || { rm -f "$tf_ot_out" "$tf_ot_keys"; die3 "tests-freeze: could not create a temporary file"; }

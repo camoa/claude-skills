@@ -3,11 +3,12 @@
 # (gap rows 397 and 399). preconditions.json holds the test recipe and baseline.json
 # the check recipe, so neither step needs --test-recipe or --check-recipe. One task, one order,
 # a stub runner (`true`) for the tests and the coding-standards tool. The rows:
-#   build    build-record with no recipe flag: exit 0, order-tests and coding-standards read met.
-#   fix      one finding and one fix round, fix-record with no recipe flag: exit 0, both read met.
-#   none     the same round with no check recipe in baseline.json: coding-standards reads
-#            undeclared. With no test recipe in preconditions.json, build-record refuses at 3
-#            and spends no attempt.
+#   build    build-record with no recipe flag: exit 0, order-tests reads met.
+#   fix      one finding and one fix round, fix-record with no recipe flag: exit 0, order-tests
+#            reads met.
+#   none     the same round with no check recipe in baseline.json exits 0. With no test recipe
+#            in preconditions.json, build-record refuses at 3 and spends no attempt.
+# The record steps run no tool row since 6.1.0, so no coding-standards verdict is read here.
 # Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
 set -u
@@ -192,7 +193,6 @@ echo "--- build: build-record with no recipe flag"
 expect "build: build-record exits 0" "$(try "$OUT" "$IMPLEMENT" build-record "$TASK" wo1 \
   --interface "$IMPL/interface-wo1.md" --report "$IMPL/answers-wo1-attempt1.md" --started-at "$FROM")" "0"
 expect "build: order-tests reads met" "$(verdict "$IMPL/build-wo1.json" order-tests)" "met"
-expect "build: coding-standards reads met" "$(verdict "$IMPL/build-wo1.json" coding-standards)" "met"
 
 echo "--- fix: one finding and one fix round, fix-record with no recipe flag"
 jq -n '{findings: [{id: "f1", severity: "medium", file: "a.php", lines: "1", linkedTo: "c1",
@@ -207,7 +207,6 @@ cp -p "$IMPL/ledger.json" "$ROOT/reviewed-ledger.json"
 expect "fix: fix-record exits 0" "$(try "$OUT" "$IMPLEMENT" fix-record "$TASK" wo1 \
   --report "$FIX_REPORT" --started-at "$FIX_FROM")" "0"
 expect "fix: order-tests reads met" "$(verdict "$IMPL/fix-wo1-1.json" order-tests)" "met"
-expect "fix: coding-standards reads met" "$(verdict "$IMPL/fix-wo1-1.json" coding-standards)" "met"
 expect "fix: roundsUsed is 1" "$(order .roundsUsed)" "1"
 
 echo "--- none: nothing on record to take"
@@ -215,7 +214,6 @@ rm -f "$IMPL/fix-wo1-1.json"; cp -p "$ROOT/reviewed-ledger.json" "$IMPL/ledger.j
 jq '.checkRecipes = []' "$IMPL/baseline.json" >"$ROOT/b" && mv "$ROOT/b" "$IMPL/baseline.json"
 expect "none: fix-record with no check recipe exits 0" "$(try "$OUT" "$IMPLEMENT" fix-record "$TASK" wo1 \
   --report "$FIX_REPORT" --started-at "$FIX_FROM")" "0"
-expect "none: coding-standards reads undeclared" "$(verdict "$IMPL/fix-wo1-1.json" coding-standards)" "undeclared"
 cp -p "$ROOT/built-ledger.json" "$IMPL/ledger.json"; rm -f "$IMPL/build-wo1.json"
 jq '.frameworks = [ .frameworks[] | del(.recipePath) ]' "$ROOT/preconditions.json" >"$IMPL/preconditions.json"
 expect "none: build-record with no test recipe refuses 3" "$(try "$OUT" "$IMPLEMENT" build-record "$TASK" wo1 \
