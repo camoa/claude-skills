@@ -71,7 +71,8 @@ create_trunk_case() (
 )
 expect "a tree made inside an open task's tree is cut from the trunk" "$(create_trunk_case)" 'trunk'
 
-# start_findings_case: a task whose record has no parent field starts. The check names the field.
+# start_findings_case: a task whose record has no parent field starts. The exit, the state, and
+# how many warnings the task records for the start.
 start_findings_case() (
   source "$HERE/records.bash"
   task_records branch
@@ -79,14 +80,14 @@ start_findings_case() (
   jq -n --arg w "$WT" '{schemaVersion: 1, id: "n1", state: "new", children: [], worktree: {path: $w, branch: "feature/t1"}}' \
     >"$PROJECT/tasks/n1/task.json"
   run "$TASK_ACTIONS" start --project "$PROJECT" n1 -- "begin"
-  printf '%s|%s\n' "$RC" "$(jq -r .state "$PROJECT/tasks/n1/task.json")"
+  printf '%s|%s|%s\n' "$RC" "$(jq -r .state "$PROJECT/tasks/n1/task.json")" \
+    "$(jq '[ (.warnings // [])[] | select(.step == "task start") ] | length' "$PROJECT/tasks/n1/task.json")"
 )
-expect "start exits 0 when the task check reports a finding" "$(start_findings_case)" '0|in_progress'
+expect "start exits 0 and records a warning when the task check reports a finding" "$(start_findings_case)" '0|in_progress|1'
 
-# prune_case <setup>: task n1 in state new, with a tree cut from t1's branch, which holds a commit
-# the trunk does not, as completion cut follow-up trees before. Then <setup> runs in the tree: none,
-# dirty or commit. Prints prune's exit, whether the tree is on disk, whether its branch is, and the
-# tree n1 records.
+# prune_case <state>: task n1 in <state>, never started, with a tree cut from t1's branch, which
+# holds a commit the trunk does not, as completion cut follow-up trees before. Prints prune's exit,
+# whether the tree is on disk, and whether its branch is.
 prune_case() (
   source "$HERE/records.bash"
   task_records branch
@@ -94,29 +95,24 @@ prune_case() (
   local tree="$ROOT/code.worktrees/code-n1"
   git -C "$CODE" worktree add -q -b feature/n1 "$tree" feature/t1
   mkdir -p "$PROJECT/tasks/n1"
-  jq -n --arg p "$tree" '{schemaVersion: 1, id: "n1", state: "new", parent: null, children: [],
+  jq -n --arg p "$tree" --arg s "$1" '{schemaVersion: 1, id: "n1", state: $s, parent: null, children: [],
       worktree: {path: $p, branch: "feature/n1", base: "feature/t1"}}' >"$PROJECT/tasks/n1/task.json"
-  case "$1" in
-    dirty) printf 'x\n' >"$tree/new.txt" ;;
-    commit) printf 'c\n' >"$tree/a.php"; git -C "$tree" commit -qam "n1 work" ;;
-  esac
   run "$TASK_ACTIONS" prune --project "$PROJECT" n1
-  printf '%s|%s|%s|%s\n' "$RC" "$(on_disk "$tree")" \
-    "$(git -C "$CODE" rev-parse -q --verify refs/heads/feature/n1 >/dev/null && echo yes || echo no)" "$(tree_of n1)"
+  printf '%s|%s|%s\n' "$RC" "$(on_disk "$tree")" \
+    "$(git -C "$CODE" rev-parse -q --verify refs/heads/feature/n1 >/dev/null && echo yes || echo no)"
 )
-expect "prune removes the tree and the branch of a task nobody started" "$(prune_case none)" '0|no|no|none'
-expect "prune keeps a never-started tree with an uncommitted file" "$(prune_case dirty | cut -d'|' -f1-2)" '3|yes'
-expect "prune keeps a never-started tree whose branch has a commit" "$(prune_case commit | cut -d'|' -f1-2)" '3|yes'
+expect "prune keeps the tree of a task nobody started while it is open" "$(prune_case new)" '3|yes|yes'
+expect "prune removes a closed task's tree and keeps its unmerged branch" "$(prune_case complete)" '0|no|yes'
 
-# prune_list_case: the listing names a never-started task's tree.
+# prune_list_case: the listing leaves out the tree a plain create just made.
 prune_list_case() (
   source "$HERE/records.bash"
   task_records branch
-  run "$TASK_ACTIONS" create --project "$PROJECT" --name n1 -- "a follow-up"
+  run "$TASK_ACTIONS" create --project "$PROJECT" --name n1 -- "more work"
   run "$TASK_ACTIONS" prune --project "$PROJECT"
   grep -c '^id: n1 ' "$OUT"
 )
-expect "prune lists the tree of a task nobody started" "$(prune_list_case)" '1'
+expect "prune lists no tree of an open task" "$(prune_list_case)" '0'
 
 # repeat_case: the same recipe declined twice. The second exit, and how many times the field holds it.
 repeat_case() (

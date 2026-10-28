@@ -61,7 +61,8 @@ Each `OPEN:` line is one of two shapes:
   record. An open task reading `passed` or `failed` is reviewed, and completion closes it. Also
   `notes`: the date of the newest file under the task's `notes/`, or `none`. It also carries
   `worktree`: the path of the task's own git worktree, or `none` for a task made before every
-  task had one, or one waiting on another task's build (`afterBuild`, below). With a path it carries `worktreeOnDisk` too, `yes` or `no`: whether that folder
+  task had one, or one waiting on another task's build (`afterBuild`, below). A follow-up and a
+  split's child read `none` too, until `start` makes the tree. With a path it carries `worktreeOnDisk` too, `yes` or `no`: whether that folder
   is on this machine. The key is absent with `none`.
   And `stage`: where the task stands, the first stage whose close record is absent,
   one of `scope`, `research`, `design`, `implement`, `review`, `completion`.

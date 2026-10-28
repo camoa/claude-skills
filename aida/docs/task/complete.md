@@ -32,9 +32,9 @@ hand, it gives the task a state with no grounds and no pull request body. Run
 - The task is not reopened. For more work, create a new task.
 - The task folder stays where it is, with every record beside it.
 - The worktree stays until you prune it. `/aida:task prune` lists the worktrees of complete tasks
-  and of tasks nobody started, and removes the ones you name. See [the task worktree](worktree.md).
+  and removes the ones you name. See [the task worktree](worktree.md).
 - A task nobody started, such as a moot follow-up, closes the same way, with the reason as its
-  summary.
+  summary. Then prune reaches its tree. An open task keeps its tree.
 
 ## Why it works this way
 

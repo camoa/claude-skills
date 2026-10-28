@@ -26,7 +26,7 @@ skills/implement/references/review.md 476
 skills/implement/references/start.md 151
 skills/implement/references/tests.md 583
 skills/implement/references/what-a-test-is.md 76
-skills/next/SKILL.md 201
+skills/next/SKILL.md 202
 skills/next/references/handoff.md 14
 skills/playbooks/SKILL.md 98
 skills/project/SKILL.md 630
@@ -39,7 +39,7 @@ skills/review/references/acceptance.md 124
 skills/scope/SKILL.md 489
 skills/surfaces/SKILL.md 168
 skills/surfaces/references/discover.md 60
-skills/task/SKILL.md 527
+skills/task/SKILL.md 525
 skills/test-cleanup/SKILL.md 105
 skills/tool/SKILL.md 211
 skills/tool/references/reading-a-recipe.md 58

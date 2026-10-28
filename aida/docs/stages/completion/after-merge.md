@@ -42,8 +42,8 @@ route. It keeps a tree another task builds in. See [the task pages](../../task/R
 
 Close the task anyway. A task that stays open sits in `/aida:next` forever. Say why the work ended
 in the reason, or in the summary when review passed. The pull request body stays in the folder as
-the account of what was done. Then prune: prune keeps an unmerged branch that holds a commit of its
-own, and AIDA never deletes one.
+the account of what was done. Then prune: prune keeps an unmerged branch and names it, and AIDA
+never deletes one.
 
 ## Why it works this way
 

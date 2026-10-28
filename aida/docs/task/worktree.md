@@ -61,7 +61,7 @@ AIDA records that the worktree has files and no site.
 
 When `up` changed files in the worktree for its site, completion takes the site down and puts
 those files back, so the merge does not carry them. `/aida:task prune` removes the worktrees you
-name, of complete tasks and of tasks nobody started; see [completion](../stages/completion/README.md).
+name, of complete tasks; see [completion](../stages/completion/README.md).
 
 ## Why it works this way
 

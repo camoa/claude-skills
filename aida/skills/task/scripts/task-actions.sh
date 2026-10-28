@@ -665,6 +665,14 @@ do_start() {
   jq '.state = "in_progress"' "$task_json" > "$tmp" && mv "$tmp" "$task_json" \
     || { rm -f "$tmp"; die3 "start: could not update state in $task_json"; }
 
+  # A task is repaired one thing at a time, only when it is worked on and a deterministic check
+  # fails. Starting a task is when it is worked on, so the check runs here. It reports and never
+  # repairs. The start is written, so a finding is a warning in the task record, committed with
+  # the start, and the stage that reads the field refuses on it.
+  local check_rc=0
+  bash "$CHECK_TASK_SCRIPT" "$task_dir" || check_rc=$?
+  [ "$check_rc" -eq 0 ] || task_warn "$task_dir" "task start" "" "the task check exited $check_rc; its report names each finding"
+
   commit_task_change "$project_path" \
     "Start ${id}" \
     "$why" \
@@ -676,12 +684,6 @@ do_start() {
   echo "STATE: ${old_state} -> in_progress"
   task_summary "$task_json"
   environment_offer_line "$task_json"
-
-  # A task is repaired one thing at a time, only when it is worked on and a deterministic check
-  # fails. Starting a task is when it is worked on, so the check runs here. It reports and never
-  # repairs. The start is written, so a finding is a warning and the stage that reads the field
-  # refuses on it.
-  bash "$CHECK_TASK_SCRIPT" "$task_dir" || true
 }
 
 do_complete() {
@@ -1883,44 +1885,36 @@ $capture"
 }
 
 # ------------------------------------------------------------------------------------------------
-# prune: the worktrees of complete tasks, and of tasks nobody started. A tree kept after completion
-# costs disk and a site each, and a tree removed too early loses uncommitted work. So with no id it
-# only lists, which is the whole action unattended, and it removes the named trees one at a time:
-# the site down first, so the framework keeps no orphaned registry entry, then the tree, then the
-# branch when it is merged or holds no commit of its own. A task in state new keeps its tree when
-# its branch holds a commit of its own. It gets a tree again when it starts (gap row 440).
+# prune: the worktrees of complete tasks. A tree kept after completion costs disk and a site each,
+# and a tree removed too early loses uncommitted work. So with no id it only lists, which is the
+# whole action unattended, and it removes the named trees one at a time: the site down first, so
+# the framework keeps no orphaned registry entry, then the tree, then the branch when git deletes
+# it as merged. A task nobody started reaches prune once it is complete, such as a moot follow-up
+# closed with its reason (gap row 440). An open task keeps its tree.
 # The group folder that held the tree goes when it is left empty.
-# Never --force: git's refusal on uncommitted changes stops it at 3 (version 5's worktree-prune).
+# Never --force: git's refusal on uncommitted changes stops it at 3 (version 5's worktree-prune),
+# and a branch git will not delete as merged stays, named in the output for the person.
 # ------------------------------------------------------------------------------------------------
 
-# True when the branch $2 of the repository $1 holds no commit of its own: its tip is still the
-# commit it was made at, the oldest entry of its reflog. A branch with no reflog holds one. Prints
-# that commit.
-branch_unchanged() {
-  local first
-  first="$(git -C "$1" reflog show --format=%H "refs/heads/$2" -- 2>/dev/null | tail -n 1)"
-  [ -n "$first" ] && [ "$first" = "$(git -C "$1" rev-parse -q --verify "refs/heads/$2")" ] && printf '%s' "$first"
-}
-
-# One line per complete or new task that records a worktree. $1 the project folder, $2 the merged
+# One line per complete task that records a worktree. $1 the project folder, $2 the merged
 # branches, one per line.
 prune_list() {
-  local project_path="$1" merged="$2" tab d row id wt branch env state yes_no; tab="$(printf '\t')"
+  local project_path="$1" merged="$2" tab d row id wt branch env yes_no; tab="$(printf '\t')"
   find "$project_path/tasks" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | while IFS= read -r d; do
-    row="$(jq -r 'select((.state == "complete" or .state == "new") and .worktree != null)
+    row="$(jq -r 'select(.state == "complete" and .worktree != null)
       | [.id, .worktree.path, .worktree.branch,
          (if .environment.address != null then "yes"
           elif .environment.state == "coming-up" then "coming-up"
           elif .environment.adopted == true then "adopted"
-          else "no" end), .state] | @tsv' \
+          else "no" end)] | @tsv' \
       "$d/task.json" 2>/dev/null)"
     [ -n "$row" ] || continue
-    IFS="$tab" read -r id wt branch env state <<TA_ROW
+    IFS="$tab" read -r id wt branch env <<TA_ROW
 $row
 TA_ROW
     printf '%s\n' "$merged" | grep -Fqx "$branch" && yes_no=yes || yes_no=no
-    printf 'id: %s worktree: %s branch: %s merged: %s disk: %s environment: %s state: %s\n' \
-      "$id" "$wt" "$branch" "$yes_no" "$([ -d "$wt" ] && echo yes || echo no)" "$env" "$state"
+    printf 'id: %s worktree: %s branch: %s merged: %s disk: %s environment: %s\n' \
+      "$id" "$wt" "$branch" "$yes_no" "$([ -d "$wt" ] && echo yes || echo no)" "$env"
   done
 }
 
@@ -1950,7 +1944,7 @@ do_prune() {
   merged="$(git -C "$CODE_PATH" branch --format='%(refname:short)' --merged 2>/dev/null)"
   listed="$(prune_list "$project_path" "$merged")"
   if [ "$all" = no ] && [ -z "$ids" ]; then
-    [ -n "$listed" ] && printf '%s\n' "$listed" || printf 'prune: none, no complete or new task records a worktree\n'
+    [ -n "$listed" ] && printf '%s\n' "$listed" || printf 'prune: none, no complete task records a worktree\n'
     return 0
   fi
   # shellcheck disable=SC2034 # read by cr_require_person in scripts/lib/recipes.sh
@@ -1960,7 +1954,7 @@ do_prune() {
 
   # Every named task is checked before any tree goes: a task that is not complete is a reason to
   # remove nothing, because its tree is where its work is.
-  local id task_dir task_json state wt branch said branch_word group held other first
+  local id task_dir task_json state wt branch said branch_word group held other
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     task_json="$(task_dir_for "$project_path" "$id")/task.json"
@@ -1971,12 +1965,7 @@ do_prune() {
       || die3 "prune: could not read $task_json. Nothing was removed"
     # A task that records no tree has nothing to prune, and the loop below says so.
     [ -n "$(jq -r '.worktree.path // empty' "$task_json")" ] || continue
-    case "$state" in
-      complete) ;;
-      new) branch_unchanged "$CODE_PATH" "$(jq -r '.worktree.branch // empty' "$task_json")" >/dev/null \
-             || die3 "prune: $id was never started, and its branch holds a commit of its own, so its tree holds work. Nothing was removed" ;;
-      *) die3 "prune: $id is $state, not complete, so its tree is where its work is. Nothing was removed" ;;
-    esac
+    [ "$state" = complete ] || die3 "prune: $id is $state, not complete, so its tree is where its work is. Nothing was removed"
     # An adopted site's database is no copy, so prune never tears it down, and a tree removed
     # under a running site leaves the framework's registration behind (gap row 351). A person
     # decides. A tree another task holds stays anyway, and the record below keeps the mark. A
@@ -2021,15 +2010,11 @@ TA_IDS
       && rmdir -- "${wt%/*}" 2>/dev/null
     if printf '%s\n' "$merged" | grep -Fqx "$branch"; then
       git -C "$CODE_PATH" branch -d "$branch" >/dev/null 2>&1 && branch_word="removed" || branch_word="kept, git refused to delete it"
-    elif first="$(branch_unchanged "$CODE_PATH" "$branch")"; then
-      # git deletes the branch only while its tip is still the commit it was made at.
-      git -C "$CODE_PATH" update-ref -d "refs/heads/$branch" "$first" \
-        && branch_word="removed, it held no commit of its own" || branch_word="kept, git refused to delete it"
     else
       branch_word="kept, not merged into $current"
     fi
     write_atomic "$task_json" "$(jq 'del(.worktree, .environment)' "$task_json")"
-    commit_task_change "$project_path" "Prune the worktree of ${id}" "the task is $(jq -r .state "$task_json") and a person chose this tree" "" "" "$id" "prune" \
+    commit_task_change "$project_path" "Prune the worktree of ${id}" "the task is complete and a person chose this tree" "" "" "$id" "prune" \
       || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
     [ -z "$held" ] || wt="$wt kept, task $held builds in it,"
     printf 'pruned: %s %s branch %s %s\n' "$id" "$wt" "$branch" "$branch_word"

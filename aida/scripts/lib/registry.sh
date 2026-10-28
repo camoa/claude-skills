@@ -331,11 +331,13 @@ registry_taken() {
   local name="$1" except="$2" current hit
   shift 2
   current="$(registry__current)" || return 2
-  hit="$(printf '%s' "$current" | jq -r --arg n "$name" --arg x "$except" '
+  # The paths arrive as one JSON array, not as jq 1.6's --args, so an older jq reads them too.
+  hit="$(printf '%s' "$current" | jq -r --arg n "$name" --arg x "$except" \
+      --argjson paths "$(for p in "$@"; do printf '%s\n' "$p"; done | jq -R . | jq -sc .)" '
     [ (.projects // [])[] | select((.path // "" | sub("/+$"; "")) != $x) ] as $rows
-    | ([ $ARGS.positional[] | . as $p
+    | ([ $paths[] | . as $p
          | select(any($rows[]; [.codePath, .path] | any((. // "" | sub("/+$"; "")) == $p))) | "path " + $p ]
-       + (if $n != "" and any($rows[]; .name == $n) then ["name " + $n] else [] end))[0] // empty' --args "$@")" \
+       + (if $n != "" and any($rows[]; .name == $n) then ["name " + $n] else [] end))[0] // empty')" \
     || return 2
   [ -z "$hit" ] || { printf '%s' "$hit"; return 1; }
 }

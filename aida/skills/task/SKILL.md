@@ -1,6 +1,6 @@
 ---
 name: task
-description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks and of tasks nobody started.
+description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
 argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh read-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh --run-mode * set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh distill *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh distill *), Agent, EnterWorktree
@@ -254,7 +254,8 @@ site in a file absent where the branch started.
 
 ## `prune [<task-id>]...`
 
-The worktrees of complete tasks, and of tasks nobody started. A worktree kept after completion
+The worktrees of complete tasks. A task nobody started reaches here once it is complete, such as
+a moot follow-up closed with its reason. An open task keeps its tree. A worktree kept after completion
 costs disk and a DDEV project each, and a tree removed too early loses uncommitted work. So this
 lists first, asks once, and removes only what a person named. Run it from the main checkout,
 never from inside a tree it may remove.
@@ -262,29 +263,26 @@ never from inside a tree it may remove.
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   prune --project "<projectPath>" [--all] [<task-id>]...
 ```
-**1. List.** With no id the script prints one `id:` line per complete task, and per task in
-state `new`, that records a worktree. The line holds the path, the branch, and whether the branch
-is merged into the code path's current branch. It also says whether the tree is on disk, whether
-a site is up, and the task's state. A site reads `coming-up` for a tree whose bring-up did not
-finish. `prune: none` means nothing to remove. Show the lines. Autonomous: this is the whole
+**1. List.** With no id the script prints one `id:` line per complete task that records a
+worktree. The line holds the path, the branch, and whether the branch is merged into the code
+path's current branch. It also says whether the tree is on disk and whether a site is up. A site
+reads `coming-up` for a tree whose bring-up did not finish. `prune: none` means nothing to remove. Show the lines. Autonomous: this is the whole
 action. Say once that a tree goes only on a person's yes, and stop. The script refuses an id
 unattended at 70.
 
 **2. Ask once.** Show the list and ask which trees go. The answer names the trees, or says all
-of them. Say first which branches are unmerged and hold a commit of their own: the tree goes,
-that branch stays.
+of them. Say first which branches are unmerged: the tree goes, that branch stays.
 
 **3. Remove.** Run the action once with every id the answer named, in the order given, or with
 `--all` when it named every tree. For each tree the script tears the site down when one is up,
 then removes the tree. It removes the group folder when it is empty, never the worktree base
-itself. It deletes the branch when it is merged, or when it holds no commit of its own. A task in
-state `new` gets a tree again when it starts. A task that records no tree prints `unchanged:`.
+itself. It deletes the branch when git deletes it as merged. Otherwise the branch stays, and the
+`pruned:` line names it, so the person decides. A task that records no tree prints `unchanged:`.
 It clears `worktree` and
 `environment` from `task.json` and commits. It prints one `pruned:` line per tree naming what
 happened to the branch. A tree that another task also records stays, and its line says `kept`:
 a later task made with `--in-tree` builds in it. Show them. Exit 3 names the tree it stopped at and why. The task is
-started and not complete, or it was never started and its branch holds a commit. Or git refused a
-tree with uncommitted changes, or the tear-down failed. Nothing after
+not complete, git refused a tree with uncommitted changes, or the tear-down failed. Nothing after
 that tree was touched, and nothing is ever forced. Say what it printed and stop.
 
 ## `repair <old-task-folder>`
