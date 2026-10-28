@@ -13722,7 +13722,9 @@ do_dispatch_close() {
     # 63), and go on the ledger, as build-record does on a stop: the order's commit list, redo and
     # drop read them. A capped builder spends one build attempt, so the attempt cap bounds the caps,
     # and the last one stops the order the way build-record does. Each cap is its own warning: its
-    # words carry the count of turn caps on the order.
+    # words carry the count of turn caps on the order. Any other role's caps are counted from those
+    # warnings, and the cap that reaches the order's attempt limit stops the order, allowing the
+    # go-on that sends the role again: fix for a fixer, check for a reviewer, build for the rest.
     nr_cap="$(sed -n 's/^maxTurns: *//p' "$PLUGIN_ROOT/agents/${nr_role##*:}.md" 2>/dev/null | head -1)"
     local nr_times="twice" nr_last="second" nr_what nr_code nr_head nr_brief="" nr_spent="" nr_count
     [ "$nr_allowed" -eq 1 ] || { nr_times="$((nr_allowed + 1)) times"; nr_last="last"; }
@@ -13745,7 +13747,21 @@ do_dispatch_close() {
       nr_ledger="$(im_listed_commits_in "$nr_ledger" "$nr_unit" "$IM_MOVED")"
       [ -n "$nr_ledger" ] || die3 "dispatch-close: the capped ${nr_role##*:}'s commits on $nr_unit could not be written."
     fi
-    if [ "${nr_role##*:}" = "implementer" ]; then
+    nr_count="$(( $(jq --arg id "$nr_unit" '[ (.warnings // [])[] | select(.step == "dispatch-close" and .order == $id and (.words | startswith("turn cap: "))) ] | length' "$TASK_PATH/task.json" 2>/dev/null || printf '0') + 1 ))"
+    if [ "${nr_role##*:}" != "implementer" ]; then
+      local nr_role_caps nr_limit nr_allows='["build"]'
+      nr_role_caps="$(( $(jq --arg id "$nr_unit" '[ (.warnings // [])[] | select(.step == "dispatch-close" and .order == $id and (.words | startswith("turn cap: ")) and (.words | startswith("turn cap: implementer ") | not)) ] | length' "$TASK_PATH/task.json" 2>/dev/null || printf '0') + 1 ))"
+      nr_limit="$(attempts_allowed_for "$(printf '%s' "$nr_ledger" | jq -c --arg id "$nr_unit" '[ .orders[] | select(.id == $id) ][0]')")"
+      case "${nr_role##*:}" in
+        fixer) nr_allows='["fix"]' ;;
+        reviewer) nr_allows='["check"]' ;;
+      esac
+      nr_spent=" It is turn cap $nr_role_caps of $nr_limit for roles other than the builder."
+      [ "$nr_role_caps" -lt "$nr_limit" ] \
+        || nr_ledger="$(stop_order_in "$nr_ledger" "$nr_unit" dispatch-close \
+             "turn caps spent: ${nr_role##*:} cut off at its turn cap, $nr_role_caps of $nr_limit allowed" "$nr_allows")"
+      [ -n "$nr_ledger" ] || die3 "dispatch-close: the turn caps spent on $nr_unit could not be written."
+    else
       local nr_used_attempts nr_allowed_attempts
       nr_used_attempts="$(( $(printf '%s' "$nr_ledger" | jq -r --arg id "$nr_unit" '[ .orders[] | select(.id == $id) | .attemptsUsed // 0 ][0] // 0') + 1 ))"
       nr_allowed_attempts="$(attempts_allowed_for "$(printf '%s' "$nr_ledger" | jq -c --arg id "$nr_unit" '[ .orders[] | select(.id == $id) ][0]')")"
@@ -13759,7 +13775,6 @@ do_dispatch_close() {
     fi
     write_atomic "$IMPL_DIR/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
-    nr_count="$(( $(jq --arg id "$nr_unit" '[ (.warnings // [])[] | select(.step == "dispatch-close" and .order == $id and (.words | startswith("turn cap: "))) ] | length' "$TASK_PATH/task.json" 2>/dev/null || printf '0') + 1 ))"
     task_warn "$TASK_PATH" dispatch-close "$nr_unit" "turn cap: ${nr_role##*:} $nr_what, $nr_after; its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty$nr_spent It is turn cap $nr_count on this order."
     # A fixer's complete report stops a fresh dispatch-open until fix-record reads it (gap row 343).
     local nr_next="dispatch the $nr_role again with a fresh brief, which reads what it left"
