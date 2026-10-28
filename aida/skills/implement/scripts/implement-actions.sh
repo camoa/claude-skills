@@ -632,8 +632,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 109  retired in 6.1.0. A --red file written before the order's test round began, or before its
 #      own test file last changed, is a warning.
 # 110  retired in 6.1.0. `dispatch-close --no-report` with the resumes spent is a warning: the
-#      order does not stop, the record is removed, a capped builder's or fixer's commits join the
-#      order's unrecordedCommits, and the next step reads what the role left (gap row 228).
+#      record is removed, a capped builder's or fixer's commits join the order's unrecordedCommits,
+#      and the next step reads what the role left (gap row 228). The cap that reaches the order's
+#      attempt limit stops it, as does a cap whose commits breach the frozen tests or owned files.
 # 111  a plain `dispatch-close` on a reviewer's, a row-checker's or an implementer's record found its
 #      file missing, or written before the record's `openedAt`: `findingsPath` in review mode,
 #      `verdictsPath` in verify mode after the ledger's `fixed`, `row-check-<order>.json` for the
@@ -5327,11 +5328,8 @@ TF_EOF
   # --- 27 also: a repair's test is a new file, so no earlier freeze of this order holds it ---------
   local tf_frozen_before="" tf_refrozen=""
   if [ -n "$tf_repair" ]; then
-    # A record that does not parse would leave this list empty, and every file would read as new.
-    tf_frozen_before="$(im_with_repair_tests "$unit_id" "$(jq -c '.' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)")"
-    [ -n "$tf_frozen_before" ] \
-      || die3 "tests-freeze: $IMPL_DIR/tests-$unit_id.json or a repair record tests-$unit_id-repair-*.json beside it could not be read as JSON, so the files an earlier freeze of $unit_id holds are unknown. Repair or remove it by hand. Nothing is frozen."
-    tf_frozen_before="$(printf '%s' "$tf_frozen_before" \
+    im_with_repair_tests "tests-freeze" "$unit_id"
+    tf_frozen_before="$(printf '%s' "$IM_REPAIR_TESTS_DOC" \
       | jq -r '[ (.rows // [])[] | (.tests // [])[] | .path ] + [ (.support // [])[] | .path ] | unique | .[]')"
     while IFS= read -r p; do
       [ -n "$p" ] || continue
@@ -6458,20 +6456,27 @@ bb_load_unit() {
   [ "$BB_UNIT_JSON" != "null" ] || die3 "build-brief: $unit_id is not in the frozen copy. Run read to list the orders it holds."
 }
 
-# Order $1's frozen test record document $2, with the rows and the support files of each repair's
-# record appended. A repair's record, tests-<order>-repair-<n>.json, holds the failing test of a bug
-# a failed task review found. The fix round runs and hashes it with the order's own tests. Prints the
-# document, or nothing when a record does not read.
+# Order $2's frozen test record, with the rows and the support files of each repair's record
+# appended. A repair's record, tests-<order>-repair-<n>.json, holds the failing test of a bug a
+# failed task review found. The fix round runs and hashes it with the order's own tests. Sets
+# IM_REPAIR_TESTS_DOC. Refuses at 3, naming the file, when a record does not parse: the files the
+# freezes hold are then unknown. $1 the action. Call it as a plain statement, never in $(...).
+IM_REPAIR_TESTS_DOC=""
 im_with_repair_tests() {
-  local doc="$2" f
+  local f doc
+  doc="$(jq -c '.' "$IMPL_DIR/tests-$2.json" 2>/dev/null)"
+  [ -n "$doc" ] \
+    || die3 "$1: $IMPL_DIR/tests-$2.json could not be read as JSON, so the files the freezes of $2 hold are unknown. Repair or remove it by hand before running this again."
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     doc="$(printf '%s' "$doc" | jq -c --slurpfile r "$f" \
       '.rows = ((.rows // []) + ($r[0].rows // [])) | .support = ((.support // []) + ($r[0].support // []))' 2>/dev/null)"
+    [ -n "$doc" ] \
+      || die3 "$1: $f could not be read as JSON, so the files the freezes of $2 hold are unknown. Repair or remove it by hand before running this again."
   done <<IWR_EOF
-$(find "$IMPL_DIR" -maxdepth 1 -type f -name "tests-$1-repair-*.json" 2>/dev/null | sort)
+$(find "$IMPL_DIR" -maxdepth 1 -type f -name "tests-$2-repair-*.json" 2>/dev/null | sort)
 IWR_EOF
-  printf '%s' "$doc"
+  IM_REPAIR_TESTS_DOC="$doc"
 }
 
 # The frozen tests record of unit $2, which step three writes. Sets IM_TESTS_DOC. $1 names the step
@@ -7503,9 +7508,13 @@ br_verify_fold() {
   verdict="$(br_worst_verdict "$(jq -c --arg v "${BRL_VERDICT:-met}" '[.verdict, $v]' "$1")")"
   # The exit code follows the verdict that stands: the lines' own when they failed, the check's
   # own when it failed, and the lines' when both passed and the check ran no command.
+  # provedByRun names the criteria the lines proved when every line passed. close judges them on
+  # an order whose own check judges no machine criterion.
   jq --arg v "$verdict" --arg lv "${BRL_VERDICT:-met}" --arg rc "$BRL_RC" --rawfile out "$outfile" \
+     --argjson proved "$(if [ -z "$BRL_VERDICT" ]; then printf '%s' "$linked_now" | jq -c 'map(.criterion) | unique'; else printf '[]'; fi)" \
      --arg add "$(if [ -z "$BRL_VERDICT" ]; then printf 'Every verify line (%s of them%s) passed, from %s.' "$BRL_N" "$([ "$BRL_SKIPPED" -eq 0 ] || printf ', %s did not apply' "$BRL_SKIPPED")" "$cites"; elif [ "$BRL_VERDICT" = "undeclared" ]; then printf 'Its verify lines do not apply: %s, from %s.' "$BRL_WHY" "$cites"; else printf 'Its verify lines did not pass: %s, from %s.' "$BRL_WHY" "$cites"; fi)" '
     .verdict = $v | .detail = (.detail + " " + $add)
+    | (if ($proved | length) > 0 then .provedByRun = $proved else . end)
     | .output = (if (.output // "") == "" then $out else .output + "\n" + $out end)
     | if $rc == "" then .
       elif $lv == "unmet" then .exitCode = ($rc | tonumber)
@@ -8752,9 +8761,8 @@ go_on_check() {
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
     || die3 "go-on: $tests_file not found, though a build record implies tests-freeze already ran for $unit_id."
-  tests_doc="$(im_with_repair_tests "$unit_id" "$(jq -c '.' "$tests_file" 2>/dev/null)")"
-  [ -n "$tests_doc" ] \
-    || die3 "go-on: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  im_with_repair_tests "go-on" "$unit_id"
+  tests_doc="$IM_REPAIR_TESTS_DOC"
 
   # --- the recipe flags, taken from the records that produced them (gap row 349). A flag left out
   # would make its check read unknown or undeclared over the stop the checks are meant to clear,
@@ -9178,15 +9186,16 @@ rv_load_review_record() {
     || die3 "$who: $RV_REVIEW_FILE exists but could not be read as JSON. Repair or remove it by hand before running this again."
 }
 
-# The frozen test paths for this order, one per line, from the frozen test record. $1 the unit id.
+# The frozen test paths for this order, from the frozen test records, as a JSON array in
+# RV_FROZEN_PATHS_JSON: none when the order froze no record. $1 the action, $2 the unit id. Call it
+# as a plain statement, because a record that does not parse refuses.
+RV_FROZEN_PATHS_JSON="[]"
 rv_frozen_test_paths_json() {
-  local unit_id="$1" tests_file tests_doc
-  tests_file="$IMPL_DIR/tests-$unit_id.json"
-  [ -f "$tests_file" ] || { printf '[]'; return 0; }
-  tests_doc="$(im_with_repair_tests "$unit_id" "$(jq -c '.' "$tests_file" 2>/dev/null)")"
-  [ -n "$tests_doc" ] || { printf '[]'; return 0; }
-  printf '%s' "$tests_doc" | jq -c \
-    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique'
+  RV_FROZEN_PATHS_JSON="[]"
+  [ -f "$IMPL_DIR/tests-$2.json" ] || return 0
+  im_with_repair_tests "$1" "$2"
+  RV_FROZEN_PATHS_JSON="$(printf '%s' "$IM_REPAIR_TESTS_DOC" | jq -c \
+    '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
 }
 
 # Prints the paths of scope list $1, a JSON array, that lie outside owned list $2, one per line,
@@ -9544,7 +9553,8 @@ RB_RECORDS
     | [ $ids[] as $id | (.alignment.criteria // [])[] | select(.id == $id)
         | {id, text, verification, verifiedBy} ]')"
   nongoals_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.nonGoals // [])[] | {id, text} ]')"
-  tests_json="$(rv_frozen_test_paths_json "$unit_id")"
+  rv_frozen_test_paths_json "review-brief" "$unit_id"
+  tests_json="$RV_FROZEN_PATHS_JSON"
   # A locks-in reason is read with the diff, so the brief says where it sits, and never copies it.
   local locks_note
   locks_note="$(jq -r --arg f "$IMPL_DIR/tests-$unit_id.json" '[ (.rows // [])[] | (.tests // [])[] | select(has("locksIn")) | .name ]
@@ -9727,8 +9737,9 @@ do_review_record() {
   rv_read_information_array "$findings_path" "review-record"
   information_json="$RV_INFORMATION_ARRAY"
   local rr_test_globs=""
+  rv_frozen_test_paths_json "review-record" "$unit_id"
   [ "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.alignment.automatedTests == false')" != "true" ] \
-    || [ "$(rv_frozen_test_paths_json "$unit_id")" != "[]" ] \
+    || [ "$RV_FROZEN_PATHS_JSON" != "[]" ] \
     || rr_test_globs="$(jq -r '(.testGlobs // [])[]' "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
   rv_read_recipe_answers "$findings_path" "review-record" "$IMPL_DIR/diff-$unit_id.patch" "$rr_test_globs"
 
@@ -10069,7 +10080,8 @@ do_fix_brief() {
     fi
     die 53 "fix-brief: $empty_why. A person rules $empty_who: $empty_call."
   fi
-  tests_json="$(rv_frozen_test_paths_json "$unit_id")"
+  rv_frozen_test_paths_json "fix-brief" "$unit_id"
+  tests_json="$RV_FROZEN_PATHS_JSON"
   owned_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson o "$(im_owns_of "$unit_id")" '(.ownedFiles // []) + $o')"
 
   rv_load_codepath "fix-brief"
@@ -10445,9 +10457,8 @@ RV_AC
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
     || die3 "fix-record: $tests_file not found, though a fix round implies tests-freeze already ran for $unit_id."
-  tests_doc="$(im_with_repair_tests "$unit_id" "$(jq -c '.' "$tests_file" 2>/dev/null)")"
-  [ -n "$tests_doc" ] \
-    || die3 "fix-record: $tests_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+  im_with_repair_tests "fix-record" "$unit_id"
+  tests_doc="$IM_REPAIR_TESTS_DOC"
   if [ -z "$gate_recipes" ]; then
     br_fill_gate_recipes "fix-record" "$RV_UNIT_JSON" "" "" "No check ran and no round was spent."
     gate_recipes="$RF_LIST"
@@ -11280,32 +11291,42 @@ do_close() {
     .orders = (.orders | map(if .id == $id then (.lastStep = "closed" | .commitRange = $range) else . end))')"
   [ -n "$new_ledger" ] || die3 "close: the ledger update for $unit_id failed."
 
-  # An order whose proof is gate froze no test, so the judgement of every machine criterion it owns
-  # is written here, from the configuration-gate check in the record this close reads: the build
-  # record, or the last fix record. met is confirmed, and the derivation below then confirms the
-  # criterion the way it does for any owner. Not met writes nothing, and the row stays not-judged.
-  # It is judged by `gate`, a third value: a model's row is weaker evidence queued for a person and
-  # a person's row claims a reader, and the recipe's own lines are neither (live-run row 65). An
-  # order proved by its own tests has its criteria judged by the rows it froze. Any other order
-  # writes nothing here. The person answers a confirm order's criteria at review (gap row 196), and
-  # review checks the criteria of a record or observe order: neither a reading nor a look judges a
-  # machine criterion, which the design check refuses on such an order unless a run line proves it.
-  local slot_verdict slot_detail
+  # An order whose own check judges no machine criterion gets the judgement of the ones it owns
+  # here, from the check that took the first slot in the record this close reads: the build
+  # record, or the last fix record. A gate order's criteria are judged by its configuration-gate
+  # check when it reads met, by `gate`: a model's row is weaker evidence queued for a person and a
+  # person's row claims a reader, and the recipe's own lines are neither (live-run row 65). A record
+  # or observe order's criteria are judged by `run`, each one its run lines proved (provedByRun):
+  # neither a reading nor a look judges a machine criterion, and the design check refuses one on
+  # such an order with no run line. A tests order's criteria are judged by the rows it froze. A
+  # confirm order writes nothing: the person answers its criteria at review (gap row 196). Nothing
+  # written leaves the row not-judged, and the derivation below confirms a judged criterion the
+  # way it does for any owner.
+  local slot_check slot_doc slot_judge judged_json='[]'
   br_order_facts "$RV_UNIT_JSON"
-  if [ "$BR_ORDER_SLOT" = "configuration-gate" ]; then
-    slot_verdict="$(jq -r '[ (.checks // [])[] | select(.id == "configuration-gate") ][0].verdict // ""' "$last_record" 2>/dev/null)"
-    slot_detail="$(jq -r '[ (.checks // [])[] | select(.id == "configuration-gate") ][0].detail // ""' "$last_record" 2>/dev/null)"
-    if [ "$slot_verdict" = "met" ]; then
-      new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg unit "$unit_id" --arg note "$slot_detail" \
-        --argjson owned "$(printf '%s' "$RV_UNIT_JSON" | jq -c '.criteriaOwned // []')" \
-        --argjson kinds "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id ]')" '
-        .criteria = ((.criteria // []) | map(
-          if ((.id as $i | $owned | index($i)) != null) and ((.id as $i | $kinds | index($i)) != null)
-          then . + {judgements: ((((.judgements // []) | map(select(.unit != $unit))))
-                                 + [{unit: $unit, verdict: "confirmed", judgedBy: "gate", note: $note}])}
-          else . end))')"
-      [ -n "$new_ledger" ] || die3 "close: the configuration-gate judgement for $unit_id could not be written."
-    fi
+  slot_check="$BR_ORDER_SLOT"
+  slot_doc="$(jq -c --arg c "$slot_check" '[ (.checks // [])[] | select(.id == $c) ][0] // {}' "$last_record" 2>/dev/null)"
+  case "$slot_check" in
+    configuration-gate)
+      slot_judge="gate"
+      [ "$(printf '%s' "$slot_doc" | jq -r '.verdict // ""')" != "met" ] \
+        || judged_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c '.criteriaOwned // []')" ;;
+    done-when|observed)
+      slot_judge="run"
+      judged_json="$(printf '%s' "$slot_doc" | jq -c '.provedByRun // []')" ;;
+  esac
+  if [ "$judged_json" != "[]" ]; then
+    new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg unit "$unit_id" --arg judge "$slot_judge" \
+      --arg note "$(printf '%s' "$slot_doc" | jq -r '.detail // ""')" \
+      --argjson judged "$judged_json" --argjson owned "$(printf '%s' "$RV_UNIT_JSON" | jq -c '.criteriaOwned // []')" \
+      --argjson kinds "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.criteria // [])[] | select(.verifiedBy == "machine") | .id ]')" '
+      .criteria = ((.criteria // []) | map(
+        if ((.id as $i | $owned | index($i)) != null) and ((.id as $i | $kinds | index($i)) != null)
+           and ((.id as $i | $judged | index($i)) != null)
+        then . + {judgements: ((((.judgements // []) | map(select(.unit != $unit))))
+                               + [{unit: $unit, verdict: "confirmed", judgedBy: $judge, note: $note}])}
+        else . end))')"
+    [ -n "$new_ledger" ] || die3 "close: the $slot_check judgement for $unit_id could not be written."
   fi
 
   # Every criterion this order serves or owns is decided now, and only now. A criterion design split

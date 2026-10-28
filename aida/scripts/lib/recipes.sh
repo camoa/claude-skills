@@ -1250,8 +1250,8 @@ br_filter_extensions() {
 }
 
 # Prints the frozen test files named by $1, a JSON array of rows as a tests-<unit>.json holds them.
-# The build and review leave these out of their tool rows, because no role after the freeze may
-# write them (gap row 270).
+# The build runs them as the order's own tests. Review leaves them out of its tool rows, because no
+# role after the freeze may write them (gap row 270).
 br_frozen_test_paths() {
   printf '%s' "$1" | jq -c '[ .[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique'
 }

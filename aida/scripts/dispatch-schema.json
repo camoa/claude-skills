@@ -35,7 +35,7 @@
     "resumedAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
-      "description": "Present once the role returned with no report and `dispatch-close --no-report` kept the record open for one resume by message, UTC, to the second (gap row 228). `dispatch-open --resume` writes it at once, equal to openedAt, when the earlier record was already closed. A `--no-report` once `resumes` reaches `resumesAllowed` is a warning: the order does not stop, and the record is removed."
+      "description": "Present once the role returned with no report and `dispatch-close --no-report` kept the record open for one resume by message, UTC, to the second (gap row 228). `dispatch-open --resume` writes it at once, equal to openedAt, when the earlier record was already closed. A `--no-report` once `resumes` reaches `resumesAllowed` is a warning, and the record is removed. A capped builder spends an attempt, and another role's cap counts toward the order's attempt limit, so the cap that reaches that limit stops the order, as does a cap whose commits breach the frozen tests or the owned files."
     },
     "resumes": {
       "type": "integer",

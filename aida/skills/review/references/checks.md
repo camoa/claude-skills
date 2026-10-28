@@ -124,8 +124,8 @@ undeclared, not met: it opened no file. The three tool rows and the mutation row
 too, the word the build stage answers with. The mutation command never runs over zero paths. The
 suite reads not-needed, which finishing the build already decided. Every lens reads undeclared:
 the diff holds nothing, and this stage does not hand the reviewer the deliverables. Check 4 reads
-the judgement such an order left on the ledger, the way it reads an observed record for a page
-order. A criterion judged at build time is covered.
+the judgement such an order left on the ledger, from the run lines that proved it, as for a page
+order. A criterion judged at build time is covered. A look judges no machine criterion.
 
 **Check 3 is decided twice.** A changed file no order owns is unmet, decided here. A support file
 that an order's tests froze is set aside while it holds the content the freeze hashed. A hunk

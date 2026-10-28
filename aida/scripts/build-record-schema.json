@@ -162,6 +162,12 @@
         "detail"
       ],
       "properties": {
+        "provedByRun": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^c[1-9][0-9]*$" },
+          "description": "The criteria the order's run lines proved, present only when every run line passed and one names a criterion. `close` judges them, by `run`, on an order whose proof is record or observe."
+        },
         "id": {
           "type": "string",
           "enum": [

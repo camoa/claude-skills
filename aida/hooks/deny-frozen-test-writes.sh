@@ -213,7 +213,7 @@ completion-actions.sh close --reason --leave --captures-offered
 surfaces-actions.sh baseline --confirmed
 surfaces-actions.sh decline
 project-actions.sh unregister|task-rule|task-rule-remove|uninstall|record-declined'
-PERSON_REFUSAL="This command runs an action that records a person's approval, ruling or answer, and only the main session runs one. This command comes from a dispatched agent, type ${AGENT:-unnamed}. Report the halt to the main session and stop."
+PERSON_REFUSAL="This command runs an action that records a person's approval, ruling or answer, and only the main session runs one. This command comes from a dispatched agent, type ${AGENT:-unnamed}. Report this refusal to the main session and stop."
 # Returns 0 when segment $1 runs a PERSON_ACTIONS line of script PA_SCRIPT: the script's name, or a
 # `$NAME` set to it, then any `--option value` pairs, then the action, then one of the words. A grep
 # for an action's name passes, because the script's name comes after it.

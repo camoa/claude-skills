@@ -1016,24 +1016,22 @@ RW_CHANGED
 }
 
 # Check 4's script half: every criterion is covered by a frozen test naming it or by a checklist a
-# person reads. A criterion covered by neither was signed off on nothing. A criterion owned by
-# an order whose proof is observe is covered by the observed record the build read, when it
-# holds a row: a model judged the order's done-when rows at each surface and viewport, and no
-# test names such a criterion (live-run row 104).
+# person reads. A criterion covered by neither was signed off on nothing.
 #
-# A criterion owned by an order whose proof is gate is covered by the judgement `close` wrote onto
-# the ledger from the order's configuration-gate check. No test names such
-# a criterion either, and reading it as covered by nothing said "each was signed off on nothing"
-# about a criterion somebody had signed off (live-run row 167).
+# A criterion owned by an order whose proof is gate, record or observe is covered by the judgement
+# `close` wrote onto the ledger: from a gate order's configuration-gate check, or from the run
+# lines of a record or observe order. No test names such a criterion, and reading it as covered by
+# nothing said "each was signed off on nothing" about a criterion somebody had signed off
+# (live-run row 167). A look judges no machine criterion, so the observed record covers none.
 #
 # A criterion owned by an order whose proof is confirm is covered by the checklist rows `finish`
 # wrote from that order's done-when rows. The task has no automated tests, and the person answers
 # the criterion from those rows at close (gap row 196).
 rw_check_coverage_verdict() {
-  local criteria count i cid covered uncovered="" observed_owner judged_owner
+  local criteria count i cid covered uncovered="" judged_owner
   criteria="$(rw_alignment | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
-  i=0; cid=""; covered=""; observed_owner=""; judged_owner=""
+  i=0; cid=""; covered=""; judged_owner=""
   while [ "$i" -lt "$count" ]; do
     cid="$(printf '%s' "$criteria" | jq -r --argjson i "$i" '.[$i].id')"
     covered="$(jq -nr --argjson rows "$RW_TEST_ROWS" --arg id "$cid" '
@@ -1041,19 +1039,13 @@ rw_check_coverage_verdict() {
         | select(((.kind == "machine") and (((.tests // []) | length) > 0))
                  or ((.kind == "person") and ((.checklist // "") != ""))) ] | length > 0')"
     if [ "$covered" != "true" ]; then
-      observed_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
-        [ (.workOrders // [])[] | select(orderFacts.slot == "observed") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
-      [ -n "$observed_owner" ] \
-        && covered="$(jq -r '((.rows // []) | length) > 0' "$IMPL_DIR/observed-$observed_owner.json" 2>/dev/null)"
-    fi
-    if [ "$covered" != "true" ]; then
       covered="$(printf '%s' "$RW_FINISHED_DOC" | jq -r --arg id "$cid" '[ (.checklists // [])[] | select(.criterion == $id) ] | length > 0')"
     fi
     if [ "$covered" != "true" ]; then
       judged_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
         [ (.workOrders // [])[]
           | orderFacts.slot as $slot
-          | select($slot == "configuration-gate")
+          | select($slot == "configuration-gate" or $slot == "done-when" or $slot == "observed")
           | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
       [ -n "$judged_owner" ] \
         && covered="$(jq -r --arg id "$cid" --arg unit "$judged_owner" '
@@ -1068,9 +1060,9 @@ rw_check_coverage_verdict() {
     return 0
   fi
   if [ -n "$uncovered" ]; then
-    printf 'unmet\tthese criteria are covered by no frozen test, no checklist row, no observed record and no judgement on the ledger, so each was signed off on nothing: %s' "${uncovered%, }"
+    printf 'unmet\tthese criteria are covered by no frozen test, no checklist row and no judgement on the ledger, so each was signed off on nothing: %s' "${uncovered%, }"
   else
-    printf 'met\tevery one of the %s criteria carries a frozen test naming it, a checklist row a person reads, an observed record a model judged, or the judgement its owning order left on the ledger.' "$count"
+    printf 'met\tevery one of the %s criteria carries a frozen test naming it, a checklist row a person reads, or the judgement its owning order left on the ledger.' "$count"
   fi
 }
 
@@ -3016,7 +3008,7 @@ do_close() {
 
   local alignment criteria count i one kind state verdict answered suite_verdict
   local hit rows_out criteria_json bad_rows person_checks unanswered=0 unmet_count=0
-  local observe_owner observed_file person_owned failed_by cited_by="" stale_low
+  local person_owned failed_by cited_by="" stale_low
   alignment="$(rw_alignment)"
   # The criteria a person answers, personCriteria in scripts/lib/proof.sh: each person-verified
   # one, and each one an order proved by confirm puts to the person. The person answers each with
@@ -3028,17 +3020,11 @@ do_close() {
   rw_load_test_rows "close"
 
   rows_out="$(mktemp)" || die 3 "close: could not create a temporary file"
-  i=0; cid=""; kind=""; state=""; verdict=""; answered=""; hit="false"; observe_owner=""; observed_file=""
+  i=0; cid=""; kind=""; state=""; verdict=""; answered=""; hit="false"
   while [ "$i" -lt "$count" ]; do
     cid="$(printf '%s' "$criteria" | jq -r --argjson i "$i" '.[$i].id')"
     kind="$(printf '%s' "$criteria" | jq -r --argjson i "$i" '.[$i].verifiedBy')"
     verdict=""; answered="nobody"
-    # A criterion owned by an order whose proof is observe has no test to join on: a model
-    # judged the order's done-when rows at each surface and viewport, and the observed record
-    # the build read holds those rows (live-run row 104). Met when every row is met, unmet when
-    # one is not, unanswered when the record is not there to read.
-    observe_owner="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r --arg id "$cid" "$BR_ORDER_FACTS_JQ"'
-      [ (.workOrders // [])[] | select(orderFacts.slot == "observed") | select((.criteriaOwned // []) | index($id) != null) | .id ][0] // ""')"
     if [ "$(printf '%s' "$person_owned" | jq --arg id "$cid" 'index($id) != null')" = "true" ]; then
       verdict="$(cr_lookup "$rows" "$cid")"
       if [ -n "$verdict" ]; then
@@ -3046,12 +3032,6 @@ do_close() {
       else
         verdict="unanswered"
       fi
-    elif [ -n "$observe_owner" ]; then
-      answered="script"
-      observed_file="$IMPL_DIR/observed-$observe_owner.json"
-      verdict="$(jq -r 'if ((.rows // []) | length) == 0 then "unanswered"
-                        elif all(.rows[]; .verdict == "met") then "met" else "unmet" end' "$observed_file" 2>/dev/null)"
-      [ -n "$verdict" ] || verdict="unanswered"
     else
       answered="script"
       state="$(printf '%s' "$RW_FINISHED_DOC" | jq -r --arg id "$cid" \
