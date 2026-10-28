@@ -209,8 +209,9 @@ For each one, in order, in the draft:
    the restatement. A machine clause names the behaviour a test proves, not a flow to run. A test
    is what this page defines:
    `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
-   `add` and `update` warn on a clause that names an end-to-end or browser check. See "Tests and
-   checks" below for what changes when the project has end to end testing or visual regression on.
+   `add` and `update` warn on a clause that names an end-to-end check or a browser test. See
+   "Tests and checks" below for what changes when the project has end to end testing or visual
+   regression on.
 3. Record who asked. `designer` for every line the draft wrote, until `approve` promotes it at
    "Approval". `owner` when a person wrote or corrected this criterion, in this conversation.
    There is no third value, and a missing answer is never `owner`.

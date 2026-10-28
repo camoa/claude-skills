@@ -635,22 +635,23 @@ task_warn() {
   printf 'warning: %s%s: %s\n' "$2" "${3:+ $3}" "$4"
 }
 
-# True when the text names the end-to-end or browser check. Such a check is a surface, which review
+# True when the text names an end-to-end check or a browser test. Such a check is a surface, which review
 # runs after the build, and a test proves the behaviour beneath it (gap rows 451 to 453). scope's
 # verify clauses and design's test descriptions warn on it. Visual regression is left out: scope
 # itself drafts a criterion on that check. The words are English, not a framework's. $1 the text.
 names_a_surface_check() {
-  printf '%s' "$1" | grep -Eiq '(^|[^[:alnum:]])(e2e|end[- ]to[- ]end|browser)([^[:alnum:]]|$)'
+  printf '%s' "$1" | grep -Eiq '(^|[^[:alnum:]])(e2e|end[- ]to[- ]end|browser tests?)([^[:alnum:]]|$)'
 }
 
-# Warns when one run of an order's frozen tests took more than TEST_WEIGHT_SECONDS a test (gap row
-# 454). A test the recipes run every attempt takes milliseconds or seconds. The heavy periplus tests
-# ran a whole flow, 116 to 2631 seconds each. A warning, never a stop. $1 the task folder, $2 the
-# step, $3 the order, $4 the run's seconds, $5 the frozen tests it ran.
+# Warns when one run of an order's frozen tests took more than TEST_WEIGHT_SECONDS (gap row 454).
+# The whole run is timed, so one heavy test is not hidden in an average. A test the recipes run
+# every attempt takes milliseconds or seconds. The heavy periplus tests ran a whole flow, 116 to
+# 2631 seconds each. The words carry no seconds, so a step run again warns once. A warning, never a
+# stop. $1 the task folder, $2 the step, $3 the order, $4 the run's seconds.
 TEST_WEIGHT_SECONDS=60
 test_weight_warn() {
-  [ "$5" -gt 0 ] && [ $(($4 / $5)) -gt "$TEST_WEIGHT_SECONDS" ] || return 0
-  task_warn "$1" "$2" "$3" "one run of the frozen tests took $4 s, $(($4 / $5)) s a test, over $TEST_WEIGHT_SECONDS s. A test heavier than its behaviour is sent back: see skills/implement/references/what-a-test-is.md"
+  [ "$4" -gt "$TEST_WEIGHT_SECONDS" ] || return 0
+  task_warn "$1" "$2" "$3" "a run of this order's frozen tests took over $TEST_WEIGHT_SECONDS s. A test heavier than its behaviour is sent back: see skills/implement/references/what-a-test-is.md"
 }
 
 # The one overlap rule for owned files, read by check-design.sh and by implementation's `start`.

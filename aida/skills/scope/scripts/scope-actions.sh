@@ -457,14 +457,14 @@ do_set_tests() {
 # sets author from --author when given or from the run mode otherwise, and appends it.
 # ------------------------------------------------------------------------------------------------
 
-# Warns when criterion $2's machine verify clause names the end-to-end, browser or visual
-# regression check (gap row 451). That check is a surface review runs; the clause names the
+# Warns when criterion $2's machine verify clause names an end-to-end check or a browser test
+# (gap row 451). That check is a surface review runs; the clause names the
 # behaviour a test proves. $1 the step.
 warn_surface_clause() {
   local clause
   clause="$(jq -r --arg id "$2" '(.criteria // [])[] | select(.id == $id and .verifiedBy == "machine") | .verification' "$ALIGNMENT_FILE")"
   [ -n "$clause" ] && names_a_surface_check "$clause" || return 0
-  task_warn "$TASK_PATH" "$1" "" "criterion $2's verify clause names an end-to-end or browser check. That check is a surface review runs; name the behaviour a test proves (skills/implement/references/what-a-test-is.md)"
+  task_warn "$TASK_PATH" "$1" "" "criterion $2's verify clause names an end-to-end check or a browser test. That check is a surface review runs; name the behaviour a test proves (skills/implement/references/what-a-test-is.md)"
 }
 
 do_add() {

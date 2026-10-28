@@ -12,9 +12,7 @@ covers.
 
 **Read this first:**
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
-It says what a test is in AIDA. When a verify clause names an end-to-end test, a browser test or
-a whole flow, judge whether the tests prove the behaviour beneath it. The surface proves the flow
-at review.
+It says what a test is in AIDA.
 
 **What you are given**, one per line in the dispatch, and nothing else:
 
@@ -28,11 +26,13 @@ at review.
 Each row names a
 criterion, its verify clause, and the tests that claim to prove it. Read the recipe first: it says
 which test levels exist, what a test may not do, and whether a test names its criterion. Answer one
-question per row: if these tests pass, is the verify clause true? Judge each test against the
-recipe and against the clause. Read only the recipe, the test files, the verify clause and the
-interface file below. Do not read the implementation. A hook refuses that read. The reason: a check
-that reads the code stops checking tests against the criterion. It starts checking tests against
-what the code already does.
+question per row: if these tests pass, is the verify clause true? A clause that names an
+end-to-end test, a browser test, a visual regression check or a whole flow is read as the
+behaviour beneath it, here and in every rule below. The surface proves the rest at review. Judge
+each test against the recipe and against the clause. Read only the recipe, the test files, the
+verify clause and the interface file below. Do not read the implementation. A hook refuses that
+read. The reason: a check that reads the code stops checking tests against the criterion. It
+starts checking tests against what the code already does.
 
 **A test that calls existing code or another order's code gets its interface from a file.** The
 hook refuses you that source, as it refuses the test author. The file is

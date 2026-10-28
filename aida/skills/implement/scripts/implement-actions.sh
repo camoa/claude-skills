@@ -3486,11 +3486,10 @@ PC_RECIPES
   [ -z "$pc_gate_missing" ] \
     || die3 "preconditions: a gate order runs the ## Configuration gate of ${pc_gate_missing#*	}, and its token {${pc_gate_missing%%	*}} has no value. Nothing was recorded. Pass --value ${pc_gate_missing%%	*}=<value>, or bring the environment up with task environment <task-id> up, which records it."
   order_tests_absent="$(printf '%s' "$CR_DOC" | jq -r '
-    [ (.frameworks // [])[] | select(.testRecipe != "" and ((.orderTests | has("argv")) | not))
-      | .framework + " (" + (.orderTests.missing // .orderTests.absent // "no row") + ")" ]
+    [ (.frameworks // [])[] | select(.testRecipe != "" and ((.orderTests | has("argv")) | not)) | .framework ]
     | join(", ")')"
   if [ -n "$order_tests_absent" ]; then
-    printf 'implement-actions: preconditions: %s\n' "these frameworks declare no every-attempt test-command row that runs a named set of tests, so no order on them can ever have its own tests run, and no order on them can ever pass its checks: $order_tests_absent" >&2
+    printf 'implement-actions: preconditions: %s\n' "these frameworks declare no test-command row that runs a named set of tests, so no order on them can ever have its own tests run, and no order on them can ever pass its checks: $order_tests_absent" >&2
     exit 19
   fi
   check_recipes_json="$(printf '%s' "$CR_DOC" | jq -c '
@@ -6264,8 +6263,7 @@ The test author repairs these files and runs each test again, and this freeze ru
     tf_ot_started="$(date +%s)"
     tf_ot_json="$(br_test_check "order-tests" "orderTests" "order-tests")" || exit "$?"
     # The same run, timed, is the record a test's weight is read from (gap row 454).
-    test_weight_warn "$TASK_PATH" tests-freeze "$unit_id" "$(($(date +%s) - tf_ot_started))" \
-      "$(printf '%s' "$rows_json" | jq '[.[] | (.tests // [])[] | .path + "::" + .name] | unique | length')"
+    test_weight_warn "$TASK_PATH" tests-freeze "$unit_id" "$(($(date +%s) - tf_ot_started))"
     tf_ot_out="$(mktemp)" || die3 "tests-freeze: could not create a temporary file"
     tf_ot_keys="$(mktemp)" || { rm -f "$tf_ot_out"; die3 "tests-freeze: could not create a temporary file"; }
     tf_ot_red_keys="$(mktemp)" || { rm -f "$tf_ot_out" "$tf_ot_keys"; die3 "tests-freeze: could not create a temporary file"; }
@@ -7950,7 +7948,12 @@ br_seven_checks() {
     done-when)          br_record_check >"$slot_file" ;;
     observed)           br_observed_check >"$slot_file" ;;
     confirm-at-review)  br_confirm_check >"$slot_file" ;;
-    *)                  br_test_check "order-tests" "orderTests" "order-tests" >"$slot_file" ;;
+    *)
+      local ot_started; ot_started="$(date +%s)"
+      br_test_check "order-tests" "orderTests" "order-tests" >"$slot_file"
+      # The green run is timed too: a red can stop at once on a missing class (gap row 454).
+      test_weight_warn "$TASK_PATH" "$BRC_WHO" "$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id // ""')" \
+        "$(($(date +%s) - ot_started))" ;;
   esac
   br_verify_fold "$slot_file" >>"$parts_file"
   rm -f "$slot_file"

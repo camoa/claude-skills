@@ -1317,7 +1317,7 @@ do_add_test() {
   # A browser-style description is warned, not refused: the words can be innocent (gap row 452).
   # A light task's first order owns the script that walks the demo path, by design.
   if [ "$proof" = "tests" ] && names_a_surface_check "$description" && ! task_is_light "$TASK_PATH"; then
-    task_warn "$TASK_PATH" "design add-test" "$id" "the test description names an end-to-end or browser check: $description. That check is a surface review runs; describe the one behaviour beneath it (skills/implement/references/what-a-test-is.md)"
+    task_warn "$TASK_PATH" "design add-test" "$id" "the test description names an end-to-end check or a browser test: $description. That check is a surface review runs; describe the one behaviour beneath it (skills/implement/references/what-a-test-is.md)"
   fi
   if is_blank "$level"; then
     doc="$(jq --arg d "$description" \

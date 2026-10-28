@@ -13,7 +13,8 @@ Another context writes the code.
 **Read this first:**
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
 It says what a test is in AIDA, and every test you write is of that kind. When a verify clause
-names an end-to-end test, a browser test or a whole flow, test the behaviour beneath it.
+names an end-to-end test, a browser test, a visual regression check or a whole flow, test the
+behaviour beneath it.
 
 **You may not read production source.** Not this unit's, and not any unit already built. A hook
 refuses the read. If you see the code, the tests describe what the code does instead of what the

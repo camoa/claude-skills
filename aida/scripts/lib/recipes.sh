@@ -714,7 +714,7 @@ cr_resolve() {
   local work fw_file tools_file fw names
   local test_path check_path tc_rows cc_rows rows_file
   local tc_state cc_state markers marker_json
-  local suite_json order_json order_row order_cand order_first tool_id
+  local suite_json order_json tool_id
   local test_sha check_sha
   local all_tools tools_out commanded count absent_rows tool_ids
 
@@ -750,24 +750,14 @@ cr_resolve() {
         order_json="$suite_json"
       else
         suite_json="$(cr_row_command "$tc_rows" "suite" "suite")"
-        # Two rows can run a named set of tests, and the narrower is read first (gap row 455).
-        # `file` runs exactly the files named; `changed` may widen to what those files cover. A row
-        # the recipe costs `end-of-task` is not an every-attempt command, so it is passed over. A
-        # framework with neither row usable leaves order-tests undeclared, and an order whose own
-        # tests nothing runs never passes its checks.
-        order_json=""; order_first=""
-        for order_row in file changed; do
-          order_cand="$(cr_row_command "$tc_rows" "$order_row" "selected-tests")"
-          case "$order_cand" in
-            '{"missing"'*|'{"absent"'*) ;;
-            *)
-              [ "$(printf '%s' "$order_cand" | jq -r '.cost // ""')" = "end-of-task" ] \
-                || { order_json="$order_cand"; break; }
-              order_cand="$(jq -nc --arg r "$order_row" '{missing: ("the recipe costs its " + $r + " row end-of-task, so it is not run on every attempt")}')" ;;
-          esac
-          [ -n "$order_first" ] || order_first="$order_cand"
-        done
-        [ -n "$order_json" ] || order_json="$order_first"
+        # Two rows can run a named set of tests. `changed` takes a path list whole and is the exact
+        # shape this needs, so it is read first; `file` is the fallback where a framework declares
+        # `changed` absent. A framework declaring both absent leaves order-tests undeclared, and an
+        # order whose own tests nothing runs never passes its checks.
+        order_json="$(cr_row_command "$tc_rows" "changed" "selected-tests")"
+        case "$order_json" in
+          '{"missing"'*|'{"absent"'*) order_json="$(cr_row_command "$tc_rows" "file" "selected-tests")" ;;
+        esac
       fi
     fi
 

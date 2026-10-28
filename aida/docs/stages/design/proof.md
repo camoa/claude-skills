@@ -41,9 +41,9 @@ When the product is unclear, `tests` stays the default on a task that has tests.
 ## Tests and surfaces
 
 A test lives in a file the order owns: see [Owned files](files.md). The review stage's check of a page is not a test. On a `tests` order, design refuses a test description that names
-one of the order's own surfaces. The surface proves the page at review. Describe the one behaviour
-beneath it instead. A description that names an end-to-end or browser check is written with a
-warning. What a test is: skills/implement/references/what-a-test-is.md.
+one of the order's own surfaces. Describe the one behaviour beneath it instead. A description that
+names an end-to-end check or a browser test is written with a warning. What a test is, and what it
+is not: skills/implement/references/what-a-test-is.md.
 
 ## Write an absence as its own row
 

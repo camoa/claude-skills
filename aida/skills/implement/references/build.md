@@ -456,8 +456,9 @@ again over the fix record's range, and a pass addresses the round's check findin
 
 This step runs all eight deciding checks. The record holds every one.
 
-- **order-tests.** Do this order's own frozen tests pass. On an order whose proof is `gate` this
-  slot is `configuration-gate` instead. Does every line pass, run in the worktree. The order's
+- **order-tests.** Do this order's own frozen tests pass. The run is as narrow as the recipe's
+  machine-readable rows allow. On an order whose proof is `gate` this slot is
+  `configuration-gate` instead. Does every line pass, run in the worktree. The order's
   own `verify` run entries run first, then the `## Configuration gate` lines of the implement
   recipe. The worse verdict stands. The first line that does not pass is named, with its
   output. A placeholder given several `--value` entries runs its line once per value. It reads
