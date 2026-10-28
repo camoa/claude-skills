@@ -30,16 +30,23 @@ no suite row passes with `undeclared`, and the record says so.
 ### A test newly broken at finish
 
 A failing line the subtraction leaves is a test that passed in the implement-start baseline and
-fails at the final commit. It stops completion. The lines are the ones the suite row's
-`failure_line` names, or every line when it names none. `finish` gives each line to an order by
-`reopen`'s rule. That is the order whose frozen test the line names, else the one order that owns
-a file the line names. That order gets one repair finding per line, scoped to its owned files. It
-goes back to its fix step, stopped, and the stop allows `go-on fix`, redo or drop. Leave it as
-"Leave a stop" below says. The fix round then runs as after `reopen`, and `finish` runs again once
-the order closes. `finish` exits 66 and writes no `finished.json`.
+fails at the final commit. It stops completion. `finish` turns each framework's red run into items.
+When the suite row declares `failure_line`, each new line it names is one item. Otherwise the
+whole run is one item, `the suite on <framework>`, because a banner or a count is no test. A run
+that printed no new line, such as a crash, is one item of that name too.
 
-A line no order takes waits for the person. The message names each one. The person chooses one of
-two things for each line:
+`finish` gives each item to an order by `reopen`'s rule. That is the order whose frozen test a line
+names, else the one order that owns a file a line names. A runner that names a test and not its
+file names it by a word. A PHPUnit class is its file's base name, and a Go test function is
+defined in its file. So the frozen test file of that name, or the one that defines it, comes
+before the owned files. A whole run goes to the one order its lines find. That order gets one
+repair finding per item, scoped to its owned files. It goes back to its fix step, stopped, and
+the stop allows `go-on fix`, redo or drop. Leave it as "Leave a stop" below says. The fix round
+then runs as after `reopen`, and `finish` runs again once the order closes. `finish` exits 66 and
+writes no `finished.json`.
+
+An item no order takes waits for the person. The message names each one. The person chooses one
+of two things for each item:
 - **Give it to an order**: the closed order whose change broke it. `finish` writes the stop on that
   order, as above.
 - **Not caused by this task**, such as a flaky test or the environment. It becomes a warning, like
@@ -49,13 +56,16 @@ Record the person's answer with step `implement finish regression`, and the pers
 run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh finish "<task_folder>" \
-  --regression <order id>=<failing line> | --regression not-caused=<failing line> \
+  --regression <order id>=<item> | --regression not-caused=<item> \
   --because <the person's words>
 ```
-Give one `--regression` per line, with the line as the message names it. Without the answer it
-refuses (exit 68) and writes nothing. The ledger keeps each not-caused line under `notCaused`, so a
-later `finish` reads it as a warning again. No hand commit repairs a newly broken test, because a
-hand commit is outside every order and the frozen-test hook.
+Give one `--regression` per item, with the item as the message names it. A failing line of the
+output may also be given as not caused. Without the answer it refuses (exit 68) and writes
+nothing. The ledger keeps each not-caused item under `notCaused`. A later `finish` subtracts each
+such line with the baseline, so it never hides a new line, and reads a whole run as a warning
+again. A line matches with its numbers set aside, the subtraction's own rule, so two failures that
+differ only in a number read as one. No hand commit repairs a newly broken test, because a hand
+commit is outside every order and the frozen-test hook.
 
 A suite row may also declare `warning_line`, the lines a runner prints that fail no test. A
 failing suite where no line matches `failure_line` and at least one matches `warning_line` reads

@@ -1360,9 +1360,11 @@ rw_tool_row_check() {
 #
 # When finished.json holds a `suite`, finish already ran the whole suite once at this same commit
 # (do_checks refuses any other HEAD), so this row reads that result and runs nothing (nyc defect
-# 18). Its verdict can only be met, undeclared or not-needed, because finish refused unmet and
-# unknown, or warned when a person accepted runner warnings at finish. That warned reads met here,
-# and the detail says it is the person's answer and gives their reason (gap row 261). The sidecar
+# 18). finish refuses a test newly broken there, so its verdict is never unmet. It is met, also
+# when a person recorded each new failure as not caused by this task, undeclared or not-needed. It
+# can be unknown or warned, which finish records as a warning. A warned that a person accepted at
+# finish reads met here, and the detail says it is the person's answer and gives their reason (gap
+# row 261). The sidecar
 # is inlined the way this row inlines its own run. The loop below stays for a record with no
 # `suite` key.
 rw_check_suite() {

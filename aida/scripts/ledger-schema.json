@@ -95,12 +95,12 @@
         "additionalProperties": false,
         "required": ["line", "because", "at"],
         "properties": {
-          "line": {"type": "string", "minLength": 1, "description": "The suite's failing line, verbatim. `finish` matches it to a later run with numbers set aside, the subtraction's own rule."},
+          "line": {"type": "string", "minLength": 1, "description": "The suite's failing line, verbatim, or `the suite on <framework>` for a whole run. `finish` subtracts a line from a later run with numbers set aside, the subtraction's own rule, so it never takes one of the 20 new lines a run keeps. A whole run matches exactly."},
           "because": {"type": "string", "minLength": 1, "description": "The person's words, from `--because`."},
           "at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date of the answer. Set by the script, never typed."}
         }
       },
-      "description": "One entry per test newly broken at finish that a person recorded as not caused by this task, such as a flaky test or the environment. Present only when one was. `finish --regression not-caused=<line>` writes it, through a person's answer. Every later `finish` reads such a line as a warning, like a baseline failure, and never stops on it."
+      "description": "One entry per test newly broken at finish that a person recorded as not caused by this task, such as a flaky test or the environment. Present only when one was. `finish --regression not-caused=<item>` writes it, through a person's answer. Every later `finish` reads such a line as a warning, like a baseline failure, and never stops on it."
     }
   },
   "$defs": {
