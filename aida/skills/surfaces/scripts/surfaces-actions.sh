@@ -9,8 +9,9 @@
 #   surfaces-actions.sh [--run-mode ...] show     <kind> <recipe flags>
 #   surfaces-actions.sh [--run-mode ...] install  <kind> <recipe flags> [--viewport <name>=<w>x<h>]...
 #   surfaces-actions.sh [--run-mode ...] register <id> --url <url> --kind <kind>... [--mask <css>]...
-#                                                 [--path <glob>]... [--critical] [--enable]
-#   surfaces-actions.sh [--run-mode ...] register <id> --command <line> --kind e2e [--critical] [--enable]
+#                                                 [--path <glob>]... [--critical] [--enable] [--reason <text>]
+#   surfaces-actions.sh [--run-mode ...] register <id> --command <line> --kind e2e --reason <text> [--critical] [--enable]
+#   surfaces-actions.sh unregister <id>
 #   surfaces-actions.sh [--run-mode ...] baseline [<id>]... --check-recipe <framework>=<path>...
 #                                                 [--value <name>=<value>]... [--confirmed]
 #   surfaces-actions.sh decline <kind>
@@ -30,10 +31,12 @@
 #   1  no project owns this directory
 #   3  could not do its job: a bad argument, a refused command, a differing file, a recipe with no
 #      block, a lookup nobody completed, an id registered with different fields, an absent accept row,
-#      a surface file another branch holds, a command surface beside a page surface for e2e
+#      a surface file another branch holds, a command surface beside a page surface for e2e, an e2e
+#      surface with no reason, an id unregister does not find
 #   4  a recipe command ran and failed; its own output, in the file, is the answer
-#  61  the tree is dirty, so an install, register or baseline commit would sweep other work in
-#  62  `register --url` or `baseline` before `install` wrote the surface file
+#  61  the tree is dirty, so an install, register, unregister or baseline commit would sweep other
+#      work in
+#  62  `register --url`, `unregister` or `baseline` before `install` wrote the surface file
 #  70  a person's answer was passed with nobody present
 #  72  two frameworks each carry a recipe for one kind, or two accept rows for one baseline
 #
@@ -55,7 +58,7 @@ done
 RUN_MODE="interactive"
 if [ "${1:-}" = "--run-mode" ]; then [ $# -ge 2 ] || die 3 "--run-mode needs a value"; RUN_MODE="$2"; shift 2; fi
 case "$RUN_MODE" in interactive|autonomous) ;; *) die 3 "run mode must be interactive or autonomous, got $RUN_MODE" ;; esac
-ACTION="${1:-}"; [ -n "$ACTION" ] || die 3 "needs an action: read, show, install, register, baseline, decline or step"
+ACTION="${1:-}"; [ -n "$ACTION" ] || die 3 "needs an action: read, show, install, register, unregister, baseline, decline or step"
 shift
 TAB="$(printf '\t')"
 
@@ -202,7 +205,7 @@ do_show_or_install() {
 
 # -------------------------------------------------------------------- register
 do_register() {
-  local id="${1:-}" url="" command="" kinds='[]' masks='[]' paths='[]' critical=false enabled=false row have doc
+  local id="${1:-}" url="" command="" kinds='[]' masks='[]' paths='[]' critical=false enabled=false reason="" row have doc
   [ -n "$id" ] || die 3 "register: a surface id is required"
   case "$id" in *[!a-z0-9-]*|-*|*-|*--*) die 3 "register: a surface id is kebab case, got: $id" ;; esac
   shift
@@ -210,7 +213,7 @@ do_register() {
     case "$1" in
       --enable) cr_require_person "--enable" "a person confirmed this surface"; enabled=true; shift; continue ;;
       --critical) critical=true; shift; continue ;;
-      --url|--command|--kind|--mask|--path) [ "$#" -ge 2 ] || die 3 "register: $1 needs a value" ;;
+      --url|--command|--kind|--mask|--path|--reason) [ "$#" -ge 2 ] || die 3 "register: $1 needs a value" ;;
       *) die 3 "register: unrecognized argument: $1" ;;
     esac
     case "$1" in
@@ -223,6 +226,7 @@ do_register() {
               kinds="$(printf '%s' "$kinds" | jq -c --arg k "$2" '. + [$k] | unique')" ;;
       --mask) masks="$(printf '%s' "$masks" | jq -c --arg m "$2" '. + [$m]')" ;;
       --path) paths="$(printf '%s' "$paths" | jq -c --arg g "$2" '. + [$g]')" ;;
+      --reason) reason="$(pc_trim "$2")" ;;
     esac
     shift 2
   done
@@ -231,6 +235,9 @@ do_register() {
   [ "$command" != "[]" ] || die 3 "register: --command holds no word"
   [ "$kinds" != "[]" ] || die 3 "register: at least one --kind is required"
   [ -z "$command" ] || [ "$kinds" = '["e2e"]' ] || die 3 "register: a command surface has the e2e kind alone, because there is no page to capture"
+  # An end to end test is added on purpose: a core journey, or behaviour no lower test can reach.
+  [ -n "$reason" ] || [ "$(printf '%s' "$kinds" | jq 'index("e2e") == null')" = "true" ] \
+    || die 3 "register: an e2e surface needs --reason: the core journey it walks, or the behaviour no lower test can reach"
   # A command surface needs no recipe and no harness, so it writes the surface file and turns end
   # to end on when nothing has: a command-line project has no install to run first.
   sf_load_surfaces "$SURFACE_FILE"
@@ -250,9 +257,9 @@ do_register() {
     || die 3 "register: the surface file holds an e2e surface of the other form, and review runs either commands or the recipe's page suite for e2e. Register $id with the same form, or use another kind."
   # The key order is the reader's own, so a re-register compares equal to what sf_load_surfaces read.
   row="$(jq -nc --arg id "$id" --arg url "$url" --argjson kinds "$kinds" --argjson enabled "$enabled" --argjson masks "$masks" \
-    --argjson paths "$paths" --argjson critical "$critical" --argjson command "${command:-null}" \
+    --argjson paths "$paths" --argjson critical "$critical" --argjson command "${command:-null}" --arg reason "$reason" \
     '{id: $id, url: $url, kinds: $kinds, enabled: $enabled, masks: $masks, paths: $paths, critical: $critical}
-     + (if $command == null then {} else {command: $command} end)')"
+     + (if $reason == "" then {} else {reason: $reason} end) + (if $command == null then {} else {command: $command} end)')"
   have="$(printf '%s' "$SF_SURFACES" | jq -c --arg id "$id" '[ .[] | select(.id == $id) ][0] // empty')"
   if [ -n "$have" ]; then
     [ "$have" = "$row" ] && { printf 'surface: %s unchanged\n' "$id"; exit 0; }
@@ -265,6 +272,22 @@ do_register() {
   printf 'surface: %s enabled=%s kinds=%s paths=%s critical=%s\nsurface-file: %s\n' "$id" "$enabled" \
     "$(printf '%s' "$kinds" | jq -r 'join(",")')" "$(printf '%s' "$paths" | jq 'length')" "$critical" "$SURFACE_FILE"
   recipe_commit_if_changed "$TREE" "$ACTION" "register wrote nothing new" "Register the $id surface through the surfaces skill"
+}
+
+# ------------------------------------------------------------------ unregister
+# Removes one surface, once a person decided at test cleanup that a lower test covers it. Its
+# baselines stay on disk, because the suite names them and this script does not.
+do_unregister() {
+  local id="${1:-}" doc
+  [ "$#" -eq 1 ] && [ -n "$id" ] || die 3 "unregister: one surface id is required"
+  require_surface_file
+  printf '%s' "$SF_SURFACES" | jq -e --arg id "$id" 'any(.[]; .id == $id)' >/dev/null \
+    || die 3 "unregister: $id is not a surface in $SURFACE_FILE"
+  br_require_clean_tree unregister "$TREE"
+  doc="$(jq --arg id "$id" '.surfaces |= map(select(.id != $id))' "$SURFACE_FILE")" || die 3 "unregister: could not read $SURFACE_FILE"
+  write_atomic "$SURFACE_FILE" "$doc"
+  printf 'unregistered: %s\nsurface-file: %s\n' "$id" "$SURFACE_FILE"
+  recipe_commit_if_changed "$TREE" "$ACTION" "unregister wrote nothing new" "Unregister the $id surface through the surfaces skill"
 }
 
 # -------------------------------------------------------------------- baseline
@@ -344,7 +367,7 @@ do_read() {
   printf 'surface-file: %s (%s)\n' "$SURFACE_FILE" "$SF_STATE"
   # Every setup offer reads this line first: scope's, design's and this skill's own (gap row 278).
   [ "$SF_STATE" != "missing" ] || printf 'surface-branch: %s\n' "$(sf_branch_with "$TREE" "$SURFACE_REL" | grep . || echo none)"
-  [ "$SF_STATE" != "ok" ] || printf '%s' "$SF_SURFACES" | jq -r '.[] | "surface: \(.id) kinds=\(.kinds | join(",")) enabled=\(.enabled) \(if has("command") then "command=" + (.command | join(" ")) else "url=" + .url end) masks=\(.masks | length) paths=\(.paths | length) critical=\(.critical)"'
+  [ "$SF_STATE" != "ok" ] || printf '%s' "$SF_SURFACES" | jq -r '.[] | "surface: \(.id) kinds=\(.kinds | join(",")) enabled=\(.enabled) \(if has("command") then "command=" + (.command | join(" ")) else "url=" + .url end) masks=\(.masks | length) paths=\(.paths | length) critical=\(.critical)\(if has("reason") then " reason=" + .reason else "" end)"'
   # A version 5 project holds a YAML registry beside the file. It is named, left in place, and its
   # ids and URLs are candidates for discovery.
   [ ! -f "$TREE/.visual-review/registry.yml" ] || printf 'registry-v5: %s\n' "$TREE/.visual-review/registry.yml"
@@ -354,7 +377,8 @@ case "$ACTION" in
   read)         do_read ;;
   show|install) do_show_or_install "$@" ;;
   register)     do_register "$@" ;;
+  unregister)   do_unregister "$@" ;;
   baseline)     do_baseline "$@" ;;
   decline)      do_decline "$@" ;;
-  *)            die 3 "unknown action $ACTION, expected read, show, install, register, baseline, decline or step" ;;
+  *)            die 3 "unknown action $ACTION, expected read, show, install, register, unregister, baseline, decline or step" ;;
 esac

@@ -21,7 +21,7 @@
     },
     "surfaces": {
       "type": "array",
-      "description": "One row per surface, written by `register`. A disabled surface stays in the list: review records it as not run rather than dropping it in silence.",
+      "description": "One row per surface, written by `register` and removed by `unregister`. A disabled surface stays in the list: review records it as not run rather than dropping it in silence.",
       "items": {
         "type": "object", "additionalProperties": false, "required": ["id", "kinds", "enabled", "masks"],
         "oneOf": [ { "required": ["url"] }, { "required": ["command"] } ],
@@ -33,6 +33,7 @@
           "enabled": { "type": "boolean", "description": "False until a person passed `register --enable`. Nothing is enabled unattended." },
           "masks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "CSS selectors hidden before capture, each proposed with the element count it hides." },
           "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Globs relative to the code tree, in the catalog glob language, naming the files that render this surface. Review runs the surface when the diff touches one of them, and a surface declaring none runs on every review. Optional and read as [] when absent, because install seeds no entries. A row written before the field existed is edited by hand, one at a time, since register refuses a changed row." },
+          "reason": { "type": "string", "minLength": 1, "description": "Why this surface earns an end to end test: the core journey it walks, or the behaviour no lower test can reach. `register` requires it for an e2e surface. Optional on a row written before the field existed." },
           "critical": { "type": "boolean", "description": "True for a surface that runs on every review whatever the diff touched. Optional and read as false when absent, for the same reason paths is." }
         }
       }

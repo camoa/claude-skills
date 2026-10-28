@@ -1,7 +1,7 @@
 ---
 name: surfaces
-description: This skill should be used when end to end or visual regression has to be set up for the current project, for example "set up e2e", "set up visual regression", "register a surface", "take the first baselines", "add a page to the visual review", or when a stage's offer, at scope, design or review, gets a yes on a kind. It installs the harness from the framework's recipe, writes the surface file review runs, and takes first baselines with a person present.
-argument-hint: "<read | show | install | register | baseline | decline> [<kind or id>]"
+description: This skill should be used when end to end or visual regression has to be set up for the current project, for example "set up e2e", "set up visual regression", "register a surface", "remove a surface", "take the first baselines", "add a page to the visual review", or when a stage's offer, at scope, design or review, gets a yes on a kind. It installs the harness from the framework's recipe, writes the surface file review runs, and takes first baselines with a person present.
+argument-hint: "<read | show | install | register | unregister | baseline | decline> [<kind or id>]"
 arguments: [action, subject]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh *), Agent
 ---
@@ -49,12 +49,12 @@ A stage's offer names the kind in its invocation. Run by hand with no kind, ask 
 A project with no page to drive, such as a command-line tool, has no setup recipe for `e2e`. Its
 end to end surface is a command. It needs no recipe and no install:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --command "<line>" --kind e2e --critical --enable
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --command "<line>" --kind e2e --reason "<why>" --critical --enable
 ```
 The line is the command that walks the path, such as a script in the code repository. Exit 0
 means the path works. The line is split at spaces and runs without a shell. So a quote or a shell
-character is refused at 3. With no surface file, `register` writes one and turns end to end on in
-the project record, and commits both. Review runs the command in the task's tree, and nobody walks
+character is refused at 3. `--reason` is required, as for every e2e surface below. With no
+surface file, `register` writes one and turns end to end on in the project record, and commits both. Review runs the command in the task's tree, and nobody walks
 it. Exit 3 also means the file holds an e2e page surface already, because a project uses one form.
 
 The command runs with the session's PATH. So it must reach this tree's own build, never an
@@ -115,8 +115,11 @@ After `install`, open the discovery step through the script and follow it:
 A `Read` rule naming the plugin root does not reliably expand, which is why the step is read this
 way. Discovery ends with one `register` call per surface the person confirmed:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --url <url> --kind <kind>... [--mask <css>]... [--path <glob>]... [--critical] --enable
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --url <url> --kind <kind>... [--mask <css>]... [--path <glob>]... [--critical] [--reason "<why>"] --enable
 ```
+An end to end test is added on purpose, so a surface with the `e2e` kind needs `--reason`. The
+reason is the person's words: the core journey it walks, or the behaviour no lower test can reach.
+With no reason, `register` refuses at 3 and writes nothing. The surface file keeps the reason.
 Pass `--enable` only for a surface the person confirmed. Nothing is enabled unattended. Each
 `--path` is a glob, relative to the code tree, naming files that render the surface. Review runs
 the surface only when the diff touches one of them. `--critical` makes it run on every review.
@@ -124,6 +127,16 @@ A surface with no `--path` runs on every review too. Each `register` commits the
 the way `install` does, so `baseline` finds a clean tree.
 Exit 62 means `install` has not run. Exit 3 names an id already registered with different
 fields. Exit 61 means the tree is dirty with something else.
+
+## Remove a surface
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh unregister <id>
+```
+Removes one surface from the surface file and commits it. Run it only when a person decided the
+surface goes, such as at test cleanup when a lower test covers it. The baselines of that surface
+stay on disk. Exit 3 means no surface has that id, exit 61 that the tree is dirty, and exit 62 that
+there is no surface file.
 
 ## Take the first baselines
 

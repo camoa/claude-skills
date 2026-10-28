@@ -20,8 +20,9 @@ templates no surface covers, so the person sees the gap. An id is kebab case and
 because the suite names every baseline from it and the viewport name.
 
 Each surface names its kinds from the three words the review recipe uses: `e2e`,
-`visual-regression`, `visual-parity`. A surface with a form or a flow carries `e2e`. A surface
-whose look matters carries `visual-regression`.
+`visual-regression`, `visual-parity`. A surface carries `e2e` only for a core journey, or for
+behaviour no lower test can reach. Ask the person which, and keep their words as its reason. A
+surface whose look matters carries `visual-regression`.
 
 ## Propose a mask only with its count
 
@@ -46,13 +47,14 @@ with no declared paths runs on every review, so declaring is what makes review a
 
 ## Write what the person kept
 
-Show the list: id, url, kinds, masks, paths, critical. The person adds, removes and edits. Then,
-for each row the person kept:
+Show the list: id, url, kinds, masks, paths, critical, and the reason of each e2e surface. The
+person adds, removes and edits. Then, for each row the person kept:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --url <url> --kind <kind>... [--mask <css>]... [--path <glob>]... [--critical] --enable
+"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh --run-mode <mode> register <id> --url <url> --kind <kind>... [--mask <css>]... [--path <glob>]... [--critical] [--reason "<why>"] --enable
 ```
-A row the person did not confirm is not written. Autonomous, `--enable` refuses at 70, so nothing
-is enabled unattended: register nothing and say the list needs a person.
+Pass `--reason` for every surface with the `e2e` kind, or `register` refuses at 3. A row the
+person did not confirm is not written. Autonomous, `--enable` refuses at 70, so nothing is enabled
+unattended: register nothing and say the list needs a person.
 
 Then run `read` and show the person the surface lines it prints. Next comes `baseline`, in
 SKILL.md, for every surface carrying `visual-regression`.
