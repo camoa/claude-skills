@@ -23,7 +23,7 @@ rule first. The implementer may still not read that file.
 - It commits its own work before it returns. A dirty tree means the commit did not happen, and
   the attempt is not recorded. AIDA asks you whether to commit or discard what it left.
 
-An order has two attempts unless you go on with one more. See [The eight checks](checks.md).
+An order has two attempts unless you go on with one more. See [The three checks](checks.md).
 
 ## When the builder stops
 

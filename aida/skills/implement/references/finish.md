@@ -13,50 +13,35 @@ the implementation stage is done and waiting to be recorded. Run:
   [--value <name>=<value>]...
 ```
 It refuses unless every order in the ledger is closed or dropped, naming whichever is not. It also
-refuses when any order is stopped, closed or not, naming the order and its reasons. It refuses
-unless every machine-verified criterion reads confirmed too, naming whichever is not. A criterion
-a dropped order serves or owns is not asked: nothing built it. It refuses a
-dirty code repository as well, because the commit range it records is a claim about what that
-repository holds.
+refuses when any order is stopped, closed or not, naming the order and its reasons. A
+machine-verified criterion that does not read confirmed is a warning, naming each one. A criterion
+a dropped order serves or owns is not asked: nothing built it. Uncommitted changes in the code
+repository are a warning too, because the commit range it records holds none of them.
 
 Then it runs the test-execution recipe's suite row once, at the final commit, from the worktree.
-The record steps leave a row the recipe costs `end-of-task` unrun and record it `deferred`; this
-is the run that decides it. The recipe paths come from `implementation/preconditions.json`, so
-pass none. Pass `--value <name>=<value>` for a placeholder the suite row carries, the same as
-`build-record`. The baseline's own failures are subtracted the same way. A suite that is unmet
-or unknown refuses (exit 86). The message names the first twenty new lines and the sidecar,
-`implementation/finished-suite.txt`. A fix commit on the branch and a second `finish` is the
-route. A recipe with no suite row passes with `undeclared`, and the record says so.
+The record steps run no suite, so this is the run that decides it. The recipe paths come from
+`implementation/preconditions.json`, so pass none. Pass `--value <name>=<value>` for a placeholder
+the suite row carries, the same as `build-record`. The baseline's own failures are subtracted line
+by line. A suite that is not met is a warning, and the record keeps its verdict. The full output is
+in the sidecar, `implementation/finished-suite.txt`. Review reads that result and lists the
+warning. A recipe with no suite row passes with `undeclared`, and the record says so.
 
 A suite row may also declare `warning_line`, the lines a runner prints that fail no test. A
 failing suite where no line matches `failure_line` and at least one matches `warning_line` reads
-`warned`. That holds whether the baseline was red, green or absent. No test failed, so a fix
-commit is not the route. `finish` refuses (exit 86), lists the warning lines, and names each
-framework's own verdict. It never passes on warnings by itself, because the project's own
-configuration made them fail the run. A `warning_line` with no `failure_line` is not read, and
-the suite's detail says so.
-
-The message names three routes, and a person picks one. Put them to the person in these words:
-"Accept the warnings: record the person's answer with person-answer.sh, then run finish
-again with --accept-warnings <the person's reason>. Change the suite row's command in the project's copy of the test-execution recipe, so these
-warnings do not fail the run. Or repair the project configuration that raises them, in a change
-outside this task."
-
-`--accept-warnings` passes only a suite that reads `warned`, and only when every other framework
-passed. It refuses without the person's answer on record (exit 68). The record keeps the suite
-`warned`, with the warning lines, the reason, and `judgedBy: person`. Review reports the suite row
-met and says it is that person's answer.
+`warned`. No test failed. A `warning_line` with no `failure_line` is not read, and the suite's
+detail says so. A person may accept the warnings: record the person's answer with
+person-answer.sh, then run finish with `--accept-warnings <the person's reason>`. It refuses
+without that answer on record (exit 68). The record keeps the suite `warned`, with the reason and
+`judgedBy: person`, and review reports the suite row met as that person's answer.
 
 A recipe can lack `warning_line`. Then the same red reads `unknown` over a red baseline, and
 `unmet` over a green or absent one. When no line matches `failure_line`, the detail names the
-recipe file, the missing key, and what the key reads. No action writes a recipe. For a file in
-a recipe folder the project declares, a person adds the key to the suite row, under
-`failure_line`, and runs `finish` again. `finish` reads that file on each run. Any other file is
-a catalog copy, and a refresh replaces it. The person copies it to
+recipe file, the missing key, and what the key reads. No action writes a recipe. For a file in a
+recipe folder the project declares, a person adds the key to the suite row, under
+`failure_line`. Any other file is a catalog copy, and a refresh replaces it. The person copies it to
 `<folder>/process-recipes/<framework>/test-execution.md` and adds the key there. A folder the
 project does not declare yet is declared first, with the project skill's `add-source`. Then
-`recipe-refresh` points the task at the copy, and `finish` runs again. Without the key,
-`--accept-warnings` does not pass. An `unknown` suite can hide a failure that prints no test line.
+`recipe-refresh` points the task at the copy.
 
 On success it writes `implementation/finished.json`: the commit range this stage produced, and
 each order's own range and rounds used. Each dropped order is under `dropped`, with the person's

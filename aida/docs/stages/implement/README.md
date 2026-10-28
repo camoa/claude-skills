@@ -46,7 +46,7 @@ set a run mode is in [the task pages](../../task/).
 - [Freeze the tests](freeze.md): what the freeze locks, and what it checks first.
 - [Work orders not proved by tests](proof-kinds.md): configuration, document, page and confirm orders.
 - [Build the code for one work order](build.md): the implementer, its rules and its stops.
-- [The eight checks](checks.md): what runs after each attempt, and running them again.
+- [The three checks](checks.md): what runs after each attempt, and running them again.
 - [Review one work order](review-order.md): the reviewer, its findings and a departure.
 - [Fix and verify](fix.md): fix rounds, files you allow, and rulings.
 - [Close orders and finish the stage](finish.md): the close, the final suite and a reopen.

@@ -78,7 +78,8 @@ Read that line to the person, so a missing review tool is known before the build
 A row that `build-record` runs, whose argv holds no tool the review recipe names, is not checked.
 No tool name is guessed from a command. The record keeps that row and its argv under
 `buildToolsNotChecked`, and the `buildToolsNotChecked:` line names them. Read that line to the
-person. A missing program then reads unknown at `build-record`, after the order was built.
+person. The baseline below runs that row once, and a program it cannot find stops the run there,
+before any order is built.
 
 ## Run the checks
 
@@ -121,9 +122,8 @@ framework as `not-needed`, with the reason, and runs neither. The verdict is
 `not-needed` and the build goes on. The recipe is still resolved and recorded, because the freeze
 reads its path. The baseline runs no suite and records `not-needed` per framework there too. The
 `## Check commands` tools still run where an order owns a file under the code path, and read
-undeclared where none does. Any other proof needs the harness. A `gate` order on a task with
-tests runs the suite after its lines, and an `observe` order's build runs the suite against the
-baseline.
+undeclared where none does. Any other proof needs the harness, because `finish` runs the suite
+against the baseline.
 
 **A project with no implement recipe cannot build a test-proved order, and this step says so.**
 `tests-freeze` takes its test globs from the implement recipe's `## Oracle files` block. With no
@@ -164,7 +164,7 @@ frameworks into two tasks.
 
 **A framework that could never test itself refuses here, not later.** The test-execution recipe's
 `## Test commands` block needs a `changed` or a `file` row, the two that can run a named set of
-tests. A framework declaring both absent stops the whole run (exit 19), naming the framework. No
+tests. A framework declaring both absent stops the whole run (exit 3), naming the framework. No
 order on it could ever have its own tests run. `build-record`'s own floor requires that check to
 answer met before an order reaches `checks-passed`. This is the one place `undeclared` does not
 continue: continuing would mean no project on that framework ever builds.
@@ -230,11 +230,12 @@ nothing. Bring the environment up, or pass `--value <name>=<value>`, then run th
 runs has answered, and stopping on it would mean no project on that framework ever builds. Say
 which of the two happened; never report `undeclared` as conditions that passed.
 
-`unmet` and `unknown` stop, and the person decides. Interactive, open with: "Something this
-project needs before a test can run is missing, or could not be checked. Only you can install or
-fix it. Do that and the build starts. Leave it and nothing is built." Then name the condition,
-the framework, and the owner the recipe gave. In an unattended run they halt. Nothing here
-judges an unmet condition acceptable.
+`unmet` and `unknown` stop the run (exit 3), in both run modes, and the record names each one. The
+repository cannot run a test or a tool yet, so no order could prove anything. Interactive, open
+with: "Something this project needs before a test can run is missing, or could not be checked.
+Only you can install or fix it. Do that and the build starts. Leave it and nothing is built." Then
+name the condition, the framework, and the owner the recipe gave. Unattended, report it and stop.
+Nothing here judges an unmet condition acceptable.
 
 Say which frameworks were answered from a recipe and which were not. A framework whose recipe could
 not be reached was not checked, and reporting the run as clean would be false.
@@ -250,28 +251,27 @@ command printed.
 Last, it records what was already broken at the commit the build started from. The suite runs
 whole, from the `## Test commands` block's own `suite` row, because the orders' tests do not exist
 yet and no framework maps changed paths to the tests covering them. The three tools from the
-`## Check commands` block run over the union of every work order's own owned files. A framework
-with a failed review lookup records each tool undeclared instead. A suite that is already red is
-recorded, never refused. Knowing it is the point: a builder chasing a failure it did not cause
+`## Check commands` block run over the union of every work order's own owned files, and so does
+every other tool row review runs. This is the one run of each tool before review. A tool can fail
+to run because it is not installed or a placeholder has no value. Then the run stops here (exit 3),
+and no baseline is written. Install it with the tool skill, or pass the value, and run
+preconditions again. A tool finding does not stop anything. A framework with a failed review
+lookup records each tool undeclared instead. A suite that is already red is recorded, never
+refused. Knowing it is the point: a builder chasing a failure it did not cause
 spends every attempt it has.
 
-A red suite is also a question for the person. `finish` meets the same red at the end, and it
-refuses unless the baseline subtraction clears it. The summary's `baselineRed:` line names each
+A red suite is also a question for the person. `finish` meets the same red at the end, and writes
+a warning unless the baseline subtraction clears it. The summary's `baselineRed:` line names each
 framework whose suite read unmet or unknown. When that line is not `none`, put it to the person
 before the first order. Interactive, open with: "The suite already fails before this build
-starts. Finish will refuse on that failure at the end unless it is decided now." When the red is
-runner warnings and no failed test, give the routes `finish` offers, in its words: "Accept the
-warnings: record the person's answer with person-answer.sh, then run finish again with
---accept-warnings <the person's reason>. Change
-the suite row's command in the project's copy of the test-execution recipe, so these warnings do
-not fail the run. Or repair the project configuration that raises them, in a change outside this
-task." A suite row with no `warning_line` needs the key first, or `--accept-warnings` does not
-pass (`references/finish.md`). A failed test is repaired outside this task. In an unattended run the build goes on, and a
-person meets the red at `finish`.
+starts. Finish will warn on that failure at the end unless it is decided now." When the red is
+runner warnings and no failed test, the person may accept them at `finish`
+(`references/finish.md`). A failed test is repaired outside this task. In an unattended run the
+build goes on, and a person meets the warning at review.
 
 What each run printed is kept whole, one file per run under `implementation/baseline-output/`,
-and the baseline names each file. The build step subtracts those lines from a later run, so a
-red suite or a red tool does not block every order. The subtraction compares lines with numbers
+and the baseline names each file. `finish` and review subtract those lines from a later run, so a
+red suite or a red tool is not read as this task's. The subtraction compares lines with numbers
 set aside, and it holds no parser. It cannot see a finding whose text changed, which reads as
 new, or a finding fixed and reintroduced, which reads as old.
 
@@ -302,10 +302,9 @@ heading changes more rarely than its markers, and the person who refreshes knows
 a framework with no resolved recipe on record, and a path that does not exist (exit 3). The
 freeze refuses a `--test-recipe` that is not the record's path (exit 3), so run this first.
 
-The review recipe is pinned by the baseline, with its sha256. The build refuses a body the
-baseline did not read (exit 73). A baseline reads the tree before the task. Each tool runs where
-the tree stands, so a second reading records this task's own findings as pre-existing. For that
-reason a new review body is adopted only when no finding can hide. Resolve it the same way, with
+The review recipe is pinned by the baseline, with its sha256. Review refuses a body the baseline
+did not read (exit 73). A baseline reads the tree before the task. Each tool runs where the tree
+stands, so a second reading records this task's own findings as pre-existing. Resolve it the same way, with
 `point: review`, then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh recipe-refresh "<task_folder>" \
@@ -314,6 +313,5 @@ reason a new review body is adopted only when no finding can hide. Resolve it th
 It runs every tool row of the new body over the baseline's scope, on the tree as it stands. When
 each row reads met or undeclared, nothing is subtracted. It then pins the new body, writes those
 readings into the baseline, and records both hashes under `recipeRefreshes`. When a row reads
-unmet or unknown, it refuses (exit 73), names each such row, and writes nothing. Then finish the
-task with the pinned body, or repair what the row found and run it again. The last route is to
-abandon the baseline by hand, and checks 5 to 7 then subtract this task's own findings.
+unmet or unknown, it adopts the body too, and writes a warning naming each such row. Review then
+subtracts that finding as if it came before the task. Report the warning to the person.

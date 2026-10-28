@@ -1,8 +1,9 @@
 # An attempt failed its checks
 
-Each build attempt must pass eight checks, and each work order gets two attempts. When the last
-attempt fails, the order stops with `attempts spent` and waits for you. What the checks are is on
-[the eight checks](../stages/implement/checks.md).
+Each build attempt must pass three checks: its own tests, its owned files and its frozen tests. Each
+work order gets two attempts. No tool runs at this step, so a tool finding never spends an
+attempt. When the last attempt fails, the order stops with `attempts spent` and waits for you.
+What the checks are is on [the three checks](../stages/implement/checks.md).
 
 ## When the attempts run out
 
@@ -25,14 +26,13 @@ The stopped order refuses every record (exit 49) until you choose a way out:
 Each way out needs your answer on record (exit 68). See
 [a run with nobody present](person-must-answer.md).
 
-## When only a tool check failed
+## When the cause is outside the code
 
-An attempt that failed only on coding standards, static analysis, security, owned files or the
-interface record may need no new build. While attempts remain, the next attempt answers it. When
-the last attempt failed that way, the stop allows AIDA to go on with the checks. They run again
-over the same commits, and no attempt is spent. Amend the interface record first, or give the
-order the file it needs as part of going on. A failed test or suite is never checked again with
-no build; its route is a new attempt. The refusals are on [the eight checks](../stages/implement/checks.md).
+An attempt that failed on owned files, or on a test that failed for a reason outside the code, may
+need no new build. While attempts remain, the next attempt answers it. When the last attempt
+failed, the stop allows AIDA to go on with the checks. They run again over the same commits, and
+no attempt is spent. Repair the cause first, or give the order the file it needs as part of going
+on. The checks are on [the three checks](../stages/implement/checks.md).
 
 ## Other refusals at the record step
 

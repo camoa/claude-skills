@@ -1,7 +1,7 @@
 # Fix and verify
 
-One fixer per round takes every open finding, with the files their fixes need. Then seven checks
-run again, and the reviewer reads the fix. An order has two fix rounds; a light task's order has
+One fixer per round takes every open finding, with the files their fixes need. Then the three
+checks run again, and the reviewer reads the fix. An order has two fix rounds; a light task's order has
 one.
 
 ## A fix round
@@ -15,11 +15,11 @@ file, and the fixer may change it. Withhold it, and the fixer reports the findin
 reach. A file is allowed only through your recorded answer, in every run mode. See [the person's
 answer](../../task/person-answer.md).
 
-After the round, seven of the eight checks run again, all but the interface record. A check that
+After the round, the three checks run again. A check that
 fails spends the round and leaves every finding open. It also opens one finding for that check.
 The next round's checks decide it. When the cause lies outside the fix, such as a broken
 environment, repair it, and the next round's checks run again. At the cap, AIDA can go on with the
-checks alone. See [The eight checks](checks.md).
+checks alone. See [The three checks](checks.md).
 
 The fixer can report a finding as already correct, with the command it ran. That round has no
 commit. The reviewer then reads the cited code and the run.

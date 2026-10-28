@@ -18,13 +18,13 @@ When AIDA cannot work out the trunk, it says so and goes on. See
 
 ## Uncommitted files
 
-- **Exit 61.** The tree holds uncommitted work. A record step, `close`, `finish`, a redo, a drop,
-  and review's checks all refuse it. Commit the work, then run the step again. On an unattended
-  run the record step also stops the order; AIDA goes on after you commit.
-- **Exit 104 at `start`.** A role stopped mid-run left files, or an install changed one, such as
-  `package-lock.json`. Commit a file to keep it, keep the files for this run only, or set them
-  aside. The choices, and where set-aside files go, are on
-  [start the build](../stages/implement/start.md).
+- **Exit 61.** The tree holds uncommitted work. A record step, going on with the checks, a redo,
+  a drop, and review's checks all refuse it. Commit the work, then run the step again. On an
+  unattended run the record step also stops the order; AIDA goes on after you commit. At `close`
+  and `finish` uncommitted work is a warning.
+- **Files a stopped role left, at `start`.** A role stopped mid-run left files, or an install
+  changed one, such as `package-lock.json`. Start sets them aside and warns. Commit a file first
+  to keep it. Where set-aside files go is on [start the build](../stages/implement/start.md).
 
 ## The code moved after a record
 

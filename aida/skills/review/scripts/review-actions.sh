@@ -829,6 +829,9 @@ rw_catalog_note() {
 RW_RUN_KIND=""; RW_RUN_PAYLOAD=""; RW_RUN_RC=""; RW_RUN_OUTPUT=""
 RW_RUN_STDOUT_LEN=0; RW_RUN_OUTFILE=""; RW_RUN_ERRFILE=""
 RW_RUN_VERDICT=""; RW_RUN_DETAIL=""
+# The seconds one tool row may run before it is stopped (BR_RUN_LIMIT in recipes.sh), so a tool
+# that hangs reads unknown instead of holding the review. AIDA_REVIEW_TOOL_LIMIT sets another limit.
+RW_TOOL_LIMIT="${AIDA_REVIEW_TOOL_LIMIT:-600}"
 # The surfaces a person accepted a baseline for and the accept rows that ran for them. Both are read
 # back after every kind has answered: a surface nothing accepted refuses, and a row that already
 # answered is not reported twice.
@@ -884,6 +887,10 @@ rw_run_fault() {
       return 0 ;;
   esac
   case "$RW_RUN_RC" in
+    124)
+      [ -n "$BR_RUN_LIMIT" ] || return 0
+      RW_RUN_VERDICT="unknown"
+      RW_RUN_DETAIL="the $label command ran past its time limit of $BR_RUN_LIMIT seconds and was stopped, so nothing was decided." ;;
     127)
       RW_RUN_VERDICT="unknown"
       # A command not found is this project's install, not the recipe, so no catalog note is raised
@@ -1287,8 +1294,10 @@ rw_tool_row_check() {
   fi
 
   [ "$only_frozen" = "frozen" ] || RW_TOOL_READ="yes"
+  BR_RUN_LIMIT="$RW_TOOL_LIMIT"
   rw_run_row "$argv" "$scoped" "$RW_VALUES" "$signal"
   rw_run_fault "$row_id" "$framework"
+  BR_RUN_LIMIT=""
   verdict="$RW_RUN_VERDICT"; detail="$RW_RUN_DETAIL"
   if [ -z "$verdict" ]; then
     rc="$RW_RUN_RC"

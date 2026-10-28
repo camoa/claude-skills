@@ -144,15 +144,17 @@ commits, so no earlier test or code of it is in the tree. Its `whatToDo` asks fo
 written fresh from the brief. The summary prints a `redo:` line.
 
 `rowsRejected`, only while a row rejected at the checkpoint below stands. It holds each row's
-key, the checker's note, and the person's words verbatim when a person rejected it. Its `redAgain` list names each
-test with a red run in a file that holds a rejected row's test. The repair edits that file, so
-each of those tests needs a new red run. The `whatToDo` asks for those runs only when the list is
-not empty. The summary prints a `rowsRejected:` line.
+key, the order id for the done-when row, the checker's note, and the person's words verbatim when
+a person rejected it. Its `redAgain` list names each test with a red run in a file that holds a
+rejected row's test. The repair edits that file, so each of those tests needs a new red run. The
+`whatToDo` asks for those runs only when the list is not empty. The summary prints a
+`rowsRejected:` line. When the last freeze's `checkAgain` named a rejected row that the brief does
+not carry, `tests-brief` writes a warning naming it (gap row 447). Report it before the dispatch.
 
 `deliverableIsTests`, only when every file the order owns matches a `--test-glob`. Its `whatToDo`
 tells the author to make the change in the test file and freeze each test with a locks-in reason,
-below. Pass the same globs the freeze takes. Without them the key is never written, and exit 118
-at the freeze is the only check left. The summary prints a `deliverableIsTests:` line.
+below. Pass the same globs the freeze takes. Without them the key is never written, and the
+freeze's warning is the only check left. The summary prints a `deliverableIsTests:` line.
 
 One more key is for the freeze, not the author. `roundStartedAt` is the time this order's test
 round began. A brief written again for a rejected row keeps the earlier time, because
@@ -266,10 +268,10 @@ The freeze locks the test file, and the implementer may write only owned files. 
 turn a red test green. The author makes the done-when's change in its own test file and runs each
 test until it passes. Each test then freezes with `--locks-in`, naming the existing code it passes
 against. Design marks nothing: the owned files already say it, and `tests-brief` writes
-`deliverableIsTests` from them. The freeze refuses a test with a red run and no `--locks-in` when
-every owned file is a test file or a `--support` file (exit 118), before anything is frozen. Resume
-the author with `dispatch-open --resume`, as for exit 27. An owned directory leaves the implementer
-a file to write, so it refuses nothing. The build step then dispatches no implementer, as
+`deliverableIsTests` from them. When every owned file is a test file or a `--support` file, no build
+can turn a red test green. So the freeze warns on a test with a red run and no `--locks-in`. Report
+the warning, and resume the author with `dispatch-open --resume`, as for exit 27. An owned
+directory leaves the implementer a file to write, so it warns on nothing. The build step then dispatches no implementer, as
 `references/build.md` says.
 
 **A done-when clause that asserts an absence gets no test, and goes to review.** Such a clause says
@@ -293,13 +295,13 @@ not its wording, and route only what nothing can run. The row checker asks the s
 before the freeze, below, and review asks it again. The reviewer says whether a test could have
 watched each routed clause fail, and a yes fails the review.
 
-The freeze refuses the flag on two facts. The clause is not, verbatim, one of the order's
-frozen done-when entries (exit 3). Or the clause carries no negation word at all (exit 81). A contraction such as
-doesn't counts, with a straight or a curly apostrophe. That second refusal is a floor and not the
-whole rule. A script cannot read meaning, so it catches a clause plainly asserting a presence and
-leaves the rest to the judgement above. **This route relaxes nothing else.** Every `--test` still
-needs its red run or its `--locks-in` reason (exit 33). An order that froze no test at all still
-refuses, at exit 29 or exit 74. A clause a test could have proved, routed here, is how the rule that
+The freeze refuses the flag when the clause is not, verbatim, one of the order's frozen done-when
+entries (exit 3). It warns when the clause carries no negation word at all. A contraction such as
+doesn't counts, with a straight or a curly apostrophe. That warning is a floor and not the whole
+rule. A script cannot read meaning, so it catches a clause plainly asserting a presence and leaves
+the rest to the judgement above. **This route relaxes nothing else.** Every `--test` still needs
+its red run or its `--locks-in` reason, and the freeze warns on one with neither. An order that
+froze no test at all still refuses (exit 74). A clause a test could have proved, routed here, is how the rule that
 every frozen test was watched failing gets worked around. So route narrowly, and name every routed
 clause when you report this step to the person.
 
@@ -310,21 +312,22 @@ nothing looks like success and is the dangerous one.
 
 **The freeze runs the coding-standards row over the test files.** It takes the row from the
 check recipe `baseline.json` records. It runs the row over the test and support files the freeze
-adds or changes, and subtracts the baseline the way the build does. A finding refuses the freeze
-(exit 122) and names the files and the output. Send the finding back to the author. The author
-repairs the files and runs each test again, and the freeze runs again.
+adds or changes, and subtracts the baseline the way review does. A finding is a warning that names
+the files and the output, and the freeze goes on. Report it to the person. No role may write a
+frozen file afterwards, so a person who wants the files repaired redoes the order.
 A row that reads unknown or undeclared judged nothing, and the freeze prints why and goes on.
 Then nothing checks those files: say so to the person when you report this step.
-This is the one place the tests' own standards are judged. The build and review leave the frozen
-tests out of their tool rows, because no role after the freeze may write them.
+This is the one place the tests' own standards are judged. Review leaves the frozen tests out of
+its tool rows, because no role after the freeze may write them.
 
 **The freeze runs the build's order-tests command when a test has a red.** It is the command
-build-record runs over the frozen files whole, with no argument. When that run fails and prints
-something, at least one red file must share a line with what it printed. Numbers in a line are
-not compared. Otherwise the freeze refuses (exit 80): the build would run something other than
-what the reds show, and read a correct build unmet. The message names the command and the
-output. Send it back to the author. A test file that runs a case only when the case is named is
-the usual cause.
+build-record runs over the frozen files whole, with no argument. The tests must fail. A run that
+passes refuses the freeze (exit 80): a test that does not fail now proves nothing a build could
+change. When the run fails and prints something, at least one red file must share a line with
+what it printed. Numbers in a line are not compared. Otherwise the freeze refuses (exit 80): the
+build would run something other than what the reds show, and read a correct build unmet. The
+message names the command and the output. Send it back to the author. A test file that runs a
+case only when the case is named is the usual cause.
 
 Do not run the static-analysis row here. The tests name code that does not exist yet, so an
 analyser reports each missing name. Once the code exists, an analyser can read a test's guard as
@@ -411,7 +414,8 @@ the task skill's `person-answer.sh`, step `implement tests-freeze`, with each su
 words, one per line. A row the person rejects goes back to
 the test author before anything is frozen, in three steps. Run `tests-freeze` with every row as
 answered. It refuses (exit 65) and writes no test record. It records each rejected row on the
-order's ledger entry, with the person's words and the checker's note. Run `tests-brief` again, which
+order's ledger entry, with the person's words and the checker's note. A row a model rejected is
+recorded the same way, with no person's words. Run `tests-brief` again, which
 carries those rows under `rowsRejected`. Then open a new dispatch record and dispatch the test
 author fresh, with the same message as before. Do not resume the earlier author with a message: the
 brief is the one carrier. A role that stopped with no report is a different case, in SKILL.md.
@@ -491,23 +495,26 @@ would rewind the step and leave a spent attempt counter and a stale build record
 longer exist. Use `references/finish.md`'s redo when the design or a test is wrong; otherwise
 this order goes forward from here, not back.
 
-The script checks the file exists, sits inside the code repository, and matches the framework's own
-declared pattern. It checks every machine-verified criterion this order owns has a test (a `gate`
-or `record` order excepted), and every criterion a person verifies has a checklist line. A
-criterion that a verify run line of the order names, and that runs, needs no test. It needs a row:
-`dispatch-open` names the line, and the row-checker judges whether it proves the clause. The freeze
-runs the line over the files it freezes, and refuses while it fails (exit 121), so the test author
-repairs the files first. A criterion this order only serves needs no test from it, because its
-proof lives with its owner (exit 29 reads the owned list). A person-verified criterion is
-different: each order that serves it needs its checklist line, owned or not (exit 30). A test that
-names neither a criterion this order serves or owns nor this order's id refuses (exit 31). A record
-that would hold no row refuses (exit 74).
+The script refuses a test file that does not exist, sits outside the code repository, or misses
+the framework's own declared pattern. It refuses one in a file the order does not own (exit 27). It
+refuses an untracked file under a path the order owns, which the freeze would leave out (exit 27).
+It refuses
+a record that would hold no row (exit 74). The checks below each write a warning into the task
+record and let the freeze go on. Report every warning to the person when you report this step.
+
+It checks every machine-verified criterion this order owns has a test (a `gate` or `record` order
+excepted), and every criterion a person verifies has a checklist line. A criterion that a verify run
+line of the order names, and that runs, needs no test. It needs a row: `dispatch-open` names the
+line, and the row-checker judges whether it proves the clause. The freeze runs the line over the
+files it freezes, and warns when it fails. A criterion this order only serves needs no test from
+it, because its proof lives with its owner. A person-verified criterion is different: each order
+that serves it needs its checklist line, owned or not, and one with none gets no row. It warns on a
+test that names a criterion this order neither serves nor owns.
 It checks every test has the output of the run that failed, or a `--locks-in` reason in its
-place. A test with neither refuses (exit 33). A `--locks-in` reason names the existing code.
-A `--red` file written before the brief's `roundStartedAt` refuses (exit 109). So does one written
+place, and warns on a test with neither. A `--locks-in` reason names the existing code.
+It warns on a `--red` file written before the brief's `roundStartedAt`, and on one written
 before its test file last changed. Either is the run of an earlier test, for example one a redo
-moved aside. The message names each file and both times. Its last line, `redAgain:`, holds the
-names of those tests as a JSON list. Run each test again and pass the new output. The comparison is
+moved aside. The warning names each file and both times. Run each test again. The comparison is
 per file, not per test. Many frameworks keep several tests in one file, so an edit to one test
 makes each red in that file stale. That is on purpose: the edit can change what the other tests
 run, and it moves each line their reds cite. A brief that holds no `roundStartedAt` is read by its
@@ -515,31 +522,29 @@ own file time. A freeze with no tests brief compares the test files only.
 It reads each `--red` file against the markers the
 test-execution recipe declares under `failure_signal`, and against the suite row's `failure_line`.
 A file holding an `assertion` marker is a red. A file holding a `harness` marker instead is a
-setup gap, and the freeze refuses it (exit 80) saying so. The harness never reached the
+setup gap, and the freeze warns, saying so. The harness never reached the
 behaviour, so nothing in that file says the behaviour is absent. One order is the exception: the
 order that creates the unit. The implement recipe's `## Unit declaration` names the file whose
 presence makes a unit exist. When an owned file of this order matches one of its globs, the
 freeze accepts the harness-only file as its red, recorded `redSignal: harness-new-unit`. No
 test can assert before the module exists, so that is the only red the order
 can have. The author does not scaffold the module to get a better one: it may write no production
-file. With no `--implement-recipe`, no block, or no matching owned file, the refusal stands.
-The exception reads the recipe's `harness` markers only, never the recipe's prose. When the
-harness printed an undeclared form, the freeze refuses (exit 80), naming the markers and quoting
-the file's error line. The author then asks the recipe to declare that form under
-`failure_signal` `harness:`, or writes a test with no module-local class.
+file. With no `--implement-recipe`, no block, or no matching owned file, the warning stands.
+The exception reads the recipe's `harness` markers only, never the recipe's prose.
 A file holding neither marker is a red when a line matches `failure_line`. That is how a red is
 read under a recipe whose assertion span is a shape rather than a marker. A file none of the
-three reads accepts refuses (exit 80), naming the file and the marker words. When the recipes
+three reads accepts is warned, naming the file, and recorded `redSignal: unread`. When the recipes
 declare no assertion marker and no `failure_line`, the freeze cannot read the file at all. It
 then freezes it as before, records `redSignal: unchecked` on the test, and says so in one summary
-line. Every other red carries the reading that accepted it. A freeze with a `--red`, no
-`--test-recipe` and no recipe on record refuses, because then no red can be read at all. A `--locks-in` reason is
+line. A freeze with a `--red` and no recipe on record does the same, with a warning. Every other
+red carries the reading that accepted it. The freeze's own run of the tests, above, still refuses
+tests that do not fail. A `--locks-in` reason is
 recorded beside the test, and the review brief says where it is.
 
 **Two tests that fail at one place have no red.** The freeze reads each red it accepted on an
 assertion for the places it prints: every `<test file name>:<line>`, in order. Two tests of one
 file whose reds print the same places failed at one shared line. That line is a precondition, such
-as a guard that the class or service exists, and the freeze refuses (exit 80). Ten tests that fail
+as a guard that the class or service exists, and the freeze warns. Ten tests that fail
 on one guard prove one fact ten times, and none was watched failing for its criterion (live-run row
 207). The repair is the test: each test reaches its own assertion. A guard may stay if it asserts
 nothing, for example a lookup that gives the empty value when the service is absent. The red is
@@ -582,9 +587,9 @@ noticed, and the hash is what notices one. The hook allows the write and says wh
 which order froze it.
 
 Report a test that passed on arrival with `--green-on-arrival <test name>=<reason>`. The script
-stops the step rather than recording it, which is the right outcome: a test nobody watched fail is
-not a reference. This is a bound, not a rule the script enforces on its own: nothing here notices a
-green-on-arrival test the caller does not flag, so the flag is on you.
+writes a warning and goes on: a test nobody watched fail is not a reference, and the person decides
+whether to redo the order. When the order's tests with a red run pass on the freeze's own run, the
+freeze refuses (exit 80), whatever was flagged.
 
 A record is taken once. A second run with the same tests leaves it alone, whatever commit the
 tree is at now, because every freeze moves the tree. Different tests at a different commit

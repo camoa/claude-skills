@@ -44,7 +44,7 @@ It reads the frozen copy and the frozen tests. It writes twelve things to
 
 - this order's own record, with the files it owns and, under `findings`, the research findings
   design used for it. Under `interfaceNames` it lists each name the declared interface holds in
-  backticks, the names the interface-record check counts;
+  backticks. Name each one in the interface record, which the reviewer compares;
 - the frozen tests for it, with the criterion each carries; a test with `criterion: null` proves
   the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;
@@ -364,29 +364,16 @@ document there that the order does not own still reads unmet.
 `references/preconditions.md` already resolved for the baseline. Left out, `--test-recipe` is taken
 from `preconditions.json` and `--check-recipe` from `baseline.json`, here and at `fix-record`. An
 order proved by its own tests with no test recipe on record refuses (exit 3), and no attempt or
-round is spent. With no check recipe on record, the tool rows read undeclared, because no recipe
-names a tool for this task. The script parses `## Test
-commands` and `## Check commands` itself: the suite command, the command that runs this order's
-own frozen tests, and the three tool commands, each with its own argv, `{paths}` placeholder,
-`signal` and `extensions` keys, and which rows a framework declares absent. Nothing here retypes a
-command. A `{paths}` token expands to this order's own owned files, relative to codePath, and never
-reaches a shell. For the three tool rows, the order's own frozen test files come out of that
-expansion first. The implementer may not write them, so the tools judge only what it may write.
-An owned file outside codePath comes out too, because a tool run in the repository cannot see
-it. An owned file the order deleted comes out as well, because the tools refuse a missing path.
-The detail says how many were left out, and a row with nothing left reads undeclared.
-The record names the paths the token expanded to and the frozen tests left out.
+round is spent. The script parses `## Test commands` itself: the command that runs this order's
+own frozen tests, with its argv and its `{paths}` placeholder. Nothing here retypes a command. A
+`{paths}` token expands to this order's own frozen test files, relative to codePath, and never
+reaches a shell. No tool row and no suite runs at this step. Preconditions ran each tool once, and
+review runs them over the whole task, so a tool finding never spends an attempt.
 
-**Two frameworks may not both command one tool.** The same refusal preconditions.md names (exit
-72) applies here: a project whose two frameworks each carry a coding-standards row, say, gives
-nothing here two answers to choose between.
+**Two frameworks may not both command one row.** The same refusal preconditions.md names (exit
+72) applies here.
 
-**The check recipe must be the one the baseline used.** A check recipe that resolves to a
-different file than the baseline read refuses (exit 73), naming both: a tool's own result is
-compared against the baseline it ran against, and a changed recipe makes that comparison false.
-
-**The record holds exactly eight checks.** Fewer refuses (exit 3), naming the absent check, and
-no attempt is spent.
+**The record holds exactly three checks.** Fewer refuses (exit 3), and no attempt is spent.
 
 Pass `--value <name>=<value>` for a placeholder a command carries, the same as
 `references/preconditions.md` does. A placeholder is a whole token, or part of one, such as
@@ -436,25 +423,23 @@ that marker and this flag is not read.
 
 ## Run the checks again with no new build
 
-Some rows the same code can answer differently. A tool refusing a path it was handed is the
-plugin's fault, not the implementer's. An interface record missing an element is a record file,
-amended without moving the code. A file the owned-files check refused may be one the order should
-own. While attempts remain, the next attempt answers a failure. When the last attempt fails, the
-order stops, and its reason allows `go-on --continue check` for any failed row, under "Go on" in
-`references/finish.md`. Amend the interface record first, or give the order the file with
-`--owns`. The check runs over the recorded range, dispatches no implementer and spends no attempt.
-It takes `build-record`'s recipe flags and `--interface`. A flag left out is taken from its record,
-and the `filledFromRecords:` line names each one. It rewrites the record with the new checks. The
-replaced checks stay under `checksBefore`, beside `recheckedAt`. When the interface record's text
-changed, the attempt's own text stays under `interfaceRecordBefore`. When the code moved since the
-record, it runs over the range extended to HEAD and writes a warning. It refuses (exit 63) when
-those commits change a frozen test or a file the order does not own. It refuses (exit 88) when a
-path the interface check named does not exist at the recorded commit. After a fix round it runs that round's seven checks
-again over the fix record's range, and a pass addresses the round's check finding.
+Some rows the same code can answer differently. A test may fail for a reason outside the code, such
+as a broken environment. A file the owned-files check refused may be one the order should own.
+While attempts remain, the next attempt answers a failure. When the last attempt fails, the order
+stops, and its reason allows `go-on --continue check` for any failed row, under "Go on" in
+`references/finish.md`. Repair the cause first, or give the order the file with `--owns`. The check
+runs over the recorded range, dispatches no implementer and spends no attempt. It takes
+`build-record`'s recipe flags and `--interface`. A flag left out is taken from its record, and the
+`filledFromRecords:` line names each one. It rewrites the record with the new checks. The replaced
+checks stay under `checksBefore`, beside `recheckedAt`. When the interface record's text changed,
+the attempt's own text stays under `interfaceRecordBefore`. When the code moved since the record,
+it runs over the range extended to HEAD and writes a warning. It refuses (exit 63) when those
+commits change a frozen test or a file the order does not own. After a fix round it runs that
+round's checks again over the fix record's range, and a pass addresses the round's check finding.
 
-## Read the eight checks to the person
+## Read the three checks to the person
 
-This step runs all eight deciding checks. The record holds every one.
+This step runs the three deciding checks. The record holds every one.
 
 - **order-tests.** Do this order's own frozen tests pass. The run is as narrow as the recipe's
   machine-readable rows allow. On an order whose proof is `gate` this slot is
@@ -482,81 +467,42 @@ This step runs all eight deciding checks. The record holds every one.
   `verify` run entries
   then run in this slot, from the code worktree. The slot is met only when its own answer and
   every line are. The detail names the source.
-- **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
-  recipe costs `end-of-task` does not run here. The check reads `deferred`, and `finish` runs
-  that row once at the final commit. On a Drupal project the row is ten minutes per run. On a
-  `record` order it reads undeclared, and so do the three tool checks. A document in the task
-  folder is nothing a suite or a tool reads, and the detail names the proof kind. On a `confirm`
-  order it reads undeclared too, because the task has no automated tests. The three tool checks
-  run on it as on any code order.
-- **coding-standards.** Does the coding-standards tool raise anything the baseline did not already
-  have.
-- **static-analysis.** Does static analysis raise anything the baseline did not already have.
-- **security.** Does the security tool raise anything the baseline did not already have.
-- **owned-files.** Did the change stay inside the files this order owns. On a `record` order the
-  change is the task folder's diff in the project folder, with the files AIDA's own scripts
-  write there set aside and counted in the detail.
+- **owned-files.** Did the order's own commits stay inside the files this order owns. On a
+  `record` order the change is the task folder's diff in the project folder, with the files AIDA's
+  own scripts write there set aside and counted in the detail.
 - **frozen-tests.** Does every frozen test file still hash to what the freeze recorded. An order
   that froze none reads undeclared, because the row hashed nothing, and the executed count does
   not count it.
-- **interface-record.** Does the interface record name every element the order's own declared
-  interface names in backticks. A shortened name in backticks counts when it ends the declared
-  name after a `.` or `::`, ends no other declared name, and is not itself declared. A path is
-  never shortened. A name ending in lowercase only, such as `a.php`, needs a shortened form that
-  keeps a `.` or `::`. The detail lists each shortened name.
-
-A suite or a tool the baseline recorded red does not fail these checks by itself. The check
-subtracts the baseline's own output from the run now, line by line. Numbers and dots are set
-aside first, so a shifted line number, a count or a duration does not read as new. No new line
-is met. A new line is unmet, and the record lists the first twenty under `newLines` with the
-count. The check reads unknown only when the baseline kept no output or the run printed nothing.
-
-That is enough for a tool, which prints one line per finding. It is not enough for every suite.
-PHPUnit and pytest print a progress line and a summary line that change whenever a test is added
-or fixed. On the whole output, a red baseline on those still reads unmet. A test-execution
-recipe's suite row may declare `failure_line`, a regular expression matching the lines that name
-a failed test. Then only those lines are compared, on both sides, and the record names the
-selector. With the selector, a failure that matches no line reads unknown, because it is not one
-the selector names. A suite row may also declare `warning_line`, the lines that fail no test.
-Only `finish` reads it, and `references/finish.md` says what follows. A record step still reads
-such a failure unknown.
-
-The subtraction holds no parser, so it cannot see four things. A finding whose text changed
-reads as new. A finding fixed and reintroduced reads as old. A new finding worded like an old
-one in another file reads as old. A second copy of an old finding on another line reads as old.
 
 A failed check is not a failed order. It is this attempt's result, and the order has as many
 attempts as its own allowed count says, two unless a person's go-on granted more. The summary prints
 one line per check with its verdict and a one-line reason. Say which check failed, in plain words,
-and name the record path that holds what the tool printed. Do not read the record here. Then
+and name the record path that holds what the check printed. Do not read the record here. Then
 brief the next attempt, in both run modes. Do not ask whether to spend it: the attempt cap and the
 run budget bound the attempts, and a person can stop the run at any time.
 
-An unknown on interface-record does not fail the attempt. The declaration named no backticked
-element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every
-other unmet or unknown does. Every attempt counts against the allowed number, whatever the checks
-said.
+Every unmet or unknown fails the attempt. Every attempt counts against the allowed number,
+whatever the checks said.
 
 **order-tests is the floor,** or `configuration-gate` on a `gate` order, or `done-when` on a
-`record` order. Every other check may
-answer undeclared, or deferred on the suite, and still let the order go on
-to `checks-passed`, the same rule step two applies to a precondition nobody declared. order-tests
-may not. It is the one check that says this order's own code does what its tests ask. Undeclared or
-unknown there means nothing here ran, so the order stays at `code-written`, whatever the other
-seven answered.
+`record` order. The other two checks may
+answer undeclared and still let the order go on to `checks-passed`. Step two applies the same rule
+to a precondition nobody declared. order-tests may not. It is the one check that says this order's
+own code does what its tests ask. Undeclared or unknown there means nothing here ran, so the order
+stays at `code-written`, whatever the other two answered.
 
 One order has nothing for this check to run: an order serving only criteria a person verifies.
 Its frozen record carries checklist rows and no test, which design allows. order-tests answers
 met there, with a detail saying so, and review's close confirms the checklists. A machine-verified
 criterion frozen with no test path still reads unknown, and the order stays at `code-written`.
 
-The summary's `executed:` line says how many of the eight actually ran a command, a diff or a
-hash rather than reading undeclared. Say that count to the person: eight checks answering does not
+The summary's `executed:` line says how many of the three actually ran a command, a diff or a
+hash rather than reading undeclared. Say that count to the person: three checks answering does not
 by itself say the code was tested.
 
 The attempt counter lives in the ledger and is incremented here, and the order's state moves with
-it: `checks-passed` when every check but order-tests answered met or undeclared (interface-record's
-own unknown excepted) and order-tests itself answered met, `code-written` otherwise. When the
+it: `checks-passed` when the other two checks answered met or undeclared and order-tests itself
+answered met, `code-written` otherwise. When the
 failing attempt was the last one allowed, the script writes the stop and its reason into the
 ledger at that moment. It says so. Nothing here takes the order out of its stop. Go back to the
 skill body for what happens to the run.

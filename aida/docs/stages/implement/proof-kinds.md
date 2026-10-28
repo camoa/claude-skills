@@ -1,7 +1,7 @@
 # Work orders not proved by tests
 
 Design gives each work order a proof kind. Most orders are proved by tests. Four kinds are proved
-another way, so no test author writes tests for them, and the first of the eight checks changes.
+another way, so no test author writes tests for them, and the first of the three checks changes.
 
 | Proof kind | Deliverable | What decides it |
 |---|---|---|
@@ -20,7 +20,7 @@ with no test. Its build runs the order's own verify commands first, in the workt
 the configuration gate lines of the framework's implement recipe. The worse answer stands, and the
 first line that fails is named with its output.
 
-The site must be running, as [The eight checks](checks.md) says. After the gate, a put-back line
+The site must be running, as [The three checks](checks.md) says. After the gate, a put-back line
 runs. When it fails, run that line again by hand.
 
 A command from research runs only when you approved it at the design close. When no verify
@@ -32,7 +32,7 @@ configuration does is proved by the tests of the order that uses it.
 The document lands in the project folder, by default in the task folder's `deliverables/`. Its
 done-when rows are its check. The checker, or you, confirms that each row names something a reader
 can confirm from the document alone. The implementer writes the document and commits it in the
-project folder. The suite and the three tool checks read `undeclared`. The reviewer reads the
+project folder. The reviewer reads the
 document whole. The order's criteria are recorded as judged by whoever judged the rows.
 
 Files that AIDA's own steps write in the project folder are set aside before the owned-files check.
@@ -59,8 +59,7 @@ puts each such criterion to you.
 
 No test is written. The implementer builds the order, and a reviewer reads the diff. The first
 check reads `deferred`, and that passes, unless the order's own verify commands fail. They still
-run in that slot, and the worse answer stands. The suite reads `undeclared`. The three tool
-checks still run. At finish, each done-when row becomes a checklist row, and you answer them at
+run in that slot, and the worse answer stands. At finish, each done-when row becomes a checklist row, and you answer them at
 review.
 
 ## Why it works this way

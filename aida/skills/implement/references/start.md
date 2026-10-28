@@ -30,16 +30,15 @@ or changed and not committed, and the orders whose owned files hold it. A role s
 leaves such files, and the next role would work beside them. A gitignored file is never named.
 The usual first-run case is `package-lock.json`, changed by a surfaces harness install at `environment up`. Commit it.
 
-Interactive, such a file refuses with exit 104, and nothing is written. Read the paths to the
-person and offer two choices. To keep a file, the person commits it. Or you run start again with
-`--leftovers keep` to leave it as it is, for that run only. To set the files aside, run start
-again with `--leftovers set-aside`. Unattended, with no `--leftovers`, the script sets them aside
-itself. In either mode, `--leftovers keep` refuses without the person's answer on record (exit 68).
+With no `--leftovers`, the script sets such files aside itself, in both run modes, and writes a
+warning. Read the paths to the person. To keep a file next time, the person commits it first. Or
+run start with `--leftovers keep` to leave it as it is, for that run only. `--leftovers keep`
+refuses without the person's answer on record (exit 68).
 
 Set aside moves each untracked file to `<task_folder>/implementation/set-aside/<time>/`, under its
 own path. A modified file is copied there, and its committed version comes back. Nothing is
-deleted. Any other change, such as a deleted file or a staged new one, refuses with exit 104 in
-both modes. The ledger records each move under `setAside`. The `setAside:` line names the folder,
+deleted. Any other change, such as a deleted file or a staged new one, stays in the tree, and a
+warning names it. The person commits it or undoes it. The ledger records each move under `setAside`. The `setAside:` line names the folder,
 so give the person that path. The `leftovers:` line names each file that was kept or set aside.
 
 Unattended, a start after a design reopen sets aside the tests an author has not frozen yet. Do
@@ -47,7 +46,8 @@ not copy them back by hand. The next fresh `dispatch-open` of a test author name
 of each test file that order owns. Put its `earlier tests:` paths in the dispatch message.
 
 The freeze keeps its own warning about uncommitted files. It names a file that the test author
-made during its own run, after this check.
+made during its own run, after this check. An untracked file under a path the order owns, which the
+freeze would leave out, refuses the freeze (exit 27).
 
 On success the script prints summary lines. They say whether this is a new run or a resumed one.
 They give the snapshot's path, hash and counts, and the ledger's path. They name which order is in

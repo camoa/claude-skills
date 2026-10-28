@@ -74,9 +74,14 @@ result for every row by its id, so a failing added row subtracts as the three fl
 task past preconditions adopts the copy with `implement-actions.sh recipe-refresh --check-recipe`,
 or every check stops at exit 73.
 
-**The tool rows leave the frozen tests out, as the build's do.** The frozen tests are the reference
+**The tool rows leave the frozen tests out.** The frozen tests are the reference
 this stage judges against, and no role after the freeze may change them. A row's detail names each
 test it left out. A row whose files are all frozen tests reads undeclared.
+
+**Each tool row has a time limit.** A tool row that runs past 600 seconds is stopped and reads
+unknown, naming the limit. The environment variable `AIDA_REVIEW_TOOL_LIMIT` sets another number
+of seconds. Preconditions already ran each tool once, so a tool that cannot run at all was found
+before the build.
 
 **The static-analysis row runs once more, over the frozen tests alone.** The project's own analyser
 reads the tests after the merge. A run that reads unmet or unknown becomes one finding on the

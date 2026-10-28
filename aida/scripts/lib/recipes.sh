@@ -44,7 +44,8 @@
 #   tf_sha256_of <file>                       the sha256 of that file, lowercase hex
 #   tf_path_matches_glob <path> <glob>        one segment against one glob segment
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob, or its file name when the glob has no /
-#   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>] [<log>]   runs one resolved command
+#   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>] [<log>]   runs one resolved command,
+#                                             within BR_RUN_LIMIT seconds when that is set
 #   br_token_value <values> <name>            a run line's value for that name, from every source
 #   br_fill_arg <values> <arg>                the argument with each {name} filled, or the unfilled name
 #   br_recorded_token <name>                  the value preconditions recorded for a ## Tokens name
@@ -1036,11 +1037,16 @@ tf_path_matches_catalog_glob() {
 # token that is empty or holds a character outside [A-Za-z0-9_./:=@%+,-] is in single quotes, so a
 # reader can tell the tokens apart.
 #
+# BR_RUN_LIMIT, when it holds a number of seconds, stops a command that runs longer: the command
+# gets TERM and the exit status reads 124, the status GNU timeout uses. `timeout` is not on a stock
+# macOS, so a watchdog in the shell does it. A child the command started itself may outlive it.
+#
 # Prints one of three tab-separated results and never dies:
 #   UNRESOLVED<TAB><name>  a placeholder token nothing supplied a value for, naming it
 #   EMPTY<TAB>             the argv holds no token at all. An exec with no operands returns 0
 #                          without replacing the shell, so this is a refusal and never a run
 #   RAN<TAB><exit status>  once the command actually ran, whatever it exited with
+BR_RUN_LIMIT=""
 br_run_resolved() {
   local argv_json="$1" dir="$2" outfile="$3" paths_json="$4" values="$5" errfile="${6:-}" logfile="${7:-}"
   local count i tok list_json pcount pi rc
@@ -1099,13 +1105,36 @@ br_run_resolved() {
       printf '\n'
     } >>"$logfile"
   fi
-  if [ -n "$errfile" ]; then
-    ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>"$errfile"
-    rc=$?
-  else
-    ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>&1
-    rc=$?
-  fi
+  [ -n "$errfile" ] || errfile="$outfile"
+  case "$BR_RUN_LIMIT" in
+    ''|*[!0-9]*)
+      if [ "$errfile" = "$outfile" ]; then
+        ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>&1
+      else
+        ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>"$errfile"
+      fi
+      rc=$? ;;
+    *)
+      # The watchdog's own output goes to /dev/null, or the command substitution around this call
+      # would wait for its sleep. The mark file says the watchdog fired, so a command that exits
+      # 143 on its own is not read as stopped.
+      local cmd_pid dog_pid mark
+      mark="$(mktemp)" && rm -f "$mark"
+      if [ "$errfile" = "$outfile" ]; then
+        ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>&1 &
+      else
+        ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>"$errfile" &
+      fi
+      cmd_pid=$!
+      ( trap 'kill "$sleep_pid" 2>/dev/null; exit 0' TERM
+        sleep "$BR_RUN_LIMIT" & sleep_pid=$!
+        wait "$sleep_pid"
+        : >"$mark"; kill -TERM "$cmd_pid" 2>/dev/null ) >/dev/null 2>&1 &
+      dog_pid=$!
+      wait "$cmd_pid"; rc=$?
+      kill -TERM "$dog_pid" 2>/dev/null; wait "$dog_pid" 2>/dev/null
+      [ ! -f "$mark" ] || { rc=124; rm -f "$mark"; } ;;
+  esac
   printf 'RAN\t%s' "$rc"
 }
 

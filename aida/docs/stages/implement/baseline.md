@@ -13,12 +13,14 @@ and the record keeps what the command printed.
 ## The baseline
 
 The whole suite runs once, because the orders' tests do not exist yet. The coding-standards,
-static-analysis and security tools run over every file the work orders own. What each run printed
-is kept, one file per run, under `implementation/baseline-output/`.
+static-analysis and security tools run over every file the work orders own, and so does every
+other tool row review runs. This is each tool's one run before review. A tool that cannot run,
+because it is not installed or a value is missing, stops the build here, before any order is
+built. What each run printed is kept, one file per run, under `implementation/baseline-output/`.
 
-**A red baseline is recorded, never refused.** A builder that chases a failure it did not cause
-spends every attempt it has. The later checks compare line by line, with numbers set aside, so a
-moved line number does not read as new. The comparison holds no parser. A finding whose text
+**A red baseline is recorded, never refused.** Finish and review subtract it, so a finding that was
+there before the task is not read as this task's. The comparison is line by line, with numbers
+set aside, so a moved line number does not read as new. The comparison holds no parser. A finding whose text
 changed reads as new. A finding fixed and brought back reads as old.
 
 The baseline is taken once per commit. A second run at the same commit leaves it alone. A baseline
@@ -35,11 +37,11 @@ uncommitted path.
 ## A suite that is already red
 
 The `baselineRed:` line names each framework whose suite already fails. When it is not `none`, AIDA
-puts it to you before the first order. Finish runs the suite again at the end and refuses on this
+puts it to you before the first order. Finish runs the suite again at the end and warns on this
 red unless the baseline subtraction clears it. You can act on it now rather than at the end. A
-failed test is repaired outside this task. For runner warnings, the routes finish offers are in
+failed test is repaired outside this task. For runner warnings, see
 [Close orders and finish the stage](finish.md). Unattended, the build goes on, and a person meets
-the red at finish.
+the warning at review.
 
 ## A task that runs no test
 
@@ -56,9 +58,9 @@ The record pins each recipe's path. When the catalog republishes a test recipe, 
 re-runs nothing. The freeze refuses a recipe path that differs from the record.
 
 The review recipe is pinned by the baseline. `recipe-refresh --check-recipe <framework>=<path>`
-runs every tool row of the new recipe on the tree as it stands. It adopts the new recipe only when
-each row reads `met` or `undeclared`. Otherwise it refuses and names the row. Finish the task with
-the pinned recipe, or repair what the row found and run it again.
+runs every tool row of the new recipe on the tree as it stands, and adopts it. When a row reads
+other than `met` or `undeclared`, it writes a warning naming the row. Review then reads that
+finding as one from before the task.
 
 ## Why it works this way
 

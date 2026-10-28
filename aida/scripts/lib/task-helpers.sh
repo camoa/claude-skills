@@ -144,8 +144,7 @@ CITES_JQ='
     | {search: $s, n: tonumber};'
 
 # A backticked token from an order's interface, read as a repository path (gap row 253). Design's
-# check compares it with the order's owned and known paths, and go-on's check asks git whether it
-# exists, so both read a token alike. A leading ./ goes, and so does everything from the first
+# check compares it with the order's owned and known paths. A leading ./ goes, and so does everything from the first
 # colon, so `src/Foo.php::bar()` and `src/Foo.php:12` read as src/Foo.php. What is left is a path
 # when it holds a slash, and is neither absolute nor a URL. Anything else yields empty.
 # shellcheck disable=SC2034 # read by the sourcing script

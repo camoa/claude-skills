@@ -1,6 +1,6 @@
 ---
 name: implement
-description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, refuses to land the build on the project's own trunk branch, establishes whether this repository can build and test at all, writes the tests for one work order and freezes them, writes the code for that order until it passes all eight deciding checks, reviews the diff, repairs what the review finds, closes the order, and once every order is closed records the task's implementation as finished.
+description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, refuses to land the build on the project's own trunk branch, establishes whether this repository can build and test at all, writes the tests for one work order and freezes them, writes the code for that order until it passes all three deciding checks, reviews the diff, repairs what the review finds, closes the order, and once every order is closed records the task's implementation as finished.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh --run-mode interactive create *), Agent, EnterWorktree
@@ -12,7 +12,7 @@ Implementation builds each work order design wrote, one at a time, against tests
 change once they are frozen. One freezes the contract and the work orders into a snapshot and
 opens the ledger that will track every order's progress. Two establishes whether this repository
 can run a test at all. Three writes the tests for one work order, watches each one fail, and
-freezes them. Four writes the code until it passes all eight deciding checks. Five reviews the
+freezes them. Four writes the code until it passes all three deciding checks. Five reviews the
 diff, repairs what the review finds, verifies each repair, and closes the order. Once every order
 closes, `finish` records the task's own implementation as done and hands it to the review stage.
 
@@ -252,10 +252,10 @@ commit that breaks the frozen tests or the owned files stops the order too (exit
 
 A record already closed takes the same route. Run `dispatch-open` with the same role and unit and
 `--resume`, then resume the same agent by message. When that agent cannot be reached, as from
-another session, dispatch the role fresh. A fresh `dispatch-open` refuses (exit 104) while the tree
-holds uncommitted files, so no role starts beside another role's work. Commit a file to keep it,
-or run `start` with `--leftovers set-aside`. A row-checker, and a test author sent back for a
-rejected row, are exempt, because their work starts from those files.
+another session, dispatch the role fresh. A fresh `dispatch-open` writes a warning when the tree
+holds uncommitted files, because the role starts beside another role's work. Report it. Commit a
+file to keep it, or run `start`, which sets them aside. A row-checker, and a test author sent back
+for a rejected row, are exempt, because their work starts from those files.
 
 ## What this skill does
 

@@ -5,8 +5,8 @@ runs the whole suite once and records the stage as done, for the review stage to
 
 ## Close one order
 
-Close refuses when a finding is still open, when the last fix round was never verified, or when
-the tree is dirty. Commits after the last record in the order's own files are a warning: they join
+Close refuses when a finding is still open, or when the last fix round was never verified. A dirty
+tree is a warning, because no commit range holds it. Commits after the last record in the order's own files are a warning: they join
 the order's range, and review lists the warning. Commits that change a frozen test or a file the
 order does not own refuse (exit 63). Move the branch back, or redo the order.
 
@@ -21,31 +21,24 @@ order.
 
 ## Finish the stage
 
-Finish refuses until every order has closed or been dropped, none is stopped, every
-machine-verified criterion reads `confirmed`, and the code tree is clean. A criterion a dropped
-order served is not asked: the finished record lists the dropped order with it, and the task
-review reads it unanswered.
+Finish refuses until every order has closed or been dropped, and none is stopped. A
+machine-verified criterion that does not read `confirmed`, and a dirty code tree, are warnings. A
+criterion a dropped order served is not asked: the finished record lists the dropped order with
+it, and the task review reads it unanswered.
 
-Then it runs the suite once at the final commit, with the baseline subtracted. A suite row marked
-end-of-task runs here for the first time. When the suite fails or cannot be decided, finish
-refuses. It names the first new failure lines and the file that holds the whole output,
-`implementation/finished-suite.txt`. Commit a fix on the branch and run finish again.
+Then it runs the suite once at the final commit, with the baseline subtracted. The build steps run
+no suite, so this is its first run. When the suite fails or cannot be decided, finish writes a
+warning, records the verdict, and goes on. The warning names the file that holds the whole output,
+`implementation/finished-suite.txt`. Review reads that result and lists the warning.
 
-**Runner warnings and no failed test** read `warned`, and finish refuses on them too. You pick one
-of three routes:
-
-- Accept the warnings: run finish again with `--accept-warnings <your reason>`. This is
-  interactive only, and review reports your answer as yours.
-- Change the suite row's command in your project's copy of the test-execution recipe.
-- Repair the project configuration that raises the warnings, in a change outside this task.
-
-The recipe must name which output lines are warnings. When it does not, the same failure reads
-`unknown` or `unmet`, and the message names the missing key. Add it to your project's copy of the
-recipe. When the recipe is a catalog copy, copy it into your recipe folder first, under
-`process-recipes/<framework>/test-execution.md`. Declare the folder with the project skill if it
-is new. Then point the task at the copy with `recipe-refresh --recipe <framework>=<path>`, and run
-finish again. Without that step the task still reads the old recipe. See [The smoke run and the
-baseline](baseline.md).
+**Runner warnings and no failed test** read `warned`, and are a warning too. You may accept them:
+run finish with `--accept-warnings <your reason>`, with your answer on record, and review reports
+the suite as your answer. The recipe must name which output lines are warnings. When it does not,
+the same failure reads `unknown` or `unmet`, and the detail names the missing key. Add it to your
+project's copy of the recipe. When the recipe is a catalog copy, copy it into your recipe folder
+first, under `process-recipes/<framework>/test-execution.md`. Declare the folder with the project
+skill if it is new. Then point the task at the copy with `recipe-refresh --recipe
+<framework>=<path>`. See [The smoke run and the baseline](baseline.md).
 
 On success, finish writes `implementation/finished.json`. It holds the commit range, each order's
 range and rounds, the suite's verdict, each criterion's state and who judged it, the checklists,

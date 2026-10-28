@@ -303,12 +303,26 @@
             "required": ["criterion", "checkerNote"],
             "properties": {
               "criterion": {"type": "string", "minLength": 1, "description": "The row's key: a criterion id, the order id for the done-when row, or `<order id>:absence:<n>` for a routed absence clause, n its done-when row counted from 1 (gap row 273)."},
-              "personWords": {"type": "string", "minLength": 1, "description": "The person's words, verbatim, from the row's `--row <key>=rejected::person::<words>` flag. Absent on a row the checker rejected on an unattended run and sent back (gap row 373)."},
+              "personWords": {"type": "string", "minLength": 1, "description": "The person's words, verbatim, from the row's `--row <key>=rejected::person::<words>` flag. Absent on a row a model or the checker rejected (gap rows 373 and 447)."},
               "checkerNote": {"type": ["string", "null"], "description": "The checker's note on this row, read from `implementation/row-check-<order id>.json`. Null when that file or its row is absent."},
               "redAgain": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "The name of every `--test` with a `--red` in a file that holds one of this row's tests. A `--locks-in` test has no red run, so it is not here. The repair edits that file, so each of those red runs is then older than it, and `tests-freeze` refuses it (exit 109). `tests-brief` joins these lists under `rowsRejected.redAgain` (gap row 258)."}
             }
           },
-          "description": "The rows a person rejected at the checkpoint, written by `tests-freeze` when it refuses on them and replaced on each such refusal. Removed by the next freeze that writes, since that freeze had no rejected row. Present only while one stands. `tests-brief` carries it to a fresh test author, because the person's words otherwise lived only in the conversation (gap row 218). A row the checker rejected on an unattended run is here only when its verdict file marks it `\"repair\": \"tests\"` and its key is not yet in rowsSentBack. Any other such row halts the order instead (gap row 373)."
+          "description": "The rows rejected at the checkpoint, by a person, a model or the checker, written by `tests-freeze` when it refuses on them and replaced on each such refusal. A row keyed by the order id lands here too (gap row 447). Removed by the next freeze that writes, since that freeze had no rejected row. Present only while one stands. `tests-brief` carries it to a fresh test author, because the person's words otherwise lived only in the conversation (gap row 218). A row the checker rejected on an unattended run is here only when its verdict file marks it `\"repair\": \"tests\"` and its key is not yet in rowsSentBack. Any other such row halts the order instead (gap row 373)."
+        },
+        "checkAgain": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["criterion", "verdict"],
+            "properties": {
+              "criterion": {"type": "string", "minLength": 1, "description": "The row's key, the same keys rowsRejected uses."},
+              "verdict": {"type": "string", "enum": ["confirmed", "rejected"], "description": "What the refused freeze's own `--row` said of it."}
+            }
+          },
+          "description": "The rows the next checker dispatch judges, the `checkAgain:` line of the freeze that refused, written beside rowsRejected and removed with it (gap row 447). `tests-brief` warns when a rejected row here is not in rowsRejected, so a lost rejection is named before the author runs."
         },
         "rowsSentBack": {
           "type": "array",

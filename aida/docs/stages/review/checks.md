@@ -30,6 +30,8 @@ or a non-goal that changed after the freeze. You answer those at the [close](clo
 - **The frozen tests are left out.** No step after the freeze may change them, so the tool rows
   skip them. Static analysis then runs once more over the frozen tests alone. A finding there
   blocks nothing. It becomes a follow up task for the test author.
+- **Each tool row has a time limit,** 600 seconds unless `AIDA_REVIEW_TOOL_LIMIT` says otherwise.
+  A row that runs longer is stopped and reads unknown.
 - **A row reads only the file types its recipe names.** When no row reads a file the task
   changed, every tool row reads undeclared, and review writes a catalog note that names the
   files. To check them, add a row with its own id and file types to your own copy of the review

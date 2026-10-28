@@ -7,24 +7,31 @@ alone on the task branch. From then on, no role but that order's test author may
 
 The freeze refuses, and freezes nothing, when one of these is true:
 
-- A test sits in a file the order does not own. The test author is resumed and moves the tests
-  into the file design chose.
-- A test has no red run and no reason why it passed on arrival.
-- A red run is older than the order's test round, or older than its own test file's last change.
-  It is the run of an earlier test. The test is run again.
-- A test that should fail did not fail for the right reason. See [Write the tests](tests.md).
-- A criterion the order owns has no test, or a criterion a person verifies has no checklist line.
-- The order serves and owns no criterion at all. The repair is the work order, in design.
+- The order would freeze no test and no row. The repair is the work order, in design.
+- A test sits in a file the order does not own, or outside the test pattern. The test author is
+  resumed and moves the tests into the file design chose.
+- An untracked file lies under a path the order owns, and the freeze would leave it out.
+- The freeze runs the tests with the build's own test command, and the tests with a red run do
+  not fail. Or the run fails and shows none of the failing runs.
 - The order has already left its tests step. A changed design or a wrong test takes a redo
   instead.
 
+Every other doubt is a warning in the task record, and the freeze goes on. Review lists the
+warnings. These are warnings:
+
+- a test with no red run and no locks-in reason, or a test that passed on arrival;
+- a red run older than its test, or one the recipe cannot read as an assertion;
+- a criterion with no test, or no checklist line.
+
+AIDA reports each one, and you decide whether to go on or redo the order. See [Write the
+tests](tests.md).
+
 **A verify command can stand in for a test.** When the order's own verify list names a criterion,
-the freeze runs that command over the test files. It refuses while the command fails, and the test
-author repairs the files first.
+the freeze runs that command over the test files. A failure is a warning.
 
 **The tests' own standards are checked here.** The coding-standards tool runs over the new test
-and support files, less what the baseline already had. A finding goes back to the test author. No
-role may change the tests after the freeze, so this is the one place their standards are judged.
+and support files, less what the baseline already had. A finding is a warning. No role may change
+the tests after the freeze, so this is the one place their standards are judged.
 When that tool reads `unknown` or `undeclared`, nothing checked the files, and AIDA says so.
 Static analysis does not run here, because the tests name code that does not exist yet. The review
 stage runs it over the frozen tests.

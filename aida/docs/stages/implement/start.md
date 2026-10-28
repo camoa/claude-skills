@@ -23,17 +23,14 @@ Start lists each file git reports untracked or changed, and the work order that 
 gitignored file is never listed. A role stopped mid-run leaves such files, and the next role
 would work beside them.
 
-Interactive, start refuses and asks you. You have three choices:
-
-- Commit the file to keep it.
-- Run start again with `--leftovers keep`. The files stay as they are, for that run only.
-- Run start again with `--leftovers set-aside`.
+Start sets such files aside itself, in both run modes, and writes a warning naming them. To keep a
+file, commit it before start. Or run start with `--leftovers keep`, and the files stay as they
+are, for that run only. Keeping needs your answer on record.
 
 Set aside moves each untracked file to `implementation/set-aside/<time>/` in the task folder. A
 changed file is copied there, and its committed version comes back. Nothing is deleted. A deleted
-file or a staged new file cannot be set aside, so set aside refuses on it. Commit it, undo it by
-hand, or keep it with `--leftovers keep`. Unattended, start sets the files aside itself, and
-`--leftovers keep` refuses.
+file or a staged new file cannot be set aside, so it stays in the tree, and a warning names it.
+Commit it or undo it by hand.
 
 The usual first-run case is `package-lock.json`, changed when `task environment up` installed a
 test harness. Commit it.

@@ -133,7 +133,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # carries `resumesAllowed` 2, so it is resumed twice and the third time warns (gap row 301). For a
 # reviewer or a row-checker, a plain close also refuses when its file is missing (111).
 # `dispatch-open --resume` reopens a record already closed for that one resume. It skips the
-# leftover check `dispatch-open` otherwise runs (exit 104) and writes `resumedAt` at once.
+# leftover warning `dispatch-open` otherwise writes and writes `resumedAt` at once.
 # `dispatch-close --not-sent` removes a record whose role was never dispatched, and spends no
 # resume. It refuses when a fixer's or test author's report exists, when another role's file was
 # written after the record opened, or when the record counts a resume. It also refuses on a commit
@@ -278,6 +278,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #        cannot load or run, the task's site down, a surface file that cannot be read, a project
 #        folder that is no git repository for an order proved by its record, a write that failed.
 #      - A record of checks short of the count its schema requires: a defect in this plugin.
+#      - A repository that cannot test yet: `preconditions` found a condition, a smoke run or a
+#        tool that answered no or could not run, a framework with no row that runs a named set of
+#        tests, or a tool row review runs that could not run at the baseline. The record is
+#        written first and names each one. A missing tool is found here, before any order is
+#        built, and never after (target flow, step 4).
 #   4  design has not closed cleanly: scripts/check-design.sh, run against the live design/*.json
 #      files, did not exit 0. The message names what it reported as open.
 #   5  the task's own project (resolved from the task folder, never asked for) points at a
@@ -312,54 +317,25 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  17  a resumed run's snapshot.json does not agree with itself: a hash re-derived from its own
 #      copied alignment and work orders disagrees with its own stored hash field. The snapshot
 #      file was edited after it was written.
-#  19  `preconditions` ran and something stops the build: a condition answered no, nobody could
-#      tell, or a framework's own smoke run came back the same way. The record is written first
-#      and names every condition, every smoke run, and its reason, so this exit says do not
-#      proceed, never that nothing was learned. `undeclared` does not land here: a recipe saying
-#      this framework needs nothing before a test runs, or nothing before a smoke command proves
-#      one, has answered, and refusing on it would stop every project on that framework. It is
-#      reported, never counted as met. A framework passed as `--lookup-failed <fw>=no-recipe` is
-#      `undeclared` too: the catalog looked and holds nothing for it (live-run row 137). The other
-#      two lookup failures are nobody looking, and they land here as `unknown`. `not-needed` does
-#      not land here either. Every order in the snapshot is proved by its record, so no condition
-#      and no smoke row was run. The record says so per framework (live-run row 136).
 #  21  `preconditions` found <task_folder>/implementation/baseline.json already recorded at a
 #      commit other than the one this run's own ledger started from. A baseline is taken once, at
 #      the commit the build started from, and this refuses rather than overwrite a different one.
-#      The message names both commits. `build-record`, `go-on`, `fix-record`, `finish`
-#      and `tests-freeze` refuse at 21 too, before they subtract a baseline taken at a commit
-#      other than startedFrom. After `start --rebased-onto`, that baseline would read the new
-#      start's failures as the build's (gap row 401). `preconditions` refuses at 21 too when an
-#      owned file is uncommitted before the baseline runs, or when HEAD or an owned file changed
-#      while it ran: the baseline would measure that work, not the commit (gap row 431).
-#      `tests-brief` and `dispatch-open` of a writing role refuse at 21 while that run is live.
-#  24  `tests-brief` found the given unit, proved by tests, owns a criterion whose verifiedBy is
-#      machine while its own frozen tests field is empty. check-design.sh should already have
-#      refused this at design close; this is a second reading against the frozen copy, never a
-#      live one.
+#      The message names both commits. `finish` and `tests-freeze` refuse at 21 too, before they
+#      subtract a baseline taken at a commit other than startedFrom. After `start --rebased-onto`,
+#      that baseline would read the new start's failures as the build's (gap row 401).
+#      `preconditions` refuses at 21 too when an owned file is uncommitted before the baseline
+#      runs, or when HEAD or an owned file changed while it ran: the baseline would measure that
+#      work, not the commit (gap row 431). `tests-brief` and `dispatch-open` of a writing role
+#      refuse at 21 while that run is live.
 #  27  `tests-freeze` was given a --test whose path matches none of the given --test-glob patterns.
 #      A test written outside the framework's own pattern is not protected by anything later.
 #      Or its path is not a file the order owns (gap row 249); the refusal names the owned one.
+#      Or an untracked file lies under a path the order owns, which the freeze would leave out of
+#      its commit: it reaches the build unprotected. The message names each one.
 #  28  retired on 2026-10-19 (live-run row 374). `tests-freeze` refused a test name that did not
 #      end in the criterion id or the order id it claimed. The --test flag already names that id,
 #      the record keeps it, and every reader joins on the recorded name. The test-authoring recipe
 #      says how a name reads, so a project can carry its upstream convention.
-#  29  `tests-freeze` found a criterion the unit owns whose verifiedBy is machine with no --test
-#      row naming it. A criterion the unit only serves needs no test from it: exactly one order
-#      owns a criterion, and that order's tests are the ones that can observe it (live-run row
-#      59). A serving order freezes its tests against its own doneWhen instead. An order whose
-#      proof is gate is exempt: it takes no --test at all, and its owned machine criterion is
-#      judged by the recipe's `## Configuration gate` lines at build time (live-run row 65). An
-#      order whose proof is record is exempt the same way: its done-when row, `--row <unit_id>=`,
-#      is its checkpoint, and exit 64 asks for that row (nyc defect 17). An order whose proof is
-#      observe is exempt too, and takes no --row either: nothing is judged before its build
-#      (live-run row 104).
-#  30  `tests-freeze` found a criterion the unit serves or owns whose verifiedBy is person with no
-#      --checklist row.
-#  31  `tests-freeze` was given a --test naming a criterion the unit does not serve or own.
-#  33  `tests-freeze` found a test with neither a --red nor a --locks-in naming the existing code.
-#  34  `tests-freeze` was given a --green-on-arrival. Not a defect in the script: it stops the step
-#      and says the test proves nothing, which is the escalation this stage requires.
 #  35  `tests-freeze` found <task_folder>/implementation/tests-<unit_id>.json already recorded at a
 #      commit other than the one this run is at. The message names both commits. The one freeze
 #      exempt is the freeze after a builder's `Stop: test-wrong`: the order is at tests-frozen and
@@ -405,9 +381,6 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      stopped order records no attempt.
 #      `build-brief` and `dispatch-open implementer` refuse on it, so no builder starts (gap row 409).
 #      Only go-on, redo and drop act on a stopped order.
-#  50  a review record already exists for this order, and an order gets one review, ever
-#      (ideal/implementation.md, 'One review per order'). `review-brief` refuses to hand over a
-#      second brief and `review-record` refuses to write a second record.
 #  51  `review-record` found the working tree dirty. The reviewer holds Write for one purpose, its
 #      own findings file under the task folder, and this is the check that enforces it. A probe
 #      test left inside the reviewed code is a refusal here, never a finding later. Code that moved
@@ -447,12 +420,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      role's work is committed before the record is written. Unattended, the two record steps write
 #      a stop reason onto the order before refusing, because an order left in flight with no reason
 #      is a stop nobody sees until they ask; interactive they only refuse, since a person is there to
-#      commit and run the step again. `go-on`, `redo`, `drop`, `close` and `finish` refuse on the
-#      same fact and share this number, because a commit range is a claim about a repository and a
-#      dirty tree makes it a claim about something else. A redo with uncommitted work would move
-#      the record of that work aside and leave the work itself behind. `review-record` names a related fact with exit 51,
-#      and the two stay apart: 51 says the code moved after a record was already written, and 61
-#      says it was never committed at all.
+#      commit and run the step again. `go-on --continue check`, `redo` and `drop` refuse on the same
+#      fact and share this number: the check runs the record checks, and a redo or a drop with
+#      uncommitted work would revert the order's commits and leave that work behind, in no commit
+#      list. At `close` and `finish` uncommitted changes are a warning. `review-record` names a
+#      related fact with exit 51, and the two stay apart: 51 says the code moved after a record was
+#      already written, and 61 says it was never committed at all.
 #  62  `fix-brief` or `fix-record` was asked for a round while the last one has no verification.
 #      `verify-record` is what turns a fixer's own account into a verdict this stage holds, so two
 #      rounds spent back to back leave the first round's findings judged by nobody. Exit 60 names
@@ -478,8 +451,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      which nothing later could tell from a real one. On missing rows the confirmed rows given
 #      are recorded as `rowsConfirmed` first, the same way exit 65 records them (gap row 259).
 #  65  `tests-freeze` was given a `--row` that answers rejected. Not a defect in the script: the
-#      freeze stops, writes no test record, and the row goes back to the test author, the same way
-#      exit 34 stops the step on a test that was green on arrival. Unattended, a row the checker
+#      freeze stops, writes no test record, and the row goes back to the test author. Unattended, a row the checker
 #      itself rejected goes back to the test author once, when the order has one and the verdict
 #      file marks the row `"repair": "tests"`; its key joins `rowsSentBack` (gap row 373). Any
 #      other row the checker rejected unattended stops the order first, because a refusal nobody
@@ -496,9 +468,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      `rowsCarried: <row key>, ...` line naming the rows it carried. A repair round's checker
 #      judges only the rows put to it, so those notes are on disk nowhere else (gap row 259).
 #  66  `finish` found implementation is not finished for this task: an order that is neither closed
-#      nor dropped, an order that is stopped whether or not it closed, or a machine-verified
-#      criterion whose row state is not confirmed and that no dropped order serves. The message
-#      names every one of them.
+#      nor dropped, or an order that is stopped whether or not it closed. The message names every
+#      one of them. A machine-verified criterion that is not confirmed is a warning.
 #  67  a way out was asked for an order it cannot answer. `go-on` found the order stopped, or
 #      changed mid-build, for a reason that does not allow the choice it was given: the message
 #      names the choices every reason allows. `redo` found no live copy of the order in the design,
@@ -525,12 +496,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  72  two frameworks each declare a command for one check row, and nothing here may choose between
 #      two answers to one question. The message names both frameworks and the row.
 #  73  the check recipe resolved for a framework moved after this task's baseline was taken: its
-#      sha256 differs. Every tool check compares its own result against that baseline, so a changed
-#      recipe compares one tool's output against another tool's baseline. The baseline is not
-#      retaken mid-task: it reads the tree before the task, and the tree now holds this task's own
-#      code. Run again with the recipe body the baseline read. `recipe-refresh --check-recipe`
-#      refuses with this code too, when a tool row of the new body reads neither met nor
-#      undeclared on the current tree (gap row 295). The message names each such row.
+#      sha256 differs (cr_require_baseline_recipes in scripts/lib/recipes.sh, which review runs
+#      before its tool rows). The build runs no tool row, so the record steps never refuse on it.
+#      `recipe-refresh --check-recipe` adopts a new body even when a tool row of it reads neither met
+#      nor undeclared on the current tree, and writes a warning naming each such row (gap row 295).
 #  74  `tests-freeze` was asked to freeze an order that serves and owns no criterion at all, or one
 #      whose record would hold no row: no test named, no doneWhen test, no checklist. Every guard
 #      in that step reads a per-criterion list, so an order with none passes all of them and
@@ -548,22 +517,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      minutes. The order stops with `budget spent` and both numbers; once a person raises the
 #      budget, go-on answers it.
 #  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
-#  80  `tests-freeze` was given a --red whose file holds none of the assertion markers the
-#      test-execution recipes declare under `failure_signal:` and no line their suite row's
-#      `failure_line` names (`--test-recipe`, the flag `build-record` already takes), so the run it
-#      holds did not fail a test. A file that holds a harness marker instead is named as a setup
-#      gap: the run never reached the behaviour (live-run row 68), unless the order creates the
-#      unit: an owned file matches a glob under `## Unit declaration` in an `--implement-recipe`,
-#      and the file is then accepted as `harness-new-unit`. The same exit when no
-#      --test-recipe was given beside a --red, because then no red can be read at all. A recipe set
-#      declaring neither a marker nor a selector records the red unchecked instead of refusing.
-#      The same exit when two tests of one file have reds that print the same places in it: they
-#      failed on a shared precondition, not on their own assertions (live-run row 207).
-#      The same exit when build-record's order-tests check, run over the frozen files, fails and
-#      prints no line of any red file: it runs something other than the reds (gap row 436).
-#  81  `tests-freeze` was given an --absence clause with no negation word, so it asserts a
-#      presence, and a presence is proved by a test that was watched failing (live-run row 184). A
-#      clause that is not, verbatim, one of the order's frozen `doneWhen` entries is an error, exit 3.
+#  80  `tests-freeze` ran the order-tests command build-record runs over the files it freezes, and
+#      the run passed though the order has tests with a red run: those tests do not fail when it
+#      runs them. Or the run failed and printed no line of any red file: it runs something other
+#      than the reds, and a correct build would fail (gap row 436). A red file the recipe's markers
+#      do not read as a failed assertion is a warning, recorded with `redSignal: unread`.
 #
 # The codes a resumed `start` added (nyc defects 10 and 19).
 #  82  a resumed `start` found HEAD is not a descendant of the ledger's own startedFrom. The branch
@@ -575,24 +533,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      ancestor of HEAD, or the value already held. HEAD still descends from startedFrom, and
 #      the value does not, or a commit between the two is on no other branch, or an order has
 #      committed (gap row 401). The run has no ledger.
-#  86  `finish` ran the suite once at HEAD and it did not answer met or undeclared (nyc defect 18).
-#      The record steps leave a suite row the recipe costs `end-of-task` unrun, recorded deferred,
-#      so this run is the one that decides it. Unmet names the lines new since the baseline, the
-#      first twenty, and the sidecar holding the whole output; a fix commit on the branch and a
-#      second `finish` is the route. Unknown names its own cause: no baseline to subtract from, a
-#      placeholder with no --value, a runner not found, or a run that selected nothing. Nothing
-#      is recorded; the sidecar stays, because it is what a person reads next. `not-needed` never
-#      lands here. A task whose every order is proved by its record ran no test, so the suite
-#      is recorded not-needed and not run (live-run row 136).
+#  86  retired in 6.1.0. `finish` runs the suite once at HEAD and records its verdict. A verdict
+#      other than met, undeclared or not-needed is a warning. A person may record acceptance of
+#      runner warnings with --accept-warnings, which review reads.
 #
 # The code the record proof added (nyc defect 17).
 #
 # The code go-on's check added (live-run row 87).
-#  88  `go-on --continue check` found that a path the interface check named does not exist at the
-#      recorded commit, so no amended record can answer it (gap row 253). After a fix round the
-#      fact is read from that round's record (gap row 310). Code that moved after the record is no
-#      refusal: the checks run over the record's range extended to HEAD, as for a person's fix
-#      after a load-bearing ruling (live-run row 426), unless exit 63 applies.
+#  88  retired in 6.1.0, with the interface check: the build runs no interface check, so go-on's
+#      check has no named path to look for.
 #
 # The code the support files added (live-run row 90).
 #
@@ -647,12 +596,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # The code the site check before the verify lines added (gap row 212).
 # The code the leftover check added (gap row 217).
-# 104  `start` found uncommitted files in the task's tree, on an interactive run given no
-#      `--leftovers`. Or `--leftovers set-aside` met a change other than an untracked or a modified
-#      file. The message names each path and the orders whose owned files hold it. Nothing is
-#      written and nothing moves. Since gap row 228 `dispatch-open` refuses the same way before a
-#      fresh role meets such files. A row-checker, a test author sent back for a rejected row, and
-#      `--resume` are exempt.
+# 104  retired in 6.1.0. `start` sets aside uncommitted files a stopped role left, in both run
+#      modes, unless a person chose keep, and writes a warning. A change that cannot move stays in
+#      the tree with a warning. `dispatch-open` writes a warning before a fresh role meets such
+#      files.
 # The code the builder's stop added (gap row 219).
 # 105  `build-record` was given a report whose stop line is not `Stop: none`. The builder stopped,
 #      so this is not an attempt, whatever it committed. The message quotes the line and names each
@@ -691,11 +638,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The code the reviewer's recipe answers added (gap row 225).
 #
 # The code the stale red run added (gap row 229).
-# 109  `tests-freeze` was given a --red file written before the order's test round began, the
-#      tests brief's `roundStartedAt`, or before its own test file last changed. It is a run of
-#      earlier tests, such as those a redo set aside. The message names each file and both
-#      times, and a last line `redAgain: [<test name>, ...]` names each test to run again, as
-#      JSON (gap row 258). Nothing is frozen.
+# 109  retired in 6.1.0. A --red file written before the order's test round began, or before its
+#      own test file last changed, is a warning.
 # 110  retired in 6.1.0. `dispatch-close --no-report` with the resumes spent is a warning: the
 #      order does not stop, the record is removed, a capped builder's or fixer's commits join the
 #      order's unrecordedCommits, and the next step reads what the role left (gap row 228).
@@ -744,11 +688,6 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # 117  `build-record` found the order's ownedFiles or sharedFiles in design/<id>.json different
 #      from the snapshot's copy. The route is design close, then start. No attempt is spent.
 #
-# 118  `tests-freeze` found every file the order owns among the tests and support files it would
-#      lock, and a test with a red run and no --locks-in. The implementer writes only owned files,
-#      and the hook refuses a frozen one, so no build can turn that red green. The test file is the
-#      order's deliverable: its author edits it until each test passes, and freezes each with a
-#      --locks-in reason (live-run row 369). The message names the tests. Nothing is frozen.
 #
 # 119  `reopen` found no failed task review of this finish, or no finding of it that fails a
 #      criterion in a file a closed order owns (gap row 390). Nothing is written.
@@ -758,15 +697,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      judgement made on the shorter text. The next freeze with the same tests judges it again and
 #      removes the list (gap row 409). Nothing is written.
 #
-# 121  `tests-freeze` ran a verify run line that proves a criterion over the files it freezes, and
-#      the line did not pass or did not apply (gap row 370). The implementer may not edit a frozen
-#      test, so the test author repairs the files first. Nothing is frozen.
 #
-# 122  `tests-freeze` ran the coding-standards row of the check recipe baseline.json records over
-#      the test and support files this freeze adds or changes, and the row read unmet after the
-#      baseline subtraction (gap row 408). No role may write a frozen file. The message names the
-#      files and the first lines of the output. Nothing is frozen. A row that reads unknown or
-#      undeclared judged nothing; its detail goes to standard error and the freeze goes on.
 #
 # 123  retired in 6.1.0. `go-on --continue check` over commits after the record records the
 #      checks whether or not they pass. A failed check leaves the order stopped, so close refuses it.
@@ -1899,22 +1830,18 @@ do_start() {
   run_mode="$(task_run_mode "$TASK_PATH" implement)"
 
   # --- step 7b: files a stopped role left in the tree (gap row 217) -------------------------------
-  # im_scan_leftovers names them. Interactive refuses until a person picks keep or set-aside.
-  # Unattended sets them aside. Only an untracked or a modified file can move. Any other change is
-  # a person's to undo, in both modes.
-  local lo_xy lo_rel lo_tab lo_tracked leftovers_json
+  # im_scan_leftovers names them. They are set aside unless a person chose keep, in both run modes,
+  # and the set-aside deletes nothing. Only an untracked or a modified file can move. Any other
+  # change stays in the tree, and a warning names it.
+  local lo_xy lo_rel lo_tab lo_tracked leftovers_json lo_defaulted=""
   lo_tab="$(printf '\t')"
   im_scan_leftovers "$code_path" "$( { jq -ce '.workOrders' "$SNAPSHOT_FILE" 2>/dev/null || printf '%s' "$live_workorders_json"; } )"
   leftovers_json="$LO_LEFTOVERS_JSON"
   lo_tracked="$LO_TRACKED"
   if [ "$leftovers_json" != "[]" ]; then
-    [ "$run_mode" != "autonomous" ] || [ -n "$leftovers_choice" ] || leftovers_choice="set-aside"
+    [ -n "$leftovers_choice" ] || { leftovers_choice="set-aside"; lo_defaulted=yes; }
     [ "$leftovers_choice" != "keep" ] \
       || task_require_answer 68 start "--leftovers keep, the files a stopped role left," "$TASK_PATH" "implement start" "" keep
-    [ -n "$leftovers_choice" ] \
-      || die 104 "start: uncommitted files in $code_path: $(printf '%s' "$leftovers_json" | jq -r "[ $LO_TEXT_JQ ] | join(\", \")"). A role stopped mid-run may have left them, and the next role would work beside them. To keep a file, commit it, or run start again with --leftovers keep to leave it as it is. To set them aside, run start again with --leftovers set-aside. That moves them under $IMPL_DIR/set-aside/ and deletes nothing."
-    [ "$leftovers_choice" != "set-aside" ] || [ -z "$lo_tracked" ] \
-      || die 104 "start: these changes cannot be set aside: ${lo_tracked%, }. Only an untracked or a modified file moves aside. Commit them, or undo them by hand, then run start again."
   fi
 
   # --- step 8: look for an existing snapshot: absent, present-readable, or present-unreadable ----
@@ -2529,6 +2456,11 @@ REMOVED_PATHS
   local set_aside_json='[]' set_aside_dir="" lo_move_tsv
   [ -z "$ledger_doc" ] || set_aside_json="$(printf '%s' "$ledger_doc" | jq -c '.setAside // []')"
   if [ "$leftovers_choice" = "set-aside" ] && [ "$leftovers_json" != "[]" ]; then
+    [ -z "$lo_tracked" ] \
+      || task_warn "$TASK_PATH" start "" "these changes cannot be set aside, so they stay in the tree: ${lo_tracked%, }. Commit them, or undo them by hand"
+    leftovers_json="$(printf '%s' "$leftovers_json" | jq -c 'map(select(.status == "??" or .status == " M" or .status == "M " or .status == "MM"))')"
+  fi
+  if [ "$leftovers_choice" = "set-aside" ] && [ "$leftovers_json" != "[]" ]; then
     set_aside_dir="$IMPL_DIR/set-aside/$(date -u +%Y%m%dT%H%M%SZ)"
     [ ! -e "$set_aside_dir" ] || die3 "start: $set_aside_dir already exists. Run start again in a second."
     lo_move_tsv="$(printf '%s' "$leftovers_json" | jq -r '.[] | .status + "\t" + .path')"
@@ -2548,6 +2480,8 @@ LO_MOVE
     set_aside_json="$(printf '%s' "$set_aside_json" | jq -c --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       --arg folder "$set_aside_dir" --argjson paths "$leftovers_json" \
       '. + [{at: $at, folder: $folder, paths: [ $paths[] | {path, orders} ]}]')"
+    [ -z "$lo_defaulted" ] \
+      || task_warn "$TASK_PATH" start "" "uncommitted files a stopped role may have left were set aside under $set_aside_dir: $(printf '%s' "$leftovers_json" | jq -r 'map(.path) | join(", ")')"
   fi
 
   # The re-snapshot lands after the ledger's hash check above, which reads the hash the ledger was
@@ -2796,8 +2730,8 @@ ST_CHANGES
 # verdict is not `met`; a `met` run records none. This is the one row where the discipline changes:
 # every other row here is read and never run, because this step still resolves nothing else and
 # substitutes nothing else. Effect on the run is the same rule the conditions already follow: `met`
-# and `undeclared` continue, `unmet` and `unknown` stop with the same exit 19 a condition itself
-# would stop it with; no new exit code exists for this.
+# and `undeclared` continue, `unmet` and `unknown` stop with the same error a condition itself
+# would stop it with.
 #
 # Once every framework's own verdict and its own smoke run both land on `met` or `undeclared`, this
 # step takes the baseline: what was already broken at the commit the build starts from, read from
@@ -3280,6 +3214,17 @@ bl_tool_result() {
   '
 }
 
+# Refuses at 3 when the baseline run of tool row $1, whose result is $2, could not run: no result,
+# a command not found or not runnable, or a placeholder with no value. Review runs every tool row,
+# and a tool first found missing there was paid for by every order before it (target flow, step 4).
+# A row that did not apply, or that ran and found something, goes on.
+bl_require_ran() {
+  [ -n "$2" ] || die3 "preconditions: the $1 run produced no result. No baseline was written."
+  printf '%s' "$2" | jq -e '.verdict == "unknown" and ((.exitCode // 0) == 126 or (.exitCode // 0) == 127
+      or ((.reason // "") | test("has no supplied value|no token at all")))' >/dev/null || return 0
+  die3 "preconditions: the $1 tool could not run, and review runs it: $(printf '%s' "$2" | jq -r '.reason // ""'). No baseline was written. Install it with the tool skill, or pass the value, then run preconditions again."
+}
+
 # Prints {entries, end} for the tools recipe $1 names under requires_tooling, checked by the tool
 # skill's own require from the worktree. Without it a missing tool is first met after an order was
 # paid for (gap rows 271 and 285). An absent tool reads as a condition whose check command was not
@@ -3488,10 +3433,8 @@ PC_RECIPES
   order_tests_absent="$(printf '%s' "$CR_DOC" | jq -r '
     [ (.frameworks // [])[] | select(.testRecipe != "" and ((.orderTests | has("argv")) | not)) | .framework ]
     | join(", ")')"
-  if [ -n "$order_tests_absent" ]; then
-    printf 'implement-actions: preconditions: %s\n' "these frameworks declare no test-command row that runs a named set of tests, so no order on them can ever have its own tests run, and no order on them can ever pass its checks: $order_tests_absent" >&2
-    exit 19
-  fi
+  [ -z "$order_tests_absent" ] \
+    || die3 "preconditions: these frameworks declare no test-command row that runs a named set of tests, so no order on them can ever have its own tests run, and no order on them can ever pass its checks: $order_tests_absent"
   check_recipes_json="$(printf '%s' "$CR_DOC" | jq -c '
     [ (.frameworks // [])[] | select(.checkRecipe != "")
       | {framework: .framework, path: .checkRecipe, sha256: .checkRecipeSha256} ]')"
@@ -3917,11 +3860,11 @@ PC_FOLDER
           # jq below fails on an empty --argjson, and write_atomic then refuses naming the
           # baseline file, which tells a person the wrong thing about what went wrong.
           cs_json="$(bl_tool_result "coding-standards" "coding-standards" "$codepath" "$scope_json" "$task_folder/implementation")"
-          [ -n "$cs_json" ] || die3 "preconditions: the coding-standards run produced no result. No baseline was written"
+          bl_require_ran "coding-standards" "$cs_json"
           sa_json="$(bl_tool_result "static-analysis" "static-analysis" "$codepath" "$scope_json" "$task_folder/implementation")"
-          [ -n "$sa_json" ] || die3 "preconditions: the static-analysis run produced no result. No baseline was written"
+          bl_require_ran "static-analysis" "$sa_json"
           sec_json="$(bl_tool_result "security" "security" "$codepath" "$scope_json" "$task_folder/implementation")"
-          [ -n "$sec_json" ] || die3 "preconditions: the security run produced no result. No baseline was written"
+          bl_require_ran "security" "$sec_json"
           # Review runs every row the check recipes declare, and a failing row subtracts its own
           # baseline. So every other row is taken here as well, keyed by its id under toolRows
           # (gap row 353). The build reads the three rows above, so the full resolve is a second
@@ -3936,7 +3879,7 @@ PC_FOLDER
           while IFS= read -r pc_row_id; do
             [ -n "$pc_row_id" ] || continue
             pc_row_json="$(bl_tool_result "$pc_row_id" "$pc_row_id" "$codepath" "$scope_json" "$task_folder/implementation")"
-            [ -n "$pc_row_json" ] || die3 "preconditions: the $pc_row_id run produced no result. No baseline was written"
+            bl_require_ran "$pc_row_id" "$pc_row_json"
             tool_rows_json="$(jq -nc --argjson have "$tool_rows_json" --arg id "$pc_row_id" --argjson r "$pc_row_json" '$have + {($id): $r}')"
           done <<PC_TOOL_ROWS
 $(printf '%s' "$CR_DOC" | jq -r '(.tools // [])[].id | select(. != "coding-standards" and . != "static-analysis" and . != "security")')
@@ -4125,7 +4068,7 @@ PC_TOOL_ROWS
   # conditions that passed. `not-needed` goes on too: nothing was checked because nothing runs.
   case "$run_verdict" in
     met|undeclared|not-needed) ;;
-    *) exit 19 ;;
+    *) die3 "preconditions: this repository cannot run a test or a tool yet, so the build does not go on. The next line above names the first failure, and $record_file names each one." ;;
   esac
 }
 
@@ -4270,7 +4213,7 @@ RR_EOF
 $(printf '%s' "$CR_DOC" | jq -r '(.tools // [])[].id')
 RR_TOOLS
       [ -z "$failed" ] \
-        || { die 73 "recipe-refresh: the review recipe $rp for $fw cannot be adopted, because not every tool row of it reads met or undeclared on the current tree:$failed A new baseline would subtract that finding from every later check. Finish the task with the pinned body, sha256 $was_sha, or repair the finding and run this again. Nothing was written."; }
+        || task_warn "$TASK_PATH" recipe-refresh "" "the review recipe $rp for $fw was adopted though not every tool row of it reads met or undeclared on the current tree, so review subtracts these findings as if they came before the task:$failed The pinned body was sha256 $was_sha"
       baseline_doc="$(printf '%s' "$baseline_doc" | jq -c --arg f "$fw" --arg p "$rp" --arg sha "$now_sha" \
         '.checkRecipes |= map(if .framework == $f then .path = $p | .sha256 = $sha else . end)')"
       record_doc="$(printf '%s' "$record_doc" | jq -c --arg f "$fw" --arg from "$was_path" --arg to "$rp" \
@@ -4563,8 +4506,9 @@ do_tests_brief() {
     test_recipe_path="$(pre_test_recipes "$IMPL_DIR/preconditions.json" | head -n 1 | cut -f2)"
   fi
 
-  # --- exit 24: an owned, machine-verified criterion with no declared test at all ------------------
+  # --- an owned, machine-verified criterion with no declared test at all: a warning ----------------
   # Only an order proved by tests owes one, the exemption check-design reads from the same slot.
+  # The author may still write the test, and the freeze judges what arrives.
   local unit_tests_count owned_json owned_machine_unmet
   unit_tests_count="$(printf '%s' "$UNIT_JSON" | jq '(.tests // []) | length')"
   br_order_facts "$UNIT_JSON"
@@ -4575,7 +4519,7 @@ do_tests_brief() {
         | join(", ")
       ')"
     [ -z "$owned_machine_unmet" ] \
-      || die 24 "tests-brief: $unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field."
+      || task_warn "$TASK_PATH" tests-brief "$unit_id" "$unit_id owns $owned_machine_unmet, whose verifiedBy is machine, and declares no test in its own tests field"
   fi
 
   # --- assemble the brief: these fixed keys, then the optional ones: redo, rowsRejected, absenceCandidates ---
@@ -4616,7 +4560,7 @@ do_tests_brief() {
 
   # Another key, only when every owned file matches a --test-glob: the freeze locks them all and
   # the implementer writes only owned files, so the author's edit is the deliverable (live-run row
-  # 369). Exit 118 in tests-freeze is the floor when the globs were not passed here.
+  # 369). tests-freeze warns on the same fact when the globs were not passed here.
   local deliverable_out='null' tb_f tb_g tb_hit tb_all=false
   if [ -n "$tb_globs" ]; then
     tb_all=true
@@ -4674,13 +4618,24 @@ TB_OWNED
                       + (if ($again | length) == 0 then ""
                          else " Then run again each test that redAgain names, and write each new red run. Each shares a test file with a repaired test, so its earlier red is older than that file." end))} end')"
 
+  # A row the last freeze rejected and named under checkAgain, with no rowsRejected entry, would
+  # reach the author with no note (gap row 447). The brief cannot invent the note, so it warns.
+  local tb_lost
+  tb_lost="$(printf '%s' "$ledger_doc" | jq -r --arg id "$unit_id" '
+    [ (.orders // [])[] | select(.id == $id) ][0] as $o
+    | [ ($o.rowsRejected // [])[] | .criterion ] as $have
+    | [ ($o.checkAgain // [])[] | select(.verdict == "rejected") | .criterion | select(. as $k | $have | index($k) | not) ]
+    | join(", ")')"
+  [ -z "$tb_lost" ] \
+    || task_warn "$TASK_PATH" tests-brief "$unit_id" "checkAgain names rejected rows this brief does not carry, so the test author gets no note for them: $tb_lost"
+
   # The brief is a file the dispatch names, never text printed through this conversation. It
   # carries the criteria, the non-goals and every dependency's interface record, and printing it
   # would spend the orchestrator's own context on words only the test author reads.
-  # `roundStartedAt` is when this order's test round began, and `tests-freeze` refuses a red run
-  # older than it (exit 109). A brief written again in the same round, for a rejected row, keeps
+  # `roundStartedAt` is when this order's test round began, and `tests-freeze` warns on a red run
+  # older than it. A brief written again in the same round, for a rejected row, keeps
   # the first time, because a test file the repair leaves alone keeps its red runs. A red older
-  # than its own test file still refuses, so each test in an edited file runs again (gap row 258).
+  # than its own test file is warned too, so each test in an edited file runs again (gap row 258).
   # The round is the same only while the order and its criteria are. A redo moves the brief aside,
   # so the next brief starts a new round.
   local brief_file brief_json round_started_at=""
@@ -5144,7 +5099,7 @@ do_tests_freeze() {
   # verbatim: review judges the words design wrote, never a paraphrase the freeze was handed.
   # Second, a clause with no negation word, which asserts a presence and is proved by a test.
   # This route relaxes nothing else. Every --test still needs its red run or its --locks-in reason
-  # (exit 33), and an order whose record would hold no row still refuses (exit 74).
+  # (a warning without one), and an order whose record would hold no row still refuses (exit 74).
   #
   # Sorted in one jq pass, and no clause is ever carried through a shell variable: a command
   # substitution strips the trailing newlines of whatever it reads, and a doneWhen clause is prose
@@ -5172,7 +5127,7 @@ do_tests_freeze() {
   [ -z "$absence_unknown" ] \
     || die3 "tests-freeze: these --absence clauses are not, verbatim, a doneWhen entry of $unit_id: $absence_unknown. Review judges the clause design wrote, so the flag carries the order's own words. Read the doneWhen in implementation/snapshot.json and pass one of its entries."
   [ -z "$absence_asserts" ] \
-    || die 81 "tests-freeze: these --absence clauses carry no negation word, so each asserts a presence: $absence_asserts. An absence clause says the change added nothing of a named kind, and that is the only clause with no red run to watch. A clause asserting a presence is proved by a test that failed first."
+    || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these --absence clauses carry no negation word, so each asserts a presence, and review judges them with no red run behind them: $absence_asserts"
 
   # --- 74: an order that serves and owns no criterion ---------------------------------------------
   # Every guard below iterates a per-criterion list, so an order with none passes all of them and
@@ -5406,7 +5361,7 @@ TF_EOF
   support_json="$(jq -s 'unique_by(.path)' "$support_tmp")"
   rm -f "$support_tmp"
 
-  # --- 29: every machine-verified criterion the unit owns needs a --test row ----------------------
+  # --- every machine-verified criterion the unit owns needs a --test row, or a warning -------------
   # Owns, not serves. Exactly one order owns a criterion and most own none (ideal/design.md), and
   # the owner is the order whose tests can observe it. A served criterion's proof lives with its
   # owner, and this order's own tests are frozen against its doneWhen. A criterion that a run entry
@@ -5425,9 +5380,9 @@ TF_EOF
       | join(", ")
     ')"
   [ -z "$missing_machine" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
-    || die 29 "tests-freeze: these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine. A criterion that tool output proves needs no test when design names it on a verify run line with --criterion, and that line runs. A line runs when it is binding, when it equals a check_commands argv of the project's check recipe, or when a person approved it at the design close."
+    || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these machine-verified criteria $unit_id owns have no --test row naming them: $missing_machine"
 
-  # --- 30: every person-verified criterion the unit serves or owns needs a --checklist row ---------
+  # --- every person-verified criterion the unit serves or owns needs a --checklist row, or a warning
   local missing_person
   missing_person="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson checklists "$checklists_json" '
       ($checklists | map(.id)) as $named
@@ -5436,16 +5391,16 @@ TF_EOF
       | join(", ")
     ')"
   [ -z "$missing_person" ] \
-    || die 30 "tests-freeze: these person-verified criteria have no --checklist row: $missing_person"
+    || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these person-verified criteria have no --checklist row, so they have no row: $missing_person"
 
-  # --- 31: a --test must never name a criterion the unit does not serve or own ---------------------
+  # --- a --test that names a criterion the unit does not serve or own is a warning ------------------
   local bad_criteria
   bad_criteria="$(jq -nr --argjson allowed "$CRITERIA_IDS_JSON" --argjson tests "$tests_json" '
       ($tests | map(.criteria) | add // []) as $named
       | [ $named[] as $cid | select(($allowed | index($cid)) == null) | $cid ] | unique | join(", ")
     ')"
   [ -z "$bad_criteria" ] \
-    || die 31 "tests-freeze: a --test names criteria $unit_id does not serve or own: $bad_criteria"
+    || task_warn "$TASK_PATH" tests-freeze "$unit_id" "a --test names criteria $unit_id does not serve or own: $bad_criteria"
 
   # --- the run's own mode, read once: the row checks below and the rejected-row stop both use it ---
   # The mode is the task's own for this stage, so a person who sets the task interactive is heard
@@ -5463,7 +5418,7 @@ TF_EOF
   tf_run_mode="$(task_run_mode "$TASK_PATH" implement)"
 
   # --- 64: a criterion whose frozen verifiedBy is neither word answers nothing ----------------------
-  # Such a criterion needs no test (exit 29 reads machine), no checklist (exit 30 reads person) and
+  # Such a criterion needs no test (the check above reads machine), no checklist (person) and
   # no row, so it would be frozen with nothing at all behind it. scripts/check-alignment.sh refuses
   # the value when scope closes, and scripts/check-design.sh refuses it again when design closes.
   # This is a third reading, against the frozen copy rather than the live file: a snapshot taken
@@ -5531,7 +5486,7 @@ TF_EOF
   # --- 64: the --row set and this order's tests must correspond, in all four ways ------------------
   # Rows follow the tests' claims. A machine-verified criterion a --test names needs exactly one
   # row: the checkpoint asks, per order, whether these tests observe the part of the verify clause
-  # this order is responsible for. Every owned machine criterion is named, by exit 29 above; a
+  # this order is responsible for. Every owned machine criterion is named, or warned, above; a
   # served one is named only when this order chose to claim part of it. A doneWhen test needs the
   # doneWhen row, keyed by the unit's own id, judged against the doneWhen text. A person-verified
   # criterion never gets a row, because it carries a checklist and completion is what confirms it
@@ -5691,8 +5646,7 @@ TF_RECORDED
     # A missing verdict file leaves each note null. A present one that does not read refuses a
     # person's row, because the rejection would otherwise be lost with it. Unattended, nobody would
     # read that refusal, so a model's row stops the order instead, as one whose file names no repair.
-    if [ -n "$tf_ledger_doc" ] && [ -f "$tf_check_file" ] \
-       && { [ "$tf_person_rejected" != "[]" ] || { [ -n "$rejected_by_model" ] && [ "$tf_run_mode" = "autonomous" ]; }; }; then
+    if [ -n "$tf_ledger_doc" ] && [ -f "$tf_check_file" ]; then
       tf_check_doc="$(jq -c '.' "$tf_check_file" 2>/dev/null)"
       if [ -z "$tf_check_doc" ]; then
         [ "$tf_person_rejected" = "[]" ] \
@@ -5731,6 +5685,7 @@ TF_RECORDED
         tf_ledger_doc="$tf_halted_doc"
         echo "TESTS-FREEZE: $unit_id is stopped. $tf_why" >&2
         tf_model_next=" $unit_id is stopped. Report the stop, and take the next ready order."
+        tf_person_next="$tf_model_next"
       else
         tf_sent_back="$(printf '%s' "$tf_model_rows" | jq -c 'map(del(.cause))')"
       fi
@@ -5742,26 +5697,28 @@ TF_RECORDED
           'map(select(.criterion as $k | ($again | index($k)) == null))')"
       tf_ledger_doc="$TF_CONFIRMED_DOC"
     fi
-    # A row a person rejected goes back to the test author, and the person's words existed only in
-    # the conversation (gap row 218). So they land on the order's ledger entry, with the checker's
-    # note from its verdict file, and `tests-brief` carries them to a fresh test author. A row sent
-    # back unattended lands the same way, with no person's words, and its key joins rowsSentBack.
-    local tf_rejected_doc
-    tf_person_rejected="$(printf '%s' "$tf_person_rejected" | jq -c --argjson m "$tf_sent_back" '. + $m')"
-    if [ "$tf_person_rejected" != "[]" ] && [ -n "$tf_ledger_doc" ]; then
-      tf_person_rejected="$(printf '%s' "$tf_person_rejected" | jq -c --argjson check "$tf_check_doc" \
+    # Every rejected row lands on the order's ledger entry, with the checker's note from its verdict
+    # file and the person's words when a person rejected it, because those words existed only in the
+    # conversation (gap row 218). `tests-brief` carries them to a fresh test author. A row keyed by
+    # the order id, the done-when row, lands the same way (gap row 447). A row sent back unattended
+    # also joins rowsSentBack. checkAgain is kept beside them, so tests-brief can tell a rejected
+    # row that did not land.
+    local tf_rejected_doc tf_all_rejected
+    if [ -n "$tf_ledger_doc" ]; then
+      tf_all_rejected="$(printf '%s' "$rows_meta_json" | jq -c --argjson check "$tf_check_doc" \
           --argjson entries "$tf_red_entries" "$RED_AGAIN_JQ"'
-          [ .[] | .criterion as $c
+          [ .[] | select(.verdict == "rejected") | .criterion as $c
             | {criterion: $c}
               + (if .judgedBy == "person" then {personWords: .note} else {} end)
               + {checkerNote: ([ ($check.rows // [])[] | select(.criterion == $c) | .note ][0] // null),
                  redAgain: red_again($entries; $c)} ]' 2>/dev/null)"
-      [ -n "$tf_person_rejected" ] \
+      [ -n "$tf_all_rejected" ] \
         || die3 "tests-freeze: $tf_check_file is not in the checker's shape, {\"rows\": [{\"criterion\", \"verdict\", \"note\"}]}. Repair or remove it by hand before running this again."
-      tf_rejected_doc="$(printf '%s' "$tf_ledger_doc" | jq -c --arg id "$unit_id" --argjson r "$tf_person_rejected" \
-        --argjson m "$tf_sent_back" '
+      tf_rejected_doc="$(printf '%s' "$tf_ledger_doc" | jq -c --arg id "$unit_id" --argjson r "$tf_all_rejected" \
+        --argjson m "$tf_sent_back" --argjson again "$tf_check_again" --argjson rows "$rows_meta_json" '
         .orders = (.orders | map(if .id != $id then .
           else .rowsRejected = $r
+            | .checkAgain = [ $rows[] | select(.criterion as $k | $again | index($k)) | {criterion, verdict} ]
             | if $m == [] then . else .rowsSentBack = (((.rowsSentBack // []) + ($m | map(.criterion))) | unique) end
           end))')"
       [ -n "$tf_rejected_doc" ] || die3 "tests-freeze: the ledger update for $unit_id failed."
@@ -5846,8 +5803,7 @@ TF_RED_TESTS
     ri=$((ri + 1))
   done
   [ -z "$stale_reds" ] \
-    || die 109 "tests-freeze: these --red files are runs of earlier tests: ${stale_reds%, }. Run each test again and pass the new output.
-redAgain: $(printf '%s' "$stale_names" | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')"
+    || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these --red files are runs of earlier tests: ${stale_reds%, }"
 
   # --- the reds are read against the recipe preconditions recorded (live-run row 99) --------------
   # The record is the one producer of a test-execution recipe path, and build-record reads it from
@@ -5882,7 +5838,7 @@ redAgain: $(printf '%s' "$stale_names" | jq -R -s -c 'split("\n") | map(select(l
   local assertion_markers="" harness_markers="" failure_lines=""
   if [ "$red_count" -gt 0 ]; then
     [ -n "$test_recipes" ] \
-      || die 80 "tests-freeze: a --red was given, no --test-recipe, and implementation/preconditions.json records no resolved test-execution recipe, so no failure marker can be read and no red can be told from a run that never asserted. Run preconditions with --recipe <framework>=<path> for each framework first."
+      || task_warn "$TASK_PATH" tests-freeze "$unit_id" "a --red was given, and no test-execution recipe is known, so no red was read and each is recorded unchecked"
     red_rows_tmp="$IMPL_DIR/.tests-freeze-recipe-rows.$$"
     while IFS= read -r red_recipe_path; do
       [ -n "$red_recipe_path" ] || continue
@@ -5934,9 +5890,7 @@ TF_GLOBS
 $unit_recipes
 TF_RECIPES
   fi
-  local red_signal marker unread_reds="" setup_gap_reds="" marker_words signals_tmp
-  local first_unread_path="" harness_words unread_line
-  marker_words="$(printf '%s' "$assertion_markers" | grep -v '^$' | sort -u | sed "s/.*/'&'/" | tr '\n' ' ')"
+  local red_signal marker unread_reds="" setup_gap_reds="" signals_tmp
   signals_tmp="$IMPL_DIR/.tests-freeze-signals.$$"
   : >"$signals_tmp"
   ri=0
@@ -5980,29 +5934,18 @@ TF_EOF
     case "$red_signal" in
       ""|harness)
         unread_reds="$unread_reds$red_name ($red_path), "
-        [ -n "$first_unread_path" ] || first_unread_path="$red_path" ;;
+        red_signal="unread" ;;
     esac
     printf '%s\t%s\n' "$red_name" "$red_signal" >>"$signals_tmp"
     ri=$((ri + 1))
   done
-  if [ -n "$unread_reds" ]; then
-    rm -f "$signals_tmp"
-    [ -z "$setup_gap_reds" ] \
-      || die 80 "tests-freeze: these --red files hold the recipe's harness marker and no assertion marker: ${setup_gap_reds%, }. The harness stopped in an error before any assertion held or failed, which is a setup gap and not a red: for a unit whose module does not exist yet, nothing can fail an assertion before it does. Nothing is frozen. Repair the harness or the unit's own declaration, never the test, and run that test on its own again. An order that creates the unit passes --implement-recipe <framework>=<path>, so its unit declaration can be read. An assertion failure prints one of ${marker_words% }. Every file read as no red: ${unread_reds%, }."
-    # For the order that creates the unit, "run it again until it fails for the reason it names"
-    # is wrong advice: nothing can fail an assertion before the unit exists, and the file already
-    # shows why the harness stopped. On the live run (row 98) every red was a PHP fatal the recipe
-    # names in prose and declares under no marker, so the exception above never fired. The plugin
-    # reads whatever markers the recipe declares; the recipe is the repair, and this says so.
-    if [ -n "$unit_file" ]; then
-      harness_words="$(printf '%s' "$harness_markers" | grep -v '^$' | sort -u | sed "s/.*/'&'/" | tr '\n' ' ')"
-      # The first line holding "error" is the one that says why: a PHP fatal names the missing
-      # class there and ends in "thrown in <file>". A file with no such line quotes its last one.
-      unread_line="$(grep -a -i -m 1 'error' "$first_unread_path" | cut -c1-160)"
-      [ -n "$unread_line" ] || unread_line="$(grep -a -v '^[[:space:]]*$' "$first_unread_path" | tail -n 1 | cut -c1-160)"
-      die 80 "tests-freeze: $unit_id creates the unit, so a red holding only a harness marker would be accepted. These --red files hold none of the harness markers the test-execution recipe declares: ${unread_reds%, }. The recipe's harness markers are ${harness_words% }. One line of $first_unread_path reads: $unread_line. Nothing is frozen. Repair one: the test-execution recipe declares the form the harness printed, under failure_signal harness:. Repair two: the test does not depend on a module-local class before the unit exists."
-    fi
-    die 80 "tests-freeze: these --red files hold none of the assertion markers the test-execution recipe declares, and no line its suite row's failure_line names: ${unread_reds%, }. A run that did not fail an assertion is not a red. An assertion failure prints one of ${marker_words% }; read the file, and run the test again until it fails for the reason it names."
+  # A red file the recipe's markers do not read as a failed assertion is a warning. A harness
+  # marker alone is a setup gap: the run never reached the behaviour (live-run row 68). The freeze's
+  # own run below still refuses tests that do not fail.
+  if [ -n "$setup_gap_reds" ]; then
+    task_warn "$TASK_PATH" tests-freeze "$unit_id" "these --red files hold the recipe's harness marker and no assertion marker, so the harness stopped before any assertion: ${setup_gap_reds%, }"
+  elif [ -n "$unread_reds" ]; then
+    task_warn "$TASK_PATH" tests-freeze "$unit_id" "these --red files hold none of the assertion markers the test-execution recipe declares, and no line its failure_line names: ${unread_reds%, }"
   fi
   # The signal each red was accepted on rides with its --red row into the record (redSignal).
   reds_json="$(jq -c --rawfile sig "$signals_tmp" --argjson reds "$reds_json" -n '
@@ -6046,18 +5989,19 @@ TF_EOF
       | map(select(length > 1) | "\(.[0][1]) (\(map(.[2]) | join(", ")))") | join("; ")' "$places_tmp")"
   rm -f "$places_tmp"
   [ -z "$shared_places" ] \
-    || die 80 "tests-freeze: these tests' reds all stop at one place: $shared_places. A failure there is a shared precondition, such as a guard that the class or service exists, so it is a red for none of them. Nothing is frozen. Make each test reach its own assertion: write the guard so that it asserts nothing, for example a lookup that gives the empty value when the service is absent. Then run each test again."
+    || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these tests' reds all stop at one place, a shared precondition, so it is a red for none of them: $shared_places"
 
-  # --- 33: every declared test needs a --red, or a --locks-in naming the existing code it locks in --
+  # --- every declared test needs a --red, or a --locks-in naming the existing code it locks in -----
+  # A test with neither is a warning. A green-on-arrival test is warned below on its own.
   local missing_red
-  missing_red="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" --argjson locks "$locks_json" '
-      (($reds + $locks) | map(.name)) as $named
+  missing_red="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" --argjson locks "$locks_json" --argjson goa "$goa_json" '
+      (($reds + $locks + $goa) | map(.name)) as $named
       | [ $tests[] | .name as $n | select(($named | index($n)) == null) | $n ] | unique | join(", ")
     ')"
   [ -z "$missing_red" ] \
-    || die 33 "tests-freeze: these tests have neither a --red nor a --locks-in: $missing_red"
+    || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these tests have neither a --red nor a --locks-in: $missing_red"
 
-  # --- 118: an order whose every owned file this freeze locks has no build to turn a red green -----
+  # --- an order whose every owned file this freeze locks has no build to turn a red green: a warning
   # An owned directory never equals a frozen path. It leaves the implementer a file to write, so
   # it refuses nothing.
   local red_only
@@ -6069,14 +6013,11 @@ TF_EOF
         else "" end
     ')"
   [ -z "$red_only" ] \
-    || die 118 "tests-freeze: $unit_id owns no file outside the tests and support files this freeze locks, so no build can turn a red test green. These tests have a red run and no --locks-in: $red_only. The test file is the order's deliverable. Run dispatch-open with --resume and resume the test author: it edits its own test file until each test passes, and returns a locks-in reason naming the existing code each one passes against. Then freeze again with a --locks-in for each test. Nothing was frozen."
+    || task_warn "$TASK_PATH" tests-freeze "$unit_id" "$unit_id owns no file outside the tests and support files this freeze locks, so no build can turn a red test green. These tests have a red run and no --locks-in: $red_only"
 
-  # --- 34: a green-on-arrival stops the step outright -----------------------------------------------
-  if [ "$(printf '%s' "$goa_json" | jq 'length')" -gt 0 ]; then
-    local goa_text
-    goa_text="$(printf '%s' "$goa_json" | jq -r 'map(.name + ": " + .reason) | join("; ")')"
-    die 34 "tests-freeze: reported green on arrival, which proves nothing: $goa_text. Fix the test or the code until it fails for the right reason, then run tests-freeze again."
-  fi
+  # --- a green-on-arrival test proves nothing, and the freeze says so ------------------------------
+  [ "$(printf '%s' "$goa_json" | jq 'length')" -eq 0 ] \
+    || task_warn "$TASK_PATH" tests-freeze "$unit_id" "reported green on arrival, which proves nothing: $(printf '%s' "$goa_json" | jq -r 'map(.name + ": " + .reason) | join("; ")')"
 
   # --- 35: a record already exists for this unit at a different commit -----------------------------
   local record_file existing_doc existing_commit=""
@@ -6131,7 +6072,7 @@ TF_EOF
     else
       checklist_text="$(printf '%s' "$checklists_json" | jq -r --arg id "$cid" \
         '[ .[] | select(.id == $id) ][0].text // empty')"
-      jq -n --arg cid "$cid" --arg text "$checklist_text" \
+      [ -z "$checklist_text" ] || jq -n --arg cid "$cid" --arg text "$checklist_text" \
         '{criterion: $cid, kind: "person", checklist: $text}' >>"$rows_tmp" \
         || die3 "tests-freeze: could not record the row for $cid"
     fi
@@ -6180,10 +6121,10 @@ TF_EOF
     fi
   fi
 
-  # --- 121: each verify line that proves a criterion passes now, over the files about to freeze ----
+  # --- each verify line that proves a criterion runs now, over the files about to freeze ------------
   # The implementer may not edit a frozen test. So a line such as a coding-standards run over the
   # test file runs here, while the test author can still repair the file (gap row 370). A line that
-  # does not apply proves nothing, so it refuses too. The build runs the same lines again.
+  # fails or does not apply is a warning, and the build runs the same lines again.
   if [ "$tf_linked" != "[]" ] && [ "$BR_ORDER_SLOT" = "order-tests" ]; then
     local tf_verify_out
     tf_verify_out="$IMPL_DIR/verify-$unit_id-freeze.txt"
@@ -6193,14 +6134,15 @@ TF_EOF
     br_run_verify_lines "$codepath" "$tf_verify_out"
     case "$BRL_VERDICT" in
       "") ;;
-      undeclared) die 121 "tests-freeze: the verify lines that prove $(printf '%s' "$tf_by_run" | jq -r 'join(", ")') do not apply: $BRL_WHY. A line that did not run proves nothing. Nothing is written. Their output is in $tf_verify_out." ;;
-      *) die 121 "tests-freeze: a verify line that proves $(printf '%s' "$tf_by_run" | jq -r 'join(", ")') did not pass: $BRL_WHY. The line: $BRL_LINE. The test author repairs the files it names, and this freeze runs again. Nothing is written. Its output is in $tf_verify_out." ;;
+      undeclared) task_warn "$TASK_PATH" tests-freeze "$unit_id" "the verify lines that prove $(printf '%s' "$tf_by_run" | jq -r 'join(", ")') do not apply: $BRL_WHY. Their output is in $tf_verify_out" ;;
+      *) task_warn "$TASK_PATH" tests-freeze "$unit_id" "a verify line that proves $(printf '%s' "$tf_by_run" | jq -r 'join(", ")') did not pass: $BRL_WHY. The line: $BRL_LINE. Its output is in $tf_verify_out" ;;
     esac
   fi
 
-  # --- 122: the coding-standards row passes over the files this freeze adds or changes -------------
-  # No role may write a frozen file, and build and review leave the frozen tests out of their tool
-  # rows. So the row runs here, while the test author can still repair the file (gap row 408). It
+  # --- the coding-standards row over the files this freeze adds or changes --------------------------
+  # No role may write a frozen file, and review leaves the frozen tests out of its tool rows. So the
+  # row runs here, and the freeze is the one place the tests' own standards are judged (gap row
+  # 408). A finding is a warning, so a person sees it before the build. It
   # runs over the files the commit below takes, through build-record's own check. A finding the
   # baseline already held in a changed file is subtracted the same way, so it never refuses here.
   # The files absent at the baseline commit run apart from the ones it held. One file it held
@@ -6234,9 +6176,7 @@ TF_CS_EOF
         unmet)
           tf_cs_out="$IMPL_DIR/coding-standards-$unit_id-freeze.txt"
           printf '%s' "$tf_cs_json" | jq -r '.output // ""' >"$tf_cs_out"
-          die 122 "tests-freeze: the coding-standards row fails over $(printf '%s' "$tf_cs_group" | jq -r 'join(", ")'): $(printf '%s' "$tf_cs_json" | jq -r '.detail | sub("newLines holds the first 20[.]$"; "The first 20 lines of the output follow.")')
-$(head -n 20 "$tf_cs_out")
-The test author repairs these files and runs each test again, and this freeze runs again. Nothing is frozen. The output is in $tf_cs_out." ;;
+          task_warn "$TASK_PATH" tests-freeze "$unit_id" "the coding-standards row fails over $(printf '%s' "$tf_cs_group" | jq -r 'join(", ")'). The output is in $tf_cs_out" ;;
         unknown|undeclared)
           printf 'tests-freeze: the coding-standards row over %s reads %s, so it judged nothing: %s\n' \
             "$(printf '%s' "$tf_cs_group" | jq -r 'join(", ")')" "$tf_cs_verdict" "$(printf '%s' "$tf_cs_json" | jq -r '.detail')" >&2 ;;
@@ -6244,16 +6184,17 @@ The test author repairs these files and runs each test again, and this freeze ru
     done
   fi
 
-  # --- 80: build-record's order-tests check runs what the reds show (gap row 436) -----------------
+  # --- 80: the freeze runs the tests the way build-record will, and they fail (gap row 436) -------
   # The author runs each test on its own, and the build runs the frozen files whole, with the
-  # recipe's order-tests command. A spec that ran a case only when named froze with a red per case,
-  # then printed usage when run whole, so a correct build read unmet and spent an attempt. So the
-  # freeze runs that check itself, through br_test_check. When it fails and prints something, at
-  # least one red file must share a line with it, compared through br_line_keys so a duration or a
-  # count does not differ. One is enough: a file that stops at its first failing case shows only
-  # that red. A run that printed nothing, passed or read unknown is left to the build. A line that
-  # differs only in a random name, such as a temporary path, does not match; that is the limit.
-  local tf_ot_paths tf_ot_json tf_ot_out tf_ot_keys tf_ot_red_keys tf_ot_names tf_ot_started
+  # recipe's order-tests command. So the freeze runs that check itself, through br_test_check, and
+  # refuses when it passes: a test that does not fail now proves nothing a build could change. A
+  # spec that ran a case only when named froze with a red per case, then printed usage when run
+  # whole, so a correct build read unmet and spent an attempt. So when the run fails and prints
+  # something, at least one red file must share a line with it, compared through br_line_keys so a
+  # duration or a count does not differ. One is enough: a file that stops at its first failing case
+  # shows only that red. A run that printed nothing or read unknown is left to the build. A line
+  # that differs only in a random name, such as a temporary path, does not match; that is the limit.
+  local tf_ot_paths tf_ot_json tf_ot_out tf_ot_keys tf_ot_red_keys tf_ot_names tf_ot_started tf_ot_argv
   tf_ot_paths="$(br_frozen_test_paths "$rows_json")"
   if [ "$red_count" -gt 0 ] && [ "$BR_ORDER_SLOT" = "order-tests" ] && [ "$tf_ot_paths" != "[]" ]; then
     CR_WHO="tests-freeze"; CR_TEST_RECIPES="$test_recipes"; CR_CHECK_RECIPES=""
@@ -6264,6 +6205,10 @@ The test author repairs these files and runs each test again, and this freeze ru
     tf_ot_json="$(br_test_check "order-tests" "orderTests" "order-tests")" || exit "$?"
     # The same run, timed, is the record a test's weight is read from (gap row 454).
     test_weight_warn "$TASK_PATH" tests-freeze "$unit_id" "$(($(date +%s) - tf_ot_started))"
+    tf_ot_names="$(printf '%s' "$reds_json" | jq -r 'map(.name) | unique | join(", ")')"
+    tf_ot_argv="$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | (.orderTests.argv // []) | join(" ") ] | join("; ")')"
+    [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" != "met" ] \
+      || die 80 "tests-freeze: the order-tests command build-record runs, $tf_ot_argv, over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), passes, so these tests with a red run do not fail when it runs them: $tf_ot_names. A frozen test fails before the build. The test author repairs the tests, or returns a locks-in reason for a test that passes against existing code, and this freeze runs again. Nothing is frozen."
     tf_ot_out="$(mktemp)" || die3 "tests-freeze: could not create a temporary file"
     tf_ot_keys="$(mktemp)" || { rm -f "$tf_ot_out"; die3 "tests-freeze: could not create a temporary file"; }
     tf_ot_red_keys="$(mktemp)" || { rm -f "$tf_ot_out" "$tf_ot_keys"; die3 "tests-freeze: could not create a temporary file"; }
@@ -6274,14 +6219,33 @@ The test author repairs these files and runs each test again, and this freeze ru
     done | grep -v '^$' | sort -u >"$tf_ot_red_keys"
     if [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" = "unmet" ] && [ -s "$tf_ot_keys" ] \
       && ! grep -a -F -x -q -f "$tf_ot_red_keys" "$tf_ot_keys"; then
-      tf_ot_names="$(printf '%s' "$reds_json" | jq -r 'map(.name) | unique | join(", ")')"
       cp "$tf_ot_out" "$IMPL_DIR/order-tests-$unit_id-freeze.txt"
       rm -f "$tf_ot_out" "$tf_ot_keys" "$tf_ot_red_keys"
-      die 80 "tests-freeze: the order-tests command build-record runs, $(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | (.orderTests.argv // []) | join(" ") ] | join("; ")'), over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), fails, and its output holds no line of any red file of these tests: $tf_ot_names. It printed: $(head -n 5 "$IMPL_DIR/order-tests-$unit_id-freeze.txt" | tr '\n' ' ')
+      die 80 "tests-freeze: the order-tests command build-record runs, $tf_ot_argv, over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), fails, and its output holds no line of any red file of these tests: $tf_ot_names. It printed: $(head -n 5 "$IMPL_DIR/order-tests-$unit_id-freeze.txt" | tr '\n' ' ')
 So the build check does not run what these reds show, and it would read a correct build unmet. Every test must run when that command runs its file, with no argument. The test author repairs the files and runs each test again, and this freeze runs again. Nothing is frozen. The output is in $IMPL_DIR/order-tests-$unit_id-freeze.txt."
     fi
     rm -f "$tf_ot_out" "$tf_ot_keys" "$tf_ot_red_keys"
   fi
+
+  # --- 27 also: no untracked file under the order's own paths stays outside the freeze --------------
+  # The commit below takes the frozen paths alone. An untracked file the author left under a path
+  # the order owns would reach the build unprotected, and the reds were taken beside it. So the
+  # author commits nothing else there: it declares the file as a test or a support file, or removes it.
+  local tf_left_untracked="" tf_u
+  while IFS= read -r tf_u; do
+    case "$tf_u" in '?? '*) tf_u="${tf_u#?? }" ;; *) continue ;; esac
+    printf '%s\n' "$frozen_rel_paths" | grep -qxF -- "$tf_u" && continue
+    while IFS= read -r o; do
+      [ -n "$o" ] || continue
+      tf_path_matches_catalog_glob "$tf_u" "$o" && { tf_left_untracked="$tf_left_untracked$tf_u, "; break; }
+    done <<TF_EOF
+$owned_list
+TF_EOF
+  done <<TF_EOF
+$(git -C "$codepath" status --porcelain --untracked-files=all 2>/dev/null)
+TF_EOF
+  [ -z "$tf_left_untracked" ] \
+    || die 27 "tests-freeze: these untracked files lie under paths $unit_id owns, and this freeze would leave them out: ${tf_left_untracked%, }. Declare each one as a --test or a --support file, or remove it, then run this freeze again. Nothing is frozen."
 
   # --- the test files go into a commit before anything is measured against them --------------------
   # The intent puts the commit before the build ("Tests are committed and hash-frozen before the
@@ -6366,7 +6330,7 @@ TF_EOF
                + (if $carried == [] then {} else {rowsCarried: $carried} end)) end)
             | (if ($absences | length) == 0 then del(.absenceClauses)
                else .absenceClauses = $absences end)
-            | del(.rowsRejected, .rowsConfirmed, .rowsSentBack, .doneWhenGained, .doneWhenGainedAt))
+            | del(.rowsRejected, .rowsConfirmed, .rowsSentBack, .checkAgain, .doneWhenGained, .doneWhenGainedAt))
       end))')"
   [ -n "$ledger_with_judgements" ] \
     || die3 "tests-freeze: the ledger update for $unit_id's judgements failed."
@@ -6435,11 +6399,10 @@ TF_EOF
 # ------------------------------------------------------------------------------------------------
 # Step four: build-brief and build-record. The model writes the code; this script never does.
 # `build-brief` assembles exactly what that model may see, from the frozen snapshot, the frozen
-# test record for one unit, and the ledger. `build-record` verifies what came back: it runs all
-# eight deciding checks docs/stages/implement/checks.md names ("The deciding checks run before anything
-# judges") and moves the attempt counter. Seven of them come from `br_seven_checks`, which a fix
-# round calls again; the eighth, the interface record, is this step's own, and a fix round never
-# re-runs it, because a fix round does not rewrite that record.
+# test record for one unit, and the ledger. `build-record` verifies what came back: it runs the
+# three deciding checks docs/stages/implement/checks.md names ("The deciding checks run before
+# anything judges") through `br_record_checks`, which a fix round calls again, and moves the
+# attempt counter.
 #
 # `bb_` and `br_` are this section's own helper prefixes, kept apart from `pc_`, `tc_`, `tf_` and
 # `tt_` above, which each belong to a different step. `build-record` still reuses `tf_` directly
@@ -6803,11 +6766,10 @@ im_freeze_holds_work() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# The seven computable deciding checks (ideal/implementation.md, "The deciding checks run before
-# anything judges"). `build-record` runs these seven and the interface check below it.
-# `fix-record` runs these seven again after a fix round and never the interface check, because a
-# fix round does not rewrite the interface record. One function for both, so the two steps cannot
-# drift into checking different things.
+# The three deciding checks (ideal/implementation.md, "The deciding checks run before anything
+# judges"): the order's own proof, owned-files and frozen-tests. `build-record`, `fix-record` and
+# go-on's check run them through one function, so the steps cannot drift into checking different
+# things. The tool helpers below serve the freeze and `finish`.
 #
 # Redirect this function's stdout to a file. Never capture it with `$(...)`: a command substitution
 # runs in a subshell, and a refusal inside this function would then exit that subshell alone and
@@ -6840,8 +6802,7 @@ im_freeze_holds_work() {
 #   BRC_GATE_RECIPES    the tab-separated `--implement-recipe` list, one `<framework>\t<path>` per
 #                       line, read only for an order whose proof is gate: the recipe whose
 #                       `## Configuration gate` lines are that order's own check
-#   BRC_END_OF_TASK     true only under `finish`. A suite row the recipe costs `end-of-task` is
-#                       deferred by the two record steps and runs here once (nyc defect 18)
+#   BRC_END_OF_TASK     true only under `finish`, which runs the suite once (nyc defect 18)
 #   BRC_OBSERVED        the observed record's path, read only for an order whose proof is
 #                       observe: `build-record` takes it from --observed, checked first; a fix
 #                       round and go-on's check read the path the build step names,
@@ -7108,19 +7069,15 @@ BWH_LINES
   printf ' finish then names the routes.'
 }
 
-# One commanded test check: order-tests or suite-regression. $1 the check id, $2 the field of each
-# framework entry holding the command (`orderTests` or `suite`), $3 a word for the message. The
-# command comes from the recipe, and it runs once per framework the task resolved one for, because
-# the build runs in one repository that is all of them at once. Prints the check object.
+# One commanded test check: order-tests at a record step and at the freeze, or the suite at
+# `finish`. $1 the check id, $2 the field of each framework entry holding the command (`orderTests`
+# or `suite`), $3 a word for the message. The command comes from the recipe, and it runs once per
+# framework the task resolved one for, because the build runs in one repository that is all of
+# them at once. Prints the check object.
 #
-# suite-regression compares a failure against the baseline suite; order-tests does not, because a
-# test this order owns did not exist when the baseline was taken.
-#
-# A suite row the recipe costs `end-of-task` does not run at a record step. On a Drupal project
-# that row is ten minutes and a site boot per Functional test, and it ran seven times for one
-# order (nyc defect 18). The check is recorded deferred, which passes the way undeclared does, and
-# `finish` runs the same row once with BRC_END_OF_TASK set. order-tests already runs this order's
-# own frozen tests every attempt, so the evidence about this order's code is not lost.
+# The suite compares a failure against the baseline suite; order-tests does not, because a test
+# this order owns did not exist when the baseline was taken. The suite runs once, at `finish`, with
+# BRC_END_OF_TASK set (nyc defect 18).
 #
 # The suite row's `warning_line` is read under `finish` alone, and a suite red only on those
 # lines reads warned (gap row 261). A record step's pass and stop rules know five verdicts, and a
@@ -7167,10 +7124,6 @@ br_test_check() {
         verdict="unknown"
         detail="this order froze no test file, so the selected-tests command would run over nothing."
       fi
-    elif [ "$check_id" = "suite-regression" ] && [ "$BRC_END_OF_TASK" != "true" ] \
-      && [ "$(printf '%s' "$cmd" | jq -r '.cost // ""')" = "end-of-task" ]; then
-      verdict="deferred"
-      detail="the recipe costs the suite row end-of-task, so this attempt did not run it; finish runs it once over the whole task range."
     else
       argv_json="$(printf '%s' "$cmd" | jq -c '.argv')"
       outfile="$(mktemp)" || { rm -f "$runs_file"; die3 "$BRC_WHO: could not create a temporary file"; }
@@ -7925,17 +7878,14 @@ br_require_site_up() {
     || die3 "$BRC_WHO: the site of this task is down, so no check ran and no attempt was spent. The ## Status line of $recipe said: ${RS_FIRST:-nothing}. Run task environment $(jq -r '.id' "$task_json") up, then run the same step again once the site is up."
 }
 
-# The seven, in the fixed order this stage records them: order-tests, suite-regression,
-# coding-standards, static-analysis, security, owned-files, frozen-tests. On an order whose proof
-# is gate the first slot holds configuration-gate instead, and on one whose proof is record it
-# holds done-when, with the suite and the three tool rows undeclared: a document in the task
-# folder is nothing a suite or a tool reads (nyc defect 17). On one whose proof is observe it
-# holds observed, and the rest run as they do for a code order (live-run row 104). On one whose
-# proof is confirm it holds confirm-at-review, the suite reads undeclared, and the three tool rows
-# run (gap row 196). A gate order on a task with no automated tests reads its suite undeclared
-# too (gap row 246). Prints the JSON array.
-br_seven_checks() {
-  local parts_file rc_id
+# The three checks, in the fixed order this stage records them: the order's own proof, owned-files,
+# frozen-tests. The first slot holds order-tests for an order proved by tests, configuration-gate
+# for one proved by its gate, done-when for one proved by its record, observed for one proved by a
+# look, and confirm-at-review for one a person confirms. The order's verify lines run inside that
+# slot. No tool row and no suite runs here: tools run once at preconditions and again at review,
+# so a tool row never spends an attempt. Prints the JSON array.
+br_build_checks() {
+  local parts_file
   parts_file="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
 
   # The slot's own answer goes to a file first, never through a `$(...)`, so a refusal inside it
@@ -7957,24 +7907,6 @@ br_seven_checks() {
   esac
   br_verify_fold "$slot_file" >>"$parts_file"
   rm -f "$slot_file"
-  if [ "$BR_ORDER_OWNS_CODE" = "no" ]; then
-    for rc_id in suite-regression coding-standards static-analysis security; do
-      jq -n --arg id "$rc_id" --arg detail "this order is proved by its record: its deliverable is a document in the project folder, which the $rc_id row does not read, so the row does not apply to it." \
-        '{id: $id, verdict: "undeclared", detail: $detail}' >>"$parts_file"
-    done
-  else
-    if [ "$BR_ORDER_SLOT" = "confirm-at-review" ]; then
-      jq -n '{id: "suite-regression", verdict: "undeclared", detail: "this order is confirmed by a person: its task has no automated tests, so no suite runs."}' >>"$parts_file"
-    elif [ "$BR_ORDER_SLOT" = "configuration-gate" ] \
-      && [ "$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ noAutomatedTests")" = "true" ]; then
-      jq -n '{id: "suite-regression", verdict: "undeclared", detail: "this order is proved by its configuration gate, and its task has no automated tests, so no suite runs."}' >>"$parts_file"
-    else
-      br_test_check "suite-regression" "suite"      "suite"       >>"$parts_file"
-    fi
-    br_tool_check "coding-standards" "codingStandards" "coding-standards" >>"$parts_file"
-    br_tool_check "static-analysis"  "staticAnalysis"  "static-analysis"  >>"$parts_file"
-    br_tool_check "security"         "security"        "security"         >>"$parts_file"
-  fi
 
   # --- the order's own commits touch only the files this order owns ---------------------------------
   local ofc_verdict ofc_detail
@@ -8091,10 +8023,9 @@ BR_DIFF
 
 # How many of the checks in $1 actually executed. A check executed when it ran a command, which is
 # every check carrying an exitCode, or when it computed a diff or a hash, which is owned-files and
-# frozen-tests. interface-record compares two texts the caller handed over and runs nothing, so it
-# is never counted. Prints the number.
+# frozen-tests. Prints the number.
 #
-# The count exists because a record saying eight checks answered, without saying how many of them
+# The count exists because a record saying its checks answered, without saying how many of them
 # ran, reads the same whether the code was tested or nothing was. That was the defect this count
 # closes, and it is recorded and printed for the same reason. So a frozen-tests row that hashed
 # nothing is not counted: it reads undeclared, and counting it did the thing the count prevents
@@ -8105,49 +8036,43 @@ br_executed_count() {
                    or (.id == "frozen-tests" and .verdict != "undeclared")) ] | length'
 }
 
-# Whether the checks in $1 let the order pass. $2 is the id whose unknown does not stop the attempt
-# (interface-record at build-record, nothing at fix-record). Prints true or false.
+# The order's own proof is the first check, and its id names the proof kind. A jq definition the
+# readers below share, so they name the same five ids.
+BR_PROOF_JQ='def proof: .id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed" or .id == "confirm-at-review";
+def proofmet: (proof and .id != "confirm-at-review" and .verdict == "met") or (.id == "confirm-at-review" and .verdict == "deferred");
+'
+
+# Whether the checks in $1 let the order pass. Prints true or false.
 #
-# Two rules, and the second is the floor. Every check must answer met, undeclared or deferred, with
-# the one exempt unknown allowed. And order-tests must have answered met: that check is the only
-# one that says this order's own code does what its tests ask, so undeclared or unknown there is an
-# order nothing executed. configuration-gate is the same floor for an order whose proof is gate,
-# done-when for one whose proof is record, and observed for one whose proof is observe.
-# confirm-at-review, for one whose proof is confirm, passes the floor at deferred: its task has no
-# automated tests, and the person answers at review (gap row 196).
-# Undeclared on every other check still continues, which is the rule step two already applies to
-# a precondition a recipe declared nothing for. Deferred continues the same way: the suite row
-# is `finish`'s to run, and its answer lands there (nyc defect 18).
+# Two rules, and the second is the floor. Every check must answer met, undeclared or deferred. And
+# the order's own proof must have answered met: order-tests is the only check that says this
+# order's own code does what its tests ask, so undeclared or unknown there is an order nothing
+# executed. configuration-gate is the same floor for an order whose proof is gate, done-when for
+# one whose proof is record, and observed for one whose proof is observe. confirm-at-review, for
+# one whose proof is confirm, passes the floor at deferred: its task has no automated tests, and
+# the person answers at review (gap row 196). Undeclared on the other two checks still continues.
 br_checks_pass() {
-  printf '%s' "$1" | jq -r --arg exempt "$2" '
-    (all(.[]; .verdict == "met" or .verdict == "undeclared" or .verdict == "deferred"
-              or (.verdict == "unknown" and $exempt != "" and .id == $exempt)))
-    and (any(.[]; ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict == "met")
-                  or (.id == "confirm-at-review" and .verdict == "deferred")))'
+  printf '%s' "$1" | jq -r "$BR_PROOF_JQ"'
+    all(.[]; .verdict == "met" or .verdict == "undeclared" or .verdict == "deferred")
+    and any(.[]; proofmet)'
 }
 
-# The first check that stopped the order in $1, in the recorded order, with $2 the exempt id as
-# above. Prints "<id>: <verdict>, <detail>", or "none: " when nothing stopped it.
+# The checks that stopped a build attempt, as a jq function readers prepend to their own program:
+# every check that answered unmet or unknown, and the order's own proof when it is not met.
+# `stoppers` is their ids.
+BR_STOPPERS_JQ="$BR_PROOF_JQ"'def stoppers:
+  [ .[] | select(.verdict == "unmet" or .verdict == "unknown" or (proof and (proofmet | not))) | .id ];
+'
+
+# The first check that stopped the order in $1, in the recorded order. Prints "<id>: <verdict>,
+# <detail>", or "none: " when nothing stopped it.
 br_first_stopper() {
-  printf '%s' "$1" | jq -r --arg exempt "$2" '
-    [ .[] | select(.verdict == "unmet"
-                   or (.verdict == "unknown" and ($exempt == "" or .id != $exempt))
-                   or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met")
-                   or (.id == "confirm-at-review" and .verdict != "deferred")) ]
+  printf '%s' "$1" | jq -r "$BR_STOPPERS_JQ"'
+    stoppers as $ids
+    | [ .[] | select(.id as $i | $ids | index($i)) ]
     | .[0] // {id:"none",verdict:"",detail:""}
     | "\(.id): \(.verdict)" + (if .detail == "" then "" else ", " + .detail end)'
 }
-
-# The checks that stopped a build attempt, as a jq function two readers prepend to their own
-# program: the selection br_first_stopper makes, with interface-record's unknown exempt, over a
-# record's own `checks`. `stoppers` is their ids.
-BR_STOPPERS_JQ='def stoppers:
-  [ .[] | select(.verdict == "unmet"
-                 or (.verdict == "unknown" and .id != "interface-record")
-                 or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met")
-                 or (.id == "confirm-at-review" and .verdict != "deferred"))
-    | .id ];
-'
 
 # The interface record's path, for `build-record` and go-on's check. $1 the action, $2 the unit
 # id, $3 the --interface path, empty when none was passed. Without the flag the path is the brief's
@@ -8179,8 +8104,8 @@ br_interface_text() {
 }
 
 # The names a text holds in backticks, once each, in the order they first appear. $1 the text.
-# Prints a JSON array. The build brief lists an order's declared names from this, and check eight
-# counts the same names, so the builder is told exactly what the check looks for (gap row 299).
+# Prints a JSON array. The build brief lists an order's declared names from this, so the builder
+# names each one in its interface record, which the reviewer reads (gap row 299).
 br_interface_names() {
   jq -n --arg s "$1" '
     [ $s | scan("`[^`]*`") | ltrimstr("`") | rtrimstr("`") | select(length > 0) ]
@@ -8188,86 +8113,16 @@ br_interface_names() {
   ' 2>/dev/null
 }
 
-# Check eight, the interface record, and the countable half of it only. $1 the interface this order
-# declares in the frozen snapshot, $2 the text the builder wrote. Prints the check object.
-#
-# Every backtick-quoted token in the declaration must appear in the record. It appears when the
-# record holds it verbatim, or holds a shortened form of it in backticks. A record token is read up
-# to its first `(`, so a signature names its function. A shortened form is a name the token ends
-# with after a `.` or `::`, and no other declared token ends with it. So `load_rules` names
-# `periplus.engine.packload.load_rules`, and a `run_all` that two declared names end with names
-# neither (gap row 299). A record token that is itself a declared name stands for that name only.
-# A declared token holding a slash or a space is a path or a phrase, and is never shortened. A
-# declared token whose last segment holds only lowercase letters and digits may be a file name,
-# such as `a.php`. Its shortened form must keep a `.` or `::`, so `map.run` counts and `php` does
-# not. The detail lists each shortened form for the reviewer. Any token still missing is unmet,
-# naming them. All present is met. A declaration naming no element in backticks has
-# nothing countable in it, so this answers unknown and the reviewer reads both texts instead. That
-# unknown is the one unknown in this stage that does not spend an attempt (ideal/implementation.md).
-# `build-record` runs this check; `fix-record` never does.
-br_interface_check() {
-  local declared="$1" record="$2"
-  local tokens_json token_count missing_json missing_count verdict detail short_json short_text
-  tokens_json="$(br_interface_names "$declared")"
-  [ -n "$tokens_json" ] || tokens_json='[]'
-  token_count="$(printf '%s' "$tokens_json" | jq 'length')"
-  if [ "$token_count" -eq 0 ]; then
-    verdict="unknown"
-    detail="the declaration names no element in backticks, so nothing here is countable; the reviewer reads both texts"
-  else
-    # The token is bound to $t before the pipe. Inside `$rec | contains(.)` the dot is already $rec,
-    # so an unbound form asks whether the record holds itself and every token reads as present.
-    missing_json="$(jq -n --argjson toks "$tokens_json" --arg rec "$record" \
-      '[ $toks[] as $t | select(($rec | contains($t)) | not) | $t ]')"
-    short_json="$(jq -n --argjson toks "$tokens_json" --argjson miss "$missing_json" \
-      --argjson recs "$(br_interface_names "$record")" '
-      def ends($r): endswith("." + $r) or endswith("::" + $r);
-      [ $miss[] as $d | select($d | test("[/\\s]") | not)
-        | [ $recs[] | sub("\\(.*$"; "") | select(test("^[A-Za-z_]\\S*$")) | . as $r
-            | select(($toks | index([$r])) == null)
-            | select($d | ends($r))
-            | select(($d | test("[.:][a-z0-9]+$") | not) or ($r | test("\\.|::")))
-            | select([ $toks[] | select(ends($r)) ] | length == 1) ]
-        | select(length > 0) | {declared: $d, record: .[0]} ]' 2>/dev/null)"
-    [ -n "$short_json" ] || short_json='[]'
-    missing_json="$(jq -n --argjson miss "$missing_json" --argjson short "$short_json" \
-      '$miss - [ $short[].declared ]')"
-    short_text="$(printf '%s' "$short_json" | jq -r '
-      if length == 0 then "" else "; shortened in the record: " + (map(.record + " for " + .declared) | join(", ")) end')"
-    missing_count="$(printf '%s' "$missing_json" | jq 'length')"
-    if [ "$missing_count" -eq 0 ] && [ -z "$short_text" ]; then
-      verdict="met"
-      detail="every element the declaration names in backticks ($token_count of them) appears verbatim in the interface record."
-    elif [ "$missing_count" -eq 0 ]; then
-      verdict="met"
-      detail="every element the declaration names in backticks ($token_count of them) appears in the interface record$short_text."
-    else
-      verdict="unmet"
-      detail="these elements the declaration names in backticks do not appear in the interface record: $(printf '%s' "$missing_json" | jq -r 'join(", ")')$short_text"
-    fi
-  fi
-  jq -n --arg verdict "$verdict" --arg detail "$detail" \
-    '{id: "interface-record", verdict: $verdict, detail: $detail}'
-}
-
-# Exit 84. The record schema requires exactly eight checks at build-record and seven at fix-record
-# (build-record-schema.json and fix-record-schema.json, `checks`), and a check that went missing on
-# the way is a record that reads complete while it is not. $1 the action, $2 the file holding the
-# assembled checks array, $3 the count the schema requires. Names the check that is absent, and
-# removes the file first, so the refusal leaves nothing behind.
+# The record schemas require exactly three checks (build-record-schema.json and
+# fix-record-schema.json, `checks`), and a check that went missing on the way is a record that
+# reads complete while it is not. $1 the action, $2 the file holding the assembled checks array.
+# Names the count, and removes the file first, so the refusal leaves nothing behind.
 br_require_check_count() {
-  local who="$1" checks_file="$2" want="$3" have absent
+  local who="$1" checks_file="$2" have
   have="$(jq 'length' "$checks_file" 2>/dev/null)"
-  [ "$have" != "$want" ] || return 0
-  absent="$(jq -r --argjson want "$want" '
-    [ .[] | .id ] as $have
-    | ([ "order-tests", "suite-regression", "coding-standards", "static-analysis", "security",
-         "owned-files", "frozen-tests" ] + (if $want == 8 then ["interface-record"] else [] end))
-    | map(select(. as $id | ($have | index($id)) == null))
-    | map(if . == "order-tests" and (($have | index("configuration-gate")) != null or ($have | index("done-when")) != null or ($have | index("observed")) != null or ($have | index("confirm-at-review")) != null) then empty else . end)
-    | join(", ")' "$checks_file" 2>/dev/null)"
+  [ "$have" != 3 ] || return 0
   rm -f "$checks_file"
-  die3 "$who: the record would hold ${have:-0} checks, and the schema requires $want. Absent: ${absent:-none by name, so one is repeated}. Nothing was written. This is a defect in the plugin: report it with this message."
+  die3 "$who: the record would hold ${have:-0} checks, and the schema requires 3: the order's own proof, owned-files and frozen-tests. Nothing was written. This is a defect in the plugin: report it with this message."
 }
 
 # The paths a person allowed for one fix round, from the brief fix-brief wrote for it, into
@@ -8277,22 +8132,18 @@ br_round_allowed() {
   [ -n "$BRC_ALLOWED_JSON" ] || BRC_ALLOWED_JSON="[]"
 }
 
-# The check half of `build-record`, shared with go-on's check so a second run runs exactly what
-# the attempt ran (live-run row 87). Seven checks come from the function a fix round calls too, so the
-# steps cannot drift into checking different things. The eighth, the interface record, is the build
-# step's own: a fix round does not rewrite that record, so it is never re-run there.
+# The check half of `build-record`, `fix-record` and go-on's check, so a second run runs exactly what
+# the attempt ran (live-run row 87), and the steps cannot drift into checking different things.
 #
 # Reads the BRC_* globals the caller set, and CR_TEST_RECIPES and CR_CHECK_RECIPES. Every commanded
 # check runs a command the recipe declares, resolved here rather than retyped by the caller, and the
-# selected-tests row runs this order's own frozen test files. $1 the interface the order declares,
-# $2 the text the builder wrote. $3, when 7, leaves the eighth out, for a fix round's second run
-# (gap row 310).
+# order-tests row runs this order's own frozen test files.
 #
-# Sets BR_CHECKS_FILE, a temporary file holding the eight checks, which the caller reads into its
-# record and then removes. The checks carry whole tool outputs, so they travel by file: a
-# command-line argument caps at 128KB, and a record that lost a check to that cap printed
-# `executed: 5 of 8` over seven checks (nyc defects 9 and 12). Sets BR_CHECKS_JSON, the same eight,
-# and BR_EXECUTED, how many of them ran a command, a diff or a hash.
+# Sets BR_CHECKS_FILE, a temporary file holding the three checks, which the caller reads into its
+# record and then removes. The checks carry whole outputs, so they travel by file: a command-line
+# argument caps at 128KB, and a record that lost a check to that cap printed `executed: 5 of 8` over
+# seven checks (nyc defects 9 and 12). Sets BR_CHECKS_JSON, the same three, and BR_EXECUTED, how
+# many of them ran a command, a diff or a hash.
 BR_CHECKS_FILE=""; BR_CHECKS_JSON=""; BR_EXECUTED=0
 
 # The words a check's detail carries when a token in its command had no value. The refusal below
@@ -8309,32 +8160,20 @@ br_require_supplied_values() {
   [ -z "$unfilled" ] \
     || { rm -f "$1"; die3 "$BRC_WHO: $unfilled Nothing was written, and no attempt or round was spent. Run the same step again with the value."; }
 }
-br_eight_checks() {
-  local declared="$1" record_text="$2" want="${3:-8}"
-  local unit_id seven_file interface_check_json="null"
+br_record_checks() {
+  local unit_id
   unit_id="$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')"
   BRC_SELECTED_JSON="$(br_frozen_test_paths "$(printf '%s' "$BRC_TESTS_DOC" | jq -c '.rows // []')")"
   CR_WHO="$BRC_WHO"
   cr_resolve
-  cr_require_baseline_recipes "$BRC_WHO" "$BRC_BASELINE_FILE"
   BRC_RECIPES="$CR_DOC"
-
-  if [ "$want" = 8 ]; then
-    interface_check_json="$(br_interface_check "$declared" "$record_text")"
-    [ -n "$interface_check_json" ] \
-      || die3 "$BRC_WHO: the interface-record check produced nothing for $unit_id."
-  fi
-
   br_require_gate_tokens
   br_require_site_up
-  seven_file="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
-  br_seven_checks >"$seven_file"
-  [ -s "$seven_file" ] \
-    || { rm -f "$seven_file"; die3 "$BRC_WHO: the seven computable checks produced nothing for $unit_id."; }
-  BR_CHECKS_FILE="$(mktemp)" || { rm -f "$seven_file"; die3 "$BRC_WHO: could not create a temporary file"; }
-  jq -c --argjson eighth "$interface_check_json" 'if $eighth == null then . else . + [$eighth] end' "$seven_file" >"$BR_CHECKS_FILE"
-  rm -f "$seven_file"
-  br_require_check_count "$BRC_WHO" "$BR_CHECKS_FILE" "$want"
+  BR_CHECKS_FILE="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
+  br_build_checks >"$BR_CHECKS_FILE"
+  [ -s "$BR_CHECKS_FILE" ] \
+    || { rm -f "$BR_CHECKS_FILE"; die3 "$BRC_WHO: the checks produced nothing for $unit_id."; }
+  br_require_check_count "$BRC_WHO" "$BR_CHECKS_FILE"
   BR_CHECKS_JSON="$(cat "$BR_CHECKS_FILE" 2>/dev/null)"
   br_require_supplied_values "$BR_CHECKS_FILE"
   BR_EXECUTED="$(br_executed_count "$BR_CHECKS_JSON")"
@@ -8889,10 +8728,9 @@ do_build_record() {
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" \
     "$(im_unrecorded_commits_in "$ledger_doc" "$unit_id" "$codepath" "$started_at_full" HEAD)" "$RV_RANGE_PATHS"
 
-  # --- the eight deciding checks ---------------------------------------------------------------------
-  # Seven of them are computable by the same function a fix round calls, so the two steps can never
-  # drift into checking different things. The eighth, the interface record, is this step's own: a fix
-  # round does not rewrite that record, so it is never re-run there.
+  # --- the three deciding checks --------------------------------------------------------------------
+  # The same function a fix round calls, so the two steps can never drift into checking different
+  # things.
   BRC_WHO="build-record"
   BRC_CODEPATH="$codepath"
   BRC_SCOPE="$RV_RANGE_SCOPE"
@@ -8926,7 +8764,6 @@ do_build_record() {
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
-  brc_use_baseline "$BRC_WHO"
   CR_TEST_RECIPES="$test_recipes"
   CR_CHECK_RECIPES="$check_recipes"
   BRC_VALUES="$values"
@@ -8934,7 +8771,7 @@ do_build_record() {
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
   BRC_GATE_RECIPES="$gate_recipes"
   BRC_OBSERVED="$observed_path"
-  br_eight_checks "$unit_interface_declared" "$interface_text"
+  br_record_checks
   local checks_file checks_json
   checks_file="$BR_CHECKS_FILE"
   checks_json="$BR_CHECKS_JSON"
@@ -8962,7 +8799,7 @@ do_build_record() {
       reportPath: $reportPath,
       checks: .,
       executed: $executed,
-      decidingChecks: { total: 8, ranHere: [ .[] | .id ] }
+      decidingChecks: { total: 3, ranHere: [ .[] | .id ] }
     }
     + (if $accepted == null then {} else {deviationAccepted: $accepted} end)
     + (if $commitsBefore == [] then {} else {commitsBefore: $commitsBefore} end)' "$checks_file")"
@@ -8979,16 +8816,12 @@ do_build_record() {
   # next build-brief refuses. A stop written only on refusal is a stop nobody sees until they ask,
   # and unattended nobody asks: the run would leave the order "in flight" with no reason on it.
   #
-  # interface-record is the one exception, and only for its unknown. That check answers unknown when
-  # the declaration names nothing in backticks, which is a question for the reviewer and not a fault
-  # in the code (ideal/implementation.md). Its unmet still stops the attempt like any other.
-  #
   # order-tests is the floor under all of it. That check is the only one that says this order's own
   # code does what its tests ask, so it must have run and answered met. Undeclared there is an
   # order nothing executed, and an order nothing executed never reaches checks-passed.
   local all_met first_stopper
-  all_met="$(br_checks_pass "$checks_json" "interface-record")"
-  first_stopper="$(br_first_stopper "$checks_json" "interface-record")"
+  all_met="$(br_checks_pass "$checks_json")"
+  first_stopper="$(br_first_stopper "$checks_json")"
   # The counter and the step move in one update; the stop, when there is one, goes through the one
   # helper that writes every stop, so this reason never erases a reason the order already carried.
   # A person may go on with one more build, or with the checks run again over the same code,
@@ -9030,7 +8863,7 @@ do_build_record() {
      range: "\(.startedAt)..\(.commit)",
      check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ])}
     + (if $criteriaJudged == null then {} else {criteriaJudged: $criteriaJudged} end)
-    + {executed: "\(.executed) of 8 ran a command, a diff or a hash",
+    + {executed: "\(.executed) of 3 ran a command, a diff or a hash",
      state: $state}
     + (if has("deviationAccepted") then {departureAccepted: .deviationAccepted.because} else {} end)
     + {stopped: $halt,
@@ -9045,11 +8878,9 @@ do_build_record() {
 # ------------------------------------------------------------------------------------------------
 # go-on --continue check: the deciding checks again, over the range the last record holds, with no
 # role dispatched and no attempt or round spent (live-run row 87). Some stops need no new build: a
-# tool may have failed on its own, an interface record may have missed an element, or go-on --owns
-# gives the order the file the owned-files check refused (gap rows 253 and 315). The stop reason
-# allows the choice only when such rows alone stopped the work, so it is never a free retry. On an
-# order whose last step is a fix round, it runs that round's seven checks again over the round's
-# own range (gap row 310). A pass addresses the open check finding verify-record opened.
+# test may have failed on its own, or go-on --owns gives the order the file the owned-files check
+# refused (gap rows 253 and 315). On an order whose last step is a fix round, it runs that round's
+# checks again over the round's own range (gap row 310). A pass addresses the open check finding verify-record opened.
 # A load-bearing finding leaves no round for the fix, so a person commits it, and the checks run
 # over the record's range extended to HEAD (live-run row 426). A pass moves the record's commit
 # there, so close reads a record at HEAD; a fail records nothing (exit 123).
@@ -9104,24 +8935,8 @@ go_on_check() {
     person_fix=yes
   fi
 
-  # --- exit 88, three: a path the interface check named is not in the code at the recorded commit.
-  # An amended record can name a path the code never had, and the check would pass on words
-  # alone. The paths are the declaration's backticked tokens the recorded interface record left
-  # out, read as paths by `ifacePath` ---------------------------------------------------------
-  local unit_interface_declared missing_paths="" named_path
+  local unit_interface_declared
   unit_interface_declared="$(printf '%s' "$RV_UNIT_JSON" | jq -r '.interface // ""')"
-  [ "$fix_round" = 0 ] || unit_interface_declared=""
-  while IFS= read -r named_path; do
-    [ -n "$named_path" ] || continue
-    git -C "$codepath" cat-file -e "$record_commit:$named_path" 2>/dev/null \
-      || missing_paths="${missing_paths:+$missing_paths, }$named_path"
-  done <<EOF_PATHS
-$(jq -rn --arg d "$unit_interface_declared" --arg r "$(printf '%s' "$record_doc" | jq -r '.interfaceRecord // ""')" "$IFACE_PATH_JQ"'
-  [ $d | scan("`[^`]+`") | ltrimstr("`") | rtrimstr("`") | select(. as $t | $r | contains($t) | not) | ifacePath ]
-  | unique | .[]')
-EOF_PATHS
-  [ -z "$missing_paths" ] \
-    || die 88 "go-on: the interface check at $unit_id named $missing_paths, and no such path exists at $record_commit. Amending the record cannot make a path real; go on with build, or redo the order."
 
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
@@ -9148,12 +8963,10 @@ EOF_PATHS
 
   # A fix round reads no interface record, and its owned-files check reads the paths a person
   # allowed for the round.
-  local checks_total=8
   if [ "$fix_round" = 0 ]; then
     br_interface_path "go-on" "$unit_id" "$interface_path"
     br_interface_text "go-on" "$unit_id" "$unit_interface_declared"
   else
-    checks_total=7
     br_round_allowed "$unit_id" "$fix_round"
   fi
 
@@ -9172,7 +8985,6 @@ EOF_PATHS
   fi
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
-  brc_use_baseline "$BRC_WHO"
   CR_TEST_RECIPES="$test_recipes"
   CR_CHECK_RECIPES="$check_recipes"
   BRC_VALUES="$values"
@@ -9181,7 +8993,7 @@ EOF_PATHS
   BRC_GATE_RECIPES="$gate_recipes"
   # The observed record the build step accepted, at the path it names (live-run row 104).
   BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
-  br_eight_checks "$unit_interface_declared" "$BR_INTERFACE_TEXT" "$checks_total"
+  br_record_checks
 
   # The record keeps the attempt, its range and its date, and takes the new checks and the interface
   # record's text as read now. When that text changed, the attempt's own text stays under
@@ -9205,7 +9017,7 @@ EOF_PATHS
          then .interfaceRecordBefore = (.interfaceRecordBefore // .interfaceRecord // "") else . end)
         | .interfaceRecord = $interfaceRecord | .snapshotHash = $snapshotHash end
     | .executed = $executed
-    | .decidingChecks = { total: 8, ranHere: [ $new[] | .id ] }
+    | .decidingChecks = { total: 3, ranHere: [ $new[] | .id ] }
     | .recheckedAt = $recheckedAt' "$BR_CHECKS_FILE")"
   rm -f "$BR_CHECKS_FILE"
   [ -n "$record_json" ] || die3 "go-on: could not assemble the record for $unit_id."
@@ -9216,8 +9028,8 @@ EOF_PATHS
   # finding, the rule verify-record applies to a round whose checks pass, pending on a light task
   # too. A round not yet verified has none, and verify-record reads the pass.
   local addressed="" first_stopper
-  GO_CHECK_PASS="$(br_checks_pass "$BR_CHECKS_JSON" "interface-record")"
-  first_stopper="$(br_first_stopper "$BR_CHECKS_JSON" "interface-record")"
+  GO_CHECK_PASS="$(br_checks_pass "$BR_CHECKS_JSON")"
+  first_stopper="$(br_first_stopper "$BR_CHECKS_JSON")"
   GO_CHECK_LEDGER="$RV_LEDGER_DOC"
   if [ "$fix_round" != 0 ]; then
     if [ "$GO_CHECK_PASS" = "true" ]; then
@@ -9245,13 +9057,13 @@ EOF_PATHS
     || [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep')" = "code-written" ] \
     || state="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep'), the commits after the record recorded, every check met"
   GO_CHECK_SUMMARY="$(printf '%s' "$record_json" | jq -c --arg state "$state" --arg name "$record_name" \
-    --arg record "$record_file" --argjson total "$checks_total" --arg filled "$filled" '
+    --arg record "$record_file" --arg filled "$filled" '
     (if $filled == "" then {} else {filledFromRecords: $filled} end)
     + {checkedAgain: "\($name), checks replaced",
        range: "\(.startedAt)..\(.commit)"}
     + (if has("personFix") then {personFix: "\(.personFix.commitBefore[0:7])..\(.commit[0:7])"} else {} end)
     + {check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
-       executed: "\(.executed) of \($total) ran a command, a diff or a hash",
+       executed: "\(.executed) of 3 ran a command, a diff or a hash",
        state: $state,
        record: $record}')"
 }
@@ -9879,13 +9691,9 @@ do_review_brief() {
 
   rv_load_state "review-brief" "$unit_id"
 
-  # Exit 50: one review per order, ever. A second pass is where a loop that cannot end comes from
-  # (ideal/implementation.md, "One review per order"). Asked before the step check, so an order
-  # already past its review is told that fact rather than told it is at the wrong step: the second
-  # message is true and sends a reader to the wrong repair.
+  # One review per order, ever (ideal/implementation.md, "One review per order"). An order with a
+  # review record is at reviewed or later, so the step check refuses a second brief.
   local review_file="$IMPL_DIR/review-$unit_id.json"
-  [ -f "$review_file" ] \
-    && die 50 "review-brief: $review_file already exists, so $unit_id has been reviewed. One order gets one review, ever."
   rv_require_step "review-brief" "$unit_id" "checks-passed"
 
   rv_load_build_record "review-brief" "$unit_id"
@@ -10038,11 +9846,11 @@ do_review_record() {
   # A departure a person kept with go-on --continue keep, read once by the review it lets through.
   accept="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.departureKept.because // ""')"
 
-  # Exit 50 before the step check, for the reason review-brief above states. One case is not a
-  # second review: a crash between the record write and the ledger write leaves the record on disk
-  # with the ledger still at checks-passed, and the routing table has no row for that. The record
-  # is this order own, at this order own commit, so the repair is to finish the write that did not
-  # land rather than to refuse forever.
+  # One review per order, ever: an order with a review record is at reviewed or later, and the step
+  # check refuses it. One case is not a second review: a crash between the record write and the
+  # ledger write leaves the record on disk with the ledger still at checks-passed. The record is
+  # this order's own, at this order's own commit, so the repair is to finish the write that did not
+  # land. A record at another commit is half-written state, an error.
   local review_file="$IMPL_DIR/review-$unit_id.json"
   if [ -f "$review_file" ]; then
     local rr_step rr_doc rr_commit rr_head
@@ -10071,7 +9879,8 @@ do_review_record() {
       echo "REVIEW-RECORD: $review_file was already written at $rr_commit and the ledger had not moved. The ledger now reads reviewed; nothing was reviewed twice." >&2
       exit 0
     fi
-    die 50 "review-record: $review_file already exists, so $unit_id has been reviewed. One order gets one review, ever."
+    [ "$rr_step" != "checks-passed" ] \
+      || die3 "review-record: $review_file already exists at commit ${rr_commit:-none}, and the ledger still reads checks-passed at $rr_head. One order gets one review, ever. Repair or remove the record by hand before running this again."
   fi
   rv_require_step "review-record" "$unit_id" "checks-passed"
 
@@ -10814,7 +10623,7 @@ RV_AC
         --arg next "$(im_next_step "$fr_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
         {order: .unit, round: $rounds, range: "\(.startedAt)..\(.commit)",
          check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
-         executed: "\(.executed) of 7 ran a command, a diff or a hash",
+         executed: "\(.executed) of 3 ran a command, a diff or a hash",
          state: $said, stopped: "none", record: $record, diff: .diffPath, next: $next}')"
       exit 0
     fi
@@ -10854,53 +10663,30 @@ RV_AC
   BRC_CURRENT="$current_commit"
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
-  brc_use_baseline "$BRC_WHO"
   # The owned-files check reads the paths allowed for this round beside the order's own, so an
   # allowed change passes (live-run row 116).
   br_round_allowed "$unit_id" "$round_number"
-  local selected_tests_json
-  selected_tests_json="$(br_frozen_test_paths "$(printf '%s' "$tests_doc" | jq -c '.rows // []')")"
-  # shellcheck disable=SC2034 # read by the sourced library
-  CR_WHO="fix-record"
-  # shellcheck disable=SC2034 # read by the sourced library
   CR_TEST_RECIPES="$test_recipes"
-  # shellcheck disable=SC2034 # read by the sourced library
   CR_CHECK_RECIPES="$check_recipes"
-  cr_resolve
-  cr_require_baseline_recipes "fix-record" "$IMPL_DIR/baseline.json"
-
-  BRC_RECIPES="$CR_DOC"
-  BRC_SELECTED_JSON="$selected_tests_json"
   BRC_VALUES="$values"
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
   BRC_GATE_RECIPES="$gate_recipes"
   # The observed record the build step accepted, at the path it names (live-run row 104).
   BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
-
   # The checks travel by file to the record, the same as build-record (nyc defects 9 and 12).
-  local seven_file checks_json
-  br_require_gate_tokens
-  br_require_site_up
-  seven_file="$(mktemp)" || die3 "fix-record: could not create a temporary file"
-  br_seven_checks >"$seven_file"
-  [ -s "$seven_file" ] \
-    || { rm -f "$seven_file"; die3 "fix-record: the seven computable checks produced nothing for $unit_id."; }
-  br_require_check_count "fix-record" "$seven_file" 7
-  br_require_supplied_values "$seven_file"
-  checks_json="$(cat "$seven_file" 2>/dev/null)"
+  br_record_checks
+  local checks_json="$BR_CHECKS_JSON"
 
   local diff_path
   diff_path="$IMPL_DIR/diff-$unit_id-fix$round_number.patch"
   im_list_diff "fix-record" "$RV_RANGE_REPO" "$BRC_COMMITS" "$current_commit" "$RV_UNIT_JSON" "$diff_path" "$RV_RANGE_SCOPE"
 
-  local today record_json executed_count
-  executed_count="$(br_executed_count "$checks_json")"
-  case "$executed_count" in ''|*[!0-9]*) executed_count=0 ;; esac
+  local today record_json
   today="$(date -u +%Y-%m-%d)"
   record_json="$(jq -c --arg takenAt "$today" --arg unit "$unit_id" --arg startedAt "$started_at_full" \
     --arg commit "$current_commit" --argjson round "$round_number" --arg reportPath "$report_path" \
-    --arg diffPath "$diff_path" --argjson executed "$executed_count" --argjson commits "$BRC_COMMITS" '
+    --arg diffPath "$diff_path" --argjson executed "$BR_EXECUTED" --argjson commits "$BRC_COMMITS" '
     {
       schemaVersion: 1,
       takenAt: $takenAt,
@@ -10913,9 +10699,9 @@ RV_AC
       diffPath: $diffPath,
       checks: .,
       executed: $executed,
-      decidingChecks: { total: 8, ranHere: [ .[] | .id ] }
-    }' "$seven_file")"
-  rm -f "$seven_file"
+      decidingChecks: { total: 3, ranHere: [ .[] | .id ] }
+    }' "$BR_CHECKS_FILE")"
+  rm -f "$BR_CHECKS_FILE"
   [ -n "$record_json" ] || die3 "fix-record: could not assemble the record for $unit_id."
   write_atomic "$record_file" "$record_json"
 
@@ -10947,14 +10733,12 @@ RV_AC
     write_atomic "$RV_REVIEW_FILE" "$RV_REVIEW_DOC"
   fi
 
-  # A check answering unmet or unknown spends the round and leaves every finding open. There is no
-  # interface-record here, so no unknown is exempt: that exemption belongs to a check this step
-  # never runs.
-  # order-tests carries the same floor it carries at build-record: it must have run and answered
-  # met. A fix round nothing executed proves nothing about the fix.
+  # A check answering unmet or unknown spends the round and leaves every finding open. order-tests
+  # carries the same floor it carries at build-record: it must have run and answered met. A fix
+  # round nothing executed proves nothing about the fix.
   local all_met first_stopper halt_why=""
-  all_met="$(br_checks_pass "$checks_json" "")"
-  first_stopper="$(br_first_stopper "$checks_json" "")"
+  all_met="$(br_checks_pass "$checks_json")"
+  first_stopper="$(br_first_stopper "$checks_json")"
   if [ -n "$scope_list" ]; then
     halt_why="$(printf '%s' "$RV_SCOPE_STOP" | jq -r '.[0]'), and a person decides whether the order owns more: ${scope_list%, }"
   fi
@@ -10984,7 +10768,7 @@ RV_AC
      round: $rounds,
      range: "\(.startedAt)..\(.commit)",
      check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
-     executed: "\(.executed) of 7 ran a command, a diff or a hash",
+     executed: "\(.executed) of 3 ran a command, a diff or a hash",
      scopeInsufficient: ($scope | if endswith(", ") then .[0:-2] else . end),
      alreadyCorrect: (if $ac == [] then "none" else ($ac | join(", ")) end),
      state: $state,
@@ -11355,26 +11139,22 @@ do_verify_record() {
 
   # Gap row 305. A check that stopped this round opens one finding, origin check, on the order's
   # first criterion and its owned files. Every other finding may read addressed, and then nothing
-  # open would route the failed check. The cap rules apply to it. Its severity is low when
-  # coding-standards alone stopped the round, a style line, and medium for any other check, so a
-  # light task's cap leaves only a style failure for the review. The script, not the verifier,
-  # judges it: a round whose checks pass addresses it, and one that fails again keeps it open.
+  # open would route the failed check. The cap rules apply to it. Its severity is medium. The
+  # script, not the verifier, judges it: a round whose checks pass addresses it, and one that fails again keeps it open.
   # A round with no commit ran its checks over an empty range, which proves nothing about the
   # cause a check finding names, so its pass leaves that finding open (gap row 341).
-  local fix_checks check_stop check_severity
+  local fix_checks check_stop
   fix_checks="$(jq -c '.checks // []' "$fix_file" 2>/dev/null)"
-  if [ "$(br_checks_pass "${fix_checks:-[]}" "")" = "true" ]; then
+  if [ "$(br_checks_pass "${fix_checks:-[]}")" = "true" ]; then
     [ "$(jq -r '.startedAt == .commit' "$fix_file" 2>/dev/null)" = "true" ] \
       || updated_findings="$(printf '%s' "$updated_findings" | jq -c --argjson r "$rounds_used" --arg f "$fix_file" '
         map(if .origin == "check" and .status == "open"
             then . + {status: "addressed", addressedInRound: $r, addressedEvidence: ("every check passed in " + $f)}
             else . end)')"
   elif [ "$(printf '%s' "$updated_findings" | jq '[ .[] | select(.origin == "check" and .status == "open") ] | length')" = "0" ]; then
-    check_stop="$(br_first_stopper "${fix_checks:-[]}" "")"
-    check_severity="$(printf '%s' "${fix_checks:-[]}" | jq -r "$BR_STOPPERS_JQ"'
-      if (stoppers | length > 0) and (stoppers - ["coding-standards"] | length == 0) then "low" else "medium" end')"
+    check_stop="$(br_first_stopper "${fix_checks:-[]}")"
     new_id="f$(printf '%s' "$updated_findings" | jq '[ .[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
-    braw="$(printf '%s' "$RV_UNIT_JSON" | jq -c --arg id "$new_id" --arg severity "$check_severity" \
+    braw="$(printf '%s' "$RV_UNIT_JSON" | jq -c --arg id "$new_id" --arg severity medium \
       --arg evidence "fix round $rounds_used of $unit_id was stopped by its check $check_stop" '
       {id: $id, severity: $severity, file: "", lines: "",
        linkedTo: (((.criteriaOwned // []) + (.criteriaServed // []))[0] // ""),
@@ -11640,12 +11420,12 @@ do_close() {
   [ -n "$head_now" ] \
     || die3 "close: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
 
-  # Exit 61 and exit 63. Close writes the commit range this order produced, and a range is a claim
-  # about what is in the repository. So the tree has to be clean, and HEAD has to be the commit the
-  # last record for this order was written at: the build record when no round ran, the last fix
-  # record otherwise. Without both, the range names commits that do not hold the work, which is the
-  # same gap the record steps close with exit 61.
-  br_require_clean_tree "close" "$RV_RANGE_REPO" "" "" "" "" "$RV_RANGE_PATHS"
+  # Close writes the commit range this order produced, and a range is a claim about what is in the
+  # repository. Uncommitted changes are in no range, so they are a warning: the next record step
+  # that meets them refuses at 61, and a commit of them lands on a role's list, which the owned-files
+  # check reads. HEAD has to be the commit the last record for this order was written at, the build
+  # record when no round ran and the last fix record otherwise, or exit 63 applies below.
+  im_warn_dirty_tree "close" "$RV_RANGE_REPO" "$unit_id" "$RV_RANGE_PATHS"
   local last_record last_commit
   if [ "$rounds_used" -gt 0 ] 2>/dev/null; then
     last_record="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
@@ -11851,6 +11631,17 @@ fn_load_task_state() {
 # $1" (task_require_answer). The run mode does not decide whether a person answered. The summary
 # printer marks the answer used. $1 the action's own name, $2 what the caller would have been
 # deciding, $3 the order or empty for a task-wide action, $4 the person's words the call carries.
+# Uncommitted changes at a step that does not record the order's work are a warning, not a stop.
+# $1 the step, $2 the repository, $3 the order or empty, $4 pathspecs, one per line, or empty for
+# the whole tree. The paths go to standard error.
+im_warn_dirty_tree() {
+  local dirty
+  dirty="$(git_status_of "$2" "${4:-}")"
+  [ -n "$dirty" ] || return 0
+  printf '%s: the uncommitted paths in %s are:\n%s\n' "$1" "$2" "$dirty" >&2
+  task_warn "$TASK_PATH" "$1" "$3" "the working tree at $2 holds uncommitted changes, which no commit range holds: $(printf '%s' "$dirty" | grep -c '.') paths"
+}
+
 fn_require_answer() {
   task_require_answer 68 "$1" "$2" "$TASK_PATH" "implement $1" "$3" "$4"
 }
@@ -11880,9 +11671,9 @@ do_finish() {
   open_orders="$(im_unfinished_orders "$FN_LEDGER_DOC")"
   [ -z "$open_orders" ] \
     || die 66 "finish: these orders are not closed or dropped, or are stopped: $open_orders. Every order closes or is dropped, and no order stays stopped, before implementation finishes."
-  # A criterion that is not confirmed stops the stage, and three different facts land here. The
-  # refusal names which, and what answers it, so a reader told only "not confirmed" knows what to
-  # do next. A criterion an order proved by confirm puts to the person, confirmCriteria in
+  # A criterion that is not confirmed is a warning, and three different facts land here. The
+  # warning names which, and what answers it, so a reader told only "not confirmed" knows what to
+  # do next. Review judges every criterion again. A criterion an order proved by confirm puts to the person, confirmCriteria in
   # scripts/lib/proof.sh, is not asked here: its task has no automated tests, and the person
   # answers it at review from the checklist rows below (gap row 196). A criterion a dropped order
   # serves or owns is not asked either. Nothing built it, so the finished record lists it under
@@ -11905,11 +11696,11 @@ do_finish() {
             end ]
       | join("; ")')"
   [ -z "$unconfirmed" ] \
-    || die 66 "finish: these machine-verified criteria are not confirmed: $unconfirmed. A criterion a machine verifies is confirmed by the checkpoint over its own rows, and implementation does not finish without it."
+    || task_warn "$TASK_PATH" finish "" "these machine-verified criteria are not confirmed: $unconfirmed"
 
-  # --- exit 61: the range below is a claim about the repository, so the tree has to be clean ------
+  # --- the range below is a claim about the repository; uncommitted changes are a warning --------
   rv_load_codepath "finish"
-  br_require_clean_tree "finish" "$RV_CODEPATH"
+  im_warn_dirty_tree "finish" "$RV_CODEPATH" ""
   local head_now started_from
   head_now="$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)"
   [ -n "$head_now" ] \
@@ -11918,12 +11709,12 @@ do_finish() {
   [ -n "$started_from" ] \
     || die3 "finish: $FN_LEDGER_FILE holds no startedFrom, though start writes it."
 
-  # --- exit 86: the suite, once, at the final commit (nyc defect 18) -------------------------------
-  # The two record steps leave a suite row the recipe costs end-of-task unrun and record it
-  # deferred. It runs here once, through the same check function and the same baseline
-  # subtraction they use, over the whole task range: the baseline was taken at startedFrom and
-  # this run is at HEAD. The recipe paths are the ones preconditions recorded, so no framework
-  # is forgotten. The output goes to a sidecar beside the record, never inline: a suite prints
+  # --- the suite, once, at the final commit (nyc defect 18) ----------------------------------------
+  # The record steps run no suite. It runs here once, through the order-tests check function and
+  # the baseline subtraction, over the whole task range: the baseline was taken at startedFrom and
+  # this run is at HEAD. Its result is recorded and, when it is not met, written as a warning:
+  # review reads the result and the warning. The recipe paths are the ones preconditions
+  # recorded, so no framework is forgotten. The output goes to a sidecar beside the record, never inline: a suite prints
   # more than an argument or a reader can carry. A task whose every order is proved by its
   # record, or confirmed by a person, ran no test and took no suite baseline. So did a task with
   # no automated tests whose other orders are gates. The suite is then recorded not-needed and
@@ -11979,39 +11770,18 @@ FN_RECIPES
   suite_verdict="$(printf '%s' "$suite_json" | jq -r '.verdict')"
   case "$suite_verdict" in
     met|undeclared|not-needed) ;;
-    unmet)
-      # The new lines go to standard error as their own block, the way the clean-tree refusal
-      # lists its paths, so the message stays one line a reader can act on.
-      if [ "$(printf '%s' "$suite_json" | jq -r '.newLineCount // 0')" != "0" ]; then
-        printf 'finish: the suite lines new since the baseline (first %s of %s) are:\n%s\n' \
-          "$(printf '%s' "$suite_json" | jq -r '.newLines | length')" \
-          "$(printf '%s' "$suite_json" | jq -r '.newLineCount')" \
-          "$(printf '%s' "$suite_json" | jq -r '.newLines[]')" >&2
-      fi
-      die 86 "finish: the suite is unmet at $head_now: $(printf '%s' "$suite_json" | jq -r '.detail') The whole output is at $IMPL_DIR/$sidecar. Nothing was recorded. A fix commit on the branch and a second finish is the route."
-      ;;
     warned)
-      # No test failed, so a fix commit on the branch is not the route. Passing on its own would
-      # decide for the project that its runner's exit status does not count. That is a person's
-      # call, so only --accept-warnings passes it, and the record names the person and the reason.
-      local not_warned
-      not_warned="$(printf '%s' "$suite_json" | jq -r '[ (.runs // [])[]
-        | select(.verdict != "warned" and .verdict != "met" and .verdict != "undeclared" and .verdict != "not-needed")
-        | .framework + "=" + .verdict ] | join(", ")')"
-      [ -z "$accept_warnings" ] || [ -z "$not_warned" ] \
-        || die 86 "finish: --accept-warnings accepts runner warnings only, and these frameworks read otherwise at $head_now: $not_warned. $(printf '%s' "$suite_json" | jq -r '.detail') Nothing was recorded."
+      # No test failed. Whether the runner's warnings count is a person's call: a person may
+      # record that they accept them with --accept-warnings, and review reads that answer.
       if [ -n "$accept_warnings" ]; then
         suite_json="$(printf '%s' "$suite_json" | jq -c --arg because "$accept_warnings" \
           '. + {warningsAccepted: {because: $because, judgedBy: "person"}}')"
       else
-        printf 'finish: the runner warning lines (first %s) are:\n%s\n' \
-          "$(printf '%s' "$suite_json" | jq -r '.warningLines | length')" \
-          "$(printf '%s' "$suite_json" | jq -r '.warningLines[]')" >&2
-        die 86 "finish: the suite reads warned at $head_now ($(printf '%s' "$suite_json" | jq -r '[ (.runs // [])[] | .framework + "=" + .verdict ] | join(", ")')): $(printf '%s' "$suite_json" | jq -r '.detail') The whole output is at $IMPL_DIR/$sidecar. Nothing was recorded. finish does not pass on runner warnings by itself, because the project's own configuration makes them fail the run. A person picks one of three routes. Accept the warnings: record the person's answer with person-answer.sh, then run finish again with --accept-warnings <the person's reason>. Change the suite row's command in the project's copy of the test-execution recipe, so these warnings do not fail the run. Or repair the project configuration that raises them, in a change outside this task."
+        task_warn "$TASK_PATH" finish "" "the suite reads warned at $head_now, on runner warnings alone: $(printf '%s' "$suite_json" | jq -r '.detail')${sidecar:+ The whole output is at $IMPL_DIR/$sidecar.}"
       fi
       ;;
     *)
-      die 86 "finish: the suite could not be decided at $head_now: $(printf '%s' "$suite_json" | jq -r '.detail')${sidecar:+ The whole output is at $IMPL_DIR/$sidecar.} Nothing was recorded. Repair what the detail names, then run finish again."
+      task_warn "$TASK_PATH" finish "" "the suite reads $suite_verdict at $head_now: $(printf '%s' "$suite_json" | jq -r '.detail')${sidecar:+ The whole output is at $IMPL_DIR/$sidecar.}"
       ;;
   esac
 
@@ -13377,7 +13147,7 @@ TG_ROOTS
        "$TASK_PATH/implementation/ledger.json" 2>/dev/null)" = "true" ]; }; then
     im_scan_leftovers "$codepath" "$(jq -c '.workOrders // []' "$TASK_PATH/implementation/snapshot.json" 2>/dev/null || printf '[]')"
     [ "$LO_LEFTOVERS_JSON" = "[]" ] \
-      || die 104 "dispatch-open: uncommitted files in $codepath: $(printf '%s' "$LO_LEFTOVERS_JSON" | jq -r "[ $LO_TEXT_JQ ] | join(\", \")"). A role stopped mid-run may have left them, and a fresh $role_bare would work beside them. To keep a file, commit it. To set them aside, run start with --leftovers set-aside. To resume the agent that left them, run dispatch-open again with --resume. Nothing was dispatched."
+      || task_warn "$TASK_PATH" dispatch-open "$unit_id" "a fresh $role_bare works beside uncommitted files a stopped role may have left: $(printf '%s' "$LO_LEFTOVERS_JSON" | jq -r "[ $LO_TEXT_JQ ] | join(\", \")"). start sets them aside"
   fi
 
   local deny_json allow_json

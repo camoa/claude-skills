@@ -11,9 +11,8 @@ test-execution recipe at `frameworks[].recipePath`, and `implementation/baseline
 review recipe at `checkRecipes[].path`, one per framework. A framework absent from a list had no
 recipe at the baseline; pass no flag for it. These are the same paths `references/build.md` read
 for this order. Pass them straight through to `fix-record` below, in the fix section; the script
-reads their command blocks itself, per SKILL.md. The check recipe must equal the one the baseline
-used, and `fix-record` refuses any other (exit 73). A fresh lookup could only agree with the
-record or fail.
+reads their command blocks itself, per SKILL.md. A fresh lookup could only agree with the record
+or fail.
 
 ## Review
 
@@ -43,21 +42,14 @@ It writes `implementation/brief-<order id>-review.json`:
 It prints the brief's path, the diff path, the findings path and the report path. It prints one
 line per check with its verdict, and counts. Never the brief.
 
-Check the interface-record verdict among the eight lines. Unknown means the declaration names
-nothing in backticks, so the script could count nothing there. At unknown, ask nothing, in either
-mode. Say one line to the person: "No named element of the interface could be counted. The
-reviewer reads the declared interface and the builder's record. If they disagree, its finding
-cites the criterion." The brief carries both texts, unchanged, and the reviewer is told
-nothing else. A person shown the two texts would be making the comparison the reviewer is about
+No script compares the builder's interface record with the declared interface. The brief carries
+both texts, unchanged, and the reviewer compares them. Ask the person nothing about them, in
+either mode. A person shown the two texts would be making the comparison the reviewer is about
 to make, from the same texts (live-run row 88).
 
 After go-on's check read an amended interface record, the brief's `interface` also holds
 `recordBefore`, the text the attempt recorded. The reviewer reads both records beside the
 declaration. An amendment that names an element the diff does not expose is a finding.
-
-A met verdict only means every backticked element is present verbatim. It does not rule out a
-deeper disagreement between the two texts. Catching that is the reviewer's job, from both texts
-already in the brief.
 
 Open a dispatch record for the reviewer before dispatching it, with nothing denied and nothing
 allowed:
@@ -272,8 +264,7 @@ Run:
 script parses both itself, the same way `build-record` does. `--implement-recipe` is the path
 build.md names, and an order whose proof is `gate` reads it here for the same reason. Left out, it is
 taken from `preconditions.json`, the same as at the build step. It refuses (exit 72) when two
-frameworks command one tool. It refuses (exit 73) when the check recipe it resolves is not the one
-the baseline read. `--value` and `--nothing-ran` work the same way they do at the build step.
+frameworks command one row. `--value` and `--nothing-ran` work the same way they do at the build step.
 `--scope-insufficient` is repeatable, one per finding the fixer's report names as needing more
 scope than it had. Interactive puts each one to the person, opening with: "The fixer says this
 review finding needs a change in files it was not allowed to edit. Only you can allow that. Allow
@@ -310,15 +301,13 @@ name the repository and the files git
 lists. Unattended
 stops the order with that reason.
 
-This re-runs seven of the eight checks, with the same order-tests floor build.md names. On a
+This re-runs the three checks, with the same order-tests floor build.md names. On a
 `gate` order the floor is `configuration-gate`, and on a `record` order `done-when`. A `record`
-order's range, tree and diff read from the project folder, as build.md says. Undeclared or unknown there still spends the
-round, even when every other check is undeclared. Not
-interface-record: a fix round does not rewrite that record. A check answering unmet or unknown
+order's range, tree and diff read from the project folder, as build.md says. Undeclared or unknown
+there still spends the round, even when the other two are undeclared. A check answering unmet or unknown
 spends the round and leaves every finding open. `review-brief` is never run again for this order.
 `verify-record` then opens one finding for that check, with origin `check`, on the order's first
-criterion and its owned files. It reads low when coding-standards alone stopped the round, and
-medium otherwise. The verifier does not see it. The next round's checks decide it: all met
+criterion and its owned files, at medium. The verifier does not see it. The next round's checks decide it: all met
 addresses it, and a failure keeps it open. At the cap it follows the same rules as any other
 finding: a ruling, a stop, or pending on a light task.
 
