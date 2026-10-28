@@ -5556,7 +5556,8 @@ TF_RECORDED
     [ -n "$tf_check_again" ] || die3 "tests-freeze: could not list the rows of $unit_id the checker judges again."
     # A rejected absence row has no test to repair, so the refusal names its two routes. An order
     # with no test author drops the --absence instead: its own check, the gate lines, the
-    # observation, the record's done-when row or the person's checklist at review, then covers it.
+    # observation, the reviewer's reading of a record against its done-when rows, or the person's
+    # checklist at review, then covers it.
     # The test author is named only on a kind whose roles hold one.
     local tf_absence_route="" tf_has_author=false tf_person_next tf_model_next
     br_order_needs "$UNIT_JSON"
