@@ -1,0 +1,134 @@
+# The names 6.1.0 removed. tests/removed-names-spec.sh greps the plugin for each, as a literal
+# string, case as written, and fails on any hit. CHANGELOG.md and this file are not read.
+# One entry per line: <literal>, or <literal> | <path under aida/ that may hold it>, for a spec
+# that proves the name is gone by passing it. A name that is also a live word elsewhere is listed
+# in its removed form only, and the comment above it says why. Sources: audit/24-test-path-design.md,
+# "Removed names" and "Leftovers from batches 1 to 3d", and the 6.1.0 commit messages of batches 4
+# to 7, pieces 5 to 14 and row 467.
+#
+# Removed names, audit/24.
+In the whole draft, write each criterion's verify clause
+the visual regression check that must pass
+that creating its baseline is this task's own work
+warn_surface_clause
+warn on a clause that names an end-to-end check
+names_a_surface_check
+PINS_THE_SUITE
+warn_machine_clause
+though one is never wrong to add
+The order still declares at least one test of its own
+and the whole suite once before you stop
+--recheck
+It finds a case the recipe asks for that no test covers
+A record row names a done-when line and a document
+SF_VIEWPORTS
+Review fails this task until
+and review fails the task without it
+behaviour-spec
+tests/behaviour/
+# add-test's warning on a test description that names one of the order's surfaces. Batch 5 made
+# the refusal a warning; audit/24 removes it, because the row checker's "too heavy" reason acts on
+# such a test.
+the test description names the surface
+surface_hit
+# Not listed, with the reason:
+# - "when every owned file lies under the project folder": the sentence states the record branch
+#   of implied_proof_line in design-actions.sh, which stays. audit/24 removed the word "only",
+#   since piece 4 added the confirm branches for documents and configuration.
+# - sf_load_surfaces and registryPath: build-record no longer reads them, but the surfaces and
+#   review scripts still do.
+# - RECORD_NOTE: the variable holds the hook's other notes. Its print outside every task
+#   worktree is gone, and no literal names only that print.
+# - The look at every surface and viewport (build.md), the light rows that record CHECK_E2E
+#   unmet, and the re-put question (tests.md): no literal string names only the removed text.
+#
+# Leftovers from batches 1 to 3d, audit/24.
+--keep-choices
+choicesKept
+The builder's record must then name both
+interface pairs kept changed
+exit 71
+run the coding-standards row
+exit 110
+exit 45
+exit 123
+br_seven_checks
+br_tool_check
+deviationPending.findings
+pre-6.1.0
+halt_why
+halt_front
+--arg halt
+What a halt at the attempt cap leads to
+halts the order
+a halted run
+halts the first dispatch
+# The flag goes; leftovers-spec.sh passes it to see finish refuse it.
+--accept-warnings | tests/leftovers-spec.sh
+warningsAccepted
+# Not listed, with the reason:
+# - "halt" and "halts" alone: the project, task and tool skills say an autonomous run halts.
+#   Only the removed forms above are listed.
+# - "tool rows": review runs tool rows, so the phrase is live. Item 14's build tool rows are
+#   gone, and BRC_RECIPES and BRC_SELECTED_JSON stay as the build's recipe values.
+# - rw_tool_row_check: review's tool rows still call it; it decides through br_judge_tool_run,
+#   the one copy item 17 asks for.
+# - rw_check_suite: review reads finish's result only, so item 18 moves nothing.
+#
+# Batch 4.
+im_with_repair_tests
+before_build
+# Batch 5.
+check-alignment.sh
+criteriaWithUnusableVerifiedBy
+open_summary_of
+dispose --confirmed
+# Batch 6. cr_require_person stays for other steps; only its calls at environment up,
+# not-applicable and two surfaces flags went.
+path_taken
+refuse_taken_paths
+refuse_taken_name
+registry_name_free
+branch_unchanged
+task_worktree_stack
+refuse_surface_file_elsewhere
+--advisory
+# Batch 7.
+allow-push
+push_gate_open
+scan_runs
+variable_command
+own-scripts-hook-spec
+# Piece 5.
+im_line_verdicts
+im_keep_line_verdicts
+rowsToCheck
+doneWhenJudgement.rowsCarried
+# Piece 6.
+clauses_json
+criteriaJudged
+# Piece 7.
+frozen-hook-note-spec
+# Piece 9.
+whole-flow
+# Piece 11. The surfaces action of review became acceptance; surfaces.md became acceptance.md.
+review/references/surfaces.md
+do_surfaces
+--walked
+cp_load_observed
+--observed-accepted
+observedAccepted
+observedSkipped
+# Piece 14.
+br_deleted_note
+br_outside_note
+drift_halts_json
+halted_removed_ids_json
+halted_json
+removed_halted
+tf_prior_halt
+tf_halted_doc
+ruling_halt
+RV_RULING_HALT
+halted_doc
+halts no order
