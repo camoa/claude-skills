@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
 # done-when-rows-spec.sh: the design check warns on an order that holds more than a handful of
-# done-when rows, and a row design added after the freeze can be taken out again through go-on
+# done-when rows, or more than three per criterion it owns, and a row design added after the freeze can be taken out again through go-on
 # keep, with no judgement left owed on it (gap row 439).
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
 source "$HERE/records.bash"
 
-# rows_case <count>: wo1 with that many done-when rows. Prints the check's exit and the orders it
+# rows_case <count> [none]: wo1, which owns one criterion, or none, with that many done-when rows. Prints the check's exit and the orders it
 # names past a handful.
 rows_case() (
   source "$HERE/records.bash"
   task_records branch
   edit "$TASK/design/wo1.json" '.doneWhen = [ range($n) | "row \(.)" ]' --argjson n "$1"
+  [ "${2:-}" != none ] || edit "$TASK/design/wo1.json" '.criteriaOwned = []'
   bash "$PLUGIN/scripts/check-design.sh" "$TASK" >"$OUT" 2>/dev/null
   printf '%s|%s\n' "$?" "$(jq -c '[ (.graph.ordersPastHandfulOfRows // [])[] | .id ]' "$OUT")"
 )
-expect "nine done-when rows are named, and the check does not stop" "$(rows_case 9)" '0|["wo1"]'
-expect "eight done-when rows are not named" "$(rows_case 8)" '0|[]'
+expect "nine done-when rows are named, and the check does not stop" "$(rows_case 9 none)" '0|["wo1"]'
+expect "eight done-when rows on an order that owns no criterion are not named" "$(rows_case 8 none)" '0|[]'
+expect "three done-when rows for one owned criterion are not named" "$(rows_case 3)" '0|[]'
+expect "four done-when rows for one owned criterion are named" "$(rows_case 4)" '0|["wo1"]'
 
 # The snapshot holds a row design added after the freeze, still owed its judgement, and the live
 # design took it out again. Attended, start leaves that as a change on wo1. go-on keep takes the

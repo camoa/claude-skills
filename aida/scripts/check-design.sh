@@ -64,7 +64,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     bound version 5's own overlap check carried (ideal/design.md, "What a work order holds"):
 #     this is not a glob-intersection check, and it proves nothing about what a builder actually
 #     touches. A path both orders list in sharedFiles is not an overlap (gap row 287);
-#   - no work order holds more than eight done-when rows, a warning (gap row 439);
+#   - no work order holds more than eight done-when rows, or more than three for each criterion
+#     it owns, a warning (gap row 439);
 #   - every criterion id and every non-goal id named anywhere resolves to a real one in the
 #     contract, and every dependsOn id resolves to a real work order in this task's own design/
 #     folder.
@@ -127,7 +128,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # is a warning when a person closes: a criterion with no serving order, no owner or two owners.
 # `warn` never stops: an
 # order that serves nothing, a supporting order no owner reaches, a light order not after wo1,
-# two orders that declare one owned file, and an order with more than eight done-when rows.
+# two orders that declare one owned file, and an order with more than eight done-when rows or
+# more than three for each criterion it owns.
 #
 # designStarted (top level, on stdout) is false when <task_folder>/design does not exist yet, true
 # otherwise. It being false is not an error and never raises the exit code on its own: every
@@ -192,7 +194,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #              ordersNotAfterSkeleton: [ id, ... ],   a light task only
 #              lightOrdersOwningPathScript: [ {id, path} ],   a light task only
 #              overlappingOwnedFiles: [ {ids: [id, id], path} ],
-#              ordersPastHandfulOfRows: [ {id, path, count} ],   more than eight done-when rows, a warning
+#              ordersPastHandfulOfRows: [ {id, path, count, owned} ],   a warning
 #              globbedOwnedFiles: [ {id, path} ],
 #              testsOnlyOrdersBeforeTests: [ {id, testsOrder} ],
 #              ordersOwningFrozenPaths: [ {id, path, task} ],
@@ -974,9 +976,14 @@ else
   OVERLAPPING_OWNED_FILES_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq -c "$OWNED_OVERLAP_JQ")"
 
   # An order holds a handful of behaviours, not a feature (audit/24). Past eight done-when rows,
-  # the order has grown past what its criteria need, as a critic's finding that became a row does
-  # (gap row 439). A warning, because which rows to cut or where to split is a person's call.
-  ORDERS_PAST_HANDFUL_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq -c '[ .[] | select(.doneWhenCount > 8) | {id, path, count: .doneWhenCount} ]')"
+  # or past three for each criterion it owns, the order has grown past what its criteria need, as
+  # a critic's finding that became a row does (gap row 439). No record ties a row to a criterion,
+  # so the count is what a script can read. An order that owns no criterion is asked the first
+  # question only. A warning, because which rows to cut or where to split is a person's call.
+  ORDERS_PAST_HANDFUL_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq -c '
+    [ .[] | (.criteriaOwned | length) as $owned
+      | select(.doneWhenCount > 8 or ($owned > 0 and .doneWhenCount > 3 * $owned))
+      | {id, path, count: .doneWhenCount, owned: $owned} ]')"
 
   # An owned file must be a path and never a glob. Implementation derives the test author's denied
   # reads from these entries and compares them as paths, so a glob would deny nothing while the
@@ -1112,7 +1119,7 @@ def open: {
     ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
     ((.graph.ordersNotAfterSkeleton // [])[] | "order " + . + " does not come after wo1, the walking skeleton: add wo1 to its dependsOn"),
     ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
-    ((.graph.ordersPastHandfulOfRows // [])[] | "order " + .id + " holds " + (.count | tostring) + " done-when rows, more than a handful of behaviours: remove-done-when for a row no criterion needs, or split the order")
+    ((.graph.ordersPastHandfulOfRows // [])[] | "order " + .id + " holds " + (.count | tostring) + " done-when rows for " + (.owned | tostring) + " owned criteria, more than a handful of behaviours: remove-done-when for a row no criterion needs, or split the order")
   ]
 };
 '
