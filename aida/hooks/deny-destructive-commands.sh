@@ -53,6 +53,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # False positives. A heredoc body that goes to `cat` or `tee`, or to `git commit -F -`, is not
 # read, also after `;` or `&&` on its line. The exception is a command line that also starts a
 # shell or runs a file. The unreadable-verb rule does not read a shell comment (live-run row 321).
+# Nor does it read the body of a heredoc with a quoted delimiter, such as `python3 - <<'EOF'`, on a
+# command that starts no shell: no shell expands that body (gap row 460).
 # Two rules find a
 # command word: a command word from a variable, and a recursive delete. They read a quoted string
 # that opens and closes on one line as part of one word. So the message in `detail="$d $fw: ..."`
@@ -230,6 +232,9 @@ DELETE='--de(l(e(t(e)?)?)?)?'
 MIRROR='--mi(r(r(o(r)?)?)?)?'
 # A heredoc opening line whose body goes to a file or to a commit message, never to a shell.
 HD_TO_FILE='(^|[;&])[[:space:]]*(cat|tee)[[:space:]][^|;&]*<<[^|;&]*$|(^|[;&])[[:space:]]*git[[:space:]][^|;&]*commit[[:space:]][^|;&]*(-F[[:space:]]*-|--file[=[:space:]]-)[[:space:]][^|;&]*<<[^|;&]*$|\$\(cat[[:space:]]*<<'
+# A heredoc opening line whose delimiter is quoted. The shell expands nothing in that body, so on a
+# command that starts no shell the body is another program's text (gap row 460).
+HD_QUOTED="<<-?[[:space:]]*['\"]"
 MAX_BYTES=262144
 MAX_DEPTH=3
 
@@ -645,7 +650,7 @@ check_text() {
   # The comments go before the lines join, because a comment ends at its line.
   code="$(quoted_words "$raw" "$mode")"
   code="${code//"$bsnl"/}"
-  [ "$HAVE_TEXT" = false ] || [ "$SHELLISH" = true ] || { text="$stripped"; code="$(strip_heredocs "$code" "$HD_TO_FILE")"; }
+  [ "$HAVE_TEXT" = false ] || [ "$SHELLISH" = true ] || { text="$stripped"; code="$(strip_heredocs "$code" "$HD_TO_FILE|$HD_QUOTED")"; }
   n="$(normalise "$text")"
   # The joined text is read only when git and push both appear, which saves its pass on most calls.
   # A joined option value, as in `git -C "a b" push`, can make a push that the plain text misses.

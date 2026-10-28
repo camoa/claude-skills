@@ -281,7 +281,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   5  the task's own project (resolved from the task folder, never asked for) points at a
 #      codePath that exists on disk but is not a git repository.
 #   6  the build would land on the project's own trunk branch: the branch currently checked out in
-#      codePath is the one derived as trunk.
+#      codePath is the one derived as trunk. `start` refuses it, and so do `build-brief` and
+#      `dispatch-open implementer`, because the branch can change after start.
 #   8  the build order could not be derived from the snapshot's own work orders: a dependency
 #      cycle among them (naming every order in it), or two orders declaring the same path in
 #      ownedFiles (naming both).
@@ -373,6 +374,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      message carries the order's recorded stop reasons. `build-record` refuses on it too, so a
 #      stopped order records no attempt.
 #      `build-brief` and `dispatch-open implementer` refuse on it, so no builder starts (gap row 409).
+#      `tests-brief` refuses on it, so no test author starts.
 #      Only go-on, redo and drop act on a stopped order.
 #  51  `review-record` found the working tree dirty. The reviewer holds Write for one purpose, its
 #      own findings file under the task folder, and this is the check that enforces it. A probe
@@ -4409,6 +4411,8 @@ do_tests_brief() {
     || die3 "tests-brief: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
 
   tt_load_unit_and_criteria "$SNAPSHOT_DOC" "$unit_id" "tests-brief"
+  im_refuse_stopped "tests-brief" "$unit_id" "$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
+    '(.orders // []) | map(select(.id == $id)) | .[0] // {}')"
 
   # --- every dependency needs a completion record before its interface is handed over ----
   # dep_interface is declared here and not inside the loop below. zsh prints a parameter when
@@ -6377,8 +6381,8 @@ im_require_tests_record() {
 }
 
 # Every refusal build-brief takes from the order's records rather than from its own arguments:
-# the tests record (exit $3, as above), the ledger, each dependency's completion record (exit
-# 40), the order's step (exit 3) and the attempt counter (exit 41). `dispatch-open implementer` runs the same checks before
+# the tests record (exit $3, as above), the ledger, the trunk (exit 6), each dependency's completion
+# record (exit 40), the order's step (exit 3) and the attempt counter (exit 41). `dispatch-open implementer` runs the same checks before
 # it writes, so no builder opens for an order build-brief would refuse (gap row 281). The order's
 # frozen work order is $4. Sets IM_TESTS_DOC, IM_ATTEMPTS_USED and IM_ATTEMPTS_ALLOWED.
 IM_ATTEMPTS_USED=0; IM_ATTEMPTS_ALLOWED=0
@@ -6393,6 +6397,14 @@ im_require_build_ready() {
   ledger_doc="$(jq -c '.' "$ledger_file" 2>/dev/null)"
   [ -n "$ledger_doc" ] \
     || die3 "$who: $ledger_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
+
+  # --- exit 6: start refused the trunk, and a checkout after start can bring the worktree back to it --
+  local trunk
+  rv_load_codepath "$who"
+  if trunk="$(derive_trunk_branch "$RV_CODEPATH")" \
+    && [ "$(git -C "$RV_CODEPATH" symbolic-ref --short -q HEAD 2>/dev/null)" = "$trunk" ]; then
+    die 6 "$who: $RV_CODEPATH is on $trunk, which is derived as its trunk branch. The build must not land there. Check out the task's branch again."
+  fi
 
   # --- exit 40, first: a repair this unit opened on a closed order has not closed again (gap row 286) --
   local repairing
