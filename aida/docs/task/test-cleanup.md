@@ -62,7 +62,8 @@ The task's design follows these rules, and the design check holds it to them:
 - **An end to end test you approved for removal** that is a registered surface goes with
   `/aida:surfaces unregister <id>`.
 
-The design check refuses an order that owns a test another open task froze. Wait for that task to
+The design check refuses a tests-only order, or a `tests` order whose owned files are all tests,
+that owns a test another open task froze. Wait for that task to
 finish, or leave that test out.
 
 At the task's review, you confirm each done-when row, so you see every deleted file before the

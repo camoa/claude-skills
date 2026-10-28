@@ -128,9 +128,8 @@
 #                               implement-actions.sh's own table gives it, so one number never
 #                               means two things in two scripts: 3 could not do its job, 5 the
 #                               codePath is not a git repository, 14 project.json will not parse,
-#                               15 the codePath is not on disk, 61 the working tree is dirty, 72
-#                               two frameworks each command one tool, 73 the check recipe is not
-#                               the one the baseline was taken with, and 52 a findings file that
+#                               15 the codePath is not on disk, 61 the working tree is dirty, 73
+#                               the check recipe is not the one the baseline was taken with, and 52 a findings file that
 #                               cannot be read as a findings file.
 #   write_atomic, stop_order_in  read by br_require_clean_tree only on the branch an autonomous
 #                               caller asks for by passing its ledger. A caller that passes no

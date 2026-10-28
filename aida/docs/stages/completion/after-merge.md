@@ -19,8 +19,8 @@ The same hook asks before other commands that throw work away or publish it:
 - `gh repo sync`, `gh pr merge`, `gh release create` and `gh release delete`, and a `gh api` call
   that changes a branch.
 
-Where Claude Code cannot show a prompt, the hook refuses the command: in bypassPermissions mode,
-in dontAsk mode, and in a headless run. A role AIDA dispatched is refused too, and it stops and
+Where Claude Code cannot show a prompt, the hook refuses the command. That is bypassPermissions
+mode, dontAsk mode, and a call whose permission mode is not given. A role AIDA dispatched is refused too, and it stops and
 reports the command to you.
 
 The hook refuses a write to AIDA's own hooks, and a Write or Edit that puts `disableAllHooks` in a

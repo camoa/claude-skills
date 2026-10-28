@@ -39,7 +39,8 @@ or a non-goal that changed after the freeze. You answer those at the [close](clo
   [the build's baseline page](../implement/baseline.md) says.
 - **The suite is not run again.** Finishing the build ran it at this commit, and review reads
   that result. Finish stops on a newly broken test, so the suite never reads unmet here. It reads
-  warned or unknown when finish recorded a warning.
+  met when every failure left was in the baseline or recorded as not caused by this task. That
+  case still carries finish's warning. It reads warned or unknown when finish recorded those.
 - **Mutation testing runs only when the project opts in.** With mutation off, the mutation
   command never runs, and the audit list names the check `off`. Turn it on with
   [`/aida:project set-mutation`](../../project/mutation.md).

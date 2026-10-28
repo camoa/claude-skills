@@ -31,7 +31,7 @@ written in words, never left blank, so the body claims only what a record holds.
 
 The commit range section adds a line when each of these applies:
 
-- both ends of the range are one commit: the code repository holds nothing from this task, and
+- both ends of the range are one commit. The code repository holds nothing from this task, and
   every deliverable is in the project folder;
 - a test that passed at the start of the range fails at its end, and you said at finish that this
   task did not cause it: the line and your words;

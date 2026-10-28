@@ -23,7 +23,9 @@ next step.
 | Close | It asks you the rows only a person can answer, then writes the verdict. |
 
 The diff covers the range the build recorded: from the commit the build started at to its final
-commit. Review reads that range and computes none of its own. Two orders that pass alone can fail
+commit. Review reads that range and computes none of its own. When the trunk was merged into the
+branch during the build, the trunk's own files are not the task's change. A file counts only when
+it also differs from where the trunk and the branch meet. Two orders that pass alone can fail
 together, so the tools run again over the whole task.
 
 The steps before the close commit nothing. The close commits the task folder with the record,

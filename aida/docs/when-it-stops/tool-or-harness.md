@@ -27,7 +27,7 @@ A task whose contract says no automated tests gets no test runner installed. AID
 
 | Exit | What it means | What to do |
 |---|---|---|
-| 3 | an id is already registered with other fields; the recipe has no accept row; no visual surface is on; a quote or shell character is in a command; or `register`, `unregister` or `baseline` ran before `install` | correct the call the message names, or run `install` first |
+| 3 | an id is already registered with other fields; the recipe has no accept row; no visual surface is on; a quote or shell character is in a command; `register` got an end to end surface with no `--reason`; `unregister` named an id no surface has, or found no surface file; or `register`, `unregister` or `baseline` ran before `install` | correct the call the message names, or run `install` first |
 | 70 | `--confirmed` or `decline` was passed with nobody present | answer with a person present |
 
 ## The surface file is on another branch

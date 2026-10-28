@@ -70,8 +70,9 @@ Each stage page says what its unattended branch does. In short, with where each 
   a recipe's own command waits for your approval at close.
 - [implementation](../stages/implement/README.md) stops a work order at each point only you can
   decide, and records each stop with its reasons. A finding with an empty fix scope, and a
-  departure from the design, do not stop it: review puts each to you before its verdict. The
-  finished record counts the test rows a model judged, which nobody read.
+  departure from the design, do not stop it: review puts each to you before its verdict. A test
+  newly broken at finish stops the task before review. The finished record counts the test rows a
+  model judged, which nobody read.
 - [review](../stages/review/README.md) leaves each person-answered criterion unanswered and
   writes no verdict. The task has no sign-off until you answer them.
 - [completion](../stages/completion/README.md) closes only on a review that passed with no warning.

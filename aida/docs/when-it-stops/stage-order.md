@@ -36,8 +36,9 @@ above it says why:
   covers another commit range than the finished build. Run `/aida:review` again. `/aida:next`
   shows the review as outdated for the same reason.
 - **A split parent.** After a split, the parent stops after research, and its children run the
-  later stages. The parent closes only when every child is complete. Completion refuses it with
-  exit 1 while a child is open. See [split a task](../task/split.md).
+  later stages. The parent should close only when every child is complete. Completion still closes it
+  while a child is open, and writes a warning naming each open child. See
+  [split a task](../task/split.md).
 - **An unattended run stops between stages.** A light or autonomous run goes on to the next
   stage only when its run mode covers that stage too. A mode such as `autonomous (implement)`
   covers implementation alone, so the other stages run with a person and each ends by naming

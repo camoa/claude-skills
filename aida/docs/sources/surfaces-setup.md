@@ -28,7 +28,7 @@ Running it again is safe. It keeps your surface file and every file that matches
 |---|---|
 | A step failed, with its first line of output | Do not install by hand. The fix belongs in the recipe or on the machine. |
 | A file is present with content no version of the recipe holds | The install stops before anything runs and names the file. Decide which version is right. |
-| Two frameworks each carry a recipe | AIDA names both and stops. It cannot pick one. |
+| Two frameworks each carry a recipe | AIDA takes the first framework in the project file, and warns naming both. |
 | No framework has a recipe | Nothing is installed and the kind stays off. AIDA names `templates/process-recipe-setup.md` as the shape a recipe follows. |
 
 Scope and design offer the setup without looking the recipe up, so a yes there can end here.

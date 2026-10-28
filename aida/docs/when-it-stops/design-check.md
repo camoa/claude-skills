@@ -17,7 +17,8 @@ full, is on [the design check](../stages/design/check.md).
     proving it. Make the criterion a person's, or prove it with a run line;
   - a tests-only order whose done-when rows and owned files do not match, or that does not come
     after every `tests` order. See [clean up a test suite](../task/test-cleanup.md);
-  - an order that owns a test another open task froze;
+  - a tests-only order, or a `tests` order whose owned files are all tests, that owns a test
+    another open task froze;
   - on a light task, an order that owns a file of the registered demo-path script.
 - **Unattended only, exit 5 or 7: what a person would read first.** A criterion with no serving
   order, no owner or two owners. A research finding no order accounts for (exit 7). With you

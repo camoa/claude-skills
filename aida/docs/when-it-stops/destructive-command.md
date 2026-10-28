@@ -1,4 +1,4 @@
-# A command that throws work away or publishes it
+# A command is put to you or refused
 
 A hook reads each command before it runs. A command that throws work away or publishes it, such
 as `git push`, is put to you or refused. The full list is on
@@ -10,7 +10,7 @@ as `git push`, is put to you or refused. The full list is on
 |---|---|
 | The main session, in default, acceptEdits, plan or auto mode | Claude Code shows its permission prompt. The command runs only on your yes. In auto mode the classifier cannot approve it. |
 | The main session, in bypassPermissions or dontAsk mode | The hook refuses the command, because no prompt can show there. The message names the mode. |
-| A headless run with no prompt host | No prompt can reach you, so the command does not run. |
+| A call whose permission mode is not given | The hook refuses the command. |
 | A role AIDA dispatched, in every mode | The hook refuses the command, and the role stops. It reports the command to you. |
 
 A write to AIDA's own hooks, or a `disableAllHooks` written into a `.claude` settings file, is

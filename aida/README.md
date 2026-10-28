@@ -59,7 +59,8 @@ make a decision once.
 
 Version 6. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. On every pull
 request, continuous integration runs the specs in `tests/`, under bash on Linux. The static specs
-read the scripts and the prose. The behaviour specs test the five hard stops, the three ways out of
+read the scripts and the prose. The behaviour specs test the five hard stops: frozen tests, owned files, the trunk, the
+person's answer, and a test newly broken at finish. They also test the three ways out of
 a stopped work order, the test freeze and the command hook. Each one calls one step directly, on
 records it writes itself. The plugin's scripts run under bash, whatever shell the session uses.
 Live tasks on real projects have run since the betas, and each release fixes the defects they

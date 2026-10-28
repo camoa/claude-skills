@@ -73,8 +73,9 @@ give always wins. AIDA never guesses one.
 A configuration order's lines can need a token from the task's site, such as `{project}`. When
 nothing fills it, the step refuses. Bring the site up with `task environment up`, or give the value.
 
-Other refusals here: a framework that can run no named test, and two frameworks that both command
-one tool. See [When it stops](../../when-it-stops/).
+Another refusal here is a framework that can run no named test. See
+[When it stops](../../when-it-stops/). Two frameworks that both command one tool are a warning.
+The first framework in the project file runs the tool.
 
 ## Why it works this way
 
