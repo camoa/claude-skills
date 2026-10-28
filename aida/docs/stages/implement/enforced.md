@@ -25,7 +25,8 @@ written down for a later reader. This page says which is which.
   git run there and a copy in or out.
 - **Destructive commands.** A hook stops any `git push`, a hard reset, `git clean`,
   `git branch -D`, a checkout or restore of the whole tree, a recursive delete of the home, working
-  or scratchpad folder, `gh pr merge` and `gh repo sync`. A role is refused and stops. The main
+  or scratchpad folder, `gh pr merge`, `gh release create` or `delete`, and `gh repo sync`. A role
+  is refused and stops. The main
   session gets a permission prompt, or a refusal where no prompt can show. A person pushes.
 
 ## The limits

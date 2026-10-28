@@ -57,5 +57,19 @@ expect "a role's hard reset is refused and stops it" \
 expect "a recursive delete of home through su -c, sudo su -c, eval, a pipe to sh or /bin/sh -c is asked about" \
   "$(for c in "su -c 'rm -$RF ~'" "sudo su -c 'rm -$RF ~'" "eval 'rm -$RF ~'" "echo 'rm -$RF ~' | sh" "/bin/sh -c 'rm -$RF ~'"; do
        printf '%s,' "$(decision "$(out "$(bash_call "$c" default)")")"; done)" "ask,ask,ask,ask,ask,"
+# each_decision <command>...: the decisions for the commands, joined by commas.
+each_decision() {
+  local c
+  for c in "$@"; do printf '%s,' "$(decision "$(out "$(bash_call "$c" default)")")"; done
+}
+expect "a recursive delete of home behind a wrapper option, a subshell, a brace group or a joined <<< is asked about" \
+  "$(each_decision "timeout 5 rm -$RF ~" "nice -n 5 rm -$RF ~" "sudo -u root rm -$RF ~" \
+       "sudo -u root bash -c 'rm -$RF ~'" "(rm -$RF ~)" "cd /tmp && (rm -$RF ~)" "{ rm -$RF ~; }" \
+       "bash <<<'rm -$RF ~'" "(rm -$RF \$(pwd))" "rm -$RF \${HOME}")" "ask,ask,ask,ask,ask,ask,ask,ask,ask,ask,"
+expect "gh release create and gh release delete are asked about" \
+  "$(each_decision "gh release create v1" "gh release delete v1")" "ask,ask,"
+expect "a -c flag of grep, rg or git is not a shell's -c" \
+  "$(each_decision "grep -c \"$PUSH\" x.md" "grep -ic \"$PUSH\" x.md" "rg -c \"$PUSH\" x.md" \
+       "git -c k=v log --grep \"$PUSH\"")" "allow,allow,allow,allow,"
 
 finish

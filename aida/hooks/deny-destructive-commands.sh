@@ -26,8 +26,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # the working directory, or a folder above them. A recursive delete of the session scratchpad, a
 # folder above it, or a glob directly under it: the orchestrator and every agent keep files there
 # (live-run row 317). The platform's `scratchpad_dir` names it, and without it this rule is off. A
-# folder of an agent's own under the scratchpad passes. `gh repo sync`, `gh pr merge`, and a
-# `gh api` call that changes a ref or a file on a branch. Version 6 never publishes: completion
+# folder of an agent's own under the scratchpad passes. `gh repo sync`, `gh pr merge`,
+# `gh release create` and `gh release delete`, and a `gh api` call that changes a ref or a file on
+# a branch. Version 6 never publishes: completion
 # writes the pull request body and a person pushes.
 #
 # It reads text, not the shell grammar, so it reads the literal forms only. One step makes the
@@ -38,7 +39,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # What it catches, on that text:
 # - Global options between `git` and its verb: `-C <path>`, `-c <k=v>`, `--git-dir`,
 #   `--work-tree`, `--no-pager`, `--bare`, `-P` and git's other top-level options, for every rule.
-# - A wrapper or a path before `git`: `env`, `command`, `nohup`, `sudo`, `xargs`, `exec`,
+# - A wrapper or a path before the command word: `env`, `command`, `nohup`, `sudo -u <user>`,
+#   `xargs`, `exec`, `nice -n <n>`, `timeout <duration>`, a subshell's `(`, a group's `{`,
 #   `/usr/bin/git`. Any character that cannot be part of a word may come before `git`.
 # - A flag in any order, in a cluster, or as the unique prefix git accepts, such as `--har` for
 #   `--hard`.
@@ -58,10 +60,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # word. So the message in `detail="$d $fw: ..."` is not a command (live-run row 254). The push rule
 # reads such a string as one word too, except the value of an assignment, which a later `$cmd`
 # runs. So `--reasoning "... git push ..."` is not a command (live-run row 377). A string that
-# spans lines is read as commands. On a line that holds `eval`, a `-c` flag or `<<<`, every string
-# after it is read as commands, because a shell runs it. The other rules read quoted text as
-# commands, so a phrase inside `git commit -m "..."` or `echo "..."` asks. Closing that needs the
-# shell grammar.
+# spans lines is read as commands. On a line that holds `eval`, a shell's `-c` flag or `<<<`, every
+# string after it is read as commands, because a shell runs it. A `-c` of grep, rg or git is not a
+# shell's. The delete rule reads quoted text as commands, so a phrase inside `echo "..."` asks.
+# Closing that needs the shell grammar.
 #
 # Out of reach:
 # - A command word from a variable or a substitution, and a git verb this hook cannot read.
@@ -248,8 +250,9 @@ segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
 # and `|` replaced by \037. Then read_words keeps it in one word, and segments does not split it.
 # Only a string that opens and closes on one line is joined. The quote state carries across lines,
 # so the text after a string that spans lines is read where the shell closes it. A comment and a
-# heredoc body change no quote state. On a line that holds `eval`, a `-c` flag or `<<<`, no later
-# string is joined, because a shell runs its text. The shell runs the text of each `$(...)` and
+# heredoc body change no quote state. On a line that holds `eval`, `<<<`, or a `-c` flag after a
+# shell word (sh, bash, zsh, dash, ksh, su, a path to one), no later string is joined, because a
+# shell runs its text. The shell runs the text of each `$(...)` and
 # each backtick pair outside single quotes, also inside a double-quoted string. So that text
 # follows its line again, as lines of its own. A `#` starts a comment at the start of a word,
 # outside a string, a backtick pair and `${...}`, and no substitution is read from it. A `$'...'`
@@ -319,7 +322,7 @@ quoted_words() {
           if (j == 0) { out = out substr(line, i); q = c; qe = e; break }
           s = substr(line, i, j - i + 1)
           pre = substr(line, 1, i - 1)
-          if (pre !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</ && !(asg && pre ~ /(^|[ \t;&|(])[A-Za-z_][A-Za-z0-9_]*\+?=[^ \t;&|]*$/)) gsub(/[ \t;&|]/, "\037", s)
+          if (pre !~ /(^|[^A-Za-z0-9_.-])(eval|((ba|z|da|k)?sh|su)([ \t]+-[^ \t]+)*[ \t]+-[A-Za-z]*c)([ \t]|$)|<<</ && !(asg && pre ~ /(^|[ \t;&|(])[A-Za-z_][A-Za-z0-9_]*\+?=[^ \t;&|]*$/)) gsub(/[ \t;&|]/, "\037", s)
           out = out s; i = j + 1; continue
         }
         if (c == "`") bt = !bt
@@ -333,13 +336,26 @@ quoted_words() {
 }
 
 # Sets I to the index in w of the first word after the wrappers, options and assignments that can
-# come before a command word. I equals the word count when there is none.
+# come before a command word. I equals the word count when there is none. A wrapper option that
+# takes a value skips that value too: nice -n, sudo -u, -g and -C, timeout -s and -k, and
+# timeout's duration. A `(` or `{` that opens a subshell or a group is dropped, also from the front
+# of the command word.
 # shellcheck disable=SC2154 # w is filled by read_words, scripts/lib/command-text.sh
 skip_wrappers() {
+  local wrap=""
   I=0
   while [ "$I" -lt "${#w[@]}" ]; do
     case "${w[$I]}" in
-      env|command|nohup|sudo|xargs|exec|time|nice|then|do|else|elif|'!'|-*|*=*) I=$((I + 1)) ;;
+      '('|'{') I=$((I + 1)) ;;
+      '('*|'{'*) w[I]="${w[$I]#[({]}" ;;
+      env|command|nohup|sudo|xargs|exec|time|nice|timeout|then|do|else|elif|'!') wrap="${w[$I]}"; I=$((I + 1)) ;;
+      -*)
+        case "$wrap:${w[$I]}" in
+          nice:-n|sudo:-u|sudo:-g|sudo:-C|timeout:-s|timeout:-k|timeout:--signal|timeout:--kill-after) I=$((I + 2)) ;;
+          *) I=$((I + 1)) ;;
+        esac ;;
+      *=*) I=$((I + 1)) ;;
+      [0-9]*) [ "$wrap" = timeout ] || return 0; wrap=""; I=$((I + 1)) ;;
       *) return 0 ;;
     esac
   done
@@ -478,6 +494,8 @@ deletes_home_or_cwd() {
 recursive_delete() {
   local seg word recursive targets done_opts t j
   while IFS= read -r seg; do
+    # `<<<` joined to its word, as in `bash <<<'rm ...'`, is split off.
+    seg="${seg//<<</<<< }"
     set -f; read_words "$seg"; set +f
     skip_wrappers
     if [ "$SHELL_WORD" = true ]; then
@@ -500,6 +518,10 @@ recursive_delete() {
           -*) continue ;;
         esac
       fi
+      # The `)` that closes a subshell is not part of the target; `$(pwd)` keeps its own.
+      while case "$word" in *'$(pwd)'|*'$(pwd)/') false ;; *')') true ;; *) false ;; esac; do
+        word="${word%)}"
+      done
       targets="$targets$word
 "
     done
@@ -550,6 +572,7 @@ RESTORE
   fi
   hit "$a" "${GH}repo +sync$END" && { REASON="runs gh repo sync, which publishes to a remote branch"; return 0; }
   hit "$a" "${GH}pr +merge$END" && { REASON="runs gh pr merge, which publishes to the base branch"; return 0; }
+  hit "$a" "${GH}release +(create|delete)$END" && { REASON="runs gh release create or delete, which publishes or removes a release"; return 0; }
   # gh api sends a POST by default once a field is given.
   while IFS= read -r line; do
     [ -n "$line" ] || continue

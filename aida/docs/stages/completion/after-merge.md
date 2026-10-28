@@ -16,7 +16,8 @@ The same hook asks before other commands that throw work away or publish it:
 - a recursive delete of root, your home folder, the working folder, or a folder above them;
 - a recursive delete of the session's scratchpad folder, a folder above it, or a glob directly
   under it;
-- `gh repo sync`, `gh pr merge`, and a `gh api` call that changes a branch.
+- `gh repo sync`, `gh pr merge`, `gh release create` and `gh release delete`, and a `gh api` call
+  that changes a branch.
 
 Where Claude Code cannot show a prompt, the hook refuses the command: in bypassPermissions mode,
 in dontAsk mode, and in a headless run. A role AIDA dispatched is refused too, and it stops and
