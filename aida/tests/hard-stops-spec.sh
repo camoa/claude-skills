@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# hard-stops-spec.sh: each of the four hard stops refuses, and allows the right case. Nobody but the
-# order's test author writes a frozen test. The implementer writes only its order's files. The
+# hard-stops-spec.sh: four of the five hard stops each refuse, and allow the right case. Nobody but
+# the order's test author writes a frozen test. The implementer writes only its order's files. The
 # build never lands on the trunk. Only the person's own prompt records an answer, and one answer
-# serves one call. The write rules hold through Bash, in the main checkout, and from a folder
+# serves one call. The fifth, a test newly broken at finish, is in finish-stop-spec.sh. The write rules hold through Bash, in the main checkout, and from a folder
 # outside every code path. Each case sources the helper in a subshell, so it starts from fresh
 # records, and its setup never takes the guarded step itself.
 set -u

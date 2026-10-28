@@ -74,14 +74,15 @@ answer_case() (
   source "$PLUGIN/scripts/lib/task-helpers.sh"
   task_answer_find "$TASK" "implement redo" wo1 "redo it" && echo found
 )
-# suite_case <failures now>: the suite verdict finish records over a baseline that failed on t_old.
+# suite_case <failures now>: the suite verdict finish records over a baseline that failed on t_old,
+# or its exit when it stops on a new failure and records nothing.
 suite_case() (
   source "$HERE/records.bash"
   task_records branch
   order_records closed
   suite_records "FAIL: t_old" "$1"
   run "$IMPLEMENT" finish "$TASK"
-  jq -r '.suite.verdict' "$IMPL/finished.json"
+  jq -r '.suite.verdict' "$IMPL/finished.json" 2>/dev/null || echo "stopped $RC"
 )
 # Every record the helper writes, each against its schema: prints each fault, or nothing.
 schema_case() (
@@ -124,8 +125,8 @@ expect "the order's commit changes a.php and is listed on the order" "$(commit_c
 echo "--- the answer, the suite and the schemas"
 expect "the answer reader finds the person's answer" "$(answer_case)" "found"
 expect "finish reads a failure the baseline holds as met" "$(suite_case "FAIL: t_old")" "met"
-expect "finish reads a failure the baseline lacks as unmet" "$(suite_case "FAIL: t_old
-FAIL: t_new")" "unmet"
+expect "finish stops on a failure the baseline lacks" "$(suite_case "FAIL: t_old
+FAIL: t_new")" "stopped 66"
 expect "every record passes its schema" "$(schema_case)" ""
 
 finish

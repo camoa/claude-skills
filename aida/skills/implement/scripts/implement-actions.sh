@@ -79,6 +79,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh close <task_folder> <unit_id>
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
 #                            [--accept-warnings <the person's reason>]
+#                            [--regression <order id|not-caused>=<failing line>]...
+#                            [--because <the person's words>] (with --regression alone)
 #   implement-actions.sh reopen <task_folder>
 #   implement-actions.sh go-on <task_folder> <unit_id> --continue <build|fix|check|close|keep>
 #                            --because <the person's words> [--owns <path relative to codePath>]...
@@ -460,13 +462,18 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      judges only the rows put to it, so those notes are on disk nowhere else (gap row 259).
 #  66  `finish` found implementation is not finished for this task: an order that is neither closed
 #      nor dropped, or an order that is stopped whether or not it closed. The message names every
-#      one of them. A machine-verified criterion that is not confirmed is a warning.
+#      one of them. A machine-verified criterion that is not confirmed is a warning. Or the suite at
+#      the final commit fails on a test that passed in the implement-start baseline (owner,
+#      2026-10-28). Each such test stops the closed order that owns it, with a repair finding and a
+#      stop that allows fix. A test no order takes is named for the person, who gives it to an order
+#      or records it as not caused by this task with --regression. No finished.json is written.
 #  67  a way out was asked for an order it cannot answer. `go-on` found the order stopped, or
 #      changed mid-build, for a reason that does not allow the choice it was given: the message
 #      names the choices every reason allows. `redo` found no live copy of the order in the design,
 #      so drop is the route. Nothing is written. An order that is not stopped, or is closed or
 #      dropped, has nothing to leave, so the way out exits 0 and names the next step.
-#  68  `go-on`, `redo`, `drop`, `start --leftovers keep` or `finish --accept-warnings` was called
+#  68  `go-on`, `redo`, `drop`, `start --leftovers keep`, `finish --accept-warnings` or
+#      `finish --regression` was called
 #      with no matching answer in the task's answer record. Each is a person's judgement, in every
 #      run mode. The step of a go-on names its choice, `implement go-on <choice>`, so a yes to one
 #      choice passes no other. One number, because it is one fact. Keeping a builder's deviation or
@@ -7096,7 +7103,7 @@ br_test_check() {
   local fw_count fwi fw_obj fw cmd argv_json paths_json result kind payload
   local runs='[]' verdicts='[]' verdict detail outfile rc marker_json markers_len mi marker
   local nothing_ran_hit baseline_doc baseline_verdict baseline_output new_json new_count selector
-  local runs_file warning warn_json
+  local runs_file warning warn_json picked none lines
 
   fw_count="$(printf '%s' "$BRC_RECIPES" | jq '(.frameworks // []) | length')"
   case "$fw_count" in ''|*[!0-9]*) fw_count=0 ;; esac
@@ -7234,6 +7241,18 @@ br_test_check() {
                   detail="the suite exited $rc on $fw, where the baseline recorded no failure, and $BR_WARN_DETAIL"
                 elif br_selector_misses "$selector" "$outfile"; then
                   detail="$detail$(br_warning_hint "$warning" "$fw_obj")"
+                elif [ "$verdict" = "unmet" ]; then
+                  # Nothing was red in the baseline, so each failing line is new, and finish stops on
+                  # it. The lines are the ones failure_line names, else every line, set against an
+                  # empty run by the subtraction's own rule.
+                  picked="$(mktemp)" && none="$(mktemp)" && lines="$(mktemp)" \
+                    || { rm -f "$runs_file" "$outfile"; die3 "$BRC_WHO: could not create a temporary file"; }
+                  if [ -n "$selector" ]; then grep -a -E -e "$selector" "$outfile" >"$picked" 2>/dev/null
+                  else cp "$outfile" "$picked"; fi
+                  br_lines_not_in "$none" "$picked" "$lines"
+                  new_count="$BR_NEW_COUNT"
+                  [ "$new_count" -eq 0 ] || new_json="$(jq -Rsc 'split("\n") | map(select(length > 0))' "$lines")"
+                  rm -f "$picked" "$none" "$lines"
                 fi
                 ;;
             esac
@@ -10319,9 +10338,9 @@ FB_ALLOW
   # Gap row 381. An order a closed-order-defect reopened made no commit after the record it closed
   # at. So its first round after the reopen begins at HEAD when another order's records list each
   # later commit, or the repair entry names it as the stopped builder's. Any other commit stays in
-  # the round, as before. A task review's reopen has no stopped order, so only the records count
-  # (gap row 390).
-  fb_reopen="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '[ (.repairs // [])[] | select(.by or .review) ] | last // {}')"
+  # the round, as before. A task review's reopen and finish's stop on a newly broken test have no
+  # stopped builder, so only the records count (gap row 390).
+  fb_reopen="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '[ (.repairs // [])[] | select(.by or .review or .finish) ] | last // {}')"
   fb_taken="$(im_others_listed "$unit_id" "$RV_RANGE_REPO"; printf '%s' "$fb_reopen" | jq -r '(.commits // [])[]')"
   if [ -n "$fb_last" ] && [ "$fb_last" = "$(printf '%s' "$fb_reopen" | jq -r '.closedRange // "" | split("..") | .[1] // ""')" ]; then
     for c in $(git -C "$RV_RANGE_REPO" rev-list "$fb_last..$fb_head" 2>/dev/null); do
@@ -11596,11 +11615,160 @@ fn_require_answer() {
   task_require_answer 68 "$1" "$2" "$TASK_PATH" "implement $1" "$3" "$4"
 }
 
+# The JSON array of lines $1 as the subtraction keys them (br_line_keys), in the same order, so a
+# line a person answered still matches when only a number in it changed.
+fn_line_keys() {
+  local f
+  f="$(mktemp)" || die3 "finish: could not create a temporary file"
+  printf '%s' "$1" | jq -r '.[]' >"$f"
+  br_line_keys "$f" | jq -Rsc 'split("\n") | .[:-1]'
+  rm -f "$f"
+}
+
+# The order that takes the failing line $1 of a newly broken test, by reopen's rule: the order
+# whose frozen test the line names, else the one order that owns a file the line names. Prints
+# its id only when that order is closed, else nothing.
+fn_regression_owner() {
+  local line="$1" f u p tok abs rel owners=""
+  for f in "$IMPL_DIR"/tests-*.json; do
+    [ -e "$f" ] || continue
+    while IFS='	' read -r u p; do
+      [ -n "$p" ] || continue
+      case "$line" in *"$p"*) owners="$owners$u
+" ;; esac
+    done <<FRO_FROZEN
+$(jq -r '.unit as $u | (.rows // [])[] | (.tests // [])[] | $u + "\t" + .path' "$f" 2>/dev/null)
+FRO_FROZEN
+  done
+  if [ -z "$owners" ]; then
+    for tok in $(printf '%s' "$line" | tr -cs 'A-Za-z0-9_./:-' '\n'); do
+      tok="${tok%%:*}"; tok="${tok%.}"
+      case "$tok" in */*|*.*) ;; *) continue ;; esac
+      abs="$(normalize_abs "$(resolve_against "$tok" "$RV_CODEPATH")")"
+      rel="${abs#"$RV_CODEPATH"/}"
+      owners="$owners$(im_file_owners "$abs" "$rel" "" | cut -f1)
+"
+    done
+  fi
+  owners="$(printf '%s' "$owners" | grep . | sort -u)"
+  [ -n "$owners" ] && [ "$(printf '%s\n' "$owners" | grep -c .)" = "1" ] || return 0
+  [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$owners" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""')" = "closed" ] \
+    || return 0
+  printf '%s' "$owners"
+}
+
+# The fifth hard stop (owner, 2026-10-28). Each line the baseline subtraction left in the suite
+# result $1 is a test that passed at the start of $2, the task's range, and fails at its end. A
+# line a person recorded as not caused by this task is a warning, like a baseline failure. A line
+# --regression gives to an order goes there, and any other goes to fn_regression_owner's order.
+# That order gets one repair finding per line, scoped to its owned files, and one stop that
+# allows fix, so go-on fix opens its round. A line no order takes is the person's to answer.
+# Exit 66 when an order stopped or a line is left, with no finished.json. $3 the --regression
+# values, a JSON array of {to, line}, and $4 the person's words. Sets FN_SUITE_JSON to the suite
+# result, met when every new line is recorded not caused by this task and none was cut off.
+FN_SUITE_JSON=""
+fn_stop_newly_broken() {
+  local suite_json="$1" range="$2" regs="$3" because="$4" head_now="${2#*..}" broken classed n i one owner
+  local taken='{}' left='[]' added='[]' not_caused ledger_doc review_doc unit new_id raw built ids line
+  local broken_keys reg_keys old_keys
+  FN_SUITE_JSON="$suite_json"
+  broken="$(printf '%s' "$suite_json" | jq -c 'if .verdict != "unmet" then [] elif (.newLines // []) == [] then [.detail] else .newLines end')"
+  broken_keys="$(fn_line_keys "$broken")" || exit "$?"
+  reg_keys="$(fn_line_keys "$(printf '%s' "$regs" | jq -c 'map(.line)')")" || exit "$?"
+  old_keys="$(fn_line_keys "$(printf '%s' "$FN_LEDGER_DOC" | jq -c '[ (.notCaused // [])[] | .line ]')")" || exit "$?"
+  classed="$(jq -cn --argjson b "$broken" --argjson k "$broken_keys" \
+    --argjson regs "$regs" --argjson rk "$reg_keys" \
+    --argjson old "$(printf '%s' "$FN_LEDGER_DOC" | jq -c '.notCaused // []')" --argjson ok "$old_keys" \
+    --arg because "$because" '
+    {lines: [ range(0; $b | length) as $i | {line: $b[$i], key: $k[$i]} | . as $x
+        | ([ range(0; $rk | length) | select($rk[.] == $x.key) | $regs[.] ][0]) as $given
+        | ([ range(0; $ok | length) | select($ok[.] == $x.key) | $old[.] ][0]) as $was
+        | {line}
+          + if $given != null then {to: $given.to, new: true} + (if $given.to == "not-caused" then {because: $because} else {} end)
+            elif $was != null then {to: "not-caused", because: $was.because}
+            else {to: ""} end ],
+     unknown: [ range(0; $rk | length) as $i | select(($k | index($rk[$i])) == null) | $regs[$i].line ]}')"
+  [ "$(printf '%s' "$classed" | jq '.unknown | length')" = "0" ] \
+    || die3 "finish: --regression names lines that are no test newly broken at $head_now: $(printf '%s' "$classed" | jq -r '.unknown | join("; ")'). The newly broken ones are: $(printf '%s' "$broken" | jq -r 'if length == 0 then "none" else join("; ") end')."
+  n="$(printf '%s' "$classed" | jq '.lines | length')"
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    one="$(printf '%s' "$classed" | jq -c --argjson i "$i" '.lines[$i]')"
+    i=$((i + 1))
+    case "$(printf '%s' "$one" | jq -r '.to')" in
+      not-caused)
+        [ "$(printf '%s' "$one" | jq -r '.new // false')" = "false" ] \
+          || added="$(printf '%s' "$added" | jq -c --argjson o "$one" --arg at "$(date -u +%Y-%m-%d)" '. + [$o | {line, because, at: $at}]')"
+        continue ;;
+      "") owner="$(fn_regression_owner "$(printf '%s' "$one" | jq -r '.line')")" ;;
+      *) owner="$(printf '%s' "$one" | jq -r '.to')" ;;
+    esac
+    if [ -n "$owner" ]; then
+      taken="$(printf '%s' "$taken" | jq -c --arg o "$owner" --argjson x "$one" '.[$o] = ((.[$o] // []) + [$x.line])')"
+    else
+      left="$(printf '%s' "$left" | jq -c --argjson x "$one" '. + [$x.line]')"
+    fi
+  done
+
+  ledger_doc="$FN_LEDGER_DOC"
+  [ "$added" = "[]" ] || ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --argjson a "$added" '.notCaused = ((.notCaused // []) + $a)')"
+  for owner in $(printf '%s' "$taken" | jq -r 'keys[]'); do
+    review_doc="$(jq -c '.' "$IMPL_DIR/review-$owner.json" 2>/dev/null)"
+    [ -n "$review_doc" ] \
+      || die3 "finish: $IMPL_DIR/review-$owner.json is missing or not JSON, though the ledger records $owner as closed."
+    unit="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg o "$owner" '[ .workOrders[] | select(.id == $o) ][0] // {}')"
+    ids='[]'
+    while IFS= read -r line; do
+      new_id="f$(printf '%s' "$review_doc" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
+      raw="$(printf '%s' "$unit" | jq -c --arg id "$new_id" --arg head "$head_now" --arg line "$line" '
+        {id: $id, severity: "high", file: "", lines: "",
+         linkedTo: (((.criteriaOwned // []) + (.criteriaServed // []))[0] // ""),
+         evidence: ("finish ran the suite at " + $head + ". This test passed in the implement-start baseline and fails now: " + $line),
+         fixScope: (.ownedFiles // [])}')"
+      built="$(rv_finding_record "$raw" "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')" repair)"
+      review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
+      ids="$(printf '%s' "$ids" | jq -c --arg f "$new_id" '. + [$f]')"
+    done <<FSN_LINES
+$(printf '%s' "$taken" | jq -r --arg o "$owner" '.[$o][]')
+FSN_LINES
+    write_atomic "$IMPL_DIR/review-$owner.json" "$review_doc"
+    ledger_doc="$(im_reopen_in "$ledger_doc" "$owner" "$(jq -cn --arg r "$range" --argjson f "$ids" --arg at "$(date -u +%Y-%m-%d)" \
+      '{finish: $r, findings: $f, at: $at}')")"
+    ledger_doc="$(stop_order_in "$ledger_doc" "$owner" finish \
+      "tests that passed in the implement-start baseline fail at $head_now: $(printf '%s' "$taken" | jq -r --arg o "$owner" '.[$o] | join("; ")')" '["fix"]')"
+    [ -n "$ledger_doc" ] || die3 "finish: the stop on $owner could not be written to the ledger."
+  done
+  [ "$ledger_doc" = "$FN_LEDGER_DOC" ] || write_atomic "$FN_LEDGER_FILE" "$ledger_doc"
+
+  if [ "$taken" != "{}" ] || [ "$left" != "[]" ]; then
+    task_answer_consume
+    die 66 "finish: tests that passed in the implement-start baseline fail at $head_now, so implementation is not finished, and no finished.json is written.$(
+      [ "$taken" = "{}" ] || printf ' Each stops the order that owns it, which allows go-on fix, redo or drop: %s.' \
+        "$(printf '%s' "$taken" | jq -r 'to_entries | map(.key + " (" + (.value | join("; ")) + ")") | join(", ")')")$(
+      [ "$left" = "[]" ] || printf ' No order takes these, so the person answers each: %s. Record the answer with step "implement finish regression", then run finish again with --regression <order id>=<line> to give it to an order, or --regression not-caused=<line> when this task did not cause it, and --because <the person'"'"'s words>.' \
+        "$(printf '%s' "$left" | jq -r 'join("; ")')")"
+  fi
+
+  not_caused="$(printf '%s' "$classed" | jq -c '[ .lines[] | select(.to == "not-caused") | {line, because} ]')"
+  [ "$not_caused" != "[]" ] || return 0
+  while IFS= read -r one; do
+    task_warn "$TASK_PATH" finish "" "a test newly broken at $head_now is recorded as not caused by this task, by a person's answer: $(printf '%s' "$one" | jq -r '.line'). The person's words: $(printf '%s' "$one" | jq -r '.because')"
+  done <<FSN_NOT_CAUSED
+$(printf '%s' "$not_caused" | jq -c '.[]')
+FSN_NOT_CAUSED
+  FN_SUITE_JSON="$(printf '%s' "$suite_json" | jq -c --argjson nc "$not_caused" '
+    . + {notCaused: $nc}
+    | if (.newLineCount // ($nc | length)) <= ($nc | length)
+      then .verdict = "met" | del(.newLines, .newLineCount)
+        | .detail += " Each newly broken test is recorded as not caused by this task, by a person'"'"'s answer."
+      else . end')"
+}
+
 # finish: the implementation stage is done for this task. The task is not. It goes to the review
 # stage next, and finished.json is what that stage receives.
 do_finish() {
   [ "$#" -ge 1 ] || die3 "finish: a task folder is required"
-  local task_arg="$1" values="" accept_warnings=""
+  local task_arg="$1" values="" accept_warnings="" regressions='[]' because="" to
   shift
   while [ "$#" -gt 0 ]; do
     cr_take_flag "finish" "--value=values" "$@" || { shift "$?"; continue; }
@@ -11608,13 +11776,31 @@ do_finish() {
       --accept-warnings)
         need_value "finish" "--accept-warnings" "$#" "${2:-}" text
         accept_warnings="$2"; shift 2 ;;
+      --regression)
+        need_value "finish" "--regression" "$#" "${2:-}" text
+        case "$2" in *=?*) ;; *) die3 "finish: --regression takes <order id>=<failing line> or not-caused=<failing line>; got: $2" ;; esac
+        regressions="$(printf '%s' "$regressions" | jq -c --arg to "${2%%=*}" --arg line "${2#*=}" '. + [{to: $to, line: $line}]')"
+        shift 2 ;;
+      --because)
+        need_value "finish" "--because" "$#" "${2:-}" text
+        because="$2"; shift 2 ;;
       *) die3 "finish: unrecognized extra argument: $1" ;;
     esac
   done
+  [ "$regressions" = "[]" ] || [ -n "$because" ] \
+    || die3 "finish: --regression needs --because, with the person's words."
+  [ -z "$because" ] || [ "$regressions" != "[]" ] \
+    || die3 "finish: --because goes with --regression."
   im_load_task "$task_arg" "finish"
 
   fn_load_task_state "finish"
   [ -z "$accept_warnings" ] || fn_require_answer "finish" "accepting a suite that failed on runner warnings alone" "" "$accept_warnings"
+  [ "$regressions" = "[]" ] \
+    || fn_require_answer "finish regression" "giving a test newly broken at finish to an order, or recording it as not caused by this task" "" "$because"
+  for to in $(printf '%s' "$regressions" | jq -r '.[].to | select(. != "not-caused")'); do
+    [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$to" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""')" = "closed" ] \
+      || die3 "finish: --regression gives a test to $to, which is not a closed order in the ledger. Give it to a closed order, or to not-caused."
+  done
 
   # --- exit 66: every order closed or dropped, and every machine-verified criterion confirmed -----
   local open_orders unconfirmed
@@ -11662,7 +11848,8 @@ do_finish() {
   # --- the suite, once, at the final commit (nyc defect 18) ----------------------------------------
   # The record steps run no suite. It runs here once, through the order-tests check function and
   # the baseline subtraction, over the whole task range: the baseline was taken at startedFrom and
-  # this run is at HEAD. Its result is recorded and, when it is not met, written as a warning:
+  # this run is at HEAD. A line the subtraction leaves stops finish (fn_stop_newly_broken). Any
+  # other result is recorded and, when it is not met, written as a warning:
   # review reads the result and the warning. The recipe paths are the ones preconditions
   # recorded, so no framework is forgotten. The output goes to a sidecar beside the record, never inline: a suite prints
   # more than an argument or a reader can carry. A task whose every order is proved by its
@@ -11717,6 +11904,12 @@ FN_RECIPES
     'del(.id, .output) + (if $f == "" then {} else {outputFile: $f} end)' "$suite_file")"
   rm -f "$suite_file"
   [ -n "$suite_json" ] || die3 "finish: could not assemble the suite result."
+  suite_verdict="$(printf '%s' "$suite_json" | jq -r '.verdict')"
+  # A red suite the baseline subtraction reads met failed only on tests already red at startedFrom.
+  [ "$suite_verdict" != "met" ] || [ "$(printf '%s' "$suite_json" | jq -r '.exitCode // 0')" = "0" ] \
+    || task_warn "$TASK_PATH" finish "" "the suite fails at $head_now only on tests that already failed in the implement-start baseline, so none is this task's.${sidecar:+ The whole output is at $IMPL_DIR/$sidecar.}"
+  fn_stop_newly_broken "$suite_json" "$started_from..$head_now" "$regressions" "$because"
+  suite_json="$FN_SUITE_JSON"
   suite_verdict="$(printf '%s' "$suite_json" | jq -r '.verdict')"
   case "$suite_verdict" in
     met|undeclared|not-needed) ;;
@@ -11814,7 +12007,7 @@ FN_RECIPES
       commitRange: $range,
       suite: $suite,
       orders: [ ($ledger.orders // [])[] | select(.lastStep != "dropped") | {id: .id, commitRange: (.commitRange // ""), roundsUsed: (.roundsUsed // 0)}
-                + (if ([ (.repairs // [])[] | select(has("by") or has("review")) ] | length) > 0 then {closedRanges: [ .repairs[] | .closedRange // empty ]} else {} end) ],
+                + (if ([ (.repairs // [])[] | select(has("by") or has("review") or has("finish")) ] | length) > 0 then {closedRanges: [ .repairs[] | .closedRange // empty ]} else {} end) ],
       dropped: [ ($ledger.orders // [])[] | select(.lastStep == "dropped") | . as $o
                  | {id: .id, because: (.dropped.because // ""), at: (.dropped.at // ""),
                     criteria: ([ ($snap.workOrders // [])[] | select(.id == $o.id) | (.criteriaServed // [])[], (.criteriaOwned // [])[] ] | unique)} ],

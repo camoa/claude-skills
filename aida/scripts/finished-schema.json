@@ -45,7 +45,7 @@
     },
     "suite": {
       "$ref": "#/$defs/suiteResult",
-      "description": "The whole suite, run once at the final commit by `finish` through the same check the record steps run and the same baseline subtraction (nyc defect 18). The record steps run no suite, so this run decides it. Any verdict is recorded; one other than met, undeclared or not-needed is also a warning in the task record. The output is never inline; outputFile names the sidecar."
+      "description": "The whole suite, run once at the final commit by `finish` through the same check the record steps run and the same baseline subtraction (nyc defect 18). The record steps run no suite, so this run decides it. A test that passed in the implement-start baseline and fails here stops `finish`, and no record is written, unless a person recorded it as not caused by this task (notCaused). A verdict other than met, undeclared or not-needed is also a warning in the task record, and so is a met suite that still fails on baseline failures. The output is never inline; outputFile names the sidecar."
     },
     "orders": {
       "type": "array",
@@ -128,7 +128,7 @@
             "unmet",
             "unknown"
           ],
-          "description": "The worst of runs[].verdict, the same fold build-record-schema.json describes. warned: a suite failed with no failed test, only on lines its recipe's warning_line names; when a person accepted that with `finish --accept-warnings`, warningsAccepted is present (gap row 261). met: every framework's suite exited 0, or failed only on lines the baseline already held. undeclared: no framework's recipe carries a suite row to run, or the recipe declares it absent, and the record says so rather than claiming a pass. not-needed: every order in the snapshot is proved by its record, so no test exists and no suite baseline was taken. The suite was not run, and runs is absent (live-run row 136). unmet: a line failed that the baseline did not hold. unknown: nothing here could decide, such as no baseline or a run that selected nothing. A warning in the task record goes with unmet and unknown, and with warned when no person accepted it."
+          "description": "The worst of runs[].verdict, the same fold build-record-schema.json describes. warned: a suite failed with no failed test, only on lines its recipe's warning_line names; when a person accepted that with `finish --accept-warnings`, warningsAccepted is present (gap row 261). met: every framework's suite exited 0, or failed only on lines the baseline already held or a person recorded as not caused by this task. undeclared: no framework's recipe carries a suite row to run, or the recipe declares it absent, and the record says so rather than claiming a pass. not-needed: every order in the snapshot is proved by its record, so no test exists and no suite baseline was taken. The suite was not run, and runs is absent (live-run row 136). unmet: a line failed that the baseline did not hold. `finish` stops on each such line, so a record holds unmet only when more than 20 lines were new and the 20 it read were all recorded not caused by this task. unknown: nothing here could decide, such as no baseline or a run that selected nothing. A warning in the task record goes with unmet and unknown, and with warned when no person accepted it."
         },
         "detail": {
           "type": "string",
@@ -185,9 +185,23 @@
           "minItems": 1,
           "maxItems": 20,
           "items": { "type": "string" },
-          "description": "Present only when the verdict is unmet and the baseline held other output: the first 20 lines the run printed that the baseline did not hold."
+          "description": "Present only when the verdict is unmet: the first 20 failing lines the run printed that the baseline did not hold. Over a baseline with no failure, every failing line is new."
         },
         "newLineCount": { "type": "integer", "minimum": 1, "description": "How many lines were new in all, present with newLines." },
+        "notCaused": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["line", "because"],
+            "properties": {
+              "line": { "type": "string", "minLength": 1, "description": "The failing line, verbatim." },
+              "because": { "type": "string", "minLength": 1, "description": "The person's words, as the ledger's notCaused entry holds them." }
+            }
+          },
+          "description": "The tests that passed in the implement-start baseline and fail at the final commit, which a person recorded as not caused by this task with `finish --regression not-caused=<line>`. Each is also a warning in the task record. Review lists the warning, and the pull request body names each line."
+        },
         "warningsAccepted": {
           "type": "object",
           "additionalProperties": false,

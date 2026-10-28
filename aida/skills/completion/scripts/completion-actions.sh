@@ -530,7 +530,9 @@ cp_render_body() {
               + (((($finished.commitRange // "") | split("..")) as $ends
                   | if ($ends | length) == 2 and $ends[0] == $ends[1]
                     then ["The code repository holds nothing from this task: both ends of this range are one commit. Every deliverable is committed in the project folder."]
-                    else [] end)) end)
+                    else [] end))
+              + [ ($finished.suite.notCaused // [])[]
+                  | "A test fails at the end of this range that passed at its start. A person recorded it as not caused by this task: " + .line + ". Their words: " + .because ] end)
         + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end)
         # A task page promises the tear-down here (live-run row 150). The old line printed for
         # every worktree. It told a task with no site to prune, and a task with a live site

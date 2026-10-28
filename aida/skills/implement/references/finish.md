@@ -22,9 +22,40 @@ Then it runs the test-execution recipe's suite row once, at the final commit, fr
 The record steps run no suite, so this is the run that decides it. The recipe paths come from
 `implementation/preconditions.json`, so pass none. Pass `--value <name>=<value>` for a placeholder
 the suite row carries, the same as `build-record`. The baseline's own failures are subtracted line
-by line. A suite that is not met is a warning, and the record keeps its verdict. The full output is
-in the sidecar, `implementation/finished-suite.txt`. Review reads that result and lists the
-warning. A recipe with no suite row passes with `undeclared`, and the record says so.
+by line. A failure already in the baseline is a warning. Any other result that is not met is a
+warning too, and the record keeps its verdict. The full output is in the sidecar,
+`implementation/finished-suite.txt`. Review reads that result and lists the warning. A recipe with
+no suite row passes with `undeclared`, and the record says so.
+
+### A test newly broken at finish
+
+A failing line the subtraction leaves is a test that passed in the implement-start baseline and
+fails at the final commit. It stops completion. The lines are the ones the suite row's
+`failure_line` names, or every line when it names none. `finish` gives each line to an order by
+`reopen`'s rule. That is the order whose frozen test the line names, else the one order that owns
+a file the line names. That order gets one repair finding per line, scoped to its owned files. It
+goes back to its fix step, stopped, and the stop allows `go-on fix`, redo or drop. Leave it as
+"Leave a stop" below says. The fix round then runs as after `reopen`, and `finish` runs again once
+the order closes. `finish` exits 66 and writes no `finished.json`.
+
+A line no order takes waits for the person. The message names each one. The person chooses one of
+two things for each line:
+- **Give it to an order**: the closed order whose change broke it. `finish` writes the stop on that
+  order, as above.
+- **Not caused by this task**, such as a flaky test or the environment. It becomes a warning, like
+  a baseline failure. Review lists it, and the pull request body names it.
+
+Record the person's answer with step `implement finish regression`, and the person's words. Then
+run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh finish "<task_folder>" \
+  --regression <order id>=<failing line> | --regression not-caused=<failing line> \
+  --because <the person's words>
+```
+Give one `--regression` per line, with the line as the message names it. Without the answer it
+refuses (exit 68) and writes nothing. The ledger keeps each not-caused line under `notCaused`, so a
+later `finish` reads it as a warning again. No hand commit repairs a newly broken test, because a
+hand commit is outside every order and the frozen-test hook.
 
 A suite row may also declare `warning_line`, the lines a runner prints that fail no test. A
 failing suite where no line matches `failure_line` and at least one matches `warning_line` reads
@@ -160,6 +191,7 @@ Which choices a reason allows:
 | a fixer short of scope | `fix`, often with `--owns` |
 | the fix round cap with findings open, unattended | `fix` or `close`; and `check` when every open finding is a check finding |
 | a finding ruled load-bearing | `check`, over the fix the person committed, or `close` |
+| a test newly broken, at `finish` | `fix` |
 | a departure, or `design drift` naming the order's own design file or a criterion it serves | `keep` |
 | `test wrong`, or `design drift` saying the design removed the order | none: redo or drop |
 
@@ -234,7 +266,7 @@ is not raised again.
 ## A person's answer
 
 Some calls are a person's decision only. In implement they are `go-on`, `redo`, `drop`,
-`start --leftovers keep` and `finish --accept-warnings` (exit 68). They are also `verify-record --ruling` (exit 55),
+`start --leftovers keep`, `finish --accept-warnings` and `finish --regression` (exit 68). They are also `verify-record --ruling` (exit 55),
 `fix-brief --allow` (exit 100), and `tests-freeze` with a row a person judged (exit 70). Each one
 refuses without the person's answer on record, in every run mode. The run mode does not decide
 whether a person answered.
@@ -251,7 +283,8 @@ hook refuses the action, because no prompt can show there. Then stop and report 
 The step of a go-on names its choice, such as `implement go-on build`. The words are the exact
 value of the call's flag. For a repeated flag, `--ruling` or `--allow`,
 they are every value in the call's order, one per line, passed as `@/<file>`. For `tests-freeze`
-they are each `--row` a person judged, one per line. For `start` they are `keep`. A final newline
+they are each `--row` a person judged, one per line. For `start` they are `keep`. For
+`finish --regression` they are the `--because` value. A final newline
 does not count. Each refusal prints the command with the words to use.
 
 Each answer is one entry in `person-answers.json` in the task folder. An entry serves one attempt.
