@@ -36,8 +36,6 @@ frozen_record() {
     >"$PROJECT/tasks/$1/implementation/tests-wo1.json"
 }
 
-# edit <jq filter> <file>: applies the filter to one record in place.
-edit() { jq "$1" "$2" >"$ROOT/e.json" && mv "$ROOT/e.json" "$2"; }
 
 # design_case <jq filter on the report> [<setup>]: the design check over the cleanup records,
 # after the setup command. Prints the check's exit, then what the filter reads.
@@ -56,8 +54,8 @@ deletion_records() {
   jq -n '[{id: "g1", files: ["tests/a_test.sh"], lines: 2}]' >"$PROJECT/test-cleanup/run-1/groups.json"
   jq --arg g "Apply $PROJECT/test-cleanup/run-1/decisions.md." '.goal = $g | .criteria[0].verifiedBy = "person"' \
     "$TASK/alignment.json" >"$ROOT/a.json" && mv "$ROOT/a.json" "$TASK/alignment.json"
-  edit '.proof = "confirm" | .tests = [] | .interface = "" | .ownedFiles = ["tests/a_test.sh"] | .doneWhen = ["tests/a_test.sh is deleted"]' \
-    "$TASK/design/wo1.json"
+  edit "$TASK/design/wo1.json" \
+    '.proof = "confirm" | .tests = [] | .interface = "" | .ownedFiles = ["tests/a_test.sh"] | .doneWhen = ["tests/a_test.sh is deleted"]'
   printf 'exit 0\n' >"$WT/tests/a_test.sh"
   git -C "$WT" add tests/a_test.sh && git -C "$WT" commit -qm "the test the cleanup deletes"
   order_records tests-frozen
@@ -77,7 +75,7 @@ build_case() (
   if [ "$1" = delete-env ]; then
     printf 'X=1\n' >"$WT/.env.local" && git -C "$WT" add .env.local
     blob="$(git -C "$WT" hash-object .env.local)"
-    edit ".worktree.recipeChanges = [{path: \".env.local\", blob: \"$blob\"}]" "$TASK/task.json"
+    edit "$TASK/task.json" ".worktree.recipeChanges = [{path: \".env.local\", blob: \"$blob\"}]"
   fi
   git -C "$WT" commit -qm "build wo1"
   printf 'Stop: none\nDeviation: none\n' >"$IMPL/answers-wo1-attempt1.md"
@@ -100,42 +98,42 @@ CONFIRM='[.coverage.confirmOrdersOnTaskWithTests[].id, .coverage.confirmOrdersOw
 echo "--- design: an order that deletes the run's tests"
 expect "an order deleting files the named run lists is accepted" "$(design_case "$CONFIRM")" '0|[]'
 expect "an order also owning a file the run does not list is still refused as code with no test" \
-  "$(design_case "$CONFIRM" 'edit ".ownedFiles += [\"src/x.php\"] | .doneWhen += [\"src/x.php is deleted\"]" "$TASK/design/wo2.json"')" \
+  "$(design_case "$CONFIRM" 'edit "$TASK/design/wo2.json" ".ownedFiles += [\"src/x.php\"] | .doneWhen += [\"src/x.php is deleted\"]"')" \
   '4|["wo2"]'
 expect "with a goal that names no run, the order is refused as before" \
-  "$(design_case "$CONFIRM" 'edit ".goal = \"clean up the tests\"" "$TASK/alignment.json"')" '4|["wo2"]'
+  "$(design_case "$CONFIRM" 'edit "$TASK/alignment.json" ".goal = \"clean up the tests\""')" '4|["wo2"]'
 expect "an owned file that no done-when row names is refused" \
-  "$(design_case '.coverage.testsOnlyRowsUnmatched' 'edit ".doneWhen = [\"tests/a_test.sh is deleted\"]" "$TASK/design/wo2.json"')" \
+  "$(design_case '.coverage.testsOnlyRowsUnmatched' 'edit "$TASK/design/wo2.json" ".doneWhen = [\"tests/a_test.sh is deleted\"]"')" \
   '4|[{"id":"wo2","item":"tests/b_test.sh","problem":"owned file named in no done-when row"}]'
 expect "a done-when row that names no owned file is refused" \
-  "$(design_case '.coverage.testsOnlyRowsUnmatched' 'edit ".doneWhen += [\"the suite is smaller\"]" "$TASK/design/wo2.json"')" \
+  "$(design_case '.coverage.testsOnlyRowsUnmatched' 'edit "$TASK/design/wo2.json" ".doneWhen += [\"the suite is smaller\"]"')" \
   '4|[{"id":"wo2","item":"the suite is smaller","problem":"done-when row names no owned file"}]'
 expect "an order that does not come after every tests order of its task is refused" \
-  "$(design_case '.graph.testsOnlyOrdersBeforeTests' 'edit ".dependsOn = []" "$TASK/design/wo2.json"')" \
+  "$(design_case '.graph.testsOnlyOrdersBeforeTests' 'edit "$TASK/design/wo2.json" ".dependsOn = []"')" \
   '4|[{"id":"wo2","testsOrder":"wo1"}]'
 expect "a test that another open task froze is refused, and this task's own freeze is not" \
-  "$(design_case '.graph.ordersOwningFrozenPaths' 'edit ".state = \"in_progress\"" "$PROJECT/tasks/t0/task.json"')" \
+  "$(design_case '.graph.ordersOwningFrozenPaths' 'edit "$PROJECT/tasks/t0/task.json" ".state = \"in_progress\""')" \
   '4|[{"id":"wo2","path":"tests/a_test.sh","task":"t0"}]'
 expect "a tests order that owns only a test another open task froze is refused" \
-  "$(design_case '.graph.ordersOwningFrozenPaths' 'edit ".state = \"in_progress\"" "$PROJECT/tasks/t0/task.json"; frozen_record t0 tests/k_test.sh')" \
+  "$(design_case '.graph.ordersOwningFrozenPaths' 'edit "$PROJECT/tasks/t0/task.json" ".state = \"in_progress\""; frozen_record t0 tests/k_test.sh')" \
   '4|[{"id":"wo1","path":"tests/k_test.sh","task":"t0"}]'
 expect "an order that also builds code may own a test another open task froze" \
-  "$(design_case '.graph.ordersOwningFrozenPaths' 'edit ".state = \"in_progress\"" "$PROJECT/tasks/t0/task.json"; frozen_record t0 tests/k_test.sh; edit ".ownedFiles += [\"a.php\"]" "$TASK/design/wo1.json"')" \
+  "$(design_case '.graph.ordersOwningFrozenPaths' 'edit "$PROJECT/tasks/t0/task.json" ".state = \"in_progress\""; frozen_record t0 tests/k_test.sh; edit "$TASK/design/wo1.json" ".ownedFiles += [\"a.php\"]"')" \
   '0|[]'
 
 echo "--- design: each refusal prints its line, naming the order and the file"
 STOP='[.open.stop[] | select(startswith("order wo2"))]'
 expect "an owned file no row names" \
-  "$(design_case "$STOP" 'edit ".doneWhen = [\"tests/a_test.sh is deleted\"]" "$TASK/design/wo2.json"')" \
+  "$(design_case "$STOP" 'edit "$TASK/design/wo2.json" ".doneWhen = [\"tests/a_test.sh is deleted\"]"')" \
   '4|["order wo2 deletes the tests of a cleanup run, and no done-when row names its file tests/b_test.sh: add-done-when"]'
 expect "a row that names no owned file" \
-  "$(design_case "$STOP" 'edit ".doneWhen += [\"the suite is smaller\"]" "$TASK/design/wo2.json"')" \
+  "$(design_case "$STOP" 'edit "$TASK/design/wo2.json" ".doneWhen += [\"the suite is smaller\"]"')" \
   '4|["order wo2 deletes the tests of a cleanup run, and its done-when row \"the suite is smaller\" names no file it owns: remove-done-when, or name the file in it"]'
 expect "an order before a tests order" \
-  "$(design_case "$STOP" 'edit ".dependsOn = []" "$TASK/design/wo2.json"')" \
+  "$(design_case "$STOP" 'edit "$TASK/design/wo2.json" ".dependsOn = []"')" \
   '4|["order wo2 deletes the tests of a cleanup run and does not come after the tests order wo1: add wo1 to its dependsOn"]'
 expect "a test another open task froze" \
-  "$(design_case "$STOP" 'edit ".state = \"in_progress\"" "$PROJECT/tasks/t0/task.json"')" \
+  "$(design_case "$STOP" 'edit "$PROJECT/tasks/t0/task.json" ".state = \"in_progress\""')" \
   '4|["order wo2 owns tests/a_test.sh, a test that task t0 froze and has not completed: remove-owned-file, or wait until t0 is complete"]'
 
 echo "--- build: the order deletes, and never edits"
