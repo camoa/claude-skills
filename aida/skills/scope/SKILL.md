@@ -197,8 +197,8 @@ into `task.json`'s own `mechanismHints`, never into `alignment.json`.
 
 A criterion is an outcome a person can see when the task is done, phrased like a user story: "An
 admin can download the user list as CSV." It is written from outside the code. It never names a
-class, a file, or a stage. It is not a note about how a stage should work, a reminder to check
-something, or a task for one stage to do.
+class, a file, or a stage. It is not a note about how a stage should work, or a task for one
+stage to do.
 
 A criterion states what must work, in the person's words. Scope does not police those words.
 "Test that the export works", "check" and "make sure" mean that review verifies it: review runs
@@ -228,14 +228,14 @@ Recommend the kind from what the outcome is, never from the words that state it.
 `machine` for a behaviour of code with logic, which a small test or a named command observes. "An
 admin can download the user list as CSV" is `machine` when a test can observe the export. Review
 sees the journey around it. Recommend `person` for anything else: a document, configuration,
-metadata, layout, how a page looks, or a whole journey. A person or a reviewer reads it. A
-`machine` criterion about a document forces a frozen test that only reads the text back.
+metadata, layout, how a page looks, or a whole journey. A person or a reviewer reads it.
+Design refuses a `machine` criterion that only a document serves.
 
 Some facts exist only after a step the task never takes, such as a push behind a sudo gate. No
-build step runs after that step, so write `person`. Say the step in the outcome as the person's action. For such
-a step, name in the verify clause the command that reads the fact, not a page the person opens.
-At review's close, the session runs that command and shows its output. The person answers met or
-unmet; no script runs the clause.
+build step runs after that step, so write `person`. Say the step in the outcome as the person's
+action. For such a step, name in the verify clause the command that reads the fact, not a page
+the person opens. At review's close, the session runs that command and shows its output. The
+person answers met or unmet; no script runs the clause.
 
 Never pass a verdict. It starts `unanswered` and stays there until an end of task review runs;
 scope never sets it, on `add` or on `update`.
@@ -300,8 +300,7 @@ Read `<projectPath>/project.json` once, at the point criteria are being drafted:
 
 - **`surfaces.e2e.enabled` is true.** The end to end test is the surface's own check, and review
   runs it after the build. So do not ask a separate question about coverage, and do not ask per
-  criterion whether to automate it. Recommend each criterion's kind from its outcome, as above. A
-  verify clause never names the end to end test.
+  criterion whether to automate it. Recommend each criterion's kind from its outcome, as above.
 - **A kind is off and not declined, or `surfaces` is null.** The decline is that kind's
   `declined` field in `project.json`. Interactive only. Skip a kind that `read` names under
   `surfaces-deferred:`. Look at the goal once, at this same point. Before you ask, run
@@ -419,7 +418,7 @@ call's `model` overrides it. The reason: the harness once ended the distiller on
 before it wrote anything, and the same message on sonnet completed. A rejection tied to one
 model is not tied to the message, so the message stays and the model moves. When the sonnet
 dispatch also ends before its first write, stop: interactive, put it to the person with the
-Agent call's own error; autonomous, halt. The research and design pages refer to this rule.
+Agent call's own error; autonomous, stop the run. The research and design pages refer to this rule.
 
 Cancelled at any point, first run or later: stop without running `init`, `set-goal`, `add`,
 `add-non-goal`, `update`, `remove`, `set-tests` or `set-mechanism` again. A drafted line is
