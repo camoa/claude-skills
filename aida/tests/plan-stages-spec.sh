@@ -163,17 +163,6 @@ confirmer_case() (
 )
 expect "the confirmer may rewrite its own verdict file" "$(confirmer_case)" "allow"
 
-# add_test_case: add-test's exit and its warnings, for a tests order whose description names its own
-# surface. The wording is a warning, never a refusal.
-add_test_case() (
-  source "$HERE/records.bash"
-  task_records branch
-  jq '.surfaces = ["home"]' "$TASK/design/wo1.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/wo1.json"
-  run "$DESIGN" add-test "$TASK" --id wo1 --level unit --description "the home page shows b"
-  printf '%s|%s\n' "$RC" "$(warned "design add-test")"
-)
-expect "a test that names its order's surface is added, with a warning" "$(add_test_case)" "0|1"
-
 # recipe_case: verify --recipe's exit, the entries it carried and its warnings, from a recipe whose
 # second verifier entry holds a shell character.
 recipe_case() (

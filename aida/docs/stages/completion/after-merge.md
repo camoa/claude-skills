@@ -28,7 +28,8 @@ The hook refuses a write to AIDA's own hooks, and a Write or Edit that puts `dis
 
 The hook is best effort, not a boundary. It reads text, so a command from a variable, a script
 file, an alias, an encoded string, or another language that runs git gets past it. A settings file
-written through Bash gets past it too. `AIDA_ALLOW_DANGEROUS=1` in the shell that launched the
+written through Bash gets past it too. What you see in each mode is on
+[a command is put to you or refused](../../when-it-stops/destructive-command.md). `AIDA_ALLOW_DANGEROUS=1` in the shell that launched the
 session turns it off, which is how an unattended run pushes. The hook's own header lists every
 form it reads and every form it cannot.
 
