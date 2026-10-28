@@ -5,32 +5,31 @@ prune the task's worktree.
 
 ## Pushing
 
-A hook refuses `git push` in the session. To let the session push on your machine, create one
-file that only `sudo` can create:
+A hook asks you before the session runs `git push`. Claude Code shows its permission prompt, and
+the command runs only when you approve it.
 
-```
-sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push
-```
+## What else the hook asks about
 
-While the file exists, the session pushes. `sudo rm /etc/claude/allow-push` closes the gate. A
-force push stays refused, and so do a mirror push and a delete of a remote branch.
-
-## What else the hook refuses
-
-The same hook refuses commands that throw work away or publish it:
+The same hook asks before other commands that throw work away or publish it:
 
 - a hard reset, `git clean`, a forced branch delete, and a checkout or restore of the whole tree;
 - a recursive delete of root, your home folder, the working folder, or a folder above them;
 - a recursive delete of the session's scratchpad folder, a folder above it, or a glob directly
   under it;
-- `gh repo sync`, `gh pr merge`, and a `gh api` call that changes a branch;
-- a write to AIDA's own hooks, and a Write or Edit that puts `disableAllHooks` in a `.claude`
-  settings file.
+- `gh repo sync`, `gh pr merge`, and a `gh api` call that changes a branch.
 
-The hook is best effort, not a boundary. It reads text, so a command built at run time, an encoded
-string, or another language that runs git gets past it. A settings file written through Bash gets
-past it too. `AIDA_ALLOW_DANGEROUS=1` in the shell that launched the session turns it off. The
-hook's own header lists every form it catches and every form it cannot.
+Where Claude Code cannot show a prompt, the hook refuses the command: in bypassPermissions mode,
+in dontAsk mode, and in a headless run. A role AIDA dispatched is refused too, and it stops and
+reports the command to you.
+
+The hook refuses a write to AIDA's own hooks, and a Write or Edit that puts `disableAllHooks` in a
+`.claude` settings file. It does not ask about those.
+
+The hook is best effort, not a boundary. It reads text, so a command from a variable, a script
+file, an alias, an encoded string, or another language that runs git gets past it. A settings file
+written through Bash gets past it too. `AIDA_ALLOW_DANGEROUS=1` in the shell that launched the
+session turns it off, which is how an unattended run pushes. The hook's own header lists every
+form it reads and every form it cannot.
 
 ## Prune the worktree
 
