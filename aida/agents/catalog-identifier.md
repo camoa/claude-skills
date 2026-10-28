@@ -1,6 +1,6 @@
 ---
 name: catalog-identifier
-description: Asks the guide catalog which guides and recipes cover a name, and returns the names that matched. Dispatched by the research, implement, review, surfaces, task and tool skills. Identifies only, and never opens a guide body.
+description: Asks the guide catalog which guides and recipes cover a name, and returns the names that matched. Dispatched by the research, implement, review, surfaces, task, test-cleanup and tool skills. Identifies only, and never opens a guide body.
 tools: Skill, Read, Bash, Glob, Grep
 disallowedTools: Agent
 model: sonnet
