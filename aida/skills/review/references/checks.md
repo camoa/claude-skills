@@ -103,6 +103,10 @@ that nothing was selected and exit zero. A silent pass reads unknown, never met.
 a framework the baseline recorded unmet subtracts the same way. When the suite row declares
 `failure_line`, only the lines it selects are compared, and the record names it under `failureLine`.
 
+**Mutation testing runs only when the project opts in.** With no `review.mutation` in
+`project.json`, or with it false, the mutation command never runs. Check 4 then reads the
+coverage half alone, and `audit` names it `off`. The project skill's `set-mutation` turns it on.
+
 **Check 4 records the score and every survivor, as the record holds them.** No mutation row reads
 undeclared, never met. The survivors go to the reviewer at the next step, as one more lens. The score
 is the line the tool's own recipe names, chosen by the tool in the row. An Infection run with no

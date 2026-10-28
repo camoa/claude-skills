@@ -107,6 +107,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh set-frameworks <name-or-path> <framework>...
        project-actions.sh set-worktree-base <name-or-path> [<folder>]
        project-actions.sh read-worktree-base <name-or-path>
+       project-actions.sh set-mutation <name-or-path> <on|off>
        project-actions.sh git-init <name-or-path>
        project-actions.sh add-source <name-or-path> <kind> <folder|catalog>
        project-actions.sh recipe-source <projectFolder> <phase> <framework>
@@ -930,6 +931,24 @@ do_read_worktree_base() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# set-mutation: whether review runs mutation testing for this project (audit/24, section 2)
+# ------------------------------------------------------------------------------------------------
+
+# Records review.mutation, true for on and false for off. Review reads an absent field as off.
+do_set_mutation() {
+  local target="${1:?set-mutation: a name or a path is required}" match project_path
+  case "${2:-}" in on|off) ;; *) die3 "set-mutation: takes on or off, got: ${2:-nothing}" ;; esac
+  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  project_path="$(printf '%s' "$match" | jq -r '.path')"
+  write_project_field "$project_path" "could not update review.mutation in $project_path/project.json" \
+    --argjson m "$([ "$2" = on ] && echo true || echo false)" '.review.mutation = $m'
+  commit_project "$project_path" "Set mutation testing $2" "requested" "" "" "project" "mutation" project.json \
+    || printf 'project-actions: review.mutation was written but not committed.\n' >&2
+  echo "MUTATION: $2"
+  check_after_write "$project_path" project.json
+}
+
+# ------------------------------------------------------------------------------------------------
 # git-init: the repair the check names on a project folder that is not a repository yet
 # ------------------------------------------------------------------------------------------------
 
@@ -1637,6 +1656,7 @@ case "$action" in
   set-frameworks) do_set_frameworks "$@" ;;
   set-worktree-base) do_set_worktree_base "$@" ;;
   read-worktree-base) do_read_worktree_base "$@" ;;
+  set-mutation) do_set_mutation "$@" ;;
   git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
   recipe-source) do_recipe_source "$@" ;;

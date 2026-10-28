@@ -90,6 +90,17 @@
       ],
       "description": "Whether end to end and visual regression are set up, the path to the surface file, and whether a person declined either kind's setup. Null means nobody has run the surfaces skill, which is its one producer. Baseline images stay committed inside the code repository, beside the suite that reads them; this field points at the surface file, never at pixel data. Visual parity has no producer, so it has no key here: review reads it off the recipe row."
     },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mutation": {
+          "type": "boolean",
+          "description": "True when the project opts in to mutation testing at review. Absent or false reads off: review's check 4 reads its coverage half alone, the mutation command never runs, and the audit line names it off. The project skill's set-mutation is its one producer."
+        }
+      },
+      "description": "What review runs for this project beyond its fixed checks. Absent until set-mutation writes it."
+    },
     "taskRule": {
       "default": null,
       "oneOf": [

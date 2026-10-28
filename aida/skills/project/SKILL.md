@@ -1,7 +1,7 @@
 ---
 name: project
 description: This skill should be used when the user asks "which project", wants to "create a project", "start a new project", "switch project", "mark this project complete", "archive a project", "unregister a project", "install the task rule", "set where task worktrees go", "check this machine", or "uninstall AIDA from this repository". It works out which project owns the current directory, creates one, switches to another, ends one, or cleans one up, and runs the project check every time.
-argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | set-worktree-base <name-or-path> [<folder>] | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | drop-retired <name-or-path> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path> | check-machine]"
+argument-hint: "[create | switch <name-or-path> | list | state <name-or-path> <active|complete|archived> | set-code-path <name-or-path> [<new-code-path>] | set-frameworks <name-or-path> <framework>... | set-worktree-base <name-or-path> [<folder>] | set-mutation <name-or-path> <on|off> | git-init <name-or-path> | add-source <name-or-path> <kind> <folder|catalog> | subscribe-playbook <name-or-path> <framework> <set-id> | unsubscribe-playbook <name-or-path> <framework> <set-id> | drop-retired <name-or-path> | unregister <name-or-path> | task-rule <name-or-path> [--remove | --decline] | uninstall <name-or-path> | check-machine]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-framework.sh *)
 ---
@@ -381,6 +381,18 @@ is. Show the whole output.
 
 `read-worktree-base <name-or-path>` prints the recorded folder and exits 0. A project that records
 none prints the default and exits 1. The task skill reads it before a task is created.
+
+## `set-mutation <name-or-path> <on|off>`
+
+Turns mutation testing at review on or off for this project. It is off until a person turns it on,
+because a mutation run can take hours. Run:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
+  set-mutation "<target>" <on|off>
+```
+Looks the target up the same way `switch` does. Not found: say so and stop. Otherwise it writes
+`review.mutation` into the project file, commits the change, and runs the check. Review reads it
+at `checks`. Show the whole output.
 
 ## `add-source <name-or-path> <kind> <folder | catalog>`
 

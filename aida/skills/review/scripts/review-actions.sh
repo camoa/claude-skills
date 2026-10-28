@@ -7,8 +7,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The skill body holds the conversation. This script holds the deterministic half: it reads what
 # implementation handed over, writes the diff once, runs every command the two recipes declare over
 # the changed files at the final commit, assembles the architecture reviewer's brief, records what
-# that reviewer found, runs the surfaces and takes the person's walk, and closes the review with one
-# verdict. It never judges whether a criterion is met by reading code, and it starts no fixer: a
+# that reviewer found, runs the surfaces and records the acceptance verifier's evidence, and closes
+# the review with one verdict. It never judges whether a criterion is met by reading code, and it starts no fixer: a
 # failed review goes to the person with the record.
 #
 # One review record, at <task folder>/review/review.json (scripts/review-schema.json). It lives in
@@ -26,9 +26,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                            [--value <name>=<value>]...
 #   review-actions.sh brief    <task_folder>          writes <task>/review/brief.json
 #   review-actions.sh findings <task_folder> [--findings <path the reviewer wrote>]
-#   review-actions.sh surfaces <task_folder> [--walked <surface id>]...
-#                                            [--accept-baseline <surface id>]...
-#                                            [--value <name>=<value>]...
+#   review-actions.sh acceptance <task_folder> [--evidence]
+#                                              [--accept-baseline <surface id>]...
+#                                              [--value <name>=<value>]...
 #   review-actions.sh close    <task_folder> [--row <criterion or check>=met|unmet]...
 #                                            [--row <finding id>=wrong|deferred]...
 #   review-actions.sh audit    <task_folder>          the checks, and how each verdict came about
@@ -48,10 +48,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # review/brief.json for the reviewer's brief. The one body any action prints is `read`'s checklist
 # rows, because the person answering them has to read them verbatim.
 #
-# `surfaces` takes no recipe flag. It reads the review recipe path `checks` recorded, so the surface
+# `acceptance` takes no recipe flag. It reads the review recipe path `checks` recorded, so the surface
 # block is read from the same file the tool rows came from and review keeps its two lookups. Its
 # `--value base-url=<address>` is exported as PLAYWRIGHT_BASE_URL for every row, and nothing stores
-# an address (ideal/surfaces.md).
+# an address (ideal/surfaces.md). Its `--evidence` reads the rows the acceptance verifier wrote to
+# <task>/records/evidence.json, which git ignores, and the review record keeps them. The files the
+# rows name stay under <task>/review/evidence/, where git keeps text and no image.
 #
 # `step` prints one of this skill's own step files, from
 # ${CLAUDE_PLUGIN_ROOT}/skills/review/references/<name>.md. The skill reads them through this action
@@ -74,7 +76,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  15  the recorded codePath does not exist on disk.
 #  51  the code path moved, or went dirty, since `checks` ran.
 #  52  the findings file could not be read as a findings file, or it answers a done-when clause no
-#      order routed to review.
+#      order routed to review. Or the evidence file could not be read as the verifier's rows, or it
+#      leaves a criterion with no row.
 #  61  the code repository's tree is dirty.
 #  62  a step ran out of order, and what it depends on recorded nothing.
 #  63  the previous record could not be archived, so the write was refused.
@@ -217,7 +220,7 @@ usage: review-actions.sh read     <task_folder>
                                   [--value <name>=<value>]...
        review-actions.sh brief    <task_folder>
        review-actions.sh findings <task_folder> [--findings <path the reviewer wrote>]
-       review-actions.sh surfaces <task_folder> [--walked <surface id>]...
+       review-actions.sh acceptance <task_folder> [--evidence]
                                                [--accept-baseline <surface id>]... [--value <name>=<value>]...
        review-actions.sh close    <task_folder> [--row <criterion or check>=met|unmet]...
                                                [--row <finding id>=wrong|deferred]...
@@ -233,7 +236,7 @@ EOF
 
 IMPL_DIR=""; REVIEW_DIR=""; RECORD_FILE=""; DIFF_FILE=""
 FINISHED_FILE=""; SNAPSHOT_FILE=""; BASELINE_FILE=""; ALIGNMENT_FILE=""
-FINDINGS_TARGET=""; BRIEF_FILE=""; LEDGER_FILE=""
+FINDINGS_TARGET=""; BRIEF_FILE=""; LEDGER_FILE=""; EVIDENCE_FILE=""
 
 # $1 the action's own name, $2 the task folder as given. Sets TASK_PATH and every path above.
 rw_paths() {
@@ -247,6 +250,7 @@ rw_paths() {
   DIFF_FILE="$REVIEW_DIR/diff.patch"
   FINDINGS_TARGET="$REVIEW_DIR/findings.json"
   BRIEF_FILE="$REVIEW_DIR/brief.json"
+  EVIDENCE_FILE="$TASK_PATH/records/evidence.json"
   FINISHED_FILE="$IMPL_DIR/finished.json"
   SNAPSHOT_FILE="$IMPL_DIR/snapshot.json"
   LEDGER_FILE="$IMPL_DIR/ledger.json"
@@ -329,15 +333,15 @@ rw_require_step() {
   die 62 "$who: $RECORD_FILE records no $marker row, so the step before this one recorded nothing. Run $advice first."
 }
 
-# Which step this task is at, as one word the `read` report prints: checks, reviewer, surfaces,
+# Which step this task is at, as one word the `read` report prints: checks, reviewer, acceptance,
 # close or done. Read off the record's own rows, because each action writes rows nothing else
 # writes; there is no separate state field, and a fourth place to keep one would be a fourth thing
 # to keep in step.
 rw_step_now() {
   if [ -z "$RW_RECORD_DOC" ]; then printf 'checks'; return; fi
   if printf '%s' "$RW_RECORD_DOC" | jq -e 'has("verdict")' >/dev/null 2>&1; then printf 'done'; return; fi
-  if rw_record_has_check "$CHECK_E2E"; then printf 'close'; return; fi
-  if rw_record_has_check "solid"; then printf 'surfaces'; return; fi
+  if printf '%s' "$RW_RECORD_DOC" | jq -e 'has("evidence")' >/dev/null 2>&1; then printf 'close'; return; fi
+  if rw_record_has_check "solid"; then printf 'acceptance'; return; fi
   if rw_record_has_check "$CHECK_SERVES"; then printf 'reviewer'; return; fi
   printf 'checks'
 }
@@ -426,7 +430,7 @@ RW_SCHEMA_RESULT2
 # whether the working tree must also still be clean (`clean` or `commit-only`).
 #
 # `findings` asks for both: the reviewer holds Write for one purpose, its own findings file, so a
-# file it left in the code repository is caught here rather than read as a finding later. `surfaces`
+# file it left in the code repository is caught here rather than read as a finding later. `acceptance`
 # and `close` ask for the commit alone, because accepting a new surface baseline writes images into
 # the code repository on purpose and the step that follows it would otherwise refuse.
 rw_refuse_moved_code() {
@@ -585,6 +589,7 @@ rw_print_summary() {
   printf '%s' "$doc" | jq -r --arg who "$who" --arg record "$RECORD_FILE" '
     def line($k; $v): "\($k): \($v)";
     def short: (. // "") | gsub("\n"; " ") | .[0:160];
+    def evidence_line($k): line("evidence(\($k))"; "\(.verdict) \(if .path == "" then "(no file)" else .path end) | \(.note | short)");
     [ line("action"; $who),
       line("task"; .task),
       line("range"; .reviewedRange),
@@ -595,8 +600,13 @@ rw_print_summary() {
     # Both texts of a changed non-goal, whole: the person accepts or rejects the words themselves.
     + [ (.checks // [])[] | select(has("frozenText"))
         | line("nonGoal(\(.id))"; "frozen: \(.frozenText) | live: \(.liveText // "removed")") ]
-    + [ (.criteria // [])[] | line("criterion(\(.id))"; "\(.verdict) answeredBy=\(.answeredBy)") ]
-    + [ (.surfaces // [])[] | line("surface(\(.id))"; "\(.verdict) walked=\(.walked) ran=\(.ran)") ]
+    # The evidence rows of each criterion under it, so a person answers a person row with what the
+    # verifier saw beside it. Then the rows that answer a surface alone.
+    + [ . as $r | (.criteria // [])[] | .id as $c
+        | line("criterion(\($c))"; "\(.verdict) answeredBy=\(.answeredBy)"),
+          (($r.evidence // [])[] | select(.criterion == $c) | evidence_line($c)) ]
+    + [ (.evidence // [])[] | select(has("criterion") | not) | evidence_line("\(.surface)@\(.viewport // "any")") ]
+    + [ (.surfaces // [])[] | line("surface(\(.id))"; "\(.verdict) looked=\(.looked) ran=\(.ran)") ]
     + (if has("surfaceSetup") then [ line("surfaceSetup"; .surfaceSetup) ] else [] end)
     + [ line("mutation"; "\(.mutation.verdict) survivors=\((.mutation.survivors // []) | length) score=\(if (.mutation.score // "") == "" then "none printed" else "in the record" end)") ]
     + [ (.findings // []) | group_by(.lens)[] | line("lens(\(.[0].lens))"; "\(length) finding(s): \([ .[].id ] | join(", "))") ]
@@ -653,7 +663,7 @@ do_read() {
     e2e_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not-set-up" elif (.surfaces.e2e.enabled // false) then "on" else "off" end')"
     vr_enabled="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not-set-up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
     # The recorded worktree when this task has one, the project's own code path otherwise, the
-    # same tree the surfaces action joins a relative registryPath to (row 32 of
+    # same tree the acceptance action joins a relative registryPath to (row 32 of
     # audit/14-live-run-gaps.md); read never makes a worktree, so it never calls rv_load_codepath.
     registry_path="$(sf_surface_path "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')" \
       "$([ "$code_state" != "none" ] && printf '%s' "$code_state" || printf '%s' "$RW_PROJECT_DOC" | jq -r '.codePath // ""')")"
@@ -801,7 +811,7 @@ RW_CHANGED_JSON="[]"; RW_CHANGED_COUNT=0; RW_RANGE=""
 RW_VALUES=""; RW_CATALOG_NOTES="[]"
 
 # The files the range $1..$2 changed, into RW_CHANGED_JSON and RW_CHANGED_COUNT. One producer:
-# checks reads it for the range it records, and surfaces reads it again for that recorded range.
+# checks reads it for the range it records, and acceptance reads it again for that recorded range.
 # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
 # the new path, so a deleted file no order owns would never appear in the changed list.
 rw_load_changed() {
@@ -1078,6 +1088,13 @@ rw_run_mutation() {
   local fw_count fwi fw_obj fw row outfile rc tool has_paths stopped
   local detail output survivors score combined mut_file
   verdict=""; detail=""; output=""; survivors='[]'; score=""; combined=""; tool=""; has_paths=false
+  # Mutation testing is opt in per project. The project skill's set-mutation writes the field, and
+  # an absent field reads off, so check 4 is the coverage half alone and the command never runs.
+  if [ "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.review.mutation // false')" != "true" ]; then
+    RW_MUTATION="$(jq -n '{verdict: "undeclared", score: "", survivors: [], off: true,
+      detail: "the project has not opted in to mutation testing: project.json sets no review.mutation, so the mutation command was not run. The project skill set-mutation turns it on."}')"
+    return 0
+  fi
   # A task with no automated tests has no test for a mutant to fail, so the row does not apply and
   # the command never runs, the way the build reads its suite row (gap row 246).
   if [ "$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ noAutomatedTests")" = "true" ]; then
@@ -2379,7 +2396,7 @@ RW_RESEARCH_FILES
 }
 
 # ------------------------------------------------------------------------------------------------
-# `surfaces`: checks 13 to 15, the registry, and the person's walk.
+# `acceptance`: checks 13 to 15, the registry, and the acceptance verifier's evidence.
 # ------------------------------------------------------------------------------------------------
 
 # The surface rows the review recipe declares, across every framework the record resolved one for,
@@ -2446,21 +2463,21 @@ RW_GLOBS
   return 1
 }
 
-# One kind of surface: its row, its run, its surfaces from the surface file and the walk. $1 the
-# check id, $2 the surface row id in the recipe, $3 the kind word the surface file carries, $4
-# whether the project has this kind on, $5 the walked list, $6 the accepted list. Appends the check
-# row to $7 and the surface rows to $8.
+# One kind of surface: its row, its run, its surfaces from the surface file and the verifier's
+# look. $1 the check id, $2 the surface row id in the recipe, $3 the kind word the surface file
+# carries, $4 whether the project has this kind on, $5 the ids the evidence holds at every
+# viewport, $6 the accepted list. Appends the check row to $7 and the surface rows to $8.
 rw_surface_kind() {
-  local check_id="$1" row_id="$2" gate="$3" enabled="$4" walked="$5" accepted="$6"
+  local check_id="$1" row_id="$2" gate="$3" enabled="$4" looked="$5" accepted="$6"
   local checks_out="$7" surfaces_out="$8"
   local row rc output mine count i sid verdict rows marker off not_run
-  local ran row_verdict detail worst missing_walk accept_here accept_row pre_row
+  local ran row_verdict detail worst missing_look accept_here accept_row pre_row seen_bad
   local one run unaffected narrow_note="" values
 
   # A disabled surface gets its own row, not run, and is counted in the detail rather than dropped
   # in silence. The suite skips it itself, so its id is never in the output and never read unmet.
   off="$(printf '%s' "$SF_SURFACES" | jq -c --arg g "$gate" '[ .[] | select((.kinds | index($g)) and (.enabled | not)) ]')"
-  not_run='.[] | {id, verdict: "undeclared", ran: false, walked: false, reportPath: ""}'
+  not_run='.[] | {id, verdict: "undeclared", ran: false, looked: false, reportPath: ""}'
   printf '%s' "$off" | jq -c "$not_run" >>"$surfaces_out"
   mine="$(printf '%s' "$SF_SURFACES" | jq -c --arg g "$gate" '[ .[] | select((.kinds | index($g)) and .enabled) ]')"
   count="$(printf '%s' "$mine" | jq 'length')"
@@ -2559,7 +2576,7 @@ rw_surface_kind() {
       rw_surface_row_check "$pre_row" "e2e-preflight" "ran before the e2e suite" >>"$checks_out"
       if [ -n "$RW_RUN_VERDICT" ] || [ "$RW_RUN_RC" != "0" ]; then
         rw_check_row "$check_id" "unknown" "the e2e-preflight row did not exit 0, so the e2e suite did not run and nothing here can say what it would have found." >>"$checks_out"
-        printf '%s' "$mine" | jq -c --arg walked " $walked " '.[] | .id as $sid | {id: $sid, verdict: "unknown", ran: false, walked: ($walked | contains(" " + $sid + " ")), reportPath: ""}' >>"$surfaces_out"
+        printf '%s' "$mine" | jq -c --arg looked " $looked " '.[] | .id as $sid | {id: $sid, verdict: "unknown", ran: false, looked: ($looked | contains(" " + $sid + " ")), reportPath: ""}' >>"$surfaces_out"
         return 0
       fi
     fi
@@ -2619,12 +2636,12 @@ rw_surface_kind() {
   # reads unmet rather than borrowing the run's own verdict: a gate that cannot notice its subject
   # going absent cannot inform.
   rows="$(jq -nc --argjson mine "$mine" --rawfile out "$RW_RUN_OUTFILE" --arg v "$row_verdict" \
-    --argjson ran "$ran" --arg walked " $walked " --arg accepted " $RW_ACCEPTED_DONE " '
+    --argjson ran "$ran" --arg looked " $looked " --arg accepted " $RW_ACCEPTED_DONE " '
     [ $mine[] | .id as $sid
       | {id: $sid,
          verdict: (if $ran and (($out | contains($sid)) | not) then "unmet" else $v end),
          ran: $ran,
-         walked: ($walked | contains(" " + $sid + " ")),
+         looked: ($looked | contains(" " + $sid + " ")),
          reportPath: ""}
         + (if ($accepted | contains(" " + $sid + " ")) then {baselineAccepted: true} else {} end) ]')"
   printf '%s' "$rows" | jq -c '.[]' >>"$surfaces_out"
@@ -2635,13 +2652,22 @@ rw_surface_kind() {
   done <<RW_SURFACE_KIND
 $(printf '%s' "$rows" | jq -r '.[].verdict')
 RW_SURFACE_KIND
-  missing_walk="$(printf '%s' "$rows" | jq -r '[ .[] | select(.walked | not) | .id ] | join(", ")')"
+  missing_look="$(printf '%s' "$rows" | jq -r '[ .[] | select(.looked | not) | .id ] | join(", ")')"
 
-  if [ -n "$missing_walk" ]; then
+  if [ -n "$missing_look" ]; then
     worst="$(rw_worse "$worst" "unknown")"
-    detail="$detail Nobody walked these surfaces, and the walk is half the answer: $missing_walk"
+    detail="$detail The acceptance verifier recorded no evidence at every viewport for these surfaces, and the look is half the answer: $missing_look"
   fi
-  rw_check_row "$check_id" "$worst" "$detail" "$rc" "$RW_RUN_OUTFILE" "$(printf '%s' "$row" | jq -r '.framework // ""')" >>"$checks_out"
+  # A run that passed, where the verifier saw something else, is a finding that waits for a person.
+  # It never fails the task alone (audit/23, rule 10), so the check waits for the person's row.
+  seen_bad="$(printf '%s' "$RW_EVIDENCE" | jq -r --argjson rows "$rows" \
+    '[ .[] | select(.verdict != "met") | select(.surface as $s | [ $rows[].id ] | index($s)) | "\(.surface)@\(.viewport // "any") \(.verdict)" ] | join(", ")')"
+  if [ "$worst" = "met" ] && [ -n "$seen_bad" ]; then
+    rw_check_row "$check_id" "unknown" "$detail The acceptance verifier judged these rows not met: $seen_bad. A person reads the evidence and answers met or unmet." \
+      "$rc" "$RW_RUN_OUTFILE" "$(printf '%s' "$row" | jq -r '.framework // ""')" | jq -c '. + {answeredBy: "nobody"}' >>"$checks_out"
+  else
+    rw_check_row "$check_id" "$worst" "$detail" "$rc" "$RW_RUN_OUTFILE" "$(printf '%s' "$row" | jq -r '.framework // ""')" >>"$checks_out"
+  fi
   rw_run_done
 }
 
@@ -2707,7 +2733,7 @@ rw_command_surfaces() {
       rw_run_done
     fi
     jq -nc --arg id "$sid" --arg v "$verdict" --argjson ran "$ran" \
-      '{id: $id, verdict: $v, ran: $ran, walked: false, reportPath: ""}' >>"$surfaces_out"
+      '{id: $id, verdict: $v, ran: $ran, looked: false, reportPath: ""}' >>"$surfaces_out"
     worst="$(rw_worse "$worst" "$verdict")"
   done
   [ "$off" = "[]" ] || detail="$detail Disabled and not run: $(printf '%s' "$off" | jq -r '[ .[].id ] | join(", ")')."
@@ -2763,44 +2789,74 @@ rw_surface_extra_rows() {
   done
 }
 
-do_surfaces() {
-  local task_arg="" walked="" accepted=""
+# The rows the acceptance verifier wrote, as a JSON array, into RW_EVIDENCE. Exit 52 when the file
+# is not the verifier's rows: a row of the wrong shape, a criterion the frozen contract does not
+# hold, a surface the surface file does not register, a viewport it does not list, a file that is
+# not on disk, or a criterion with no row. Reads SF_SURFACES and the viewports in $1.
+RW_EVIDENCE="[]"
+rw_load_evidence() {
+  local viewports="$1" bad missing
+  [ "$(json_file_state "$EVIDENCE_FILE")" = "ok" ] \
+    || die 52 "acceptance: --evidence reads $EVIDENCE_FILE, and it is $(json_file_state "$EVIDENCE_FILE"). The acceptance verifier writes it. Dispatch the verifier, then run this again."
+  RW_EVIDENCE="$(jq -c '.rows' "$EVIDENCE_FILE")"
+  bad="$(printf '%s' "$RW_EVIDENCE" | jq -r --argjson criteria "$(rw_alignment | jq -c '[ (.criteria // [])[].id ]')" \
+    --argjson surfaces "$(printf '%s' "$SF_SURFACES" | jq -c '[ .[].id ]')" --argjson viewports "$viewports" '
+    if type != "array" then "the file holds no rows list"
+    else [ .[] | tostring as $t
+      | select((type != "object")
+          or ((.sentence | type) != "string") or (.sentence == "")
+          or ((.path | type) != "string") or ((.note | type) != "string")
+          or ((.verdict as $w | ["met", "unmet", "unknown"] | index($w)) == null)
+          or ((has("criterion") or has("surface")) | not)
+          or (has("criterion") and (.criterion as $c | $criteria | index($c)) == null)
+          or (has("surface") and (.surface as $s | $surfaces | index($s)) == null)
+          or (has("viewport") and ((has("surface") | not) or (($viewports | length) > 0 and (.viewport as $v | $viewports | index($v)) == null)))
+          or ((keys - ["criterion", "sentence", "surface", "viewport", "path", "verdict", "note"]) != []))
+      | $t ] | join("; ") end' 2>/dev/null)" \
+    || die 52 "acceptance: $EVIDENCE_FILE could not be read as the verifier's rows."
+  [ -z "$bad" ] \
+    || die 52 "acceptance: $EVIDENCE_FILE holds rows that are not evidence rows (scripts/review-schema.json, evidenceRow), or that name a criterion, surface or viewport this task does not hold: $bad. Nothing was written."
+  bad="$(printf '%s' "$RW_EVIDENCE" | jq -r '.[] | select(.path != "") | .path' | while IFS= read -r one; do [ -e "$one" ] || printf '%s ' "$one"; done)"
+  [ -z "$bad" ] \
+    || die 52 "acceptance: $EVIDENCE_FILE names files that are not on disk: $bad. Nothing was written."
+  missing="$(rw_alignment | jq -r --argjson e "$RW_EVIDENCE" '[ (.criteria // [])[].id | select(. as $c | [ $e[].criterion ] | index($c) | not) ] | join(", ")')"
+  [ -z "$missing" ] \
+    || die 52 "acceptance: $EVIDENCE_FILE holds no row for these criteria: $missing. The verifier writes one row per criterion. Nothing was written."
+}
+
+do_acceptance() {
+  local task_arg="" evidence_given="" accepted=""
   RW_VALUES=""
   while [ "$#" -gt 0 ]; do
-    cr_take_flag "surfaces" "--value=RW_VALUES" "$@" || { shift "$?"; continue; }
+    cr_take_flag "acceptance" "--value=RW_VALUES" "$@" || { shift "$?"; continue; }
     case "$1" in
-      --walked)
-        [ "$#" -ge 2 ] || die 3 "surfaces: --walked needs a surface id"
-        looks_like_flag "$2" && die 3 "surfaces: --walked was given another flag, not a surface id: $2"
-        walked="$walked $2"; shift 2 ;;
+      --evidence) evidence_given="yes"; shift ;;
       --accept-baseline)
-        [ "$#" -ge 2 ] || die 3 "surfaces: --accept-baseline needs a surface id"
-        looks_like_flag "$2" && die 3 "surfaces: --accept-baseline was given another flag, not a surface id: $2"
+        [ "$#" -ge 2 ] || die 3 "acceptance: --accept-baseline needs a surface id"
+        looks_like_flag "$2" && die 3 "acceptance: --accept-baseline was given another flag, not a surface id: $2"
         accepted="$accepted $2"; shift 2 ;;
-      -*) die 3 "surfaces: unrecognized argument: $1" ;;
+      -*) die 3 "acceptance: unrecognized argument: $1" ;;
       *)
-        [ -z "$task_arg" ] || die 3 "surfaces: more than one task folder given"
+        [ -z "$task_arg" ] || die 3 "acceptance: more than one task folder given"
         task_arg="$1"; shift ;;
     esac
   done
 
-  rw_paths "surfaces" "$task_arg"
-  rw_require_finished "surfaces"
-  rw_require_frozen "surfaces"
-  rv_load_codepath "surfaces"
-  rw_load_project "surfaces"
-  rw_load_record "surfaces"
-  rw_require_step "surfaces" "solid" "brief, then the reviewer, then findings"
-  rw_refuse_moved_code "surfaces" "commit-only"
+  rw_paths "acceptance" "$task_arg"
+  rw_require_finished "acceptance"
+  rw_require_frozen "acceptance"
+  rv_load_codepath "acceptance"
+  rw_load_project "acceptance"
+  rw_load_record "acceptance"
+  rw_require_step "acceptance" "solid" "brief, then the reviewer, then findings"
+  rw_refuse_moved_code "acceptance" "commit-only"
 
   [ -z "$(pc_trim "$accepted")" ] \
-    || rw_require_person "surfaces" "--accept-baseline" "a person accepted a new baseline for a surface"
-  [ -z "$(pc_trim "$walked")" ] \
-    || rw_require_person "surfaces" "--walked" "a person looked at a surface at every viewport"
+    || rw_require_person "acceptance" "--accept-baseline" "a person accepted a new baseline for a surface"
 
   RW_CATALOG_NOTES="$(printf '%s' "$RW_RECORD_DOC" | jq -c '.catalogNotes // []')"
   RW_ACCEPTED_DONE=""; RW_ACCEPTED_ROWS=""
-  rw_load_surface_rows "surfaces"
+  rw_load_surface_rows "acceptance"
   # The export changes nothing unless the suite reads the variable, which the recipe ask requires.
   [ -z "$(cr_lookup "$RW_VALUES" base-url)" ] || { PLAYWRIGHT_BASE_URL="$(cr_lookup "$RW_VALUES" base-url)"; export PLAYWRIGHT_BASE_URL; }
 
@@ -2811,6 +2867,16 @@ do_surfaces() {
   vr_on="$(printf '%s' "$RW_PROJECT_DOC" | jq -r 'if (.surfaces // null) == null then "not set up" elif (.surfaces.visualRegression.enabled // false) then "on" else "off" end')"
   registry_path="$(sf_surface_path "$(printf '%s' "$RW_PROJECT_DOC" | jq -r '.surfaces.registryPath // ""')" "$RV_CODEPATH")"
   sf_load_surfaces "$registry_path"
+  # The verifier's rows: from its file when --evidence is given, else the ones the record holds, so
+  # a run for an accepted baseline keeps them. A page surface is looked at when a row names it at
+  # every viewport the surface file lists, or at one when it lists none.
+  local viewports='[]' looked
+  [ "$SF_STATE" != "ok" ] || viewports="$(jq -c '[ (.viewports // [])[].name ]' "$registry_path" 2>/dev/null)" || viewports='[]'
+  if [ -n "$evidence_given" ]; then rw_load_evidence "$viewports"
+  else RW_EVIDENCE="$(printf '%s' "$RW_RECORD_DOC" | jq -c '.evidence // []')"; fi
+  looked="$(printf '%s' "$SF_SURFACES" | jq -r --argjson e "$RW_EVIDENCE" --argjson v "$viewports" '
+    [ .[] | .id as $s | ([ $e[] | select(.surface == $s) | (.viewport // "") ]) as $seen
+      | select(($seen | length) > 0 and all($v[]; . as $one | $seen | index($one))) | $s ] | join(" ")')"
   # A kind marked on with no surface file was set up by half (gap row 275). When another branch holds
   # the file, it is often another task's unfinished work, and a merge would put that work into this
   # task (gap row 278). The file reaches this task through the trunk, so in both run modes the kind
@@ -2868,38 +2934,23 @@ do_surfaces() {
     setup="not-applicable"
   fi
 
-  checks_file="$(mktemp)" || die 3 "surfaces: could not create a temporary file"
-  surfaces_file="$(mktemp)" || die 3 "surfaces: could not create a temporary file"
+  checks_file="$(mktemp)" || die 3 "acceptance: could not create a temporary file"
+  surfaces_file="$(mktemp)" || die 3 "acceptance: could not create a temporary file"
   # Visual parity has no project field, so the recipe is the only thing that can say whether it runs:
   # a commanded row reaches the ordinary path, and anything else reads unavailable.
   parity_on="unavailable"
   [ "$(printf '%s' "$RW_SURFACE_ROWS" | jq --arg id "visual-parity" '[ .[] | select(.id == $id and (has("argv")) and ((.absent // false) == false)) ] | length')" -gt 0 ] \
     && parity_on="on"
-  # A light task is done only when the script that walks the demo path passes, so review fails
-  # one with no enabled critical end to end surface to run (gap row 197). End to end is opt in, so a
-  # project that declined it and never switched it on has no demo path script to fail (gap row 338).
-  local path_scripts=none
-  if task_is_light "$TASK_PATH"; then
-    path_scripts=0
-    [ "$e2e_on" != "on" ] || [ "$SF_STATE" != "ok" ] \
-      || path_scripts="$(printf '%s' "$SF_SURFACES" | jq '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ] | length')"
-  fi
-  if [ "$path_scripts" = "0" ] && [ "$e2e_declined" = "true" ] && [ "${e2e_on%% *}" != "on" ]; then
-    rw_check_row "$CHECK_E2E" "undeclared" "the project record says e2e is declined, so a light run keeps no script that walks the demo path, and review ran nothing for it. /aida:surfaces e2e sets it up if the project opts in." >>"$checks_file"
-  elif [ "$path_scripts" = "0" ] && [ -n "$RW_SURFACE_BRANCH" ]; then
-    rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path. Branch $RW_SURFACE_BRANCH holds the surface file, and this task's tree does not, so there is no script to run here. Register the demo path before the build: on the trunk before tasks are cut, or in the first task's tree." >>"$checks_file"
-  elif [ "$path_scripts" = "0" ]; then
-    rw_check_row "$CHECK_E2E" "unmet" "a light run keeps one script that walks the demo path, and no enabled critical end to end surface is registered, so there is no script to pass. Set it up with /aida:surfaces e2e and register the demo path as one critical surface: a page, or a command that exits 0 when the path works." >>"$checks_file"
-  else
-    rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
-  fi
+  # A light task runs its registered demo-path script like any end to end surface. A missing
+  # script is not a failure: the verifier's evidence is the light task's acceptance (audit/24).
+  rw_surface_kind "$CHECK_E2E" "e2e" "e2e" "$e2e_on" "$looked" "$accepted" "$checks_file" "$surfaces_file"
   # A light task runs no visual regression. Implementation's start logged the skip (gap row 197).
   if [ "${vr_on%% *}" = "on" ] && task_is_light "$TASK_PATH"; then
     rw_check_row "$CHECK_VR" "undeclared" "a light run skips visual regression, so review ran nothing for it. $COMPROMISES_FILE in the task folder records the skip." >>"$checks_file"
   else
-    rw_surface_kind "$CHECK_VR" "visual-regression" "visual-regression" "$vr_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
+    rw_surface_kind "$CHECK_VR" "visual-regression" "visual-regression" "$vr_on" "$looked" "$accepted" "$checks_file" "$surfaces_file"
   fi
-  rw_surface_kind "$CHECK_PARITY" "visual-parity" "visual-parity" "$parity_on" "$walked" "$accepted" "$checks_file" "$surfaces_file"
+  rw_surface_kind "$CHECK_PARITY" "visual-parity" "visual-parity" "$parity_on" "$looked" "$accepted" "$checks_file" "$surfaces_file"
   rw_surface_extra_rows "$checks_file" "e2e e2e-preflight visual-regression visual-parity$RW_ACCEPTED_ROWS"
 
   # A person accepted a baseline for a surface whose kinds declare no accept row. Recording a boolean
@@ -2908,18 +2959,18 @@ do_surfaces() {
     [ -n "$one_accept" ] || continue
     case " $RW_ACCEPTED_DONE " in
       *" $one_accept "*) ;;
-      *) die 3 "surfaces: --accept-baseline named $one_accept, and no surface row the review recipe declares writes a baseline for the kinds that surface carries. The recipe needs a row whose id is the kind's own id with -accept after it. Nothing was written." ;;
+      *) die 3 "acceptance: --accept-baseline named $one_accept, and no surface row the review recipe declares writes a baseline for the kinds that surface carries. The recipe needs a row whose id is the kind's own id with -accept after it. Nothing was written." ;;
     esac
   done <<RW_ACCEPTED_IN
 $(printf '%s' "$accepted" | tr ' ' '\n')
 RW_ACCEPTED_IN
 
   # One row per surface, not one per kind. A surface carrying two kinds is answered once per kind
-  # above, and the walk is per surface rather than per kind: a person looks at the page once, at every
-  # viewport. So the answers merge, keeping the worse verdict, and the worse of two verdicts is
+  # above, and the look is per surface rather than per kind: the verifier looks at the page once, at
+  # every viewport. So the answers merge, keeping the worse verdict, and the worse of two verdicts is
   # br_worst_verdict's to decide rather than a second ranking of the four words written here.
   all_rows="$(jq -s -c '[ group_by(.id)[] | {id: .[0].id, rows: .} ]' "$surfaces_file")" \
-    || die 3 "surfaces: could not assemble the surface rows"
+    || die 3 "acceptance: could not assemble the surface rows"
   surfaces_json='[]'
   si=0; one_surface=""; merged=""
   while [ "$si" -lt "$(printf '%s' "$all_rows" | jq 'length')" ]; do
@@ -2935,7 +2986,7 @@ RW_SURFACE_VERDICTS
       --arg verdict "$merged" '
       $have + [ {id: $g.id, verdict: $verdict,
                  ran: ([ $g.rows[].ran ] | any),
-                 walked: ([ $g.rows[].walked ] | all),
+                 looked: ([ $g.rows[].looked ] | all),
                  reportPath: ([ $g.rows[].reportPath ] | map(select(. != "")) | (.[0] // ""))}
                 + (if ([ $g.rows[] | (.baselineAccepted // false) ] | any) then {baselineAccepted: true} else {} end) ]')"
     si=$((si + 1))
@@ -2944,26 +2995,28 @@ RW_SURFACE_VERDICTS
 
   # The rows carry whole outputs, and the record holds the suite's, so both reach jq by file.
   updated="$(jq -n --slurpfile record "$RECORD_FILE" --slurpfile rows "$checks_file" \
-    --argjson surfaces "$surfaces_json" --arg setup "$setup" --argjson notes "$RW_CATALOG_NOTES" '
+    --argjson surfaces "$surfaces_json" --arg setup "$setup" --argjson notes "$RW_CATALOG_NOTES" \
+    --arg given "$evidence_given" --argjson evidence "$RW_EVIDENCE" '
     $record[0]
     | .checks = ((.checks | map(. as $c | select(([ $rows[] | .id ] | index($c.id)) == null))) + $rows)
     | .surfaces = $surfaces
     | .surfaceSetup = $setup
-    | .catalogNotes = $notes')"
+    | .catalogNotes = $notes
+    | if $given == "" then . else .evidence = $evidence end')"
   rm -f "$checks_file"
-  [ -n "$updated" ] || die 3 "surfaces: could not update the record with the surface rows."
-  rw_write_record "surfaces" "$updated"
-  rw_print_summary "$updated" "surfaces"
+  [ -n "$updated" ] || die 3 "acceptance: could not update the record with the surface rows."
+  rw_write_record "acceptance" "$updated"
+  rw_print_summary "$updated" "acceptance"
   printf 'surface-file: %s\n' "${registry_path:-none} ($SF_STATE)"
-  echo "SURFACES: end to end is $e2e_on, visual regression is $vr_on, the surface file is $SF_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
+  echo "ACCEPTANCE: end to end is $e2e_on, visual regression is $vr_on, the surface file is $SF_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
   [ -z "$RW_SURFACE_BRANCH" ] \
-    || echo "SURFACES: branch $RW_SURFACE_BRANCH holds the surface file. It reaches this task once that branch lands on the trunk. Until then a kind marked on reads as off here. Offer no setup, and do not tell the person to bring that branch into this task." >&2
+    || echo "ACCEPTANCE: branch $RW_SURFACE_BRANCH holds the surface file. It reaches this task once that branch lands on the trunk. Until then a kind marked on reads as off here. Offer no setup, and do not tell the person to bring that branch into this task." >&2
   [ -z "$deferred_kinds" ] \
-    || echo "SURFACES: this task answered not this task for $deferred_kinds, so the offer is not made again." >&2
+    || echo "ACCEPTANCE: this task answered not this task for $deferred_kinds, so the offer is not made again." >&2
   case "$setup" in
-    available)              echo "SURFACES: $open_kinds still open, with surface rows in the recipe and no decline recorded. Offer setup here, once, for $open_kinds." >&2 ;;
-    declined)               echo "SURFACES: every kind that is off has been declined, and none of them is offered again." >&2 ;;
-    not-offered-autonomous) echo "SURFACES: $open_kinds still open, with surface rows in the recipe and no decline recorded. Nobody is present, so the offer was not made." >&2 ;;
+    available)              echo "ACCEPTANCE: $open_kinds still open, with surface rows in the recipe and no decline recorded. Offer setup here, once, for $open_kinds." >&2 ;;
+    declined)               echo "ACCEPTANCE: every kind that is off has been declined, and none of them is offered again." >&2 ;;
+    not-offered-autonomous) echo "ACCEPTANCE: $open_kinds still open, with surface rows in the recipe and no decline recorded. Nobody is present, so the offer was not made." >&2 ;;
   esac
   exit 0
 }
@@ -3000,7 +3053,8 @@ do_close() {
   rw_require_frozen "close"
   rv_load_codepath "close"
   rw_load_record "close"
-  rw_require_step "close" "$CHECK_E2E" "surfaces"
+  printf '%s' "$RW_RECORD_DOC" | jq -e 'has("evidence")' >/dev/null 2>&1 \
+    || die 62 "close: $RECORD_FILE records no evidence rows, so the acceptance step recorded nothing a person can answer from. Run acceptance, dispatch the acceptance verifier, then run acceptance --evidence first."
   rw_refuse_moved_code "close" "commit-only"
   rw_refuse_changed_criteria "close"
   # The texts each non-goal row records are the ones the reviewer was given. A change since then is
@@ -3211,6 +3265,10 @@ RW_ROWS
                                       + (if $c.liveText == null then "scope remove retired the id, so redo the orders it bounds in the implement skill, then review again."
                                          elif $c.frozenText == null then "Remove the added non-goal with scope remove, then archive the review and run it again."
                                          else "Put the frozen text back with scope update, then archive the review and run it again." end))}[$g.word]))
+        elif ($c.detail | test("The acceptance verifier judged these rows not met")) then
+          $c | .verdict = $g.verdict | .answeredBy = "person"
+          | .detail = ((.detail | sub(" The person read the evidence and judged it (met|unmet)\\.$"; ""))
+                       + " The person read the evidence and judged it \($g.verdict).")
         elif ($c.detail | startswith("no guide body is on disk")) then
           $c | .verdict = $g.verdict | .answeredBy = "person"
           | .detail = ((.detail | sub(" The person judged the diff (with no guide to follow|and found it does not follow the practice it should)\\.$"; ""))
@@ -3341,7 +3399,8 @@ RW_ROWS
 # run itself did not happen. Then the counts per word over the checks.
 #
 # The row's own fields decide where they can: exitCode, absent, the id, the verdict, and the
-# mutation object's output, which is the one field a mutation run leaves. Three sets of rows write the same fields for different reasons, and there the
+# mutation object's output, which is the one field a mutation run leaves, and its off, which a
+# project that has not opted in leaves. Three sets of rows write the same fields for different reasons, and there the
 # detail's fixed wording decides: a tool row undeclared with no command, a surface check undeclared
 # with no command, and a surface row not run. The wording is this script's own, and a field on
 # the row saying why nothing ran would make each a field read. Nothing here changes a verdict.
@@ -3378,7 +3437,8 @@ do_audit() {
         elif ($lenses | contains(" " + $id + " ")) then (if $v == "unknown" or $v == "undeclared" then "could-not-look" else "ran" end)
         elif $id == "every-criterion" or $id == "serves-a-criterion" then "read"
         elif $id == "test-and-mutation" then
-          (if ($r.mutation | has("output")) then "ran" elif $v == "unknown" then "could-not-look" else "read" end)
+          (if ($r.mutation | has("output")) then "ran" elif ($r.mutation.off // false) then "off"
+           elif $v == "unknown" then "could-not-look" else "read" end)
         # The routed done-when clauses are answered by the reviewer, so a verdict on them is one it
         # returned. not-needed is no order routing a clause, and unknown is a clause nobody judged.
         elif $id == "absence-clauses" then
@@ -3447,7 +3507,7 @@ case "$ACTION" in
   checks)   do_checks   "$@" ;;
   brief)    do_brief    "$@" ;;
   findings) do_findings  "$@" ;;
-  surfaces) do_surfaces "$@" ;;
+  acceptance) do_acceptance "$@" ;;
   close)    do_close    "$@" ;;
   audit)    do_audit    "$@" ;;
   archive)  do_archive  "$@" ;;

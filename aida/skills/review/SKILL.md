@@ -1,6 +1,6 @@
 ---
 name: review
-description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over eight lenses, asks the person the rows only a person can answer, and records one verdict a person acts on.
+description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over eight lenses and one acceptance verifier that runs the product, asks the person the rows only a person can answer, and records one verdict a person acts on.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh record *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Agent, EnterWorktree
@@ -11,8 +11,9 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.s
 Review runs once per task, after implementation's `finish` wrote `implementation/finished.json`. It
 answers sixteen checks over three subjects: the contract, the code as written, and the surfaces a
 person can see. One step runs every check a script can decide. One step dispatches the architecture
-reviewer and records what it found. One step runs the surfaces and takes the person's walk. The last
-step asks the person the checklist rows and writes the verdict.
+reviewer and records what it found. One step runs the surfaces and dispatches the acceptance
+verifier, which runs the product and records evidence. The last step asks the person the checklist
+rows, with the evidence beside them, and writes the verdict.
 
 **Review starts no fixer and runs no second pass.** A failed review goes to the person, with the
 record. The implement skill's `reopen` then sends each finding that fails a criterion back to the
@@ -66,8 +67,8 @@ step being run is in this conversation.
 |---|---|---|
 | No review record, or a record with no check rows | Run the scripted checks | `checks` |
 | Checks 3 to 8 recorded, and no findings recorded | Dispatch the reviewer, then record the findings | `reviewer` |
-| The findings recorded, and no surface rows | Run the surfaces, and walk them | `surfaces` |
-| The surface rows recorded, and no verdict | Ask the person's rows, and close | `close` |
+| The findings recorded, and no evidence rows | Run the surfaces, and verify by running the product | `acceptance` |
+| The evidence rows recorded, and no verdict | Ask the person's rows, and close | `close` |
 | A verdict recorded | Nothing is left. Read the verdict and the rows that caused it to the person | |
 
 A recorded verdict is the end of the pass, and `read` says so in that word. Start a second review
@@ -109,8 +110,8 @@ mode, `interactive` or `autonomous`, then each path the step hands over. Nothing
 The role's rules and its return shape live in its agent definition, which reaches it on every
 dispatch. The data it needs lives in the brief the paths name. So the message restates neither,
 and two runs of one step hand the role the same words. The step file names this shape and lists
-its own paths. The one exception is `outward-searcher`, whose message carries the words to search
-and the bound in place of paths.
+its own paths. Two exceptions: `outward-searcher`, whose message carries the words to search and the
+bound in place of paths, and `acceptance-verifier`, whose message also carries the site address.
 
 **A recipe lookup answers four ways, and review passes the one that happened.** One answer is a path
 on disk. The other three are no recipe for this framework, a listing that could not be reached, and
@@ -135,17 +136,17 @@ branch is recorded rather than assumed.
 | Question | Interactive | Autonomous |
 |---|---|---|
 | A person verified criterion | the person answers met or unmet | the person's recorded answer, step `review close`; else `unanswered`, and no sign off |
-| The walk of the surfaces | the person walks every one | recorded as not done, and checks 13 to 15 read unknown |
+| A verifier row not met on a surface whose run passed | the person reads the evidence and answers met or unmet | unanswered, and checks 13 to 15 read unknown |
 | A lens check whose findings are all low | the person confirms them, met, or rejects them, unmet | met, and named in the audit lines |
 | A finding citing neither a criterion nor a non-goal, or a low one citing a criterion | a follow up task is offered | recorded, and no task is created |
 | A new baseline for a surface | plan, show, confirm, then write | refused, and recorded as refused |
 | Setting up a surface | offered once | not offered, and recorded as not offered |
 
-`surfaces` refuses `--accept-baseline` on an autonomous run, and `close` refuses a `--row` there
+`acceptance` refuses `--accept-baseline` on an autonomous run, and `close` refuses a `--row` there
 unless the person's answer is recorded. The task skill's `person-answer.sh` records it, step
 `review close`, after Claude Code asks the person.
 A standing order never answers a changed non-goal: ask the person, who accepts or rejects it.
-A command surface needs no walk, because its exit status is the whole answer.
+A command surface needs no look, because its exit status is the whole answer.
 A run with nobody present and no recorded answer cannot sign off a task carrying one person
 verified criterion. That is intended: a check that could not run has established nothing.
 
@@ -180,7 +181,7 @@ order: the id, the verdict, and one word for how the verdict came about.
 |---|---|
 | `ran` | a command or a lens ran and returned the verdict |
 | `read` | a record field decided it, and nothing ran |
-| `off` | the project turned the thing off: a kind disabled, a row the recipe declares absent |
+| `off` | the project turned the thing off: a kind disabled, a row the recipe declares absent, mutation testing not opted in |
 | `could-not-look` | a recipe, a row, a file or a tool was absent, so the verdict is unknown or undeclared |
 | `awaiting-person` | a lens check holds only low findings, and the person answers it at close |
 
@@ -193,8 +194,9 @@ after `checks`; the list grows as the record does.
 The architecture reviewer runs under no dispatch record, so no hook bounds it. `dispatch-open`
 requires a work order id, and a task level review has no order. Widening that pattern would weaken
 the field protecting every per order permission, and this role needs no permission. Its tool list and
-its own instructions are therefore the whole of the bound. Say that plainly when a person asks what
-the dispatch enforces, rather than describing the role as fenced.
+its own instructions are therefore the whole of the bound. The acceptance verifier runs the same
+way, and it holds Bash and Write, so nothing but its instructions keeps it out of the code path. Say
+that plainly when a person asks what a dispatch enforces, rather than describing either role as fenced.
 
 The script refuses the reviewer's findings at exit 51 when the code path moved, or its tree went
 dirty, since `checks` ran. A file the role left behind is caught there. It is a refusal, not a
@@ -216,7 +218,7 @@ One number never means two things, and these keep the meanings implementation ga
 | 14 | the project's own `project.json` exists and is not valid JSON |
 | 15 | the recorded code path does not exist on disk |
 | 51 | the code path moved, or went dirty, since `checks` ran |
-| 52 | the findings file could not be read as a findings file |
+| 52 | the findings file could not be read as a findings file, or the evidence file as the verifier's rows |
 | 61 | the code repository's tree is dirty |
 | 62 | a step ran out of order, and what it depends on recorded nothing |
 | 63 | the previous record could not be archived, so the write was refused |
@@ -230,7 +232,7 @@ One number never means two things, and these keep the meanings implementation ga
 
 Nine of these are review's own. The other eight arrive with the libraries both stages source, and each
 keeps the meaning implementation gave it. Code 70 is the one an autonomous run meets in ordinary use,
-the first time a `--walked` or a `--row` is passed.
+the first time an `--accept-baseline` or a `--row` is passed.
 
 Code 73 has no review action behind it, so put its three routes to the person. The first: run
 `checks` again with `--check-recipe` naming the recipe body the baseline read, whose sha256 the

@@ -204,9 +204,9 @@ scope-actions.sh approve|retire
 scope-actions.sh update|add --author
 design-actions.sh close --approve-runs
 design-actions.sh dispose --confirmed
-review-actions.sh surfaces --accept-baseline --walked
+review-actions.sh acceptance --accept-baseline
 review-actions.sh close --row
-completion-actions.sh close --reason --leave --captures-offered --observed-accepted
+completion-actions.sh close --reason --leave --captures-offered
 surfaces-actions.sh baseline --confirmed
 surfaces-actions.sh decline
 project-actions.sh unregister|task-rule|task-rule-remove|uninstall|record-declined'

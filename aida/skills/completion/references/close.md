@@ -48,26 +48,6 @@ When `read` prints `personRoute`, a criterion waits for a person's met or unmet 
 both modes, give the person that line first. Their answer in review can pass the review, and then
 the close needs no reason.
 
-## Put each observed criterion to the person
-
-`read` printed one `observed(<criterion>)` line per criterion a model judged through a browser.
-It printed one `observedRow(<criterion>)` line per row. Each row carries the verdict, the surface
-and viewport, the screenshot after, and the done-when sentence the model judged. A row that says
-the page is as it was also carries the before image. A model looked, not a person, so the person
-decides whether that look stands.
-
-Interactive: ask one plain question per criterion whose record is on disk. Name the criterion,
-show its rows verbatim from the output, and name each image per row, so the person can open
-them. A row that says the page is as it was is judged between the two.
-Ask whether they accept the observation. Their answer becomes one flag on `close`:
-`--observed-accepted <criterion>=yes|no`. Every such criterion needs an answer; the close
-refuses at exit 1 naming the ones without. A no needs a reason, the way a verdict that did not
-pass does. Ask why the task closes with an observation rejected, in one sentence, and pass it as
-`--reason`.
-
-Autonomous: ask nothing and pass no answer. The record says the observations were not accepted
-by a person, and the pull request body says so beside each such criterion.
-
 ## Take the summary
 
 Ask for a short summary of what was done, in one or two lines. Skip the question when the
@@ -100,11 +80,10 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/completion/scripts/completion-actions.sh close "<task_folder>" \
   [--reason "<sentence>"] [--leave <finding id>=<reason>]... [--captures-offered <n>] \
-  [--observed-accepted <criterion>=yes|no]... [-- <summary...>]
+  [-- <summary...>]
 ```
-It refuses at exit 1 in four cases. A child is open. A high severity follow up has no task and
-no `--leave`. The review did not pass and no `--reason` was given. Interactive, an observed
-criterion has no answer, or was answered no with no `--reason`.
+It refuses at exit 1 in three cases. A child is open. A high severity follow up has no task and
+no `--leave`. The review did not pass and no `--reason` was given.
 
 Then it takes out of the task branch the files `task environment up` changed for the worktree's
 own site. Merged, they would change the main checkout's site. It reads them from
@@ -132,8 +111,7 @@ run `close` again with the same arguments; that is the repair.
 Give the person the body path and the record path from the summary. Say the verdict the record
 holds and who closed it. Name the restore commit and its files from the `restoreCommit` line,
 or say there was none. Name each follow up task created and each finding left, with its reason.
-Name each play captured by its id, or say "no play captured". Name each observed criterion
-with the person's answer, or say nobody was asked.
+Name each play captured by its id, or say "no play captured".
 Say the person opens the pull request from the body file by hand, changing nothing in it first.
 End by naming `/aida:next`. When the script says every child of the parent is complete, say the
 parent closes next.

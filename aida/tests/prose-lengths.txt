@@ -1,4 +1,5 @@
 # <path> <lines>, one per skill body, reference and agent. Growth is a deliberate edit here, in the same commit.
+agents/acceptance-verifier.md 95
 agents/architecture-reviewer.md 195
 agents/catalog-identifier.md 139
 agents/design-critic.md 127
@@ -14,8 +15,8 @@ agents/reviewer.md 176
 agents/row-checker.md 133
 agents/test-author.md 175
 agents/test-reader.md 77
-skills/completion/SKILL.md 115
-skills/completion/references/close.md 142
+skills/completion/SKILL.md 114
+skills/completion/references/close.md 120
 skills/design/SKILL.md 986
 skills/implement/SKILL.md 295
 skills/implement/references/build.md 501
@@ -27,13 +28,13 @@ skills/implement/references/tests.md 583
 skills/implement/references/what-a-test-is.md 76
 skills/next/SKILL.md 201
 skills/playbooks/SKILL.md 97
-skills/project/SKILL.md 628
+skills/project/SKILL.md 640
 skills/research/SKILL.md 602
-skills/review/SKILL.md 247
-skills/review/references/checks.md 152
-skills/review/references/close.md 143
+skills/review/SKILL.md 249
+skills/review/references/checks.md 156
+skills/review/references/close.md 147
 skills/review/references/reviewer.md 179
-skills/review/references/surfaces.md 96
+skills/review/references/acceptance.md 121
 skills/scope/SKILL.md 492
 skills/surfaces/SKILL.md 168
 skills/surfaces/references/discover.md 60

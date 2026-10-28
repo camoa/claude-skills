@@ -12,7 +12,8 @@ summary asks a different question than the row a person signed up to answer. Sho
 pass, and ask for each one only once.
 
 Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. A lens
-check names the low findings of one lens. The person confirms them, met, or rejects them, unmet.
+check names the low findings of one lens. A surface check names the verifier's rows that did not
+read met; show its `evidence(<surface>@<viewport>)` lines, and the person judges it met or unmet. The person confirms them, met, or rejects them, unmet.
 The guides check and the practices check can wait the same way when no guide body is on disk.
 Then the review's own search found no practice, or the reviewer named none it judged against.
 Ask whether any guide covers the task. When none does, the person judges the diff, met or unmet.
@@ -56,9 +57,12 @@ person's word. A medium or high finding that cites no criterion still fails its 
 the person to rule it `wrong` or `deferred`. A lens check whose medium and high findings are all ruled
 then waits for the person, the way a lens check with low findings only does.
 
-The person answers met or unmet per criterion, from its rows. When a criterion's verify clause
-names a command, wait until the person says the step before that check is done. Then run the
-command, and show its output with the question. Their answer becomes one flag below.
+The person answers met or unmet per criterion, from its rows and its evidence. `close` prints each
+criterion's `evidence(<criterion>)` lines under its own line: the acceptance verifier's verdict,
+the file it judged from, and its note. Show them verbatim with the question, and name each file so
+the person can open it. When a criterion's verify clause names a command, wait until the person
+says the step before that check is done. Then run the command, and show its output with the
+question. Their answer becomes one flag below.
 Autonomous, there is nobody to ask: with no recorded answer, each such criterion reads
 unanswered, and the task gets no sign off. A run with nobody present and no recorded answer
 cannot sign off a task carrying one person verified criterion. `close` names each one and its

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # observe-look-spec.sh: the look at an observe order's page. build-record refuses when it cannot
-# list the rows the order owes, and completion names a before image only where a row has one.
+# list the rows the order owes, and completion puts the look to nobody: the person answers the
+# order's criteria at review close, from the acceptance verifier's evidence.
 # Each case sources the helper in a subshell, so it starts from fresh records.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -48,16 +49,14 @@ build_case() (
   printf '%s|%s|%s\n' "$RC" "$(ledger '.attemptsUsed')" "$([ -f "$IMPL/build-wo1.json" ] && echo written || echo none)"
 )
 
-# before_case <with a before>: the observedRow line completion's read prints for wo1's one row,
-# whose before image is there or not.
-before_case() (
+# completion_case: the lines completion's read prints about the look at wo1, counted.
+completion_case() (
   source "$HERE/records.bash"
   observe_records '["the page shows b"]'
-  observed_record "$(jq -nc --arg s "$IMPL/observed-wo1/home-wide.png" --arg b "$IMPL/observed-wo1-before/home-wide.png" \
-    --argjson with "$1" '{doneWhen: "the page shows b", surface: "home", viewport: "wide", screenshot: $s,
-      verdict: "met", note: "b shows"} + (if $with then {before: $b} else {} end)')"
+  observed_record "$(jq -nc --arg s "$IMPL/observed-wo1/home-wide.png" \
+    '{doneWhen: "the page shows b", surface: "home", viewport: "wide", screenshot: $s, verdict: "met", note: "b shows"}')"
   run "$PLUGIN/skills/completion/scripts/completion-actions.sh" read "$TASK"
-  sed -n 's/^observedRow(c1): //p' "$OUT" | sed "s|$IMPL/||g"
+  grep -c '^observed' "$OUT"
 )
 
 echo "--- build-record: the rows an observe order owes"
@@ -66,10 +65,7 @@ echo "--- build-record: the rows an observe order owes"
 expect "a failure to list the owed rows refuses, and records no attempt" "$(build_case '["the page shows b", 5]')" "3|0|none"
 expect "a machine criterion the order owns is owed no row of the look" "$(build_case '["the page shows b"]' machine)" "0|1|written"
 
-echo "--- completion: a before image only where a row has one"
-expect "a row with no before image prints no before" "$(before_case false)" \
-  "met home@wide after=observed-wo1/home-wide.png :: the page shows b"
-expect "a row with a before image names it" "$(before_case true)" \
-  "met home@wide before=observed-wo1-before/home-wide.png after=observed-wo1/home-wide.png :: the page shows b"
+echo "--- completion: the look is not put to the person again"
+expect "completion's read prints no line about the look" "$(completion_case)" "0"
 
 finish
