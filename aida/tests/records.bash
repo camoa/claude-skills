@@ -1,8 +1,8 @@
 # shellcheck shell=bash disable=SC2034 # the spec that sources this file reads IMPLEMENT, OUT and RC
 # records.bash: the one setup the plugin's own specs share. A spec sources it and is never run by
-# it. Each function writes the few records one step reads, straight to disk. None runs a stage
-# action, so no setup performs the step a spec guards: the branch stays where the spec puts it,
-# and no answer is written until the spec writes one.
+# it. Each function writes the few records one step reads, straight to disk, and runs no stage
+# action. So no setup performs the step a spec guards. The branch stays where the spec puts it.
+# No answer is written until the spec writes one.
 # Everything lives under one temporary folder, removed on exit. The registry and the settings file
 # are kept there too, so a run reads nothing from the machine it runs on. bash 3.2 and later.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}"
@@ -21,6 +21,8 @@ TASK="$PROJECT/tasks/t1"
 IMPL="$TASK/implementation"
 WT="$ROOT/wt"
 OUT="$ROOT/out.txt"
+RECIPE="$ROOT/test-recipe.md"
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 PASS=0; TOTAL=0
 # expect <what> <actual> <wanted>: prints ok or BAD with both values, and counts.
@@ -42,11 +44,19 @@ run() {
   RC=$?
 }
 
-# task_records [branch]: a code repository whose trunk is main, a registered project, task t1 with
-# its worktree, a contract with one machine-verified criterion, and work order wo1 that owns a.php
-# and tests/a_test.sh. Design is closed over those files. The worktree holds the trunk, or the
-# work branch feature/t1 when the argument is branch.
+# task_records [branch] [wo2]: a code repository whose trunk is main, a registered project folder
+# that is a git repository, task t1 with its worktree, a contract with one machine-verified
+# criterion, and work order wo1 that owns a.php and tests/a_test.sh. With wo2, a second order
+# owns b.php and criterion c2, and depends on wo1. Design is closed over the orders. The worktree holds the trunk,
+# or the work branch feature/t1 when an argument is branch. The task's base is the trunk.
 task_records() {
+  local arg branch=main second=false
+  for arg in "$@"; do
+    case "$arg" in
+      branch) branch=feature/t1 ;;
+      wo2) second=true ;;
+    esac
+  done
   mkdir -p "$CODE" "$TASK/design" "$IMPL" || exit 1
   git -C "$CODE" init -q -b main
   printf 'a\n' >"$CODE/a.php"
@@ -54,47 +64,52 @@ task_records() {
   git -C "$CODE" remote add origin "$CODE"
   git -C "$CODE" update-ref refs/remotes/origin/main main
   git -C "$CODE" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
-  git -C "$CODE" checkout -q -b work
-  local branch=main
-  if [ "${1:-}" = branch ]; then branch=feature/t1; git -C "$CODE" worktree add -q -b "$branch" "$WT"
-  else git -C "$CODE" worktree add -q "$WT" main; fi
+  git -C "$CODE" checkout -q --detach
+  if [ "$branch" = main ]; then git -C "$CODE" worktree add -q "$WT" main
+  else git -C "$CODE" worktree add -q -b "$branch" "$WT" main; fi
   jq -n --arg c "$CODE" '{schemaVersion: 1, codePath: $c, name: "p", frameworks: ["fake"], state: "active"}' \
     >"$PROJECT/project.json"
   jq -n --arg c "$CODE" --arg p "$PROJECT" \
     '{version: 1, projects: [{codePath: $c, path: $p, name: "p", state: "active"}], declinedOffers: [], directoryChoices: []}' \
     >"$AIDA_REGISTRY_PATH"
   jq -n --arg w "$WT" --arg b "$branch" \
-    '{schemaVersion: 1, id: "t1", state: "in_progress", parent: null, children: [], worktree: {path: $w, branch: $b, base: "work"}}' \
+    '{schemaVersion: 1, id: "t1", state: "in_progress", parent: null, children: [], worktree: {path: $w, branch: $b, base: "main"}}' \
     >"$TASK/task.json"
-  jq -n '{schemaVersion: 1, goal: "change a", expectedResult: "a changed",
-      criteria: [{id: "c1", text: "a.php says b", verification: "run the test", verifiedBy: "machine",
-        author: "owner", verdict: "unanswered"}],
-      nonGoals: [], nextCriterionId: 2, nextNonGoalId: 1, decidedWithoutAPerson: []}' >"$TASK/alignment.json"
+  jq -n --argjson second "$second" '
+    [{id: "c1", text: "a.php says b"}] + (if $second then [{id: "c2", text: "b.php exists"}] else [] end)
+    | {schemaVersion: 1, goal: "change a", expectedResult: "a changed",
+       criteria: map(. + {verification: "run the test", verifiedBy: "machine", author: "owner", verdict: "unanswered"}),
+       nonGoals: [], nextCriterionId: (length + 1), nextNonGoalId: 1, decidedWithoutAPerson: []}' >"$TASK/alignment.json"
   jq -n '{schemaVersion: 1, id: "wo1", title: "change a", criteriaServed: ["c1"], criteriaOwned: ["c1"],
       nonGoals: [], dependsOn: [], ownedFiles: ["a.php", "tests/a_test.sh"], surfaces: [], interface: "none",
       tests: [{description: "a.php says b"}], doneWhen: ["a.php says b"], reasoning: "the contract asks it",
       diffBudget: "small", findings: []}' >"$TASK/design/wo1.json"
+  [ "$second" = false ] \
+    || jq '.id = "wo2" | .title = "add b" | .criteriaServed = ["c2"] | .criteriaOwned = ["c2"] | .dependsOn = ["wo1"] | .ownedFiles = ["b.php"]' \
+      "$TASK/design/wo1.json" >"$TASK/design/wo2.json"
   # shellcheck source=/dev/null
   source "$PLUGIN/scripts/lib/records-hash.sh" || exit 1
   jq -n --arg h "$(records_hash_for "$TASK")" \
     '{schemaVersion: 1, closedAt: "2026-10-28", runMode: "interactive", closedBy: "person", hash: $h}' \
     >"$TASK/design-closed.json"
+  git -C "$PROJECT" init -q && git -C "$PROJECT" add -A && git -C "$PROJECT" commit -qm "task t1, design closed"
 }
 
-# order_records <step> [<allows>]: the snapshot of the closed design and a ledger with wo1 at
-# <step>, such as planned or built. With <allows>, a JSON array of go-on choices, wo1 is stopped for
-# one reason that allows them.
+# order_records <step> [<allows>]: the snapshot of the closed design and a ledger with every order
+# at <step>, such as planned, tests-frozen or code-written. With <allows>, a JSON array of go-on
+# choices, wo1 is stopped for one reason that allows them.
 order_records() {
   local hash
   hash="$(jq -r '.hash' "$TASK/design-closed.json")"
-  jq -n --arg h "$hash" --slurpfile a "$TASK/alignment.json" --slurpfile w "$TASK/design/wo1.json" \
+  jq -n --arg h "$hash" --slurpfile a "$TASK/alignment.json" --slurpfile w <(cat "$TASK"/design/wo*.json) \
     '{schemaVersion: 1, takenAt: "2026-10-28", hash: $h, alignment: $a[0], workOrders: $w}' >"$IMPL/snapshot.json"
-  jq -n --arg h "$hash" --arg from "$(git -C "$WT" rev-parse HEAD)" --arg step "$1" --argjson allows "${2:-null}" '
+  jq -n --arg h "$hash" --arg from "$(git -C "$WT" rev-parse HEAD)" --arg step "$1" --argjson allows "${2:-null}" \
+    --slurpfile a "$TASK/alignment.json" --slurpfile w <(cat "$TASK"/design/wo*.json) '
     {schemaVersion: 1, startedFrom: $from, startedAt: "2026-10-28T00:00:00Z", runMode: "interactive",
      snapshotHash: $h,
-     orders: [{id: "wo1", lastStep: (if $step == "planned" then null else $step end), attemptsUsed: 0, roundsUsed: 0}
-       + (if $allows == null then {} else {stopped: [{step: "build-record", reason: "a stop", allows: $allows}]} end)],
-     criteria: [{id: "c1", rowState: "not-judged"}]}' >"$IMPL/ledger.json"
+     orders: [ $w[] | {id, lastStep: (if $step == "planned" then null else $step end), attemptsUsed: 0, roundsUsed: 0}
+       + (if $allows == null or .id != "wo1" then {} else {stopped: [{step: "build-record", reason: "a stop", allows: $allows}]} end) ],
+     criteria: [ $a[0].criteria[] | {id, rowState: "not-judged"} ]}' >"$IMPL/ledger.json"
 }
 
 # order_commit: one commit of wo1's builder in the worktree that changes a.php, listed on wo1's
@@ -102,16 +117,107 @@ order_records() {
 order_commit() {
   printf 'b\n' >"$WT/a.php"
   git -C "$WT" commit -qam "build wo1"
-  jq --arg c "$(git -C "$WT" rev-parse HEAD)" '.orders[0].unrecordedCommits = [$c]' "$IMPL/ledger.json" >"$IMPL/ledger.new" \
-    && mv "$IMPL/ledger.new" "$IMPL/ledger.json"
+  jq --arg c "$(git -C "$WT" rev-parse HEAD)" '(.orders[] | select(.id == "wo1")).unrecordedCommits = [$c]' \
+    "$IMPL/ledger.json" >"$IMPL/ledger.new" && mv "$IMPL/ledger.new" "$IMPL/ledger.json"
 }
 
-# answer <step> <order> <words>: the person's answer, as person-answer.sh appends it.
+# test_recipe: the fake framework's test recipe at $RECIPE. Its suite row runs $ROOT/suite.sh,
+# which prints the lines of $ROOT/suite-now.txt and fails when there is one. Its file row runs the
+# given test files with sh, so a test's own exit decides.
+test_recipe() {
+  printf 'cat "%s/suite-now.txt" 2>/dev/null\n[ ! -s "%s/suite-now.txt" ]\n' "$ROOT" "$ROOT" >"$ROOT/suite.sh"
+  cat >"$RECIPE" <<EOR
+---
+name: fake_test_execution
+capability: test-execution
+recipe_class: process
+framework: fake
+---
+
+## Test commands
+
+\`\`\`yaml
+test_commands:
+  - id: suite
+    argv: ["sh", "$ROOT/suite.sh"]
+    cost: every-attempt
+  - id: file
+    argv: ["sh", "{paths}"]
+    cost: every-attempt
+  - id: test
+    absent: >-
+      No single-test form.
+  - id: changed
+    absent: >-
+      No changed form.
+  - id: smoke
+    argv: ["true"]
+    cost: every-attempt
+  - id: mutation
+    absent: >-
+      No mutation tool.
+\`\`\`
+EOR
+}
+
+# suite_records <baseline failures> [<failures now>]: preconditions.json naming $RECIPE for fake,
+# and baseline.json taken at the ledger's startedFrom. Each argument holds failure lines, one per
+# line. The baseline suite printed the first and failed when it holds one. The suite run at the
+# final commit prints the second and fails the same way. Run after order_records.
+suite_records() {
+  test_recipe
+  printf '%s' "${2:-}" >"$ROOT/suite-now.txt"
+  mkdir -p "$IMPL/baseline-output"
+  printf '%s' "$1" >"$IMPL/baseline-output/suite-fake.txt"
+  jq -n --arg r "$RECIPE" --arg s "$ROOT/suite.sh" '
+    {schemaVersion: 1, takenAt: "2026-10-28", verdict: "undeclared",
+     frameworks: [{framework: "fake", lookup: "resolved", verdict: "undeclared", entries: [],
+       testCommands: {state: "ok", rows: [
+         {id: "suite", argv: ["sh", $s], cost: "every-attempt"}, {id: "file", argv: ["sh", "{paths}"], cost: "every-attempt"},
+         {id: "test", absent: true}, {id: "changed", absent: true},
+         {id: "smoke", argv: ["true"], cost: "every-attempt"}, {id: "mutation", absent: true}]},
+       smoke: {verdict: "met", exitCode: 0}, implementLookup: "no-recipe", reviewLookup: "no-recipe", recipePath: $r}]}' \
+    >"$IMPL/preconditions.json"
+  local undeclared='{verdict: "undeclared", reason: "no resolved check recipe carries a row for this tool"}'
+  jq -n --arg c "$(jq -r '.startedFrom' "$IMPL/ledger.json")" --arg out "$1" --slurpfile s "$IMPL/snapshot.json" "
+    {schemaVersion: 1, takenAt: \"2026-10-28\", commit: \$c, scope: [ \$s[0].workOrders[].ownedFiles[] ],
+     suite: [{framework: \"fake\", verdict: (if \$out == \"\" then \"met\" else \"unmet\" end),
+       exitCode: (if \$out == \"\" then 0 else 1 end), output: \$out, outputFile: \"baseline-output/suite-fake.txt\"}],
+     codingStandards: $undeclared, staticAnalysis: $undeclared, security: $undeclared,
+     toolRows: {}, checkRecipes: [], tree: {head: \$c, uncommitted: []}}" >"$IMPL/baseline.json"
+}
+
+# tests_record: wo1's test tests/a_test.sh, which fails, committed in the worktree, and its frozen
+# record, as tests-freeze writes them. The ledger step stays the one order_records wrote.
+tests_record() {
+  mkdir -p "$WT/tests"
+  printf 'echo a does not say b\nexit 1\n' >"$WT/tests/a_test.sh"
+  git -C "$WT" add tests/a_test.sh && git -C "$WT" commit -qm "freeze wo1"
+  records_hash__resolve_sha256_cmd || exit 1
+  jq -n --arg c "$(git -C "$WT" rev-parse HEAD)" --arg sha "$("${RECORDS_HASH_SHA256_CMD[@]}" "$WT/tests/a_test.sh" | cut -d' ' -f1)" \
+    --arg r "$RECIPE" '
+    {schemaVersion: 1, takenAt: "2026-10-28", unit: "wo1", commit: $c, testGlobs: ["tests/*_test.sh"],
+     rows: [{criterion: "c1", kind: "machine", tests: [{path: "tests/a_test.sh", name: "a says b", sha256: $sha,
+       red: "a does not say b", redSignal: "unchecked"}]}],
+     proof: "tests", support: [], freezeCommits: [$c], testRecipePath: {fake: $r}}' >"$IMPL/tests-wo1.json"
+}
+
+# dispatch_record <role>: the open dispatch of aida:<role> for wo1, as dispatch-open writes it. A
+# test author may not read a.php. An implementer's or a fixer's record names the files wo1 owns.
+dispatch_record() {
+  jq -n --arg r "aida:$1" --arg w "$WT" --arg at "$NOW" --slurpfile o "$TASK/design/wo1.json" '
+    {schemaVersion: 1, role: $r, task: "t1", unit: "wo1", codePath: $w, openedAt: $at,
+     denyRead: (if $r == "aida:test-author" then ["a.php"] else [] end),
+     allowWrite: (if $r == "aida:test-author" then ["tests/a_test.sh"] else ["a.php"] end)}
+    + (if $r == "aida:implementer" or $r == "aida:fixer" then {ownedFiles: $o[0].ownedFiles} else {} end)' \
+    >"$IMPL/dispatch.json"
+}
+
+# answer <step> <order> <words>: the person's answer, through person-answer.sh. An empty <order> is
+# a step for the whole task.
 answer() {
-  local file="$TASK/person-answers.json"
-  [ -f "$file" ] || printf '[]\n' >"$file"
-  jq --arg s "$1" --arg o "$2" --arg w "$3" '. + [{step: $s, order: $o, words: $w, answeredAt: "2026-10-28T00:00:00Z"}]' \
-    "$file" >"$file.new" && mv "$file.new" "$file"
+  bash "$PLUGIN/skills/task/scripts/person-answer.sh" --project "$PROJECT" t1 --step "$1" ${2:+--order "$2"} -- "$3" \
+    >/dev/null || exit 1
 }
 
 # ledger <jq filter>: reads wo1's ledger entry.
