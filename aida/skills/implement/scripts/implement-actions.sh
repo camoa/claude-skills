@@ -2201,7 +2201,7 @@ REMOVED_PATHS
   # Two orders that declare one owned file is a warning at the design close. Each order is still
   # held to its own list at build.
   local build_orders_json cycles_json
-  build_orders_json="$(jq_files -cn --argjson orders "$snapshot_workorders_json" --argjson gone "$(jq -cn --argjson a "$halted_removed_ids_json" --argjson b "$dropped_ids_json" '$a + $b')" \
+  build_orders_json="$(jq_files -cn --argjson orders "$snapshot_workorders_json" --argjson gone "$(jq -cn --argjson a "$stopped_removed_ids_json" --argjson b "$dropped_ids_json" '$a + $b')" \
     '[ $orders[] | . as $o | select(($gone | index($o.id)) == null) ]')"
   cycles_json="$(jq_files -c -n --argjson orders "$build_orders_json" '
       def reach($adj; $start):

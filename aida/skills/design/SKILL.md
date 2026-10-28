@@ -962,11 +962,8 @@ orders or the close changed after the distiller read them: dispatch it again, th
 call again. `standsAlone: none` means the sidecar was missing or unusable, and the task record
 holds a warning. The scope skill states the one retry rule under "The distill check".
 
-Interactive: stop here. Name the next command for the person, `/aida:implement <task-id>`, and
-never invoke it yourself. Autonomous: invoke `aida:implement` through the Skill tool, once, with
-the task id, and stop if it refuses. Invoke it only when the mode covers implement too; otherwise
-end as interactive does, naming the command. Each stage refuses to start without the previous
-stage's record, so a stage cannot run out of order. That is why this chain is safe.
+Then hand off to `implement`, as `${CLAUDE_PLUGIN_ROOT}/skills/next/references/handoff.md` says:
+interactive, name `/aida:implement <task-id>` and stop; autonomous, invoke it when the run mode covers it.
 
 ## What this skill never does
 

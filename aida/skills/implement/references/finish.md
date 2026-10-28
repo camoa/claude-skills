@@ -132,11 +132,8 @@ owns reads unmet at review's check that every change serves a criterion.
 go to an order. It runs in either run mode: the review recorded the findings, so no one decides
 here.
 
-Interactive: stop here. Name the next command for the person, `/aida:review <task-id>`, and never
-invoke it yourself. Autonomous: invoke `aida:review` through the Skill tool, once, with the task
-id, and stop if it refuses. Invoke it only when the mode covers review too; otherwise end as
-interactive does, naming the command. Each stage refuses to start without the previous stage's
-record, so a stage cannot run out of order. That is why this chain is safe.
+Then hand off to `review`, as `${CLAUDE_PLUGIN_ROOT}/skills/next/references/handoff.md` says:
+interactive, name `/aida:review <task-id>` and stop; autonomous, invoke it when the run mode covers it.
 
 ## Leave a stop
 
