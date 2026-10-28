@@ -318,7 +318,7 @@
         "framework": {
           "type": "string",
           "minLength": 1,
-          "description": "The framework whose recipe carried this row. Present only on a check that ran a command. One tool row may carry a command from one framework only: two frameworks each declaring one refuses before any check runs (exit 72)."
+          "description": "The framework whose recipe carried this row. Present only on a check that ran a command. One tool row carries a command from one framework only: when two frameworks each declare one, the first in project.json runs it and the task record gets a warning."
         },
         "newLines": {
           "type": "array",

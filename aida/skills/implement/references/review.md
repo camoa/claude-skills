@@ -262,8 +262,8 @@ Run:
 `--test-recipe` is the path resolved above, one per framework. The script parses it itself, the
 same way `build-record` does. `--implement-recipe` is the path
 build.md names, and an order whose proof is `gate` reads it here for the same reason. Left out, it is
-taken from `preconditions.json`, the same as at the build step. It refuses (exit 72) when two
-frameworks command one row. `--value` and `--nothing-ran` work the same way they do at the build step.
+taken from `preconditions.json`, the same as at the build step. When two frameworks command one
+row, the first in project.json runs it, with a warning. `--value` and `--nothing-ran` work the same way they do at the build step.
 `--scope-insufficient` is repeatable, one per finding the fixer's report names as needing more
 scope than it had. Interactive puts each one to the person, opening with: "The fixer says this
 review finding needs a change in files it was not allowed to edit. Only you can allow that. Allow

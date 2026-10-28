@@ -694,10 +694,11 @@ cr_take_flag() {
 #                       this caller has none (the baseline, which runs the suite whole)
 # Sets CR_DOC.
 #
-# One tool row may carry a command from one framework only. A project on two frameworks whose
-# recipes both name a coding-standards tool has two answers to one question, and nothing here may
-# choose between them (exit 72). A row every framework declares absent is absent, and its reasons
-# are joined.
+# One tool row carries a command from one framework only. A project on two frameworks whose
+# recipes both name a coding-standards tool has two answers to one question. The first framework
+# in project.json's order runs, its row names it, and a warning in the task record at TASK_PATH
+# names the others. A refusal there stopped the whole step, and no case on record needed it. A row
+# every framework declares absent is absent, and its reasons are joined.
 CR_WHO=""; CR_TEST_RECIPES=""; CR_CHECK_RECIPES=""; CR_DOC=""
 # False resolves implementation's three tool rows. True resolves every row id the check recipes
 # declare, which is review's own reading of the same block.
@@ -719,7 +720,7 @@ cr_resolve() {
   local tc_state cc_state markers marker_json
   local suite_json order_json tool_id
   local test_sha check_sha
-  local all_tools tools_out commanded count absent_rows tool_ids
+  local all_tools tools_out commanded count absent_rows tool_ids order
 
   records_hash__resolve_sha256_cmd \
     || die 3 "$CR_WHO: neither sha256sum nor 'shasum -a 256' was found on PATH"
@@ -806,13 +807,18 @@ security'
   if [ "$CR_TOOL_IDS_ALL" = "true" ]; then
     tool_ids="$(printf '%s' "$all_tools" | jq -r '[ .[].id ] | unique | .[]')"
   fi
+  order="$(jq -c '.frameworks // []' "$(resolve_project_folder "$TASK_PATH")/project.json" 2>/dev/null)"
+  [ -n "$order" ] || order='[]'
   while IFS= read -r tool_id; do
     [ -n "$tool_id" ] || continue
     commanded="$(printf '%s' "$all_tools" | jq -c --arg id "$tool_id" \
       '[ .[] | select(.id == $id and (has("argv")) and (((.unreadable // []) | index("argv")) == null)) ]')"
     count="$(printf '%s' "$commanded" | jq 'length')"
     if [ "$count" -gt 1 ]; then
-      die 72 "$CR_WHO: $(printf '%s' "$commanded" | jq -r '[ .[].framework ] | join(" and ")') each declare a $tool_id command, and nothing here may choose between two answers to one question. Resolve one check recipe for this task, or split the frameworks into two tasks."
+      commanded="$(printf '%s' "$commanded" | jq -c --argjson o "$order" 'sort_by(.framework as $f | ($o | index($f)) // length)')"
+      task_warn "$TASK_PATH" "$CR_WHO" "" "$(printf '%s' "$commanded" | jq -r --arg t "$tool_id" \
+        '"\([ .[].framework ] | join(" and ")) each declare a \($t) command. \(.[0].framework) runs it, the first in project.json"')"
+      commanded="$(printf '%s' "$commanded" | jq -c '.[:1]')"; count=1
     fi
     if [ "$count" -eq 1 ]; then
       tools_out="$(jq -nc --argjson out "$tools_out" --argjson row "$(printf '%s' "$commanded" | jq -c '.[0]')" '$out + [$row]')"
@@ -1842,8 +1848,10 @@ cr_require_person() {
 }
 
 # One recipe per kind, or a lookup that failed, per framework. Sets RECIPE and RECIPE_FW, or ends
-# the action: no recipe anywhere is not-applicable (exit 0), a lookup nobody completed is unknown
-# (exit 3), and two recipes are two answers to one question (exit 72). The words are the ones
+# the action: no recipe anywhere is not-applicable (exit 0), and a lookup nobody completed is
+# unknown (exit 3). Two recipes are two answers to one question, as in cr_resolve: the first in
+# FRAMEWORKS, project.json's order, is taken, and a `warning:` line names the other. This step may
+# have no task, so the line is printed and not written to a record. The words are the ones
 # cr_lookup_failure_pair accepts, and nothing here reads a fourth.
 cr_resolve_recipe() {
   RECIPE=""; RECIPE_FW=""; VIEWPORTS_ARG=""
@@ -1866,8 +1874,12 @@ cr_resolve_recipe() {
     pair="$(cr_lookup "$recipes" "$fw")"; reason="$(cr_lookup "$failures" "$fw")"
     [ -n "$pair" ] || [ -n "$reason" ] || die 3 "$ACTION: nothing was said about the framework $fw. Pass --recipe $fw=<path> or --lookup-failed $fw=<word>."
     if [ -n "$pair" ]; then
-      [ -z "$RECIPE" ] || die 72 "$ACTION: $RECIPE_FW and $fw each carry a $KIND recipe, and nothing here may choose between two answers to one question."
-      RECIPE="$pair"; RECIPE_FW="$fw"
+      if [ -n "$RECIPE" ]; then
+        printf 'warning: %s: %s and %s each carry a %s recipe. %s is taken, the first in project.json\n' \
+          "$ACTION" "$RECIPE_FW" "$fw" "$KIND" "$RECIPE_FW"
+      else
+        RECIPE="$pair"; RECIPE_FW="$fw"
+      fi
     fi
     case "$reason" in listing-unreachable|fetch-failed) unknown="$unknown $fw=$reason" ;; esac
   done <<CR_FRAMEWORKS
@@ -1935,13 +1947,18 @@ recipe_files_into() {
 }
 
 # Runs one recipe line as arguments and appends its output to $4. $1 the script's own name, $2 the
-# recipe, $3 the line, the rest extra arguments. Exits 3 on a refused line. zsh does not split an
-# unquoted expansion. The split happens in a subshell that sets SH_WORD_SPLIT for zsh, and the
-# option never leaks to the caller.
+# recipe, $3 the line, the rest extra arguments. A line refuse_if_unsafe refuses is not run: a
+# `warning:` line in the output and in $4 names it unknown, and the call returns 0, so the lines
+# after it run (summary conflict 8). zsh does not split an unquoted expansion. The split happens in
+# a subshell that sets SH_WORD_SPLIT for zsh, and the option never leaks to the caller.
 run_recipe_line() {
   local who="$1" recipe="$2" line="$3" outfile="$4"
   shift 4
-  refuse_if_unsafe "$who" "$recipe" "$line" || exit 3
+  if ! refuse_if_unsafe "$who" "$recipe" "$line" 2>/dev/null; then
+    printf 'warning: %s: not run, so its result is unknown: a line of %s carries a shell character: %s\n' \
+      "$who" "$recipe" "$line" | tee -a "$outfile"
+    return 0
+  fi
   printf '+ %s\n' "$line"
   # The record says what ran, above the output that run produced. The extra arguments come from
   # the conversation, so the recipe line alone does not account for the output, and after a

@@ -47,4 +47,3 @@ in another stage, so read the page for the stage you are in.
 - [A run with nobody present stops for a person](person-must-answer.md): light and autonomous runs.
 - [The site is down or will not come up](site-down.md)
 - [A tool or a test harness will not install or run](tool-or-harness.md)
-- [Compaction is refused: unsaved stage work](compact-refused.md)

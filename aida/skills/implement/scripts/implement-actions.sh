@@ -488,8 +488,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      that is not a commit, or not an ancestor of HEAD, is an error, exit 3. `build-record` starts
 #      the range at the freeze commit's parent when HEAD is the order's own freeze commit and every
 #      frozen test locks in (live-run row 371).
-#  72  two frameworks each declare a command for one check row, and nothing here may choose between
-#      two answers to one question. The message names both frameworks and the row.
+#  72  two frameworks each carry a `## Configuration gate`, and nothing here may choose between two
+#      answers to one question. A check row two frameworks command does not refuse: the first in
+#      project.json runs it, with a warning (scripts/lib/recipes.sh, cr_resolve).
 #  73  the check recipe resolved for a framework moved after this task's baseline was taken: its
 #      sha256 differs (cr_require_baseline_recipes in scripts/lib/recipes.sh, which review runs
 #      before its tool rows). The build runs no tool row, so the record steps never refuse on it.
@@ -6535,23 +6536,21 @@ IM_DEPS
     || die 41 "$who: $unit_id has already used $IM_ATTEMPTS_USED of $IM_ATTEMPTS_ALLOWED allowed attempts. Nothing more is handed over."
 }
 
-# The reads an implementer's or a fixer's dispatch denies: every other order's owned files, less
-# the ones this order shares (gap row 287). dispatch-open writes them; build-brief names the ones
-# its text names (gap row 344). Input the snapshot, $u the order, $roots the worktree and the
-# main checkout. An owned file outside both, such as a task-folder deliverable, is a record order's
-# product, not source. No interface record stands in for it, and a later order depends on the
-# order to read it. So the owned files outside the roots of every order $u depends on, directly or
-# through another, stay readable (gap row 344). Every path inside the roots stays denied.
+# The reads an implementer's or a fixer's dispatch denies: the owned files of every order $u does
+# not depend on, directly or through another, less the ones this order shares (gap row 287).
+# dispatch-open writes them; build-brief names the ones its text names (gap row 344). Input the
+# snapshot, $u the order. A dependency's files stay readable, source included. The facts an order
+# builds on live there, and a denial stopped a builder on a dependency's data file and left a
+# fixer without the script its fix called (gap row 443). An order it does not depend on gives it
+# nothing to build on, so that order's files stay denied.
 IM_OTHERS_OWNED_JQ='def dep_closure($u): . as $s | {seen: [], todo: [$u]}
   | until(.todo == []; .todo[0] as $t | .todo = .todo[1:]
       | ([ $s.workOrders[]? | select(.id == $t) | (.dependsOn // [])[] ] - .seen - [$u]) as $new
       | .seen += $new | .todo += $new)
   | .seen;
-def outside($roots): . as $p | startswith("/")
-  and all($roots[]; . as $r | $r == "" or ($p != $r and ($p | startswith($r + "/") | not)));
-def others_owned($u; $roots): [ .workOrders[]? | select(.id == $u) | .ownedFiles[]? ] as $m
+def others_owned($u): [ .workOrders[]? | select(.id == $u) | .ownedFiles[]? ] as $m
   | dep_closure($u) as $deps
-  | [ .workOrders[]? | select(.id as $i | $deps | index($i)) | .ownedFiles[]? | select(outside($roots)) ] as $read
+  | [ .workOrders[]? | select(.id as $i | $deps | index($i)) | .ownedFiles[]? ] as $read
   | [ .workOrders[]? | select(.id != $u) | .ownedFiles[]? ] - $m - $read | unique;'
 
 do_build_brief() {
@@ -6666,18 +6665,17 @@ do_build_brief() {
     fi
   fi
   # A path the order's own text names and the builder's dispatch denies is a read the builder is
-  # told to make and cannot (gap row 344). The deny stands, because what another order exposes is
-  # its interface record. So the brief lists each such path. A dependency's record names its own
+  # told to make and cannot (gap row 344). The deny stands for an order this one does not depend
+  # on, because nothing here builds on it. So the brief lists each such path. A dependency's record names its own
   # files as a matter of course, so only the order's text is read. A path in the task folder is
   # also matched as written from that folder. A name counts only where no path character touches it.
   local denied_named_json
   denied_named_json="$(printf '%s' "$snapshot_doc" | jq -c --arg u "$unit_id" --arg tf "$TASK_PATH/" \
-    --argjson roots "$(jq -nc --arg w "$RV_CODEPATH" --arg m "$(project_code_path_value "$RV_PROJECT_FOLDER")" '[$w, $m]')" \
     --arg text "$(printf '%s' "$unit_out" | jq -c 'del(.ownedFiles)')" \
     "$IM_OTHERS_OWNED_JQ"'
     def named($p): ($p | rtrimstr("/") | gsub("(?<c>[.^$*+?()\\[\\]{}|\\\\])"; "\\\(.c)")) as $e
       | $text | test("(^|[^A-Za-z0-9_./-])" + $e + "($|/|[^A-Za-z0-9_.-]|[.]($|[^A-Za-z0-9_]))");
-    [ others_owned($u; $roots)[] | select(named(.) or (startswith($tf) and named(ltrimstr($tf)))) ]')"
+    [ others_owned($u)[] | select(named(.) or (startswith($tf) and named(ltrimstr($tf)))) ]')"
   [ -n "$denied_named_json" ] || die3 "build-brief: the reads denied to $unit_id could not be compared with its brief."
   # The report has one named path per attempt, so a later attempt never writes over the answers a
   # reviewer already compared a diff against. The brief is one file per order, rewritten on each
@@ -12084,7 +12082,7 @@ RO_ONE
 
 # Reverts every commit order $1 made in repository $2, newest first, one revert commit each, so
 # each revert applies to the tree its commit left. A revert keeps the history, and AIDA's own
-# command hook refuses the hard reset that would drop it. A revert that stops on a conflict is
+# command hook stops for a person before the hard reset that would drop it. A revert that stops on a conflict is
 # taken back, and so is every revert this run committed before it, so the branch is where it was
 # (gap row 348). `reset --keep` refuses to touch a changed file, and it runs only when the commits
 # since the start are this run's reverts alone, so a commit a hook or a person made meanwhile is
@@ -13087,8 +13085,8 @@ TG_ROOTS
   fi
 
   # The implementer is the mirror of the test author. It writes this unit's own files and may not
-  # read another unit's, because what a unit exposes is its interface record and never its code
-  # (ideal/agents.md, implementer). Both lists come from the snapshot for the same reason the test
+  # read the files of a unit it does not depend on, because it builds on nothing there. A
+  # dependency's files stay readable (gap row 443, IM_OTHERS_OWNED_JQ). Both lists come from the snapshot for the same reason the test
   # author's does: assembled per dispatch they would be a judgement made in the moment.
   # An empty denial is a real state here and is not refused: a task with one work order has no
   # other unit to withhold, which is different from a test author having nothing to withhold.
@@ -13107,8 +13105,7 @@ TG_ROOTS
     [ "$mine_count" -gt 0 ] 2>/dev/null \
       || die 47 "dispatch-open: $unit_id declares no owned file in $IMPL_DIR/snapshot.json, so a $role_bare would be dispatched with nowhere it is meant to write. Design has to name what this order owns before its code is written."
     others_json="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg u "$unit_id" \
-      --argjson roots "$(jq -nc --arg w "$codepath" --arg m "$(project_code_path_value "$RV_PROJECT_FOLDER")" '[$w, $m]')" \
-      "$IM_OTHERS_OWNED_JQ"' others_owned($u; $roots)')"
+      "$IM_OTHERS_OWNED_JQ"' others_owned($u)')"
     deny_raw="$deny_raw$(printf '%s' "$others_json" | jq -r '.[]')
 "
     allow_raw="$allow_raw$(printf '%s' "$mine_json" | jq -r '.[]')

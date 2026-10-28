@@ -49,8 +49,8 @@ commands` block and its `## Surface commands` block. Pass paths only.
 
 Every framework needs a `--recipe` or a `--lookup-failed` for it, and the script refuses rather than
 guess. A lookup nobody ran must never be recorded as a recipe that declared nothing. A project
-recording no framework refuses at exit 77, because no recipe can be chosen for it. Two frameworks
-that each command one tool refuse at exit 72, rather than give the script two answers to one question.
+recording no framework refuses at exit 77, because no recipe can be chosen for it. When two
+frameworks each command one tool, the first in project.json runs it, and the task record gets a warning.
 
 `--value` supplies a placeholder a command carries, such as the runner a Python project declares. The
 script never guesses one and never reads a default out of a recipe's prose.

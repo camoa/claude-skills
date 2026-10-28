@@ -1488,7 +1488,7 @@ environment_check() {
   fi
   if [ "$rc" -ne 0 ]; then
     cat "$outfile" >&2
-    # run_recipe_lines exits 4 when a line ran and failed, and 3 when a line was refused unrun.
+    # run_recipe_lines exits 4 when a line ran and failed, and 3 when a line holds a token nothing fills.
     [ "$rc" -ne 4 ] || environment_branch_lines "$wt" >&2
     exit 3
   fi

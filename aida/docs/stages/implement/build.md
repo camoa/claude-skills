@@ -19,7 +19,7 @@ rule first. The implementer may still not read that file.
 
 - It writes only in the files its order owns. A hook refuses a write anywhere else in the code.
 - It may not change a test. A hook refuses the write and names the order that froze the file.
-- It may not read another order's source. What another order exposes is its interface record.
+- It may not read the source of an order it does not depend on. A dependency's files stay readable.
 - It commits its own work before it returns. A dirty tree means the commit did not happen, and
   the attempt is not recorded. AIDA asks you whether to commit or discard what it left.
 

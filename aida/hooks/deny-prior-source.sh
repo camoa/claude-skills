@@ -11,8 +11,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # is that record's own denyRead (scripts/dispatch-schema.json; deny-frozen-test-writes.sh's header
 # carries the fuller reasoning for the record itself). Two roles reach it today. A test author is
 # denied every work order's owned files, because a test that has read the code describes the code
-# instead of the intent. An implementer is denied every order's but its own, because what another
-# unit exposes is its interface record and never its source. The task folder's own copies of code,
+# instead of the intent. An implementer is denied the files of every order its own does not depend
+# on, because it builds on nothing there (gap row 443). The task folder's own copies of code,
 # such as diffs and set-aside files, are listed one file at a time when the dispatch opens. A file
 # written there after that is in no list, and the read passes (gap row 379).
 #

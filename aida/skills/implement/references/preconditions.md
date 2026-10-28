@@ -157,10 +157,10 @@ nobody looked up, and the orders proved by tests. A lookup nobody ran says nothi
 order, so a run that answered for one framework and skipped a second is told so. It reads `none`
 when every framework was answered, or when no order is proved by tests.
 
-**Two frameworks may not both command one tool.** A project declaring two frameworks whose review
-recipes each carry a coding-standards row, say, gives the script two answers to one question, and
-it refuses (exit 72) rather than choose. Resolve one check recipe for the task, or split the
-frameworks into two tasks.
+**Two frameworks that both command one tool: the first runs.** A project declaring two frameworks
+whose review recipes each carry a coding-standards row, say, gives the script two answers to one
+question. The framework listed first in project.json runs the tool, its row names it, and the task
+record gets a warning that names the other.
 
 **A framework that could never test itself refuses here, not later.** The test-execution recipe's
 `## Test commands` block needs a `changed` or a `file` row, the two that can run a named set of

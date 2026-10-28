@@ -1,32 +1,49 @@
 #!/usr/bin/env bash
-# command-hook-spec.sh: hooks/deny-destructive-commands.sh reads the body of a heredoc with a quoted
-# delimiter, or a single-quoted `-c` argument, sent to a program that is not a shell, as text. No
-# shell expands that text, so a git verb in it is not a command (gap row 460). An unquoted
-# delimiter, double quotes, or a shell still have it read.
-# The commands are built with octal escapes, \140 for a backtick and \044 for a dollar sign, because
-# the hook reads this file when a session runs it.
+# command-hook-spec.sh: hooks/deny-destructive-commands.sh asks the person before a command that
+# throws work away or publishes it, where Claude Code can show a prompt. It refuses that command
+# where no prompt can show, and it refuses a dispatched role and stops it. A write to the guard is
+# refused in every case. Text no shell runs is not a command (gap row 460).
+# The commands are built with printf, because the hook reads this file when a session runs it.
 set -u
 # shellcheck source=records.bash
 source "$(dirname "${BASH_SOURCE[0]}")/records.bash"
 HOOK="$PLUGIN/hooks/deny-destructive-commands.sh"
-# decision <command>: the hook's decision on the command, deny or allow.
-decision() {
-  jq -nc --arg c "$1" '{tool_name: "Bash", tool_input: {command: $c}, cwd: "/"}' \
-    | env -u AIDA_ALLOW_DANGEROUS CLAUDE_PLUGIN_ROOT="$PLUGIN" bash "$HOOK" \
-    | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
+# out <payload as JSON> [env assignment]: the hook's output for one call.
+out() {
+  printf '%s' "$1" | jq -c '{cwd: "/"} + .' \
+    | env -u AIDA_ALLOW_DANGEROUS CLAUDE_PLUGIN_ROOT="$PLUGIN" ${2:+"$2"} bash "$HOOK"
 }
+# bash_call <command> <permission mode> [agent id]: a Bash payload.
+bash_call() {
+  jq -nc --arg c "$1" --arg m "$2" --arg a "${3:-}" \
+    '{tool_name: "Bash", tool_input: {command: $c}} + (if $m == "" then {} else {permission_mode: $m} end)
+     + (if $a == "" then {} else {agent_id: $a, agent_type: "aida:fixer"} end)'
+}
+# decision <output>: deny, ask or allow, and "stop" after it when the output ends the turn.
+decision() {
+  printf '%s' "$1" | jq -r '(.hookSpecificOutput.permissionDecision // "allow")
+    + (if .continue == false then " stop" else "" end)'
+}
+PUSH="$(printf 'git %s origin main' push)"
 
-expect "a quoted heredoc to python names a git verb in backticks: allowed" \
-  "$(decision "$(printf 'python3 - <<%sEOF%s\nprint("a \140git archive\140 export")\nEOF' "'" "'")")" allow
-expect "an unquoted heredoc to python runs its backticks: refused" \
-  "$(decision "$(printf 'python3 - <<EOF\nprint("\140git \044x\140")\nEOF')")" deny
-expect "a quoted heredoc to bash is commands: refused" \
-  "$(decision "$(printf 'bash <<%sEOF%s\ngit \044x\nEOF' "'" "'")")" deny
-expect "a single-quoted -c argument to python names a git verb in backticks: allowed" \
-  "$(decision "$(printf 'python3 -c %sprint("a \140git archive\140 export")%s' "'" "'")")" allow
-expect "a double-quoted -c argument to python runs its backticks: refused" \
-  "$(decision "$(printf 'python3 -c "print(%s\140git \044x\140%s)"' "'" "'")")" deny
-expect "a single-quoted argument to su -c or sudo -s starts a shell: refused" \
-  "$(decision "$(printf 'su -c %sgit \140echo push\140%s' "'" "'")")|$(decision "$(printf 'sudo -s %sgit \140echo push\140%s' "'" "'")")" "deny|deny"
+expect "the main session in default mode is asked about a push" \
+  "$(decision "$(out "$(bash_call "$PUSH" default)")")" ask
+expect "the main session in auto mode is asked about a recursive delete of home" \
+  "$(decision "$(out "$(bash_call "$(printf 'rm -%s ~' rf)" auto)")")" ask
+expect "bypassPermissions shows no prompt, so a push is refused" \
+  "$(decision "$(out "$(bash_call "$PUSH" bypassPermissions)")")" deny
+expect "a payload with no permission mode is refused" \
+  "$(decision "$(out "$(bash_call "$PUSH" "")")")" deny
+expect "a dispatched role is refused a push and stopped" \
+  "$(decision "$(out "$(bash_call "$PUSH" default agent-1)")")" "deny stop"
+expect "a plain status passes" \
+  "$(decision "$(out "$(bash_call "git status" default)")")" allow
+expect "a write to the hooks folder is refused in default mode" \
+  "$(decision "$(out "$(jq -nc --arg f "$PLUGIN/hooks/hooks.json" \
+    '{tool_name: "Write", permission_mode: "default", tool_input: {file_path: $f, content: "{}"}}')")")" deny
+expect "AIDA_ALLOW_DANGEROUS=1 lets the push through" \
+  "$(decision "$(out "$(bash_call "$PUSH" bypassPermissions)" AIDA_ALLOW_DANGEROUS=1)")" allow
+expect "a quoted heredoc to python names a git verb in backticks: no question" \
+  "$(decision "$(out "$(bash_call "$(printf 'python3 - <<%sEOF%s\nprint("a \140git archive\140 export")\nEOF' "'" "'")" default)")")" allow
 
 finish

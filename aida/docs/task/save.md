@@ -29,7 +29,7 @@ in either run mode.
 - A commit of the task folder alone.
 
 With nothing to save, AIDA says so in one line, and the save still runs. It writes no note. It
-records the time, and that clears the refusal on a manual `/compact`; see
+records the time, so a manual `/compact` after it writes no warning; see
 [sessions](sessions.md).
 
 ## A note is not a record

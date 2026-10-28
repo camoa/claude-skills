@@ -2,7 +2,7 @@
 
 A session closes or compacts, and the conversation is gone. What survives is what is on disk: the
 task's records, its notes, and its commits. AIDA tells each new session where things stand, and
-refuses a manual `/compact` while stage work is unsaved.
+records a warning when a manual `/compact` runs while stage work is unsaved.
 
 ## What a new session is told
 
@@ -47,9 +47,9 @@ have projects elsewhere, the block gives their count.
 Compaction keeps a summary and drops the conversation. A decision not yet in a record is what it
 forgets. The checks below apply to the task this session works on.
 
-- **A manual `/compact` with unsaved work is refused:** "Task <id> has unsaved <stage> stage
-  work, so run `/aida:task save <id>` before compacting." Save, then compact. See
-  [save a decision](save.md).
+- **A manual `/compact` with unsaved work runs, and AIDA records a warning** in the task record.
+  The warning names the unsaved files, and review lists it. Save first to keep that work on
+  record. See [save a decision](save.md).
 - **An automatic compaction is never refused.** AIDA leaves a marker in the task folder instead.
   The next session start names it once, with the time and whether work was unsaved. It tells the
   session to read `task.md` and the newest stage record before going on. Then the marker is

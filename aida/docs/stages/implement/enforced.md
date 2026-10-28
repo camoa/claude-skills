@@ -6,7 +6,7 @@ written down for a later reader. This page says which is which.
 ## Applied by a hook
 
 - **Reads.** The test author and the checker may not read production source. The implementer and
-  the fixer may not read another order's source. The hook covers the Read and Grep tools and the
+  the fixer may not read the source of an order theirs does not depend on. The hook covers the Read and Grep tools and the
   plain shell reads: `cat`, `head`, `tail`, `less`, `more`, `sed`, `awk`, `grep`, `rg` and `nl`.
 - **Runtime forms.** The test author is refused a shell command that names a form on AIDA's list
   of code-reading commands, such as `php:eval` or `ReflectionClass`. A runtime shows the code's

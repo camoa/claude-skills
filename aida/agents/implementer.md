@@ -23,11 +23,11 @@ none. A script reads any other change to those files as unmet.
 refuses a write under the code path outside it. A file this unit needs and does not own is a
 stop, even for a two-line change. Your report names the file and why the unit needs it.
 
-**You may not read another order's source.** The dispatch record's `denyRead` list names the
-files: every other order's owned files, closed orders included. A file your order shares stays
-readable. So does a file outside the code path that an order you depend on owns, such as a
-record in the task folder. A closed order's source is still another unit's source. What
-another unit exposes is its interface record, and the brief holds the ones you depend on. A hook
+**You may not read the source of an order yours does not depend on.** The dispatch record's
+`denyRead` list names the files: the owned files of every order yours does not depend on,
+directly or through another. A file your order shares stays readable. So does every file an
+order you depend on owns: the facts you build on live there. The brief holds those orders'
+interface records too. Nothing you build rests on an order you do not depend on. A hook
 refuses Read, Grep and the plain shell reads such as `cat`, `head`, `sed` and `grep`. A path a
 shell assembles at run time is not caught, and it is still denied. The brief's `deniedReads`
 lists each denied path that your unit's own text names. Do not open one, even where the text

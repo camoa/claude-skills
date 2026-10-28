@@ -2,23 +2,38 @@
 # The plugin root: the variable when the platform sets it (hooks), else this file's own place.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
-# deny-destructive-commands.sh. A PreToolUse hook on Bash, Write, Edit and MultiEdit: refuses
-# commands that throw work away or publish it, before they run. The list is version 5's, from
-# block-dangerous-commands.sh. Any `git push`, a force push, a hard reset, `git clean`,
-# `git branch -D`, and a checkout or restore of the whole working tree. A recursive delete of
-# root, the home directory, the working directory, or a folder above them. A recursive delete of
-# the session scratchpad, a folder above it, or a glob directly under it: the orchestrator and every
-# agent keep files there (live-run row 317). The platform's `scratchpad_dir` names it, and without
-# it this rule is off. A folder of an agent's own under the scratchpad passes. Plain `git push` stays
-# refused because version 6 never publishes: completion writes the pull request body and a person
-# pushes. `gh repo sync`, `gh pr merge`, and a `gh api` call that changes a ref or a file on a
-# branch publish too, so they are refused as well.
+# deny-destructive-commands.sh. A PreToolUse hook on Bash, Write, Edit and MultiEdit. It reads a
+# command that throws work away or publishes it, before the command runs. It also guards its own
+# files. The list is version 5's, from block-dangerous-commands.sh.
 #
-# The owner's goal: a deterministic way to keep a rogue agent from forcing dangerous work. It is
-# best effort, because it reads text, not the shell grammar. One step makes the text that every
-# rule reads. It joins continued lines and removes every `'`, `"` and `\`. Then `git "push"`,
-# `git pu''sh`, `git p\ush` and the text of `sh -c '...'` read as plain commands. It collapses
-# runs of spaces and tabs.
+# Two decisions. A write to the guard is refused: this plugin's hooks folder, the two libraries
+# this hook sources, and `disableAllHooks` in a `.claude` settings file. Those files enforce the
+# frozen tests, the owned files and the person's answer, so a write to them turns those stops off.
+# Every other rule asks. Claude Code then shows the person its permission prompt, and the command
+# runs only on a yes. The prompt shows in default, acceptEdits, plan and auto mode, and in auto mode
+# the classifier cannot approve it. The docs list no prompt for a hook's ask in bypassPermissions,
+# and dontAsk denies every call that would prompt. So in those two modes, and in a payload with no
+# permission_mode, the command is refused. hooks/deny-frozen-test-writes.sh reads the modes the
+# same way in ask_person.
+#
+# A dispatched role, a payload with agent_id, is refused and never asked. The refusal also sets
+# `continue: false`, so the role stops. A builder told to stop on a refusal deleted the refused
+# folder one file at a time (gap row 444). A role has no reason to run these commands, and the
+# person reads why it stopped.
+#
+# The commands it asks about. Any `git push`. A hard reset, `git clean`, `git branch -D`, and a
+# checkout or restore of the whole working tree. A recursive delete of root, the home directory,
+# the working directory, or a folder above them. A recursive delete of the session scratchpad, a
+# folder above it, or a glob directly under it: the orchestrator and every agent keep files there
+# (live-run row 317). The platform's `scratchpad_dir` names it, and without it this rule is off. A
+# folder of an agent's own under the scratchpad passes. `gh repo sync`, `gh pr merge`, and a
+# `gh api` call that changes a ref or a file on a branch. Version 6 never publishes: completion
+# writes the pull request body and a person pushes.
+#
+# It reads text, not the shell grammar, so it reads the literal forms only. One step makes the
+# text that every rule reads. It joins continued lines and removes every `'`, `"` and `\`. Then
+# `git "push"`, `git pu''sh`, `git p\ush` and the text of `sh -c '...'` read as plain commands. It
+# collapses runs of spaces and tabs.
 #
 # What it catches, on that text:
 # - Global options between `git` and its verb: `-C <path>`, `-c <k=v>`, `--git-dir`,
@@ -26,60 +41,41 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # - A wrapper or a path before `git`: `env`, `command`, `nohup`, `sudo`, `xargs`, `exec`,
 #   `/usr/bin/git`. Any character that cannot be part of a word may come before `git`.
 # - A flag in any order, in a cluster, or as the unique prefix git accepts, such as `--har` for
-#   `--hard` and `--forc` for `--force`.
-# - Every form of force push, also with the push gate open: a flag cluster holding `f`, a `+`
-#   refspec, `--mirror`, `--delete`, `-d`, and a `:ref` refspec.
-# - A verb this hook cannot read: a `$`, a `{` or a backtick in the verb word. A command word from
-#   a variable or a substitution, followed by push, a hard reset, clean or a forced branch delete.
-#   It refuses both and says so.
-# - A git alias set in the same command, by `git config` in any scope or by an inline
-#   `-c alias.*=`. It is refused when its value is a refused command, or starts with push or
-#   clean, or is a bare reset. An alias set earlier is not read.
+#   `--hard`.
 # - A recursive delete that starts the text of `bash -c '...'`, or of another shell's `-c`.
-# - A command that runs a file: `bash`, `sh`, `zsh`, `dash`, `ksh`, `source` or `.` with a path,
-#   or a command word with a slash that names an executable file. The first 256 KiB of the file
-#   go through the same rules, three files deep. A file with a NUL byte is a binary, and is not
-#   read. A file the hook cannot find or read is allowed.
-# - A write to the guard: this plugin's hooks folder and the two libraries this hook sources. A
-#   Write, Edit or MultiEdit under them is refused. A Bash command is refused when it names one of
-#   them with `>`, `>>`, `>|`, `tee`, `sed -i`, `perl -i`, `mv`, `rm`, `chmod` or `truncate`. For
-#   `cp`, `ln` and `install` the last word must name it, and for `dd` the `of=` word. The path
-#   counts when it is the real path, the path under `$CLAUDE_PLUGIN_ROOT`, or a relative path from
-#   the plugin root. When the plugin root cannot be resolved, any path that ends with those file
-#   names is refused. The limit: a symlink, another variable, or a relative path from another
-#   folder gets past it.
+# - A write to the guard. A Write, Edit or MultiEdit under the guard paths is refused. A Bash
+#   command is refused when it names one of them with `>`, `>>`, `>|`, `tee`, `sed -i`, `perl -i`,
+#   `mv`, `rm`, `chmod` or `truncate`. For `cp`, `ln` and `install` the last word must name it, and
+#   for `dd` the `of=` word. The path counts when it is the real path, the path under
+#   `$CLAUDE_PLUGIN_ROOT`, or a relative path from the plugin root. When the plugin root cannot be
+#   resolved, any path that ends with those file names is refused. The limit: a symlink, another
+#   variable, or a relative path from another folder gets past it.
 # - A Write, Edit or MultiEdit to a `.claude` settings file whose new text holds `disableAllHooks`.
 #
 # False positives. A heredoc body that goes to `cat` or `tee`, or to `git commit -F -`, is not
 # read, also after `;` or `&&` on its line. The exception is a command line that also starts a
-# shell or runs a file. The unreadable-verb rule does not read a shell comment (live-run row 321).
-# Nor does it read the body of a heredoc with a quoted delimiter, such as `python3 - <<'EOF'`, on a
-# command that starts no shell: no shell expands that body (gap row 460). Nor does it read a quoted
-# argument after `-c` or `<<<` on such a command, as in `python3 -c '...'`. `su` and `sudo -s` start
-# a shell. A substitution in a git verb that another runner passes to a shell is not refused. Two rules find a
-# command word: a command word from a variable, and a recursive delete. They read a quoted string
-# that opens and closes on one line as part of one word. So the message in `detail="$d $fw: ..."`
-# is not a command (live-run row 254). The push rules and the unreadable-verb rule read such a
-# string as one word too, except the value of an assignment, which a later `$cmd` runs. So
-# `--reasoning "... git push ..."` is not a command (live-run row 377). A string that spans lines
-# is read as commands. On a line
-# that holds `eval`, a `-c` flag or `<<<`, every string after it is read as commands, because a
-# shell runs it. The other rules read quoted text as commands. A refused phrase
-# anywhere else is refused, for example inside `git commit -m "..."` or `echo "..."`. Closing that
-# needs the shell grammar.
+# shell. The recursive delete rule reads a quoted string that opens and closes on one line as one
+# word. So the message in `detail="$d $fw: ..."` is not a command (live-run row 254). The push rule
+# reads such a string as one word too, except the value of an assignment, which a later `$cmd`
+# runs. So `--reasoning "... git push ..."` is not a command (live-run row 377). A string that
+# spans lines is read as commands. On a line that holds `eval`, a `-c` flag or `<<<`, every string
+# after it is read as commands, because a shell runs it. The other rules read quoted text as
+# commands, so a phrase inside `git commit -m "..."` or `echo "..."` asks. Closing that needs the
+# shell grammar.
 #
 # Out of reach:
-# - A script generated at run time and run in the same call, other than through a heredoc body.
+# - A command word from a variable or a substitution, and a git verb this hook cannot read.
+# - A git alias, set in the same command or before it.
+# - A file the command runs, such as `bash <script>`, and a script generated at run time.
 # - An encoded string, such as base64 piped to a shell.
 # - A quoted push that a command runs as a shell line with no `-c` flag, such as `watch` or `ssh`.
 # - Another language's subprocess call, such as Python or Node running git.
-# - An alias set before this command, and then used.
-# - A command word from a variable followed by a verb this hook does not list.
 # - A `cd` earlier in the same command line, which changes what a relative delete target names.
 # - A delete target from a variable other than `$HOME` and `$PWD`.
-# - A git option this hook does not list, and a wrapper option that takes a value, such as
-#   `sudo -u <user>` before a script path.
+# - A git option this hook does not list.
 # - A GraphQL query read from a file, and a settings file written through Bash.
+# The first three had readers until 6.1.0. They refused at random (live-run rows 254, 321, 330 and
+# 331), and they read only what an evasion writes, never an accident.
 #
 # FAIL-OPEN. No jq, empty or unreadable stdin, a payload with no command: allow, silent. A library
 # that cannot be read switches off only the rules that need it. The guard protection is the one
@@ -87,15 +83,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # in the session on a transient fault. That is worse than the command it guards against.
 #
 # Override: AIDA_ALLOW_DANGEROUS=1 in the hook's own environment, which is the shell that launched
-# this session, allows everything for that session.
+# this session, allows everything for that session. It is the route for an unattended run that
+# must run one of these commands.
 #
-# The plain push alone has a gate a person opens on their own machine: one file,
-# /etc/claude/allow-push, owned by root. Only sudo can create it, so the model cannot open the
-# gate from a tool call. Open: `sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push`.
-# Close: `sudo rm /etc/claude/allow-push`. A force push stays refused with the gate open.
-#
-# Deny is the documented JSON form (permissionDecision: deny, permissionDecisionReason shown to
-# the model), on exit 0, the same as hooks/deny-frozen-test-writes.sh.
+# Deny and ask are the documented JSON forms (permissionDecision and permissionDecisionReason), on
+# exit 0, the same as hooks/deny-frozen-test-writes.sh. A deny reason goes to the model, and an
+# ask reason goes to the person.
 set -uo pipefail
 
 [ "${AIDA_ALLOW_DANGEROUS:-}" != "1" ] || { echo '{}'; exit 0; }
@@ -109,11 +102,33 @@ SCRATCH="$(jq -r '.scratchpad_dir // empty' <<<"$INPUT" 2>/dev/null)"
 case "$SCRATCH" in /*) ;; *) SCRATCH="" ;; esac
 SCRATCH_REAL="$(cd "$SCRATCH" 2>/dev/null && pwd -P)"
 SCRATCH_HIT=false
+# agent_id is present only inside a subagent, the test hooks/deny-frozen-test-writes.sh uses.
+AGENT_ID="$(jq -r '.agent_id // empty' <<<"$INPUT" 2>/dev/null)"
+MODE="$(jq -r '.permission_mode // empty' <<<"$INPUT" 2>/dev/null)"
 
 deny() {
-  jq -nc --arg r "deny-destructive-commands: refused, because the command $1. Run it yourself if you mean it. AIDA_ALLOW_DANGEROUS=1 in the shell that launched this session turns this hook off." \
-    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+  local r="deny-destructive-commands: refused, because the command $1."
+  if [ -n "$AGENT_ID" ]; then
+    r="$r A dispatched role stops here. Report the command to the person, and do not reach its result another way."
+  else
+    r="$r Run it yourself if you mean it. AIDA_ALLOW_DANGEROUS=1 in the shell that launched this session turns this hook off."
+  fi
+  jq -nc --arg r "$r" --arg role "$AGENT_ID" '
+    {hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}
+    + (if $role == "" then {} else {continue: false, stopReason: $r} end)'
   exit 0
+}
+
+# The decision for a command that throws work away or publishes it. $1 the reason.
+ask() {
+  [ -z "$AGENT_ID" ] || deny "$1"
+  case "$MODE" in
+    default|acceptEdits|plan|auto)
+      jq -nc --arg r "deny-destructive-commands: the command $1. Approve only if you mean it." \
+        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+      exit 0 ;;
+  esac
+  deny "$1, and this session cannot show a prompt: its permission mode is ${MODE:-not given}"
 }
 
 HAVE_PATHS=false; HAVE_TEXT=false
@@ -209,16 +224,6 @@ esac
 CMD="$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)"
 [ -n "$CMD" ] || { echo '{}'; exit 0; }
 
-# The gate is open when the flag exists and root owns it. GNU stat and BSD stat spell the owner
-# flag differently, so both are tried.
-PUSH_GATE="/etc/claude/allow-push"
-push_gate_open() {
-  local owner
-  [ -f "$PUSH_GATE" ] || return 1
-  owner="$(stat -c %u "$PUSH_GATE" 2>/dev/null || stat -f %u "$PUSH_GATE" 2>/dev/null)"
-  [ "$owner" = "0" ]
-}
-
 # `git` as a word or at the end of a path, then any of git's top-level options, then the verb. An
 # option that takes a value takes the next word or an `=` value.
 GIT_OPT='-[Cc] +[^ ;&|]+|--(git-dir|work-tree|namespace|exec-path|super-prefix|config-env|attr-source)(=| +)[^ ;&|]+|--(no-pager|paginate|bare|no-replace-objects|no-lazy-fetch|no-optional-locks|no-advice|literal-pathspecs|glob-pathspecs|noglob-pathspecs|icase-pathspecs|exec-path)|-[pP]'
@@ -228,16 +233,9 @@ ARGS='( +[^ ;&|]+)*'
 END='( |$|[;&|)`])'
 # git accepts a unique prefix of a long option, so each is matched from its shortest unique form.
 HARD='--h(a(r(d)?)?)?'
-FORCE='--fo(r(c(e[^ ;&|]*)?)?)?'
 DELETE='--de(l(e(t(e)?)?)?)?'
-MIRROR='--mi(r(r(o(r)?)?)?)?'
 # A heredoc opening line whose body goes to a file or to a commit message, never to a shell.
 HD_TO_FILE='(^|[;&])[[:space:]]*(cat|tee)[[:space:]][^|;&]*<<[^|;&]*$|(^|[;&])[[:space:]]*git[[:space:]][^|;&]*commit[[:space:]][^|;&]*(-F[[:space:]]*-|--file[=[:space:]]-)[[:space:]][^|;&]*<<[^|;&]*$|\$\(cat[[:space:]]*<<'
-# A heredoc opening line whose delimiter is quoted. The shell expands nothing in that body, so on a
-# command that starts no shell the body is another program's text (gap row 460).
-HD_QUOTED="<<-?[[:space:]]*['\"]"
-MAX_BYTES=262144
-MAX_DEPTH=3
 
 # A here-string, not a pipe: under pipefail, grep -q quitting early can kill printf, and a match
 # then reads as none. A large here-string needs a writable temp folder. When grep cannot run, the
@@ -253,18 +251,13 @@ segments() { printf '%s\n' "$1" | tr ';&|' '\n\n\n'; }
 # heredoc body change no quote state. On a line that holds `eval`, a `-c` flag or `<<<`, no later
 # string is joined, because a shell runs its text. The shell runs the text of each `$(...)` and
 # each backtick pair outside single quotes, also inside a double-quoted string. So that text
-# follows its line again, as lines of its own.
+# follows its line again, as lines of its own. A `#` starts a comment at the start of a word,
+# outside a string, a backtick pair and `${...}`, and no substitution is read from it. A `$'...'`
+# string takes backslash escapes. A comment ends at its line, also after a backslash.
 # With $2 set to args, a string that is the value of an assignment is not joined, because a later
-# `$cmd` runs the text of `cmd="git push"`. With $2 set to code, it is args with each comment
-# dropped too, and a string after `-c` or `<<<` is joined: check_text sets code only on a command
-# that starts no shell, so no shell runs that string (gap row 460). With $2 set to strip, each comment is dropped and no string is joined, for a command
-# line that starts a shell, which can read a quoted string as commands. A `#` starts a comment at
-# the start of a word, outside a string, a backtick pair and `${...}`. A `$'...'` string takes
-# backslash escapes. A comment ends at its line, also after a backslash.
+# `$cmd` runs the text of `cmd="git push"`.
 quoted_words() {
-  local strip="" join=1
-  case "${2:-}" in code) strip=1 ;; strip) strip=1; join="" ;; esac
-  printf '%s\n' "$1" | LC_ALL=C awk -v strip="$strip" -v join="$join" -v asg="${2:+1}" '
+  printf '%s\n' "$1" | LC_ALL=C awk -v asg="${2:+1}" '
     function close_at(s, k, c, e,   d, depth) {
       depth = 0
       while (k <= length(s)) {
@@ -311,8 +304,7 @@ quoted_words() {
         c = substr(line, i, 1)
         if (c == "\\") { cont = (i == n); out = out substr(line, i, 2); i += 2; continue }
         if (c == "#" && !bt && !br && (i == 1 ? !pc : substr(line, i - 1, 1) ~ /[ \t;&|(]/)) {
-          if (!strip) out = out substr(line, i)
-          code = i - 1; break
+          out = out substr(line, i); code = i - 1; break
         }
         if (substr(line, i, 3) == "<<<") { out = out "<<<"; i += 3; continue }
         if (substr(line, i, 2) == "<<") {
@@ -327,7 +319,7 @@ quoted_words() {
           if (j == 0) { out = out substr(line, i); q = c; qe = e; break }
           s = substr(line, i, j - i + 1)
           pre = substr(line, 1, i - 1)
-          if (join && (strip || pre !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</) && !(asg && pre ~ /(^|[ \t;&|(])[A-Za-z_][A-Za-z0-9_]*\+?=[^ \t;&|]*$/)) gsub(/[ \t;&|]/, "\037", s)
+          if (pre !~ /(^|[^A-Za-z0-9_])(eval|-[A-Za-z]*c)([ \t]|$)|<<</ && !(asg && pre ~ /(^|[ \t;&|(])[A-Za-z_][A-Za-z0-9_]*\+?=[^ \t;&|]*$/)) gsub(/[ \t;&|]/, "\037", s)
           out = out s; i = j + 1; continue
         }
         if (c == "`") bt = !bt
@@ -353,54 +345,19 @@ skip_wrappers() {
   done
 }
 
-# Reads normalised text $1 one command segment at a time. Sets RUNS to the files the segments
-# run, one per line. A file run as a command word must be executable, so it carries an `x:`
-# prefix. Sets SHELLISH to true when a segment starts a shell, `eval`, or a command word with a
-# slash. Sets SHELL_WORD to true when a segment starts a shell or `eval` only. `su`, and `sudo`
-# with `-s` or `-i`, start a shell. Each loop in this file first drops, with one grep, the segments that cannot hit its rule.
-# A bash loop over every segment of a 256 KiB file took most of a minute (live-run row 255).
-scan_runs() {
-  local seg j n c k sudo
-  RUNS=""; SHELLISH=false; SHELL_WORD=false
+# Sets SHELL_WORD to true when a segment of normalised text $1 starts a shell or `eval`. A quoted
+# string or a heredoc body on that line can then be commands, so it is read as commands. Each loop
+# in this file first drops, with one grep, the segments that cannot hit its rule. A bash loop over
+# every segment of a long command took most of a minute (live-run row 255).
+starts_shell() {
+  local seg
+  SHELL_WORD=false
   while IFS= read -r seg; do
     set -f; read_words "$seg"; set +f
-    # shellcheck disable=SC2154 # w is filled by read_words, scripts/lib/command-text.sh
-    n=${#w[@]}
     skip_wrappers
-    sudo=false; k=0
-    while [ "$k" -lt "$I" ]; do
-      case "${w[$k]}" in
-        sudo) sudo=true ;;
-        --shell|--login|-[si]*|-[!-]*[si]*) [ "$sudo" = false ] || { SHELLISH=true; SHELL_WORD=true; } ;;
-      esac
-      k=$((k + 1))
-    done
-    [ "$I" -lt "$n" ] || continue
-    c="${w[$I]}"
-    case "$c" in
-      su) SHELLISH=true; SHELL_WORD=true ;;
-      bash|sh|zsh|dash|ksh|source|.|eval)
-        SHELLISH=true; SHELL_WORD=true
-        [ "$c" != eval ] || continue
-        # Options come before the file. -o takes a value; a -c cluster means inline text, which
-        # the rules already read.
-        j=$((I + 1))
-        while [ "$j" -lt "$n" ]; do
-          case "${w[$j]}" in
-            -o|+o) j=$((j + 2)) ;;
-            --*) j=$((j + 1)) ;;
-            -*c*) j=$n ;;
-            -*) j=$((j + 1)) ;;
-            *) break ;;
-          esac
-        done
-        [ "$j" -ge "$n" ] || RUNS="$RUNS${w[$j]}
-" ;;
-      */*) SHELLISH=true; RUNS="${RUNS}x:$c
-" ;;
-    esac
+    case "${w[$I]:-}" in bash|sh|zsh|dash|ksh|source|.|eval) SHELL_WORD=true; return 0 ;; esac
   done <<SEGMENTS
-$(printf '%s\n' "$1" | tr ';&|(){}`' '\n\n\n\n\n\n\n\n' | grep -E -e '/|sh|su|source|eval|(^| )\.( |$)')
+$(printf '%s\n' "$1" | tr ';&|(){}`' '\n\n\n\n\n\n\n\n' | grep -E -e 'sh|source|eval|(^| )\.( |$)')
 SEGMENTS
 }
 
@@ -511,8 +468,8 @@ recursive_delete() {
   while IFS= read -r seg; do
     set -f; read_words "$seg"; set +f
     skip_wrappers
-    # A shell's -c text is a command line of its own, so its first word is a command word. The
-    # options are skipped the way scan_runs skips them.
+    # A shell's -c text is a command line of its own, so its first word is a command word. Its
+    # options before -c are skipped.
     case "${w[$I]:-}" in
       bash|sh|zsh|dash|ksh)
         j=$((I + 1))
@@ -554,49 +511,14 @@ SEGMENTS
   return 1
 }
 
-# True when a segment of normalised text $1 has a command word from a variable or a substitution,
-# followed by a refused verb. Sets VAR_VERB to the verb.
-variable_command() {
-  local seg rest
-  while IFS= read -r seg; do
-    set -f; read_words "$seg"; set +f
-    skip_wrappers
-    [ "$I" -lt "${#w[@]}" ] || continue
-    case "${w[$I]}" in '$'*) ;; *) continue ;; esac
-    rest=" ${w[*]:$((I + 1))}"
-    VAR_VERB=""
-    if hit "$rest" " push$ARGS +(-[a-zA-Z]*f[a-zA-Z]*|$FORCE)( |$)"; then VAR_VERB="push"
-    elif ! push_gate_open && hit "$rest" " push( |$)"; then VAR_VERB="push"
-    elif hit "$rest" " reset$ARGS +$HARD( |$)"; then VAR_VERB="reset --hard"
-    elif hit "$rest" " clean( |$)"; then VAR_VERB="clean"
-    elif hit "$rest" " branch$ARGS +-D( |$)" || hit "$rest" " branch$ARGS +(-d|$DELETE)$ARGS +(-f|--force)( |$)"; then VAR_VERB="branch -D"
-    fi
-    [ -z "$VAR_VERB" ] || return 0
-  done <<SEGMENTS
-$(segments "$1" | grep -E -e '\$' | grep -E -e 'push|reset|clean|branch')
-SEGMENTS
-  return 1
-}
-
-# The command rules, on normalised text $1, and on $2, the same text normalised after quoted_words.
-# The push rules read $4, the text after quoted_words args. The unreadable-verb rule reads $3, the
-# text after quoted_words code, so a backticked verb in a comment passes (live-run row 321). So a
-# quoted argument that names git, such as a reason text, is not read as a command (live-run row
-# 377). On a line that starts a shell, $4 is $1 and $3 joins no string, because `echo "git push" |
-# bash` runs the string. The comment reader can take code for a comment, so every other rule reads
-# the comments too.
+# The rules that ask, on normalised text $1, and on $2, the same text normalised after
+# quoted_words. The push rule reads $3, the text after quoted_words args, so a quoted argument
+# that names git, such as a reason text, is not read as a command (live-run row 377). On a line
+# that starts a shell, $3 is $1, because `echo "git push" | bash` runs the string.
 # Sets REASON and returns 0 on the first rule that hits.
 rules() {
-  local t="$1" q="$2" c="$3" a="$4" line
-  hit "$a" "${GIT}push$ARGS +(-[a-zA-Z]*[fd][a-zA-Z]*|$FORCE|$MIRROR|$DELETE|\+[^ ;&|]+|:[^ ;&|]+)$END" \
-    && { REASON="is a force push, a mirror push, or a delete of a remote branch"; return 0; }
-  if ! push_gate_open; then
-    hit "$a" "${GIT}push$END" && { REASON="is a git push, and version 6 never publishes: a person pushes. To let this session push, the person opens the gate: sudo mkdir -p /etc/claude && sudo touch /etc/claude/allow-push"; return 0; }
-  fi
-  hit "$c" "${GIT}([\$\`]|[^- ;&|][^ ;&|]*[\$\`{])" && { REASON="puts a variable, a brace or a command substitution in the git verb, so this hook cannot read the verb"; return 0; }
-  if [ "$HAVE_TEXT" = true ] && variable_command "$q"; then
-    REASON="takes its command word from a variable or a substitution, followed by $VAR_VERB, so this hook cannot read the command"; return 0
-  fi
+  local t="$1" q="$2" a="$3" line
+  hit "$a" "${GIT}push$END" && { REASON="is a git push, and version 6 never publishes: a person pushes"; return 0; }
   hit "$t" "${GIT}reset$ARGS +$HARD$END" && { REASON="is a hard reset"; return 0; }
   hit "$t" "${GIT}clean$ARGS +(-[a-zA-Z]*[fxX]|--f(o(r(c(e)?)?)?)?$END)" && { REASON="runs git clean, which deletes untracked files"; return 0; }
   hit "$t" "${GIT}branch$ARGS +(-[a-zA-Z]*D[a-zA-Z]*|-df|-fd)$END" \
@@ -637,15 +559,12 @@ GHAPI
   if hit "$t" "${GH}api +graphql" && hit "$t" 'updateRef|createCommitOnBranch|mergePullRequest|deleteRef'; then
     REASON="sends a GitHub GraphQL mutation that changes a branch or merges a pull request"; return 0
   fi
-  if [ "$HAVE_TEXT" = true ] && guard_write "$t"; then
-    REASON="writes to this guard: this plugin's hooks folder or a library the hook sources"; return 0
-  fi
   return 1
 }
 
-# Checks command text $1, read $2 files deep. Sets REASON and returns 0 when it is refused.
+# Checks command text $1: refuses a write to the guard, and asks about a rule's command.
 check_text() {
-  local text="$1" raw="$1" depth="$2" stripped n n0="" line val f p runs runs0="" need_x code mode=code a
+  local text="$1" stripped n a
   # BSNL comes from scripts/lib/command-text.sh. The default keeps the join when that file cannot
   # be read. It is set unquoted, because inside double quotes $'...' is not expanded.
   local bsnl=${BSNL:-$'\\\n'}
@@ -654,55 +573,22 @@ check_text() {
   SHELL_WORD=true
   if [ "$HAVE_TEXT" = true ]; then
     stripped="$(strip_heredocs "$text" "$HD_TO_FILE")"
-    n0="$(normalise "$stripped")"
-    scan_runs "$n0"
-    runs0="$RUNS"
+    starts_shell "$(normalise "$stripped")"
+    [ "$SHELL_WORD" = true ] || text="$stripped"
   fi
-  [ "$SHELL_WORD" = false ] || mode="strip"
-  # The comments go before the lines join, because a comment ends at its line.
-  code="$(quoted_words "$raw" "$mode")"
-  code="${code//"$bsnl"/}"
-  [ "$HAVE_TEXT" = false ] || [ "$SHELLISH" = true ] || { text="$stripped"; code="$(strip_heredocs "$code" "$HD_TO_FILE|$HD_QUOTED")"; }
   n="$(normalise "$text")"
+  if [ "$HAVE_TEXT" = true ] && guard_write "$n"; then
+    deny "writes to this guard: this plugin's hooks folder or a library the hook sources"
+  fi
   # The joined text is read only when git and push both appear, which saves its pass on most calls.
   # A joined option value, as in `git -C "a b" push`, can make a push that the plain text misses.
   a="$n"
   [ "$SHELL_WORD" = true ] || ! hit "$n" "(^|[^A-Za-z0-9_.-])git .*push" || a="$(normalise "$(quoted_words "$text" args)")"
-  rules "$n" "$(normalise "$(quoted_words "$text")")" "$(normalise "$code")" "$a" && return 0
-  [ "$depth" -lt "$MAX_DEPTH" ] || return 1
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    val="$(printf '%s' "$line" | sed -E 's/.*alias\.[^ =]+[ =]//; s/ +$//')"
-    # A value the later arguments complete: push or clean with any flag, or reset with none.
-    case "$val" in
-      push|push\ *|clean|clean\ *|reset) REASON="sets a git alias to $val, which later arguments can turn into a refused command"; return 0 ;;
-    esac
-    check_text "$(printf 'git %s' "$val")" $((depth + 1)) && { REASON="sets a git alias whose command $REASON"; return 0; }
-  done <<ALIASES
-$(printf '%s\n' "$n" | grep -E -e "${GIT}.*alias\.[^ =]+[ =]")
-ALIASES
-  [ "$HAVE_TEXT" = true ] && [ "$HAVE_PATHS" = true ] || return 1
-  # The first scan read the same text when no heredoc body was kept, so its result stands.
-  if [ "$n" = "$n0" ]; then runs="$runs0"; else scan_runs "$n"; runs="$RUNS"; fi
-  while IFS= read -r f; do
-    need_x=false
-    case "$f" in x:*) need_x=true; f="${f#x:}" ;; esac
-    case "$f" in ''|*'$'*|*'*'*|*'?'*) continue ;; \~/*) f="$HOME/${f#\~/}" ;; esac
-    p="$(normalize_abs "$(resolve_against "$f" "$CWD")")"
-    [ -f "$p" ] && [ -r "$p" ] || continue
-    [ "$need_x" = false ] || [ -x "$p" ] || continue
-    [ "$(head -c "$MAX_BYTES" "$p" | wc -c)" = "$(head -c "$MAX_BYTES" "$p" | LC_ALL=C tr -d '\000' | wc -c)" ] || continue
-    if check_text "$(head -c "$MAX_BYTES" "$p")" $((depth + 1)); then
-      REASON="runs the file $p, which holds a command that $REASON"; return 0
-    fi
-  done <<RUNS
-$runs
-RUNS
-  return 1
+  REASON=""
+  rules "$n" "$(normalise "$(quoted_words "$text")")" "$a" && ask "$REASON"
 }
 
-REASON=""
-check_text "$CMD" 0 && deny "$REASON"
+check_text "$CMD"
 
 echo '{}'
 exit 0

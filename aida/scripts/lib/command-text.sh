@@ -56,7 +56,7 @@ strip_heredocs() {
 # target; zsh's own read refuses -a ("bad option") and takes -A instead. The caller sets
 # KSH_ARRAYS under zsh so w is indexed from 0 the bash way. bash splits the unquoted expansion
 # instead of a herestring, which costs a temporary file per call: the destructive-command hook
-# calls this for every segment of a file a command runs (live-run row 255). Every caller turns
+# calls this for every segment of a long command (live-run row 255). Every caller turns
 # globbing off first, and IFS is the default, so the words are the same.
 read_words() {
   if [ -n "${ZSH_VERSION:-}" ]; then

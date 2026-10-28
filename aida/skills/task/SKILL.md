@@ -508,7 +508,7 @@ a gap.
 Name what this conversation decided that neither the sidecar's `decisions` nor the stage's own
 files hold. Each is one sentence: what was decided and what it applies to. Write them, then show
 what was saved. Nothing to save is said in one line, and `save` still runs with no text. That
-records the time, which clears the compaction hook's refusal.
+records the time, so a later manual compaction writes no warning.
 
 Run once per sentence, or once with all of them:
 ```

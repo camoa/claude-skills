@@ -65,9 +65,9 @@ It reads the frozen copy and the frozen tests. It writes twelve things to
 - `beforeLookPath`, on an order whose proof is `observe` only: the folder a before-look goes
   in, `implementation/observed-<order id>-before/`;
 - `deniedReads`, present only when the order's own text names a path the implementer's dispatch
-  denies: another order's owned file. The deny stands. Do not tell the implementer to read one.
-  The summary's `next` then asks a person to rule first. A file outside the code path that an
-  order this one depends on owns is never denied, so a record it reads is not listed.
+  denies: a file of an order this one does not depend on. The deny stands. Do not tell the
+  implementer to read one. The summary's `next` then asks a person to rule first. A file an
+  order this one depends on owns is never denied, so it is not listed.
 
 It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
 and counts, never the brief. The allowed count is two unless a person's go-on granted this order
@@ -142,7 +142,8 @@ the code path outside it while the record is open. The reason tells it to stop a
 **It may not change a test.** A test that seems wrong is a reason to stop, not to edit. A hook
 refuses the write and names which order froze the file.
 
-**It may not read another order's source.** What another unit exposes is its interface record. A
+**It may not read the source of an order it does not depend on.** A dependency's files stay
+readable, because the facts it builds on live there (gap row 443). A
 hook refuses the Read, the Grep and the plain shell reads while the dispatch is open. A path a
 shell assembles at run time passes the hook and is still denied.
 
@@ -362,8 +363,8 @@ own frozen tests, with its argv and its `{paths}` placeholder. Nothing here rety
 reaches a shell. No tool row and no suite runs at this step. Preconditions ran each tool once, and
 review runs them over the whole task, so a tool finding never spends an attempt.
 
-**Two frameworks may not both command one row.** The same refusal preconditions.md names (exit
-72) applies here.
+**Two frameworks that both command one row: the first runs.** The same rule preconditions.md names
+applies here, with the same warning.
 
 **The record holds exactly three checks.** Fewer refuses (exit 3), and no attempt is spent.
 
