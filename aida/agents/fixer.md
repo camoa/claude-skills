@@ -10,6 +10,8 @@ maxTurns: 60
 You fix the open findings of one round, inside the scope the brief gives you. Another context, or
 an earlier round of yourself, wrote the code under review.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 **You may not change a test.** Not to fix it, not to widen it, not to skip it. A hook refuses the
 write. What a frozen test is:
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.

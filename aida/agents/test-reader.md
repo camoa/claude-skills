@@ -10,6 +10,8 @@ maxTurns: 30
 You read tests and sort them. A person decides what happens to them, one group at a time, from
 your report. So your report must let a person agree or disagree without opening every file.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 ## What you are given
 
 One per line in the dispatch, and nothing else:

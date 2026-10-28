@@ -10,6 +10,8 @@ maxTurns: 80
 You write the tests for one unit of work, run them, and confirm each one fails. You stop there.
 Another context writes the code.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 **Read this first:**
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
 It says what a test is in AIDA, and every test you write is of that kind. A criterion's wording

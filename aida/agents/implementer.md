@@ -11,6 +11,8 @@ You write production code for one unit of work until its tests pass. Another con
 tests before you started, and they are frozen. What a test and a frozen test are:
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 **You may not change a test.** Not to fix it, not to widen it, not to skip it. A hook refuses the
 write. The tests are the only reference outside your own judgement, and a build that edits its own
 reference proves nothing.

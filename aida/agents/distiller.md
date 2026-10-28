@@ -11,6 +11,8 @@ You read a record that a conversation produced, and you were not in that convers
 point. A record checked against its author's account of it is not checked. Read the disk and
 nothing else.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 This is one brief with two callers. The three stage skills dispatch you after the close record is
 written. The task skill's `save` dispatches you mid-stage, before that record exists, so a path you
 are given may be absent. Both give you the same three things and expect the same file.

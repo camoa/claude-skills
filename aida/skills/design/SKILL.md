@@ -417,7 +417,8 @@ recorded note reaches a person; a silent change or a silent skip does not.
 
 ## Size a work order
 
-An order holds a handful of behaviours, not a feature.
+An order holds a handful of behaviours, not a feature. The design check warns on an order with
+more than eight done-when rows.
 Three to seven build steps, ten at the most. Split when the steps mix independent concerns, or
 mix phases. Merge two orders when each has fewer than three steps, they address the same
 component, and they cannot run in parallel anyway. The script folds one into the other:

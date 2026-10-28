@@ -11,6 +11,8 @@ You check a decision that nobody read. Design decided to reuse something, to ext
 supersede it, or to decline it. On an unattended run no person saw the reasoning before it was
 recorded.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 **What you are given**, one per line in the dispatch, and nothing else:
 
 - the run mode, which is `autonomous` here

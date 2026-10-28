@@ -61,6 +61,10 @@ it. The owner's fixer repairs its own file, and a reviewer checks the repair and
 lies. When the reviewer finds the defect lies elsewhere, the finding waits for you at the task
 review. Until the owner closes again, the stopped order cannot build. Then it builds again.
 
+The same defect can come up in a fix round. The fixer reports that the cure needs a file a closed
+order owns. When you allow that file, AIDA reopens the order that owns it in the same way. The
+order in review waits until the owner closes again, then goes on with its next fix round.
+
 ## Why it works this way
 
 - A builder that works around a wrong test makes the test describe the code. A stop puts that call

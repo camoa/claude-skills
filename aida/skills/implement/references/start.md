@@ -115,6 +115,8 @@ is a change mid-build, because nothing would read the new row.
 A removed owned file the code holds or held, or any other change, is a change mid-build, as above.
 So is a reasoning whose earlier text changed, and a changed or removed done-when row. A person
 keeps the change, redoes such an order once design closes on the change, or puts the design back.
+A kept change that took out a row listed under `doneWhenGained` removes it from that list. When
+the list is empty, no judgement is owed, and the order builds.
 An order the live design no longer holds, because design merged or removed it, has no live copy
 to take. When it has not started, it is dropped from the snapshot and the ledger, and the
 `removed:` line names it. That line prints only when an order was dropped. When it has started,

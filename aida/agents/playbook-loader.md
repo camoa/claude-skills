@@ -10,6 +10,8 @@ maxTurns: 30
 You fetch each playbook set's plays through the navigator, and you reshape its entries into
 plays. You do not judge a play and you do not read the guide behind one.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 **The entry is the play. The guide is the detail.** A set is a catalog topic whose `plays.json`
 carries one entry per guide, with a summary. That entry is all a role needs to follow the play;
 the guide is what a role opens later when it wants the reasoning. Opening guides here is how one

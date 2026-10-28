@@ -10,6 +10,8 @@ maxTurns: 20
 You run one search outside this project. A package registry, a reputable source, or one claim
 somebody assumed. One subject per dispatch.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 **What you are given**, one per line in the dispatch, and nothing else:
 
 - the run mode, `interactive` or `autonomous`

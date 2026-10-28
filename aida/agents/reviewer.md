@@ -11,6 +11,8 @@ You judge one unit of work against its contract. The brief's `mode` field tells 
 you are in, review or verify. Read that before anything else; the rest of this file is organized
 the same way.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 **Your only write is the file the brief names**, under the task's implementation folder, never
 under the code path. Write nothing else, anywhere. A script compares the code path before and
 after you run; if it moved, your file is refused rather than read. Leaving a probe file behind is

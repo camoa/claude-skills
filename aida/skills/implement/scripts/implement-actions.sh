@@ -345,7 +345,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  40  `build-brief` or `dispatch-open implementer` found an order in the given unit's dependsOn
 #      with no completion record in the ledger (its lastStep is not "closed"), so that order's
 #      interface record does not exist yet. Or a repair the given unit opened on another order
-#      has not closed again (gap row 286).
+#      has not closed again (gap row 286). `fix-brief` refuses the same repair, opened by a
+#      person's grant of a closed order's file (gap row 433).
 #      `tests-brief` refuses the same fact as an error, exit 3. This one keeps its number, because
 #      the skill sends a stopped order's caller to the repair it waits on (references/build.md).
 #  41  `build-brief` or `dispatch-open implementer` found the given unit's attempt counter
@@ -1395,9 +1396,11 @@ im_next_step() {
     | ([ $orders[] | select(.lastStep == "dropped") | .id ]) as $dropped
     | ([ $orders[] | select(stop_text == "" and .lastStep != "dropped") ]) as $live
     | (($snap.workOrders // []) | map({(.id): (.dependsOn // [])}) | add // {}) as $deps
-    | ([ $live[] | select(.lastStep == "checks-passed" or .lastStep == "reviewed" or .lastStep == "fixed") ] | .[0]) as $rv
-    # An order that stopped on a closed order'"'"'s defect waits until that repair closes (gap row 286).
+    # An order that stopped on a closed order'"'"'s defect, or granted one of its files, waits until
+    # that repair closes (gap rows 286 and 433).
     | ([ $orders[] | select(.lastStep != "closed") | (.repairs // [])[] | .by ]) as $waiting
+    | ([ $live[] | select(.id as $i | $waiting | index($i) | not)
+         | select(.lastStep == "checks-passed" or .lastStep == "reviewed" or .lastStep == "fixed") ] | .[0]) as $rv
     | ([ $live[] | select(.id as $i | $waiting | index($i) | not) | select(.lastStep == "tests-frozen"
                           or (.lastStep == "code-written" and ((.attemptsUsed // 0) < (.attemptsAllowed // $allowed)))) ] | .[0]) as $bd
     | ([ $live[] | select(.lastStep == null) | select((($deps[.id] // []) - $closed) | length == 0) ] | .[0]) as $ts
@@ -1432,6 +1435,13 @@ im_next_step() {
 im_repair_owed() {
   printf '%s' "$1" | jq -r --arg id "$2" '[ (.orders // [])[] | select(.id == $id) ][0]
     | [ (.repairs // []) | to_entries[] | select(.value.testOwed == true) | .key + 1 ][0] // empty' 2>/dev/null
+}
+
+# The orders in ledger document $1 that are not closed and hold a repair order $2 opened, comma
+# separated, or nothing. Order $2 waits on each (gap rows 286 and 433).
+im_repairing() {
+  printf '%s' "$1" | jq -r --arg u "$2" \
+    '[ (.orders // [])[] | select(.lastStep != "closed") | select(any((.repairs // [])[]; .by == $u)) | .id ] | join(", ")'
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -4563,8 +4573,9 @@ TB_OWNED
   [ -z "$tb_lost" ] \
     || task_warn "$TASK_PATH" tests-brief "$unit_id" "checkAgain names rejected rows this brief does not carry, so the test author gets no note for them: $tb_lost"
 
-  # Another key, only while a task review's repair waits for its test: the findings `reopen` put on
-  # the order's review record, which name the bug, and the frozen tests a person ruled wrong.
+  # Another key, only while a repair waits for its test: the findings `reopen` or a grant at
+  # `fix-brief` put on the order's review record, which name the bug, and the frozen tests a person
+  # ruled wrong.
   local repair_json=null repair_at
   repair_at="$(im_repair_owed "$ledger_doc" "$unit_id")"
   if [ -n "$repair_at" ]; then
@@ -4573,7 +4584,7 @@ TB_OWNED
       [ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1] as $r
       | {findings: [ ($review[0].findings // [])[] | select(.id as $i | $r.findings | index($i)) | {id, file, lines, linkedTo, evidence} ],
          whatToDo: (if ($r.retires // []) == []
-           then "The task review found a bug in this closed order. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."
+           then "This closed order holds a bug. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."
            else "A person ruled these frozen tests wrong at the task review. Correct each one in its own file, and change no other test. Return each corrected test with a locks-in reason naming the code it passes against." end)}
       + (if ($r.retires // []) == [] then {} else {retires: $r.retires} end)')"
     [ -n "$repair_json" ] || die3 "tests-brief: the repair of $unit_id could not be read from $ledger_file and $IMPL_DIR/review-$unit_id.json."
@@ -6474,8 +6485,7 @@ im_require_build_ready() {
 
   # --- exit 40, first: a repair this unit opened on a closed order has not closed again (gap row 286) --
   local repairing
-  repairing="$(printf '%s' "$ledger_doc" | jq -r --arg u "$unit_id" \
-    '[ (.orders // [])[] | select(.lastStep != "closed") | select(any((.repairs // [])[]; .by == $u)) | .id ] | join(", ")')"
+  repairing="$(im_repairing "$ledger_doc" "$unit_id")"
   [ -z "$repairing" ] \
     || die 40 "$who: $unit_id stopped on a defect in a file $repairing owns, and that repair has not closed, so nothing of $unit_id is built until it does."
 
@@ -8160,6 +8170,28 @@ im_reopen_in() {
       else . end))'
 }
 
+# The review record of closed order $2 with one repair finding added on its file $3, with evidence
+# $4. The finding cites the owner's first criterion. $1 the action's own name. Sets IM_REPAIR_DOC,
+# IM_REPAIR_ID and IM_REPAIR_LINKED. Returns 1 when the owner serves no criterion, so no fixer
+# could act on the finding.
+IM_REPAIR_DOC=""; IM_REPAIR_ID=""; IM_REPAIR_LINKED=""
+im_repair_finding() {
+  local built
+  IM_REPAIR_LINKED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" \
+    '[ .workOrders[] | select(.id == $id) | (.criteriaOwned // []) + (.criteriaServed // []) | .[] ][0] // ""')"
+  IM_REPAIR_DOC="$(jq -c '.' "$IMPL_DIR/review-$2.json" 2>/dev/null)"
+  [ -n "$IM_REPAIR_DOC" ] \
+    || die3 "$1: $IMPL_DIR/review-$2.json is missing or not JSON, though the ledger records $2 as closed."
+  IM_REPAIR_ID="f$(printf '%s' "$IM_REPAIR_DOC" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
+  built="$(rv_finding_record "$(jq -cn --arg id "$IM_REPAIR_ID" --arg file "$3" --arg linked "$IM_REPAIR_LINKED" --arg evidence "$4" \
+    '{id: $id, severity: "high", file: $file, lines: "", linkedTo: $linked, evidence: $evidence, fixScope: [$file]}')" \
+    "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')" repair)"
+  [ "$(printf '%s' "$built" | jq -r '.actionable')" = "true" ] || return 1
+  built="$(printf '%s' "$built" | jq -c '.actionableBecause += "; the repair took the owner'"'"'s first criterion by position, and nobody judged the link"')"
+  IM_REPAIR_DOC="$(printf '%s' "$IM_REPAIR_DOC" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
+  [ -n "$IM_REPAIR_DOC" ] || die3 "$1: the repair finding on $2 could not be written."
+}
+
 # Gap row 286. A builder that meets a defect in a file a closed order owns stops with
 # `Stop: closed-order-defect: <file>: <what fails>`. A closed order cannot be reopened, two orders
 # may not own one file, and the live fix was a hand commit no reviewer read. So the stop reopens
@@ -8178,7 +8210,7 @@ BR_REPAIR_KIND="closed-order-defect"
 BR_REPAIR_NOTE=""
 br_open_repair() {
   local unit_id="$1" value="$2" report="$3" attempt="$4" ledger_file="$5" ledger_doc="$6" commits="$7"
-  local rest file defect abs rel owner="" owner_glob="" one g owner_entry linked review_file review_doc raw built new_id new_ledger
+  local rest file defect abs rel owner="" owner_glob="" one g owner_entry linked review_file review_doc new_id new_ledger
   local earlier allowed repair_state commit_count commit_text="" rounds_allowed
   case "$value" in "$BR_REPAIR_KIND:"*) ;; *) return 1 ;; esac
   rest="${value#*:}"
@@ -8222,25 +8254,13 @@ BR_OWNER
   done <<BR_EARLIER
 $earlier
 BR_EARLIER
-  linked="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$owner" \
-    '[ .workOrders[] | select(.id == $id) | (.criteriaOwned // []) + (.criteriaServed // []) | .[] ][0] // ""')"
   review_file="$IMPL_DIR/review-$owner.json"
-  review_doc="$(jq -c '.' "$review_file" 2>/dev/null)"
-  [ -n "$review_doc" ] \
-    || die3 "build-record: $review_file is missing or not JSON, though the ledger records $owner as closed."
-  new_id="f$(printf '%s' "$review_doc" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
   case "$owner_glob" in /*) rel="$abs" ;; esac
-  raw="$(jq -cn --arg id "$new_id" --arg file "$rel" --arg linked "$linked" \
-    --arg evidence "$unit_id stopped at attempt $attempt on a defect in this file: $defect. Its report: $report." \
-    '{id: $id, severity: "high", file: $file, lines: "", linkedTo: $linked, evidence: $evidence, fixScope: [$file]}')"
-  built="$(rv_finding_record "$raw" "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')" repair)"
-  if [ "$(printf '%s' "$built" | jq -r '.actionable')" != "true" ]; then
+  if ! im_repair_finding build-record "$owner" "$rel" "$unit_id stopped at attempt $attempt on a defect in this file: $defect. Its report: $report."; then
     BR_REPAIR_NOTE=" No repair opened: $owner serves no criterion, so no fixer could act on the finding."
     return 1
   fi
-  built="$(printf '%s' "$built" | jq -c '.actionableBecause += "; the repair took the owner'"'"'s first criterion by position, and nobody judged the link"')"
-  review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
-  [ -n "$review_doc" ] || die3 "build-record: the repair finding on $owner could not be written."
+  review_doc="$IM_REPAIR_DOC"; new_id="$IM_REPAIR_ID"; linked="$IM_REPAIR_LINKED"
   # The stopped builder's commits are named on the entry, so the owner's repair round reads them
   # as the stopped order's and starts after them (gap row 381).
   new_ledger="$(im_reopen_in "$ledger_doc" "$owner" "$(jq -cn --arg u "$unit_id" --argjson a "$attempt" \
@@ -9982,6 +10002,10 @@ do_fix_brief() {
 
   rv_load_state "fix-brief" "$unit_id"
   rv_require_step "fix-brief" "$unit_id" "reviewed fixed"
+  local repairing
+  repairing="$(im_repairing "$RV_LEDGER_DOC" "$unit_id")"
+  [ -z "$repairing" ] \
+    || die 40 "fix-brief: $unit_id waits on the repair a person granted it on $repairing. Its next round opens once $repairing closes again. Nothing is written."
   [ -z "$(im_repair_owed "$RV_LEDGER_DOC" "$unit_id")" ] \
     || die 121 "fix-brief: $unit_id owes the test of the task review's repair first. Run tests-brief on $unit_id, dispatch its test author, put the row to the checker, and run tests-freeze. Nothing is written."
   rv_load_review_record "fix-brief" "$unit_id"
@@ -10069,7 +10093,7 @@ do_fix_brief() {
   # (exit 100). A path already owned needs no grant. A frozen test or a support file may never
   # be granted. An unowned path no open finding names is a grant for nothing (exit 3, each). A
   # person's answer record naming the --allow values, one per line, passes it (gap row 357).
-  local allowed_json='[]' granted_json='[]' ap ap_abs ap_owned other tf fp frozen_list frozen_hit named
+  local allowed_json='[]' granted_json='[]' ap ap_abs ap_owned other tf fp frozen_list frozen_hit named closed_grant=""
   [ -z "$allow_raw" ] \
     || task_require_answer 100 fix-brief "--allow, a path outside $unit_id's own files," "$TASK_PATH" "implement fix-brief" "$unit_id" "$allow_raw"
   # Every frozen test and support path of the task, the list the write hook reads.
@@ -10099,6 +10123,16 @@ FB_FROZEN
     # already reaches the fixer, so naming it changes nothing.
     ap_owned=""
     [ -n "$(rv_scope_outside "$(jq -nc --arg p "$ap" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] || ap_owned=yes
+    # Gap row 433. A file a closed order owns is never this order's to change. The grant reopens
+    # that order for a repair round instead, as a stopped build's closed-order-defect does.
+    other="$(im_file_owners "$ap_abs" "${ap_abs#"$RV_CODEPATH"/}" "$unit_id" | head -n 1)"
+    if [ -z "$ap_owned" ] && [ -n "$other" ] \
+      && [ "$(printf '%s' "$RV_LEDGER_DOC" | jq -r --arg id "${other%%	*}" '.orders[] | select(.id == $id) | .lastStep // ""')" = "closed" ]; then
+      [ -z "$closed_grant" ] \
+        || die3 "fix-brief: --allow names two files closed orders own. Grant one closed order's file per call. Nothing is written."
+      closed_grant="$other	$ap_abs"
+      continue
+    fi
     # A file the order shares with another order is still its own (gap row 287).
     if [ -n "$repair_ids" ] && [ -z "$ap_owned" ]; then
       while IFS= read -r other; do
@@ -10119,6 +10153,40 @@ FB_OTHERS
   done <<FB_ALLOW
 $allow_raw
 FB_ALLOW
+
+  # The closed owner gets one repair finding on the file and one more fix round, with a failing
+  # test first when tests prove it, as reopen gives it. This order writes no brief, and fix-brief
+  # refuses it (exit 40) until the owner closes again.
+  if [ -n "$closed_grant" ]; then
+    local cg_owner cg_glob cg_abs cg_rel cg_ledger
+    [ "$granted_json" = "[]" ] \
+      || die3 "fix-brief: --allow names a file a closed order owns beside other paths. Grant the closed order's file alone, in its own call. Nothing is written."
+    IFS='	' read -r cg_owner cg_glob cg_abs <<FB_CLOSED
+$closed_grant
+FB_CLOSED
+    cg_rel="${cg_abs#"$RV_CODEPATH"/}"
+    case "$cg_glob" in /*) cg_rel="$cg_abs" ;; esac
+    im_repair_finding fix-brief "$cg_owner" "$cg_rel" "$unit_id's fix round needs a change in this file, and a person granted it at fix-brief. The open findings of $unit_id: $(printf '%s' "$open_json" | jq -r --argjson r "$RV_REVIEW_DOC" '
+        [ .[] | .id as $i | .id + ": " + .evidence
+          + ([ $r.findings[] | select(.id == $i) | .scopeInsufficientBecause // empty | " The fixer reported: " + . ][0] // "") ] | join(" ")')" \
+      || die3 "fix-brief: $cg_owner owns $cg_rel and serves no criterion, so no fixer could act on a repair finding. Nothing is written."
+    br_order_facts "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg o "$cg_owner" '[ .workOrders[] | select(.id == $o) ][0]')"
+    cg_ledger="$(im_reopen_in "$RV_LEDGER_DOC" "$cg_owner" "$(jq -cn --arg u "$unit_id" --arg f "$IM_REPAIR_ID" \
+      --arg at "$(date -u +%Y-%m-%d)" --argjson owed "$([ "$BR_ORDER_SLOT" = "order-tests" ] && echo true || echo false)" \
+      '{by: $u, findings: [$f], at: $at} + (if $owed then {testOwed: true} else {} end)')")"
+    [ -n "$cg_ledger" ] || die3 "fix-brief: the repair on $cg_owner could not be written to the ledger."
+    write_atomic "$IMPL_DIR/review-$cg_owner.json" "$IM_REPAIR_DOC"
+    write_atomic "$RV_LEDGER_FILE" "$cg_ledger"
+    im_print_summary "fix-brief" "$(jq -cn --arg order "$unit_id" --arg owner "$cg_owner" --arg f "$IM_REPAIR_ID" --arg file "$cg_rel" \
+      --arg linked "$IM_REPAIR_LINKED" --arg record "$IMPL_DIR/review-$cg_owner.json" \
+      --arg next "$(im_next_step "$cg_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+      {order: $order,
+       repair: "\($owner) reopened on \($f), citing \($linked) as its first criterion, in \($file)",
+       waiting: "\($order) writes no brief now. Its next round opens once \($owner) closes again",
+       record: $record,
+       next: $next}')"
+    exit 0
+  fi
 
   # Per finding, the fixScope paths outside ownedFiles and the allowed list are withheld. The
   # union the fixer gets is every other fixScope path. A finding wholly withheld is still handed
@@ -12416,6 +12484,13 @@ GO_OWNS
         new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$WAY_UNIT" --arg from "$(printf '%s' "$SNAPSHOT_DOC" | jq -r '.hash')" \
           --arg to "$(printf '%s' "$keep_snapshot" | jq -r '.hash')" --arg at "$today" '
           .snapshotHash = $to | .resnapshots = ((.resnapshots // []) + [{id: $id, from: $from, to: $to, at: $at}])')"
+        # A row design added after the freeze and took out again is owed no judgement (gap row 439).
+        new_ledger="$(printf '%s' "$new_ledger" | jq -c --arg id "$WAY_UNIT" \
+          --argjson dw "$(printf '%s' "$keep_snapshot" | jq -c --arg id "$WAY_UNIT" '[ .workOrders[] | select(.id == $id) ][0].doneWhen // []')" '
+          .orders = (.orders | map(if .id == $id and .doneWhenGained != null
+            then .doneWhenGained = [ .doneWhenGained[] | select(. as $r | $dw | index($r) != null) ]
+              | if .doneWhenGained == [] then del(.doneWhenGained, .doneWhenGainedAt) else . end
+            else . end))')"
         state_note="the snapshot holds the live design of $WAY_UNIT, and nothing is reverted"
       fi ;;
   esac

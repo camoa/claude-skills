@@ -204,6 +204,12 @@ Three paths refuse (exit 3):
 - an owned path that a fix scope already names;
 - a path outside the order's files that no open finding's fix scope names.
 
+**A file a closed order owns** is never this order's to change. Grant it alone, and `fix-brief`
+reopens the closed order for one repair round. That order gets one finding on the file and one
+more fix round. When tests prove it, its test author first writes one failing test of the bug. The
+`repair:` line names it. This order gets no brief. `fix-brief` on it refuses (exit 40) until the
+closed order closes again. Then run `fix-brief` on it again.
+
 A finding whose whole fix scope is withheld is still handed over. The fixer reports it
 scope-insufficient in round one, and the ruling route below opens for it. When an
 `outsideOwned:` line printed, put it to the person before running `fix-brief`. Open with: "A review finding wants a change in a
@@ -220,7 +226,7 @@ present. A commit that answers the verifier then gets a fresh verifier, not a ru
 present when the task's implement stage is interactive. A light task reads unattended until
 `task set-run-mode` sets it interactive. In
 that round `--allow` may name a path that no fix scope names, because the fixer's report names
-it. A path only another order owns refuses (exit 3). `fix-brief` opens the round only when the round
+it. A path only an open order owns refuses (exit 3). `fix-brief` opens the round only when the round
 can take every open finding. The ledger records it, and the order's allowed rounds rise by one.
 Otherwise `fix-brief` refuses (exit 54), and the message names what to rule or allow first. A second `fix-brief` call
 reuses the open repair round, so a mistyped `--allow` can be corrected. A second repair round

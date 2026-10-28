@@ -64,6 +64,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     bound version 5's own overlap check carried (ideal/design.md, "What a work order holds"):
 #     this is not a glob-intersection check, and it proves nothing about what a builder actually
 #     touches. A path both orders list in sharedFiles is not an overlap (gap row 287);
+#   - no work order holds more than eight done-when rows, a warning (gap row 439);
 #   - every criterion id and every non-goal id named anywhere resolves to a real one in the
 #     contract, and every dependsOn id resolves to a real work order in this task's own design/
 #     folder.
@@ -126,7 +127,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # is a warning when a person closes: a criterion with no serving order, no owner or two owners.
 # `warn` never stops: an
 # order that serves nothing, a supporting order no owner reaches, a light order not after wo1,
-# and two orders that declare one owned file.
+# two orders that declare one owned file, and an order with more than eight done-when rows.
 #
 # designStarted (top level, on stdout) is false when <task_folder>/design does not exist yet, true
 # otherwise. It being false is not an error and never raises the exit code on its own: every
@@ -191,6 +192,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #              ordersNotAfterSkeleton: [ id, ... ],   a light task only
 #              lightOrdersOwningPathScript: [ {id, path} ],   a light task only
 #              overlappingOwnedFiles: [ {ids: [id, id], path} ],
+#              ordersPastHandfulOfRows: [ {id, path, count} ],   more than eight done-when rows, a warning
 #              globbedOwnedFiles: [ {id, path} ],
 #              testsOnlyOrdersBeforeTests: [ {id, testsOrder} ],
 #              ordersOwningFrozenPaths: [ {id, path, task} ],
@@ -884,6 +886,7 @@ ORDERS_NOT_AFTER_SKELETON_JSON='[]'
 LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON='[]'
 PATH_SCRIPT_UNREAD=false
 OVERLAPPING_OWNED_FILES_JSON='[]'
+ORDERS_PAST_HANDFUL_JSON='[]'
 GLOBBED_OWNED_FILES_JSON='[]'
 TESTS_ONLY_BEFORE_TESTS_JSON='[]'
 ORDERS_OWNING_FROZEN_PATHS_JSON='[]'
@@ -969,6 +972,11 @@ else
   # Overlap on the declared strings only, never a glob intersection (ideal/design.md, "What a
   # work order holds"): two orders sharing one identical entry in ownedFiles.
   OVERLAPPING_OWNED_FILES_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq -c "$OWNED_OVERLAP_JQ")"
+
+  # An order holds a handful of behaviours, not a feature (audit/24). Past eight done-when rows,
+  # the order has grown past what its criteria need, as a critic's finding that became a row does
+  # (gap row 439). A warning, because which rows to cut or where to split is a person's call.
+  ORDERS_PAST_HANDFUL_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq -c '[ .[] | select(.doneWhenCount > 8) | {id, path, count: .doneWhenCount} ]')"
 
   # An owned file must be a path and never a glob. Implementation derives the test author's denied
   # reads from these entries and compares them as paths, so a glob would deny nothing while the
@@ -1103,7 +1111,8 @@ def open: {
     ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
     ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
     ((.graph.ordersNotAfterSkeleton // [])[] | "order " + . + " does not come after wo1, the walking skeleton: add wo1 to its dependsOn"),
-    ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path)
+    ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
+    ((.graph.ordersPastHandfulOfRows // [])[] | "order " + .id + " holds " + (.count | tostring) + " done-when rows, more than a handful of behaviours: remove-done-when for a row no criterion needs, or split the order")
   ]
 };
 '
@@ -1154,6 +1163,7 @@ jq -n \
   --argjson ordersNotAfterSkeleton "$ORDERS_NOT_AFTER_SKELETON_JSON" \
   --argjson lightOrdersOwningPathScript "$LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON" \
   --argjson overlappingOwnedFiles "$OVERLAPPING_OWNED_FILES_JSON" \
+  --argjson ordersPastHandfulOfRows "$ORDERS_PAST_HANDFUL_JSON" \
   --argjson globbedOwnedFiles "$GLOBBED_OWNED_FILES_JSON" \
   --argjson testsOnlyOrdersBeforeTests "$TESTS_ONLY_BEFORE_TESTS_JSON" \
   --argjson ordersOwningFrozenPaths "$ORDERS_OWNING_FROZEN_PATHS_JSON" \
@@ -1203,6 +1213,7 @@ jq -n \
       ordersNotAfterSkeleton: $ordersNotAfterSkeleton,
       lightOrdersOwningPathScript: $lightOrdersOwningPathScript,
       overlappingOwnedFiles: $overlappingOwnedFiles,
+      ordersPastHandfulOfRows: $ordersPastHandfulOfRows,
       globbedOwnedFiles: $globbedOwnedFiles,
       testsOnlyOrdersBeforeTests: $testsOnlyOrdersBeforeTests,
       ordersOwningFrozenPaths: $ordersOwningFrozenPaths,

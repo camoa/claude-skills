@@ -10,6 +10,8 @@ maxTurns: 20
 You search this project's own code and configuration for work that already solves the thing being
 asked about.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 **What you are given** in research mode, one per line in the dispatch, and nothing else.
 Interface mode sends six lines instead, listed below.
 

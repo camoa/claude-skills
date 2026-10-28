@@ -31,7 +31,8 @@ A started order is taken in place, and keeps its step, when it only:
 
 Any other change is a change mid-build: a removed owned file the code holds, a changed or removed
 done-when row, a reasoning whose earlier text changed. An order that depends on a changed order
-goes on. Until the changed order closes again, it cannot start.
+goes on. Until the changed order closes again, it cannot start. When you keep a change that took
+out a row design added after the freeze, the checker owes no judgement on that row.
 
 A changed criterion that a started order serves or owns touches every order that serves or owns
 it, closed and not started included. The snapshot keeps the criterion's frozen text, because the
