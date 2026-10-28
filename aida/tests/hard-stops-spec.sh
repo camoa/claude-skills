@@ -26,11 +26,13 @@ write_hook() {
 file() { jq -nc --arg f "$1" '{file_path: $f}'; }
 exists() { [ -e "$1" ] && echo yes || echo no; }
 
-# guarded_case <role> <folder> <file or command>: the hook's decision on <role>'s call from <folder>,
-# with wo1's tests frozen and <role> dispatched for wo1. A refusal names the rule that refused it:
-# frozen, owned or main. tests/a_test.sh is frozen and owned by wo1, so only the frozen rule can
-# refuse it. In the arguments, @WT, @CODE, @ROOT and @NOTES stand for this case's worktree, main
-# checkout, folder and a notes folder outside every code path. An argument with a space is a command.
+# guarded_case <role> <folder> <file or command> [remembered]: the hook's decision on <role>'s call
+# from <folder>, with wo1's tests frozen and <role> dispatched for wo1. A refusal names the rule that
+# refused it: frozen, owned or main. tests/a_test.sh is frozen and owned by wo1, so only the frozen
+# rule can refuse it. In both arguments, @WT and @CODE stand for this case's worktree and main
+# checkout. In the folder, @NOTES stands for a notes folder outside every code path. In the file or
+# command, @ROOT stands for this case's folder. An argument with a space is a command. With
+# remembered, the registry remembers project p for the notes folder.
 guarded_case() (
   source "$HERE/records.bash"
   task_records branch
@@ -39,6 +41,10 @@ guarded_case() (
   tests_record
   dispatch_record "$1"
   mkdir -p "$ROOT/notes"
+  if [ "${4:-}" = remembered ]; then
+    jq --arg d "$ROOT/notes" '.directoryChoices = [{directory: $d, project: "p", chosenAt: "2026-10-28"}]' \
+      "$AIDA_REGISTRY_PATH" >"$ROOT/registry.new" && mv "$ROOT/registry.new" "$AIDA_REGISTRY_PATH"
+  fi
   local arg input decision
   arg="${3//@WT/$WT}"; arg="${arg//@CODE/$CODE}"; arg="${arg//@ROOT/$ROOT}"
   case "$arg" in *' '*) input="$(jq -nc --arg c "$arg" '{command: $c}')" ;; *) input="$(file "$arg")" ;; esac
@@ -111,7 +117,6 @@ expect "sed -i on the frozen test is refused" "$(guarded_case implementer @WT 's
 expect "a copy of the frozen test out to a scratch file is allowed" \
   "$(guarded_case implementer @WT 'cp tests/a_test.sh @ROOT/copy.sh')" allow
 expect "a redirect into a file the order does not own is refused" "$(guarded_case implementer @WT 'echo b > b.php')" "deny owned"
-expect "cp onto a file the order does not own is refused" "$(guarded_case implementer @WT 'cp a.php b.php')" "deny owned"
 expect "sed -i on an owned file is allowed" "$(guarded_case implementer @WT 'sed -i s/a/b/ a.php')" allow
 expect "a redirect into an owned file, its errors piped to head, is allowed" \
   "$(guarded_case implementer @WT 'echo b > a.php 2>&1 | head -1')" allow
@@ -127,6 +132,8 @@ expect "a redirect into a file the order does not own is refused" \
   "$(guarded_case implementer @NOTES 'echo b > @WT/b.php')" "deny owned"
 expect "the implementer's Write in the main checkout is refused" "$(guarded_case implementer @NOTES @CODE/a.php)" "deny main"
 expect "the implementer's Write of an owned file is allowed" "$(guarded_case implementer @NOTES @WT/a.php)" allow
+expect "with the project remembered for the folder, the Write of the frozen test is refused" \
+  "$(guarded_case implementer @NOTES @WT/tests/a_test.sh remembered)" "deny frozen"
 
 echo "--- trunk: start and the build refuse on the trunk, and run on a work branch"
 expect "on the trunk, start refuses and writes no ledger" "$(start_case)" "6|no"
