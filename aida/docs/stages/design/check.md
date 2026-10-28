@@ -17,10 +17,6 @@ refusal, and what clears it, is in
 No open item can be left with a reason. The build refuses to start on any of them, so leaving one
 open only moves the stop to a later and more costly place.
 
-Two names in an interface joined by `or` also hold the close. Design writes a real choice as
-plain text, or keeps the pair when both names must exist. A kept pair whose text changes is open
-again.
-
 ## Lines that inform and never hold the close
 
 - `impliedProofDisagrees:` a `tests` order that owns no machine-verified criterion. Design changes
@@ -32,6 +28,8 @@ again.
   order it depends on owns. Design writes it as plain text, or records the reuse.
 - `interfaceShaped:` a name in backticks that holds `<` or `{`, which is often a shape and not a
   name.
+- `interfaceChoice:` two names in backticks joined by `or`, which is often a choice the builder
+  makes. Design writes a real choice as plain text.
 - `callsUndeclared:` a call in a done-when row or a test that no interface declares. The test
   author cannot read the code to learn its signature.
 - `unrecordedIds:` a work order number below the highest with no order and no removal on record,

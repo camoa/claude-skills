@@ -429,11 +429,11 @@ removes the field and the stages: there is no `"interactive"` value to write, si
 absence already means that. Show the whole output.
 
 `light` is an autonomous run over every stage that skips named steps, and it takes no `--stage`.
-Each skip is logged in `COMPROMISES.md` in the task folder. The `path-script:` line says
-whether end to end is on. Light keeps one script that walks the demo path, and review
-fails the task without it. When end to end is off, say that a person sets it up with
-`/aida:surfaces e2e` before the run. When the project declined end to end, light keeps no
-such script.
+Each skip is logged in `COMPROMISES.md` in the task folder. The `path-script:` line says what
+light does about the one script that walks the demo path. `registered`: the project has it, and
+no order writes or extends it. `create`: the first order writes it. `off`: say that a person may
+set up end to end with `/aida:surfaces e2e` before the run. `declined`: light keeps no such
+script.
 
 A light or autonomous run still stops for a person, and a dispatched agent cannot answer for one.
 So when one session coordinates agents that run the tasks, that session holds every person-only

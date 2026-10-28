@@ -39,7 +39,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                        --id <woId> [--title <text>] [--criteria-served <id[,id...]>] \
 #                        [--criteria-owned <id[,id...]>] [--non-goals <id[,id...]>] \
 #                        [--depends-on <id[,id...]>] [--interface <text>] [--reasoning <text>] \
-#                        [--strike-reasoning <n>]... [--append-reasoning <text>]... [--absence-reviewed <n>]... [--keep-choices] \
+#                        [--strike-reasoning <n>]... [--append-reasoning <text>]... [--absence-reviewed <n>]... \
 #                        [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
 #   design-actions.sh add-owned-file <task_folder> \
 #                        --id <woId> --path <path> [--shared]
@@ -180,7 +180,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      or `read-guide` found design-guides-read.json already on disk and not valid JSON; or
 #      `update` was given --reasoning with --append-reasoning or --strike-reasoning; or
 #      --strike-reasoning named no paragraph that is there and live; or --absence-reviewed named
-#      no done-when row; or --keep-choices found no pair on the order; or `close` was given
+#      no done-when row; or `close` was given
 #      --critique-outcome with no finished critique file to record it beside, or unattended; or
 #      `close` found something that is not a file where a critique file has to move; or `verify`
 #      was given no single mode, a recipe with no `## Verifier` or nothing in it to carry, an
@@ -288,7 +288,7 @@ usage: design-actions.sh read           <task_folder>
                                          [--criteria-owned <id[,id...]>] \
                                          [--non-goals <id[,id...]>] [--depends-on <id[,id...]>] \
                                          [--interface <text>] [--reasoning <text>] \
-                                         [--strike-reasoning <n>]... [--append-reasoning <text>]... [--absence-reviewed <n>]... [--keep-choices] \
+                                         [--strike-reasoning <n>]... [--append-reasoning <text>]... [--absence-reviewed <n>]... \
                                          [--diff-budget <text>] [--proof <tests|gate|record|observe|confirm>] [--surface <id>]...
        design-actions.sh add-owned-file <task_folder> --id <woId> --path <path> [--shared]
        design-actions.sh add-done-when  <task_folder> --id <woId> --text <text>
@@ -330,6 +330,9 @@ source "$TASK_HELPERS_LIB" || die3 "the task-helper library failed to load: $TAS
 RECIPES_LIB="${PLUGIN_ROOT}/scripts/lib/recipes.sh"
 # shellcheck source=/dev/null
 source "$RECIPES_LIB" || die3 "the recipes library failed to load: $RECIPES_LIB"
+# `textOnly`, the rule add-owned-file and the impliedProof line read for an order of documents.
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/scripts/lib/proof.sh" || die3 "the proof-kind library failed to load"
 
 # Prints the JSON array $1 with $2 added at its end. A flag a person can repeat collects each
 # value this way, so a second one never replaces the first (gap row 435).
@@ -455,7 +458,8 @@ wo_summary() {
 # (live-run row 145). $1 is the work order document, $2 its id. An order whose every owned file
 # lies under the project folder produces a document, so it implies `record`, the rule
 # add-owned-file applies. On a task with no automated tests any other order implies `confirm`, the
-# same rule's other half. Otherwise the line reads criteriaOwned alone. Every kind proves a
+# same rule's other half. So does a text-only order elsewhere (gap row 461). Otherwise the line
+# reads criteriaOwned alone. Every kind proves a
 # machine-verified criterion in its own way, so owning one implies any kind: what the order
 # produces decides. The line said `tests` here once, and pushed a report or an update onto an
 # invented test. An order owning criteria of which none is machine-verified implies a proof
@@ -475,6 +479,10 @@ implied_proof_line() {
   fi
   if [ "$(automated_tests "$TASK_PATH")" = "no" ]; then
     echo "impliedProof: confirm, because the task has no automated tests, so a person confirms $2's done-when rows at review"
+    return
+  fi
+  if [ "$(printf '%s' "$1" | jq -r "$BR_ORDER_FACTS_JQ textOnly")" = "true" ]; then
+    echo "impliedProof: confirm, because every file $2 owns is a document or configuration, so a reading proves it and no test does"
     return
   fi
   if [ "$(contract_ok)" != "true" ]; then
@@ -515,7 +523,9 @@ open_summary_of() {
         ((.coverage.recordOrdersOwningOutsideProjectFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " " + .reason),
         ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
         ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
-        ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person, and the contract does not say the task has no automated tests: update --proof tests"),
+        ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person on a task with tests, owns code, and run lines do not prove every machine criterion it owns: update --proof tests"),
+        ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests, so a test would only read the text back: update --proof confirm, or record for a document under the project folder"),
+        ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope, or give it to an order that builds code"),
         ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests"),
         ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
         ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
@@ -656,8 +666,8 @@ unaccounted_findings() {
 
 # `choicePairs`, read from a work order document: each pair of backticked interface names joined
 # by `or`, with at most two words after it, as `<a> or <b>` (gap row 345). Such a pair is often a
-# choice the builder makes, such as `os.DirEntry` or an explicit `stat`. The build's interface
-# check wants both names in the builder's record, so a builder that takes one option stops.
+# choice the builder makes, such as `os.DirEntry` or an explicit `stat`. A builder that takes one
+# option leaves the other out of its record, and the reviewer compares the two.
 CHOICE_PAIRS_JQ='
 def choicePairs:
   ((.interface // "") | if type == "string" then split("`") else [] end) as $p
@@ -670,14 +680,13 @@ def choicePairs:
   | unique;
 '
 
-# One line per order whose interface holds a choice pair that `update --keep-choices` did not
-# keep: `<wo> <pair>[, <pair>]`. A kept pair is held by its text, so a pair that changes is named
-# again. Prints nothing when every pair is kept or none exists.
+# One line per order whose interface holds a choice pair: `<wo> <pair>[, <pair>]`. Prints nothing
+# when no order holds one.
 open_choices() {
   local f
   find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort \
     | while IFS= read -r f; do jq -r "$CHOICE_PAIRS_JQ"'
-        . as $wo | choicePairs - ($wo.choicesKept // []) | select(length > 0)
+        . as $wo | choicePairs | select(length > 0)
         | $wo.id + " " + join(", ")' "$f" 2>/dev/null; done
 }
 
@@ -824,6 +833,8 @@ do_start() {
   echo "STARTED: $DESIGN_DIR"
   echo "contract-file: $ALIGNMENT_FILE"
   echo "criteria: $(contract_criteria_json | jq -r '[.[].id] | join(" ")')"
+  # Whether a light task's first order writes the demo-path script, read as design drafts it.
+  ! task_is_light "$TASK_PATH" || path_script_line "$TASK_PATH"
   # A resumed run has work order files on disk already, and reads only the guides that changed.
   local resumed=0
   [ -z "$(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.json' 2>/dev/null | head -n 1)" ] || resumed=1
@@ -976,16 +987,12 @@ do_create() {
 # --absence-reviewed <n> stores the text of done-when row n, counted from 1, in `absenceReviewed`.
 # `check` stops printing that row under `absenceJoined:` (gap row 237). The text is the key, so a
 # row whose text changes flags again. Each write drops the entries no row holds any more.
-# --keep-choices stores every choice pair the order's interface holds now in `choicesKept`, after
-# any --interface in the same call. `check` and `close` stop refusing on those pairs (gap row 345).
-# Each name of a kept pair must then appear in the builder's record. A pair whose text changes is
-# named again. The order has to hold a pair.
 # ------------------------------------------------------------------------------------------------
 
 do_update() {
   local id="" title="" criteria_served="" criteria_owned="" non_goals="" depends_on=""
   local interface="" reasoning="" appends_json='[]' strikes_json='[]' absences_json='[]' diff_budget="" surfaces_json='[]' proof=""
-  local set_keep=false set_absence=false set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
+  local set_absence=false set_title=false set_served=false set_owned=false set_nongoals=false set_dependson=false
   local set_interface=false set_reasoning=false set_append=false set_strike=false set_diffbudget=false set_surfaces=false set_proof=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -1025,7 +1032,6 @@ do_update() {
         need_value "update" "--absence-reviewed" "$#" "${2:-}"
         need_count "update: --absence-reviewed" "done-when row" "$2"
         absences_json="$(json_appended "$absences_json" "$2")"; set_absence=true; shift 2 ;;
-      --keep-choices) set_keep=true; shift ;;
       --diff-budget)
         need_value "update" "--diff-budget" "$#" "${2:-}"
         diff_budget="$2"; set_diffbudget=true; shift 2 ;;
@@ -1085,11 +1091,6 @@ do_update() {
   fi
   if [ "$set_reasoning" = "true" ]; then
     doc="$(printf '%s' "$doc" | jq --arg v "$reasoning" '.reasoning = $v')"
-  fi
-  if [ "$set_keep" = "true" ]; then
-    printf '%s' "$doc" | jq -e "$CHOICE_PAIRS_JQ"'choicePairs | length > 0' >/dev/null \
-      || die3 "update: $id's interface joins no two names in backticks with or, so it has no pair to keep"
-    doc="$(printf '%s' "$doc" | jq "$CHOICE_PAIRS_JQ"'.choicesKept = choicePairs')"
   fi
   if [ "$set_strike" = "true" ]; then
     local dead
@@ -1215,16 +1216,18 @@ do_add_owned_file() {
   # file added later leaves `record` in place, and the design check names it; `update --proof
   # tests` is the repair. On a task whose contract says it has no automated tests, an order with
   # no proof field that owns a code file is a code order with no test to write. So its proof is
-  # `confirm` (gap row 196), marked the same way and at the same moment.
+  # `confirm` (gap row 196), marked the same way and at the same moment. An order whose files are
+  # all documents or configuration holds no logic, so it takes `confirm` on any task (gap row 461).
   local inferred
-  inferred="$(printf '%s' "$doc" | jq -r --arg t "$PROJECT_PATH/" --arg tests "$(automated_tests "$TASK_PATH")" '
+  inferred="$(printf '%s' "$doc" | jq -r --arg t "$PROJECT_PATH/" --arg tests "$(automated_tests "$TASK_PATH")" "$BR_ORDER_FACTS_JQ"'
     if has("proof") then ""
     elif (.ownedFiles // []) | all(startswith($t)) then "record"
     elif $tests == "no" then "confirm"
+    elif textOnly then "confirm"
     else "" end')"
   [ -z "$inferred" ] || doc="$(printf '%s' "$doc" | jq --arg p "$inferred" '.proof = $p')"
-  # A record order's range is the project folder's history, so a file the project ignores can
-  # never land in it: build-record would refuse the empty range (exit 71) on every attempt. The
+  # A record order's range is the project folder's history, so a file the project ignores never
+  # lands in it, and the range never holds the deliverable the order exists to make. The
   # project ignores records/ at every depth, the folder of derived check output. git finds the
   # repository upward from the task folder. Only a path under the project folder is asked. A
   # path outside it is a code path, which the design check names on a record order. The refusal
@@ -1235,7 +1238,11 @@ do_add_owned_file() {
     die3 "add-owned-file: the project ignores $path_val, so a commit can never hold it and a record order owning it can never be recorded. records/ is derived check output the project keeps out of history. Put the deliverable in a folder the project commits, such as $TASK_PATH/deliverables/."
   fi
   [ "$inferred" != "record" ] || echo "proof-set: record, because every owned file of $id lies under the project folder"
-  [ "$inferred" != "confirm" ] || echo "proof-set: confirm, because the task has no automated tests, so a person confirms $id's done-when rows at review"
+  if [ "$inferred" = "confirm" ] && [ "$(automated_tests "$TASK_PATH")" = "no" ]; then
+    echo "proof-set: confirm, because the task has no automated tests, so a person confirms $id's done-when rows at review"
+  elif [ "$inferred" = "confirm" ]; then
+    echo "proof-set: confirm, because every owned file of $id is a document or configuration, so a reading proves it and no test does"
+  fi
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"
   wo_summary "$doc"
@@ -1309,11 +1316,6 @@ do_add_test() {
        | [(.surfaces // [])[] | select(. as $s | any($words[]; . == $s))] | first // ""' "$file")"
     [ -z "$surface_hit" ] \
       || die3 "add-test: the description names the surface $surface_hit, so it reads as the review stage's surface row over that page. That row is not a test a test author writes as a file. The surface proves the page at review. Describe here the behaviour beneath it, one behaviour, which a test can prove before the code exists (skills/implement/references/what-a-test-is.md)"
-  fi
-  # A browser-style description is warned, not refused: the words can be innocent (gap row 452).
-  # A light task's first order owns the script that walks the demo path, by design.
-  if [ "$proof" = "tests" ] && names_a_surface_check "$description" && ! task_is_light "$TASK_PATH"; then
-    task_warn "$TASK_PATH" "design add-test" "$id" "the test description names an end-to-end check or a browser test: $description. That check is a surface review runs; describe the one behaviour beneath it (skills/implement/references/what-a-test-is.md)"
   fi
   if is_blank "$level"; then
     doc="$(jq --arg d "$description" \
@@ -2038,7 +2040,7 @@ do_check() {
     echo "interfaceShaped: none"
   fi
   if [ -n "$choices" ]; then
-    echo "interfaceChoice: $(printf '%s\n' "$choices" | paste -s -d ';' - | sed 's/;/; /g') | each pair of names in backticks is joined by or, so it may be a choice the builder makes. A builder that takes one option leaves the other out of its record, and the reviewer compares the two. Write a choice as plain text with update --interface. When each name must exist, keep the order's pairs with update --keep-choices"
+    echo "interfaceChoice: $(printf '%s\n' "$choices" | paste -s -d ';' - | sed 's/;/; /g') | each pair of names in backticks is joined by or, so it may be a choice the builder makes. A builder that takes one option leaves the other out of its record, and the reviewer compares the two. Write a choice as plain text with update --interface. Leave a pair whose two names must each exist"
   else
     echo "interfaceChoice: none"
   fi
@@ -2079,8 +2081,6 @@ do_check() {
   if [ "$verdict" -eq 7 ]; then
     printf '%s\n' "$unaccounted" | sed 's/^/unaccounted: /'
     echo "next: account for each finding above, cited by the order it affects or set aside with a reason"
-  elif [ "$verdict" -eq 9 ]; then
-    echo "next: answer each pair under interfaceChoice, as plain text with update --interface or kept with update --keep-choices"
   elif [ "$verdict" -ne 0 ]; then
     echo "open: $(open_summary_of "$(cat "$CHECK_FILE")")"
   elif task_is_light "$TASK_PATH"; then

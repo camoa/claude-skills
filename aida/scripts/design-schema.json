@@ -169,12 +169,6 @@
       "items": { "type": "string", "minLength": 1 },
       "description": "The done-when rows a person reviewed after `check` flagged them under `absenceJoined:`, each held by its full text, written by design-actions.sh's `update --absence-reviewed` alone (gap row 237). `check` stops flagging a row whose text is here. A row whose text changes flags again, because its new text is not here. Optional: an order with no reviewed row has none."
     },
-    "choicesKept": {
-      "type": "array",
-      "default": [],
-      "items": { "type": "string", "minLength": 1 },
-      "description": "The pairs of backticked interface names joined by `or` that design kept, each held as `<a> or <b>`, written by design-actions.sh's `update --keep-choices` alone (gap row 345). `check` and `close` refuse, exit 9, on a pair not here. A kept pair names two things that each exist, so the build's interface check wants both names in the builder's record. A pair whose text changes is refused again. Optional: an order with no kept pair has none."
-    },
     "verify": {
       "type": "array",
       "default": [],

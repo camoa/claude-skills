@@ -27,7 +27,8 @@
 #
 #   br_order_facts <work order document>   sets BR_ORDER_SLOT, BR_ORDER_RANGE, BR_ORDER_OWNS_CODE
 #   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`,
-#                                          and `confirmCriteria` and `personCriteria` beside it
+#                                          and `textOnly`, `confirmCriteria` and `personCriteria`
+#                                          beside it
 #   BR_HARNESS_JQ                          `noAutomatedTests` and `harnessNeeded` on a snapshot
 #   br_order_needs <work order document>   sets BR_ORDER_ROLES, BR_ORDER_LOOKUPS
 #   br_proof_facts <snapshot>              commits in the code repository, owns a file there
@@ -71,7 +72,16 @@ br_order_facts() {
 # `personCriteria`, on a snapshot document ({alignment, workOrders}), lists every criterion a
 # person answers at review: each one the contract marks person-verified, and each order's
 # confirmCriteria. Review's close and set-run-mode read it, so the two never disagree (gap row 328).
+#
+# `textOnly`, on one work order, is true when the order owns files and each is a document or
+# configuration, read by its extension. Such an order holds no logic for a test to prove, so a
+# reading proves it (gap row 461). add-owned-file marks it `confirm`, and the design check refuses
+# it as a `tests` order and refuses a machine criterion it owns. A `gate` order is never text only:
+# a configuration export that tools produce is YAML, and its gate lines prove it.
 BR_ORDER_FACTS_JQ='
+  def textOnly:
+    (.proof // "") != "gate" and ((.ownedFiles // []) | length > 0
+      and all(test("\\.(md|markdown|rst|adoc|txt|json|ya?ml|toml|ini|cfg|conf)$"; "i")));
   def orderFacts:
     (.proof // "tests") as $p
     | if   $p == "gate"    then {slot: "configuration-gate", range: "code",    ownsCode: true}

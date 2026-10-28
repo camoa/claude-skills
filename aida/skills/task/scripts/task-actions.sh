@@ -1023,17 +1023,8 @@ do_set_run_mode() {
   if [ "$was_light" = yes ] && [ "$value" != "light" ] && [ "$(automated_tests "$task_dir")" = "no" ]; then
     echo "light-contract: the contract still says this task has no automated tests, so each order stays confirm or record and no suite runs. To change it, a person runs scope's set-tests --automated yes, then design's update --proof tests on each code order. A started implementation takes the new orders through redo."
   fi
-  # Light keeps one script that walks the demo path. It is the project's end to end
-  # setup, which a person installs (gap row 197).
-  if [ "$value" = "light" ]; then
-    if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then
-      echo "path-script: end to end is on. Review fails this task until the demo path is registered as one critical surface with /aida:surfaces."
-    elif [ "$(jq -r '.surfaces.e2e.declined // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then
-      echo "path-script: end to end is declined for this project, so this task keeps no script that walks the demo path. Review runs nothing for it."
-    else
-      echo "path-script: end to end is off. Review fails this task until a person sets it up with /aida:surfaces e2e and registers the demo path as one critical surface."
-    fi
-  fi
+  # A project keeps at most one script that walks the demo path (gap rows 197 and 458).
+  [ "$value" != "light" ] || path_script_line "$task_dir"
   # An unattended review records each criterion a person answers as unanswered, so it writes no
   # verdict (gap rows 290 and 328). Said here, from the records, so the person chooses knowing it.
   if [ "$value" = "light" ] || { [ "$value" = "autonomous" ] \

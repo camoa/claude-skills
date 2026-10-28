@@ -234,6 +234,10 @@ and pick the kind from that answer:
   configuration export: `gate`. Nothing new exists for a test to pin, and a test written for it
   only restates a file.
 - A document or an analysis, such as a report or a review: `record`.
+- A document, a recipe, a skill or agent file, or hand-written configuration in the code
+  repository: `confirm`. It holds no logic for a test to prove. The reviewer reads it, and the
+  person confirms each done-when row at review. `add-owned-file` sets this value itself when
+  every owned file is a document or configuration. A `gate` order is never this case.
 - Something only a person or a browser can see: `observe`.
 - Code, on a task whose contract says it has no automated tests: `confirm`. Nothing runs a
   test. The implementer builds it, one reviewer reads the diff, and the person confirms each
@@ -244,9 +248,9 @@ and pick the kind from that answer:
 A machine-verified criterion does not mean `tests`. Every kind proves one in its own way: the
 tests, the gate lines, the checks on the record, the look, or the person's confirmation.
 `create` and `update` print `impliedProof:` beside the proof the order declares. It says
-`record` when every owned file lies under the project folder. On a task with no automated tests
-it says `confirm` for any other order. Otherwise it says `any kind` for a machine-verified
-criterion. What the order produces decides. When the product is truly unclear,
+`record` when every owned file lies under the project folder. It says `confirm` on a task with no
+automated tests, and when every owned file is a document or configuration. Otherwise it says
+`any kind` for a machine-verified criterion. What the order produces decides. When the product is truly unclear,
 `tests` stays the default, on a task that has tests. A wrongly
 tested configuration order wastes one build, and a wrongly untested code order ships unproven.
 
@@ -408,6 +412,7 @@ recorded note reaches a person; a silent change or a silent skip does not.
 
 ## Size a work order
 
+An order holds a handful of behaviours, not a feature.
 Three to seven build steps, ten at the most. Split when the steps mix independent concerns, or
 mix phases. Merge two orders when each has fewer than three steps, they address the same
 component, and they cannot run in parallel anyway. The script folds one into the other:
@@ -487,10 +492,13 @@ work is split wrong, not a sign both should claim it.
 
 **Light:** the first order, `wo1`, is the walking skeleton. It is a tiny version that links the
 input, the logic and the output end to end along the demo path. Every other order depends on it,
-directly or through its chain, and `check` refuses one that does not. When end to end is on,
-`wo1` also owns the script that walks the demo path. For a page, it sits where the harness reads
-its tests. For a command surface, it is the file the command runs. That script is the one test a
-light run keeps.
+directly or through its chain, and `check` refuses one that does not. A project keeps at most
+one script that walks the demo path. `start` prints the `path-script:` line, and its first word
+says the case. `create`: `wo1` also owns that script. For a page, it sits where the harness reads
+its tests. For a command surface, it is the file the command runs. A person registers it with
+`/aida:surfaces`. `registered`: the project has the script, and no order writes or extends it.
+`declined` or `off`: no order writes one. A change to the script goes through `/aida:surfaces`
+with a person.
 
 Create it:
 ```
@@ -569,22 +577,19 @@ named kind, such as no new dependency or no static call to the container. No tes
 fail, so the build routes it to review by its exact words. A row that joins it to a behaviour,
 such as "contains no static call and saves no entity", cannot be routed without a reopen.
 
-A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
-here; the check below refuses an order that skips this. Four orders are the exception. One created
-with `--proof gate` declares no test, and the configuration check judges its owned machine
-criterion at build time. One whose proof is `record` declares no test either, and its done-when
-rows, judged at the checkpoint, stand in for the test. One whose proof is `observe` declares no
-test, and a model judges its done-when rows against its surfaces after the build. One whose proof
-is `confirm` declares no test, and the person confirms its done-when rows at review. A criterion
-whose `verifiedBy` is `person` needs no test, though one is never wrong to add.
+A criterion whose `verifiedBy` is `machine`, on the `tests` order that owns it, needs a test
+here. The check below refuses an order that skips this. The other kinds declare no test. The
+configuration check judges a `gate` order's machine criterion at build time. A `record` order's
+done-when rows are judged at the checkpoint. A model judges an `observe` order's done-when rows
+against its surfaces after the build. The person confirms a `confirm` order's done-when rows at
+review. A criterion whose `verifiedBy` is `person` needs no test.
 
 A test is what this page defines:
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`. Add its file to the order
 with `add-owned-file`. The test author writes into it, and the freeze refuses a test in a
 file the order does not own. Each description names the one behaviour its test proves, and that
 page says what a test is not. `add-test` refuses a description naming one of a `tests` order's own
-surfaces. It warns in `task.json` on a description that names an end-to-end check or a browser
-test.
+surfaces.
 
 To change a scalar or an id list on an order already created, `update` takes the same flags as
 `create`, replacing whichever are given:
@@ -643,12 +648,11 @@ Give `--kind live-site` when the check needs a served site; the source says so o
 A research `--run` never runs until a person approves it at the close. Without that, the
 reviewer judges it as a check.
 Give `--criterion` when the command's output alone proves a machine criterion the order owns,
-such as a linter run. A `tests` order then owes no test for that criterion, so the criterion
-stays on it. The order still declares at least one test of its own. The check refuses a `tests`
-order with no test, and the freeze refuses one with no row (exit 74). Give a criterion that only
-tool output proves to an order that has a test. The freeze runs the line over the test author's
-files, and the row-checker judges whether the line proves the whole clause. A clause that names
-two tools needs a line for each.
+such as a linter run. That criterion then needs no test. When run lines prove every machine
+criterion an order owns, give the order `--proof confirm`. The lines run in its check, and the
+person confirms its done-when rows at review. On a `tests` order, the freeze runs the line over
+the test author's files, and the row-checker judges whether the line proves the whole clause. A
+clause that names two tools needs a line for each.
 A line runs unattended when it equals, word for word, an `argv` in the project's check recipe
 `check_commands`. Any other research line needs the person's approval at the close.
 `--clear` empties the list, and `--recipe` replaces it.
@@ -707,8 +711,12 @@ zero it adds one `open:` line naming what is open. The report holds:
 - every work order whose proof is `confirm` and that declares a test, or has no done-when row;
 - every work order whose proof is `confirm` and that owns a file a test glob matches. The globs
   are the ones this project's earlier freezes recorded;
-- every work order whose proof is `confirm` on a task whose contract does not say it has no
-  automated tests;
+- every work order whose proof is `confirm` on a task with tests, unless it is text only or run
+  lines prove every machine criterion it owns;
+- every work order whose proof is `tests` and whose every owned file is a document or
+  configuration;
+- every machine-verified criterion owned by an order whose every owned file is a document or
+  configuration, a `gate` order excepted;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
 - two work orders sharing a declared owned file that one of them does not mark `--shared`;
@@ -765,14 +773,8 @@ the shape as plain text with `update --interface`.
 `check` also prints `interfaceChoice:`, at every exit code. It names each pair of names in
 backticks that an order's interface joins with `or`. Such a pair is often a choice the builder
 makes, and a builder that takes one option leaves the other out of its record. The line never
-blocks the close. Answer each pair. Write a
-choice as plain text with `update --interface`. When each name must exist, such as two exit
-codes, keep the order's pairs:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
-  --id <woId> --keep-choices
-```
-The builder's record must then name both. A kept pair whose text changes is open again.
+blocks the close. Write a choice as plain text with `update --interface`. Leave a pair whose two
+names must each exist, such as two exit codes.
 
 `check` also prints `callsUndeclared:`, at every exit code. It names each `name()` call in an
 order's done-when rows and tests that no interface the order declares holds. It reads the order's
@@ -810,8 +812,13 @@ problem. Read the report file when the line is not enough, and fix the specific 
   - a `confirm` order declaring a test needs a `remove-test` call for it, or `--proof tests` if
     the task has tests after all. One with no done-when row needs an `add-done-when` call. Each
     row is a sentence the person confirms at review, so write it as one thing they can check. A
-    `confirm` order on a task whose contract does not say it has no automated tests needs
-    `update --proof tests` and its tests;
+    `confirm` order on a task with tests that owns code needs `update --proof tests` and its
+    tests, unless run lines prove every machine criterion it owns;
+  - a `tests` order that owns only documents or configuration needs `update --proof confirm`,
+    or `record` when its files lie under the project folder;
+  - a machine-verified criterion on an order that owns only documents or configuration is a
+    person's. Change it to `person` with scope's `update --verified-by person`, or give it to an
+    order that builds code;
   - a `confirm` order that owns a test file needs `remove-owned-file` for it. Nothing runs that
     file, and the freeze never sees it. When the task does have tests, a person answers yes in
     scope instead, and the order takes `update --proof tests` and its tests;

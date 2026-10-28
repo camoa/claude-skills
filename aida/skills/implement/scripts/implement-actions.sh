@@ -2070,8 +2070,7 @@ CRIT_HASHES
       # not stopped either (live-run row 91), nor by files it newly shares (gap row 287), and neither is one that only took research findings
       # from `account` (gap row 226), and neither is one whose reasoning only grew by
       # `update --append-reasoning`: the live value starts with the frozen one (gap row 227).
-      # Neither is one whose absence rows design marked reviewed (gap row 237), nor one whose
-      # interface pairs design kept (gap row 345). Its
+      # Neither is one whose absence rows design marked reviewed (gap row 237). Its
       # frozen tests were written from the criteria and the order's other fields, and none of
       # those changed, so the live copy is taken in place:
       # the ledger entry keeps its step and attempts, and its dependents are untouched. The next
@@ -2120,7 +2119,7 @@ REMOVED_PATHS
               | select(($started | index($d)) != null)
               | ($snapMap[$d]) as $s | ($liveMap[$d]) as $l
               | select($l != null)
-              | select(($l | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed, .choicesKept, .doneWhen)) == ($s | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed, .choicesKept, .doneWhen)))
+              | select(($l | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed, .doneWhen)) == ($s | del(.ownedFiles, .sharedFiles, .findings, .reasoning, .absenceReviewed, .doneWhen)))
               | ($s.doneWhen // []) as $sd
               | select(($l.doneWhen // [])[0:($sd | length)] == $sd)
               | (($l.doneWhen // [])[($sd | length):]) as $gained
@@ -2140,7 +2139,6 @@ REMOVED_PATHS
                   (if $l.findings != $s.findings then "findings changed" else empty end),
                   (if $l.reasoning != $s.reasoning then "reasoning appended" else empty end),
                   (if $l.absenceReviewed != $s.absenceReviewed then "absence rows marked reviewed changed" else empty end),
-                  (if $l.choicesKept != $s.choicesKept then "interface pairs kept changed" else empty end),
                   (if ($gained | length) > 0 then "gained done-when rows" else empty end) ] as $why
               | select(($why | length) > 0)
               | {id: $d, why: $why}
@@ -3351,7 +3349,7 @@ do_preconditions() {
   # A task whose every order is proved by its record writes no test and runs none, so the test
   # harness is not needed. Its conditions and its smoke row are recorded `not-needed` and never
   # run, and the baseline runs no suite (live-run row 136). An order a person confirms runs no
-  # test either: its task has no automated tests (gap row 196). On such a task a `gate` order runs
+  # test either (gap rows 196 and 461). On a task with no automated tests a `gate` order runs
   # its own lines and no suite, so it needs no harness (gap row 246). BR_HARNESS_JQ holds the rule.
   # The recipe is still resolved and recorded, because the freeze and finish read its path.
   harness_needed="$(printf '%s' "$SNAPSHOT_DOC" | jq -r "$BR_HARNESS_JQ harnessNeeded")"
@@ -5043,8 +5041,8 @@ do_tests_freeze() {
   # folder, and its done-when row, judged here, is its checkpoint (nyc defect 17). An order whose
   # proof is observe freezes no test and no row: a model judges its done-when rows against its
   # surfaces after the build, so there is nothing to judge here (live-run row 104). An order whose
-  # proof is confirm freezes no test and no row either: its task has no automated tests, and a
-  # person confirms its done-when rows at review (gap row 196).
+  # proof is confirm freezes no test and no row either: no test proves it, and a person confirms
+  # its done-when rows at review (gap rows 196 and 461).
   # The frozen record carries the proof word itself, below, because a record holds the value. The
   # refusals and the guards read the check that takes this order's proof slot.
   local tf_proof
@@ -5060,7 +5058,7 @@ do_tests_freeze() {
     die3 "tests-freeze: $unit_id is proved by a model's observation and takes no --test. A model judges its done-when rows against its surfaces in a browser after the build; nothing is frozen and nothing is judged here."
   fi
   if [ "$BR_ORDER_SLOT" = "confirm-at-review" ] && [ -n "$test_raw" ]; then
-    die3 "tests-freeze: $unit_id is confirmed by a person and takes no --test. Its task has no automated tests; a person confirms its done-when rows at review."
+    die3 "tests-freeze: $unit_id is confirmed by a person and takes no --test. No test proves it; a person confirms its done-when rows at review."
   fi
 
   # --- 81: an --absence routes one doneWhen clause to review, because no test can prove it --------
@@ -7625,13 +7623,13 @@ br_record_check() {
 }
 
 # The confirm-at-review check, in the order-tests slot of an order whose proof is confirm (gap row
-# 196). The task has no automated tests, so nothing here can judge the order's own work. The check
+# 196). No test proves the order, so nothing here can judge the order's own work. The check
 # reads deferred: `finish` hands the order's done-when rows to review as checklist rows, and the
 # person answers there. The floor accepts deferred in this slot alone. Prints the check object.
 br_confirm_check() {
   jq -n --arg unit "$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')" \
     '{id: "confirm-at-review", verdict: "deferred",
-      detail: ($unit + " is confirmed by a person: its task has no automated tests, so no test ran. The person confirms its done-when rows at review.")}'
+      detail: ($unit + " is confirmed by a person: no test proves it, so no test ran. The person confirms its done-when rows at review.")}'
 }
 
 # The observed check, in the order-tests slot of an order whose proof is observe (live-run row
@@ -8001,7 +7999,7 @@ def proofmet: (proof and .id != "confirm-at-review" and .verdict == "met") or (.
 # order's own code does what its tests ask, so undeclared or unknown there is an order nothing
 # executed. configuration-gate is the same floor for an order whose proof is gate, done-when for
 # one whose proof is record, and observed for one whose proof is observe. confirm-at-review, for
-# one whose proof is confirm, passes the floor at deferred: its task has no automated tests, and
+# one whose proof is confirm, passes the floor at deferred: no test proves it, and
 # the person answers at review (gap row 196). Undeclared on the other two checks still continues.
 br_checks_pass() {
   printf '%s' "$1" | jq -r "$BR_PROOF_JQ"'
@@ -11613,7 +11611,7 @@ do_finish() {
   # A criterion that is not confirmed is a warning, and three different facts land here. The
   # warning names which, and what answers it, so a reader told only "not confirmed" knows what to
   # do next. Review judges every criterion again. A criterion an order proved by confirm puts to the person, confirmCriteria in
-  # scripts/lib/proof.sh, is not asked here: its task has no automated tests, and the person
+  # scripts/lib/proof.sh, is not asked here: no test proves it, and the person
   # answers it at review from the checklist rows below (gap row 196). A criterion a dropped order
   # serves or owns is not asked either. Nothing built it, so the finished record lists it under
   # the dropped order, and the task review reads it unanswered.

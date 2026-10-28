@@ -29,11 +29,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     has at least one done-when row: a model looks at each surface through a browser after the
 #     build and judges each done-when row against what renders (live-run row 104);
 #   - a work order whose proof is confirm declares no test either, and has at least one done-when
-#     row: its task has no automated tests, and a person confirms each row at review (gap row 196).
-#     Its task's contract says it has no automated tests. A contract answered yes after design, or
-#     a confirm set by hand on a task with tests, would build code with no test. It owns no file
-#     that a test glob of this project's earlier freezes matches: a test file on such an order is
-#     plain code that no check runs (gap row 367);
+#     row: no test proves it, and a person confirms each row at review (gap row 196). It sits on a
+#     task whose contract says it has no automated tests, or it is text only, or run lines prove
+#     every machine criterion it owns (gap row 461). Any other confirm order is code with no test.
+#     It owns no file that a test glob of this project's earlier freezes matches: a test file on
+#     such an order is plain code that no check runs (gap row 367);
+#   - a work order whose proof is tests is not text only, and no text-only order owns a criterion
+#     whose verifiedBy is machine. A document or configuration holds no logic, so a test of it only
+#     reads the text back, and nothing tests the criterion: it is a person's (gap row 461);
 #   - a work order whose proof is tests owns at least one criterion whose verifiedBy is machine,
 #     when it owns any criterion at all. The rule above asks whether an order owning a machine
 #     criterion declares a test. This asks the same question the other way, so the default proof is
@@ -130,8 +133,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      file outside the project folder or under an ignored path, or has no done-when row, an
 #      order whose proof is observe and
 #      that declares a test, names no surface or has no done-when row, an order whose proof is
-#      confirm and that declares a test, has no done-when row, owns a test file, or sits on a
-#      task whose contract does not say it has no automated tests, an order that owns nothing
+#      confirm and that declares a test, has no done-when row, owns a test file, or is code on a
+#      task with tests whose run lines do not prove every machine criterion it owns, a text-only
+#      order whose proof is tests, a machine criterion a text-only order owns, an order that owns nothing
 #      and reaches no owner, an order of a light task that does not come after wo1, a
 #      dependency cycle, two orders sharing
 #      a declared owned file, or an id named anywhere that resolves to nothing. Each is named in
@@ -186,6 +190,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 observeOrdersWithNoSurface: [ {id, path} ],
 #                 confirmOrdersOnTaskWithTests: [ {id, path} ],
 #                 confirmOrdersOwningTestFiles: [ {id, path, glob} ],   path is the owned test file
+#                 textOnlyTestOrders: [ {id, path} ],
+#                 machineCriteriaOnTextOnlyOrders: [ {id, path, criterionId} ],
 #                 testOrdersOwningNoMachineCriterion: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
 #                 unknownNonGoalIds: [ {path, id} ] },
@@ -454,6 +460,7 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             slot: $f.slot,
             range: $f.range,
             ownsCode: $f.ownsCode,
+            textOnly: textOnly,
             surfacesCount: ([ (.surfaces // [])[]? | select(type == "string" and length > 0) ] | length),
             doneWhenCount: ([ (.doneWhen // [])[]? | select(type == "string" and length > 0) ] | length),
             criteriaByRun: [ (.verify // [])[]? | select(type == "object" and has("run")) | .criterion? | strings ],
@@ -582,6 +589,8 @@ OBSERVE_ORDERS_WITH_NO_SURFACE_JSON='[]'
 CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON='[]'
 CONFIRM_ORDERS_OWNING_TEST_FILES_JSON='[]'
 CONFIRM_TEST_GLOBS=""
+TEXT_ONLY_TEST_ORDERS_JSON='[]'
+MACHINE_ON_TEXT_ONLY_JSON='[]'
 TEST_ORDERS_OWNING_NO_MACHINE_JSON='[]'
 CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
@@ -632,17 +641,31 @@ else
   # needs a surface as well. An order whose proof is confirm owes no test and needs a done-when
   # row on the same two rules: a person confirms each row at review (gap row 196). The two shared
   # rules keep the record lists, with the proof on each entry. A run line that names a criterion
-  # spares that criterion a test, never the order its last one: the freeze refuses an order with no
-  # row (exit 74). So the entry's problem says which repair applies (gap row 412).
+  # spares that criterion a test. A `tests` order freezes at least one row (exit 74), so an order
+  # whose run lines prove every machine criterion it owns is a confirm order (gap row 461). The
+  # entry's problem says which repair applies (gap row 412). A text-only order is named on its own
+  # lists below, with their own repairs.
   ORDERS_MISSING_REQUIRED_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
-    | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.slot == "order-tests")
+    | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.slot == "order-tests") | select($o.textOnly | not)
         | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
         | {id: $o.id, path: $o.path, criterionId: $cid,
            problem: (if ($o.criteriaByRun | index($cid)) == null
                      then "owns a machine-verified criterion (" + $cid + ") with no test"
-                     else "declares no test, and a run line proves " + $cid + " but is not a test of its own. Add a test to " + $o.id + ", or give " + $cid + " to an order that has a test"
+                     else "declares no test, and a run line proves " + $cid + ". Set " + $o.id + " to --proof confirm when run lines prove every machine criterion it owns, or add a test of a behaviour it builds"
                      end)} ]
+  ')"
+  # An order whose every file is a document or configuration holds no logic, so a test of it only
+  # reads the text back (gap row 461). Nothing there can test a machine criterion either, so such a
+  # criterion is a person's. textOnly in scripts/lib/proof.sh holds the rule, gate orders excepted.
+  TEXT_ONLY_TEST_ORDERS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
+    [ $orders[] | select(.slot == "order-tests") | select(.textOnly) | {id: .id, path: .path} ]
+  ')"
+  MACHINE_ON_TEXT_ONLY_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
+    ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
+    | [ $orders[] | . as $o | select($o.textOnly)
+        | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
+        | {id: $o.id, path: $o.path, criterionId: $cid} ]
   ')"
   GATE_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "configuration-gate") | select(.testsCount > 0) | {id: .id, path: .path} ]
@@ -670,11 +693,17 @@ else
   OBSERVE_ORDERS_WITH_NO_SURFACE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "observed") | select(.surfacesCount == 0) | {id: .id, path: .path} ]
   ')"
-  # An order a person confirms is built with no test. That is only right on a task whose contract
-  # says it has no automated tests (gap row 196). The answer can move to yes after design, and a
-  # confirm can be set by hand on a task with tests. Either way the order needs a test.
-  CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg tests "$(automated_tests "$TASK_PATH")" '
-    [ $orders[] | select(.slot == "confirm-at-review") | select($tests != "no") | {id: .id, path: .path} ]
+  # An order a person confirms is built with no test. On a task whose contract says it has no
+  # automated tests, that is every code order (gap row 196). On a task with tests it is right for an
+  # order that is text only, and for one whose run lines prove every machine criterion it owns
+  # (gap row 461). The answer can move to yes after design, and a confirm can be set by hand. Any
+  # other confirm order on a task with tests is code that needs a test.
+  CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" --arg tests "$(automated_tests "$TASK_PATH")" '
+    ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
+    | [ $orders[] | select(.slot == "confirm-at-review") | select($tests != "no") | select(.textOnly | not)
+        | . as $o | [ ($o.criteriaOwned // [])[] | select(($vbOf[.] // "") == "machine") ] as $machine
+        | select(($machine | length) == 0 or any($machine[]; . as $c | ($o.criteriaByRun | index($c)) == null))
+        | {id: .id, path: .path} ]
   ')"
   # A confirm order is built with no test. So a test file it owns is written as plain code that no
   # check runs and the freeze never sees (gap row 367). Which path is a test is the framework's to
@@ -765,6 +794,7 @@ CONFIRM_GLOBS
   SERVES_NOTHING_COUNT="$(printf '%s' "$ORDERS_SERVING_NOTHING_JSON" | jq 'length')"
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
   GATE_WITH_TESTS_COUNT="$(printf '%s' "$GATE_ORDERS_DECLARING_TESTS_JSON" | jq 'length')"
+  TEXT_ONLY_COUNT="$(jq -n --argjson a "$TEXT_ONLY_TEST_ORDERS_JSON" --argjson b "$MACHINE_ON_TEXT_ONLY_JSON" '($a | length) + ($b | length)')"
   RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" --argjson e "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" --argjson f "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length) + ($e | length) + ($f | length)')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
   UNKNOWN_NONGOAL_COUNT="$(printf '%s' "$UNKNOWN_NONGOAL_IDS_JSON" | jq 'length')"
@@ -788,7 +818,7 @@ CONFIRM_GLOBS
     COVERAGE_WITHHELD="false"
   fi
 
-  COVERAGE_ISSUE_COUNT=$((NO_SERVE_COUNT + NO_OWNER_COUNT + MULTI_OWNER_COUNT + SERVES_NOTHING_COUNT + MISSING_TESTS_COUNT + GATE_WITH_TESTS_COUNT + RECORD_ISSUE_COUNT + UNKNOWN_CRIT_COUNT + UNKNOWN_NONGOAL_COUNT + UNUSABLE_VERIFIED_BY_COUNT))
+  COVERAGE_ISSUE_COUNT=$((NO_SERVE_COUNT + NO_OWNER_COUNT + MULTI_OWNER_COUNT + SERVES_NOTHING_COUNT + MISSING_TESTS_COUNT + GATE_WITH_TESTS_COUNT + TEXT_ONLY_COUNT + RECORD_ISSUE_COUNT + UNKNOWN_CRIT_COUNT + UNKNOWN_NONGOAL_COUNT + UNUSABLE_VERIFIED_BY_COUNT))
   if [ "$DESIGN_STARTED" = "true" ] && [ "$COVERAGE_WITHHELD" = "true" ]; then
     COVERAGE_NOTE="ran in part: $FILE_COUNT file(s), $COUNTED_ORDERS work order(s) counted, $EXCLUDED_COUNT excluded as unreadable, against $(printf '%s' "$CRITERION_IDS_JSON" | jq 'length') criterion/criteria. Every finding that reports something absent is withheld, because an excluded work order and a missing one look the same from here. Repair the files listed above and run this again."
   elif [ "$DESIGN_STARTED" = "true" ]; then
@@ -975,6 +1005,8 @@ jq -n \
   --argjson observeOrdersWithNoSurface "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" \
   --argjson confirmOrdersOnTaskWithTests "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" \
   --argjson confirmOrdersOwningTestFiles "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" \
+  --argjson textOnlyTestOrders "$TEXT_ONLY_TEST_ORDERS_JSON" \
+  --argjson machineCriteriaOnTextOnlyOrders "$MACHINE_ON_TEXT_ONLY_JSON" \
   --argjson testOrdersOwningNoMachineCriterion "$TEST_ORDERS_OWNING_NO_MACHINE_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
   --argjson unknownNonGoalIds "$UNKNOWN_NONGOAL_IDS_JSON" \
@@ -1016,6 +1048,8 @@ jq -n \
       observeOrdersWithNoSurface: $observeOrdersWithNoSurface,
       confirmOrdersOnTaskWithTests: $confirmOrdersOnTaskWithTests,
       confirmOrdersOwningTestFiles: $confirmOrdersOwningTestFiles,
+      textOnlyTestOrders: $textOnlyTestOrders,
+      machineCriteriaOnTextOnlyOrders: $machineCriteriaOnTextOnlyOrders,
       testOrdersOwningNoMachineCriterion: $testOrdersOwningNoMachineCriterion,
       unknownCriteriaIds: $unknownCriteriaIds,
       unknownNonGoalIds: $unknownNonGoalIds
