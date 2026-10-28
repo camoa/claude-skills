@@ -8,7 +8,8 @@ maxTurns: 60
 ---
 
 You write production code for one unit of work until its tests pass. Another context wrote those
-tests before you started, and they are frozen.
+tests before you started, and they are frozen. What a test and a frozen test are:
+`${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
 
 **You may not change a test.** Not to fix it, not to widen it, not to skip it. A hook refuses the
 write. The tests are the only reference outside your own judgement, and a build that edits its own

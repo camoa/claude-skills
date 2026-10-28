@@ -1312,7 +1312,12 @@ do_add_test() {
       '[$d | match("[A-Za-z0-9_-]+"; "g").string] as $words
        | [(.surfaces // [])[] | select(. as $s | any($words[]; . == $s))] | first // ""' "$file")"
     [ -z "$surface_hit" ] \
-      || die3 "add-test: the description names the surface $surface_hit, so it reads as the review stage's surface row over that page. That row is not a test a test author writes as a file. A machine criterion is proved one of two ways. Describe here what a spec observes, and the tests step writes it as a file the test-execution recipe's own glob matches. Or reopen scope so the criterion reads verified by person, and the review stage's surface row over $surface_hit verifies it"
+      || die3 "add-test: the description names the surface $surface_hit, so it reads as the review stage's surface row over that page. That row is not a test a test author writes as a file. The surface proves the page at review. Describe here the behaviour beneath it, one behaviour, which a test can prove before the code exists (skills/implement/references/what-a-test-is.md)"
+  fi
+  # A browser-style description is warned, not refused: the words can be innocent (gap row 452).
+  # A light task's first order owns the script that walks the demo path, by design.
+  if [ "$proof" = "tests" ] && names_a_surface_check "$description" && ! task_is_light "$TASK_PATH"; then
+    task_warn "$TASK_PATH" "design add-test" "$id" "the test description names an end-to-end or browser check: $description. That check is a surface review runs; describe the one behaviour beneath it (skills/implement/references/what-a-test-is.md)"
   fi
   if is_blank "$level"; then
     doc="$(jq --arg d "$description" \

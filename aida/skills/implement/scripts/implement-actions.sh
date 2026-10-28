@@ -3486,10 +3486,11 @@ PC_RECIPES
   [ -z "$pc_gate_missing" ] \
     || die3 "preconditions: a gate order runs the ## Configuration gate of ${pc_gate_missing#*	}, and its token {${pc_gate_missing%%	*}} has no value. Nothing was recorded. Pass --value ${pc_gate_missing%%	*}=<value>, or bring the environment up with task environment <task-id> up, which records it."
   order_tests_absent="$(printf '%s' "$CR_DOC" | jq -r '
-    [ (.frameworks // [])[] | select(.testRecipe != "" and ((.orderTests | has("argv")) | not)) | .framework ]
+    [ (.frameworks // [])[] | select(.testRecipe != "" and ((.orderTests | has("argv")) | not))
+      | .framework + " (" + (.orderTests.missing // .orderTests.absent // "no row") + ")" ]
     | join(", ")')"
   if [ -n "$order_tests_absent" ]; then
-    printf 'implement-actions: preconditions: %s\n' "these frameworks declare no test-command row that runs a named set of tests, so no order on them can ever have its own tests run, and no order on them can ever pass its checks: $order_tests_absent" >&2
+    printf 'implement-actions: preconditions: %s\n' "these frameworks declare no every-attempt test-command row that runs a named set of tests, so no order on them can ever have its own tests run, and no order on them can ever pass its checks: $order_tests_absent" >&2
     exit 19
   fi
   check_recipes_json="$(printf '%s' "$CR_DOC" | jq -c '
@@ -6253,14 +6254,18 @@ The test author repairs these files and runs each test again, and this freeze ru
   # count does not differ. One is enough: a file that stops at its first failing case shows only
   # that red. A run that printed nothing, passed or read unknown is left to the build. A line that
   # differs only in a random name, such as a temporary path, does not match; that is the limit.
-  local tf_ot_paths tf_ot_json tf_ot_out tf_ot_keys tf_ot_red_keys tf_ot_names
+  local tf_ot_paths tf_ot_json tf_ot_out tf_ot_keys tf_ot_red_keys tf_ot_names tf_ot_started
   tf_ot_paths="$(br_frozen_test_paths "$rows_json")"
   if [ "$red_count" -gt 0 ] && [ "$BR_ORDER_SLOT" = "order-tests" ] && [ "$tf_ot_paths" != "[]" ]; then
     CR_WHO="tests-freeze"; CR_TEST_RECIPES="$test_recipes"; CR_CHECK_RECIPES=""
     cr_resolve
     BRC_WHO="tests-freeze"; BRC_CODEPATH="$codepath"; BRC_RECIPES="$CR_DOC"; BRC_VALUES=""
     BRC_SELECTED_JSON="$tf_ot_paths"; BRC_TESTS_DOC="$(jq -cn --argjson rows "$rows_json" '{rows: $rows}')"
+    tf_ot_started="$(date +%s)"
     tf_ot_json="$(br_test_check "order-tests" "orderTests" "order-tests")" || exit "$?"
+    # The same run, timed, is the record a test's weight is read from (gap row 454).
+    test_weight_warn "$TASK_PATH" tests-freeze "$unit_id" "$(($(date +%s) - tf_ot_started))" \
+      "$(printf '%s' "$rows_json" | jq '[.[] | (.tests // [])[] | .path + "::" + .name] | unique | length')"
     tf_ot_out="$(mktemp)" || die3 "tests-freeze: could not create a temporary file"
     tf_ot_keys="$(mktemp)" || { rm -f "$tf_ot_out"; die3 "tests-freeze: could not create a temporary file"; }
     tf_ot_red_keys="$(mktemp)" || { rm -f "$tf_ot_out" "$tf_ot_keys"; die3 "tests-freeze: could not create a temporary file"; }

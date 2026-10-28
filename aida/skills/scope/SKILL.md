@@ -206,8 +206,11 @@ For each one, in order, in the draft:
 2. Draft how it is observed, its verify clause, and whether a machine runs that check or a person
    looks. A clause that only restates the criterion names no signal. A criterion with no
    observable outcome is a gap: ask, one question, with a recommended answer, rather than write
-   the restatement. See "Tests and checks" below for what changes when the project has end to
-   end testing or visual regression on.
+   the restatement. A machine clause names the behaviour a test proves, not a flow to run. A test
+   is what this page defines:
+   `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
+   `add` and `update` warn on a clause that names an end-to-end or browser check. See "Tests and
+   checks" below for what changes when the project has end to end testing or visual regression on.
 3. Record who asked. `designer` for every line the draft wrote, until `approve` promotes it at
    "Approval". `owner` when a person wrote or corrected this criterion, in this conversation.
    There is no third value, and a missing answer is never `owner`.
@@ -287,10 +290,10 @@ skip. Research changes it to yes when the test recipe's own checks find a runner
 Scope sets nothing up. It uses a kind that is already on, and offers the setup once when none is.
 Read `<projectPath>/project.json` once, at the point criteria are being drafted:
 
-- **`surfaces.e2e.enabled` is true.** An end to end test is an acceptance criterion automated: a
-  criterion already phrased as an outcome is already the script. So do not ask a separate
-  question about coverage, and do not ask per criterion whether to automate it. In the whole
-  draft, write each criterion's verify clause (step 2 above) as `machine`, naming the automated
+- **`surfaces.e2e.enabled` is true.** The end to end test is the surface's own check, and review
+  runs it after the build. So do not ask a separate question about coverage, and do not ask per
+  criterion whether to automate it. In the whole draft, write each criterion's verify clause
+  (step 2 above) as `machine`. The clause names the behaviour a test proves, never the end to end
   test. The person corrects a line back to `person` like any other line, with `update`.
 - **`surfaces.visualRegression.enabled` is true.** Check whether a surface this task changes already
   has a baseline in the surface file, `.visual-review/surfaces.json` in the tree scope runs from.

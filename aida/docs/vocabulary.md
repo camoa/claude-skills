@@ -47,6 +47,9 @@ from the "Not called" column for the thing in that row.
 | tests | the proof kind of a code order, the default: tests frozen before the code is written | |
 | confirm | the proof kind of a code order on a task with no automated tests: the person answers its done-when rows at review | |
 | observe | the proof kind of a page order: a model looks through a browser after the build and judges each done-when row | |
+| test | what the implement stage writes before the code, as skills/implement/references/what-a-test-is.md defines it | |
+| frozen test | a test after the freeze: nothing changes it, so the code cannot bend it to pass | |
+| surface | a page or a command that review runs end to end or for visual regression after the build. Never a test | |
 
 ## Records and sources
 

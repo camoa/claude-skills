@@ -4,7 +4,8 @@ This step runs once per work order, not once per build. An order is ready when e
 depends on is finished.
 
 The tests are the reference the whole build is measured against. Everything below exists to keep
-that reference outside the thing it judges.
+that reference outside the thing it judges. What a test is, and what it is not, is in
+`${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
 
 ## Read what this order needs
 

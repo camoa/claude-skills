@@ -19,9 +19,10 @@ that works. A light task cannot take yes any other way.
 
 ## A kind the project has on
 
-- **End to end tests are on.** A criterion written as an outcome is already the test script. So
-  scope asks no separate question about coverage. Each drafted criterion is checked by a machine,
-  and its verify clause names the automated test. Correct a line back to a person like any other
+- **End to end tests are on.** The end to end test is the surface's own check, which review runs
+  after the build. So scope asks no separate question about coverage. Each drafted criterion is
+  checked by a machine, and its verify clause names the behaviour a test proves, never the end to
+  end test. Scope warns on a clause that names one. Correct a line back to a person like any other
   line.
 - **Visual regression is on.** A page this task changes that already has a baseline becomes a
   criterion: the visual check on it must pass. A page with no baseline becomes a criterion too:

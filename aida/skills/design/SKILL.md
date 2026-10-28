@@ -562,7 +562,7 @@ own changes to the file.
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-done-when "<task_folder>" \
   --id <woId> --text "<what must be true for this order to be finished>"
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-test "<task_folder>" \
-  --id <woId> --description "<what this test must observe>"
+  --id <woId> --description "<the one behaviour this test proves>"
 ```
 Write an absence as a done-when row of its own. An absence says the change added nothing of a
 named kind, such as no new dependency or no static call to the container. No test can watch it
@@ -578,12 +578,15 @@ test, and a model judges its done-when rows against its surfaces after the build
 is `confirm` declares no test, and the person confirms its done-when rows at review. A criterion
 whose `verifiedBy` is `person` needs no test, though one is never wrong to add.
 
-A test is what a test author writes as a file, red before the code and green after it. Add that
-file to the order with `add-owned-file`. The test author writes into it, and the freeze refuses a
-test in a file the order does not own. The review stage's surface row is not a test, so `add-test`
-refuses a description naming one of a `tests` order's own surfaces. A machine criterion only a
-surface can prove is proved by a spec described by what it observes, or reads `person` after scope
-reopens.
+A test is what this page defines:
+`${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`. Add its file to the order
+with `add-owned-file`. The test author writes into it, and the freeze refuses a test in a
+file the order does not own. Each description names the one behaviour its test proves. It names no
+flow to run and no level, because the recipe says which level shows a behaviour. A criterion only
+a surface can show is proved by that surface at review. The order's tests prove the behaviour
+beneath it, so never add a browser-style spec as an order's test. `add-test` refuses a description
+naming one of a `tests` order's own surfaces. It warns in `task.json` on a description that names
+an end-to-end or browser check.
 
 To change a scalar or an id list on an order already created, `update` takes the same flags as
 `create`, replacing whichever are given:

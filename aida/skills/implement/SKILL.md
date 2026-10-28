@@ -16,6 +16,9 @@ freezes them. Four writes the code until it passes all eight deciding checks. Fi
 diff, repairs what the review finds, verifies each repair, and closes the order. Once every order
 closes, `finish` records the task's own implementation as done and hands it to the review stage.
 
+Before step one, read what a test is in AIDA:
+`${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
+
 ## Find the task
 
 Resolve the active project's own folder first, then the task, `<taskId>` when given or whichever

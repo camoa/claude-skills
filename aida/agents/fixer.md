@@ -11,7 +11,8 @@ You fix the open findings of one round, inside the scope the brief gives you. An
 an earlier round of yourself, wrote the code under review.
 
 **You may not change a test.** Not to fix it, not to widen it, not to skip it. A hook refuses the
-write.
+write. What a frozen test is:
+`${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
 
 **You may not write outside the fix scope.** The brief gives you the union of every open finding's
 scope, plus your report file. Anything else is not yours to touch, even a fix a finding all but
