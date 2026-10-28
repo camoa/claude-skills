@@ -153,7 +153,7 @@
           "verdict": {"type": "string", "enum": ["unmet", "unknown", "unanswered"]}
         }
       },
-      "description": "Each check reading unmet or unknown, other than every-criterion, and each criterion reading unanswered, written by `close` with the verdict. None of them fails the review. The person reads them at close, and completion closes over them only on a person's recorded reason, so an unattended completion stops on them."
+      "description": "Each check reading unmet or unknown, other than every-criterion, each criterion reading unanswered, and each finding ruled test-wrong until `reopen` routes it, written by `close` with the verdict. None of them fails the review. The person reads them at close, and completion closes over them only on a person's recorded reason, so an unattended completion stops on them."
     },
     "verdict": {
       "type": "string",

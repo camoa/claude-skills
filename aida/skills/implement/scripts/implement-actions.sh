@@ -10638,13 +10638,13 @@ do_verify_brief() {
   # changed. What those files call or read is not listed: that is language-specific, and a call
   # can be a program run by name, so no framework-neutral script can know it. The verifier names
   # a file it could not read under couldNotRead, and verify-record reads that as not addressed.
-  local depends_on
-  depends_on="$( { printf '%s' "$open_json" | jq -r '.[].file // empty'
+  local rests_on
+  rests_on="$( { printf '%s' "$open_json" | jq -r '.[].file // empty'
       git -C "$RV_RANGE_REPO" diff --no-renames --name-only "$(printf '%s' "$fix_doc" | jq -r '.startedAt // empty')" \
         "$(printf '%s' "$fix_doc" | jq -r '.commit // empty')" 2>/dev/null; } | jq -Rsc 'split("\n") | map(select(length > 0)) | unique')"
-  [ -n "$depends_on" ] || depends_on='[]'
+  [ -n "$rests_on" ] || rests_on='[]'
   brief_json="$(jq -n --arg unit "$unit_id" --argjson round "$rounds_used" --argjson findings "$open_json" \
-    --argjson dependsOn "$depends_on" \
+    --argjson restsOn "$rests_on" \
     --slurpfile fix "$fix_file" --arg fixRecord "$fix_file" --argjson fixScope "$round_scope" \
     --arg verdictsPath "$IMPL_DIR/verify-$unit_id-$rounds_used.json" --arg worktree "$RV_CODEPATH" '
     $fix[0] as $fix
@@ -10654,7 +10654,7 @@ do_verify_brief() {
      round: $round,
      findings: $findings,
      fixScope: $fixScope,
-     dependsOn: $dependsOn,
+     restsOn: $restsOn,
      fixDiffPath: ($fix.diffPath // ""),
      fixReportPath: ($fix.reportPath // ""),
      fixRange: "\($fix.startedAt // "")..\($fix.commit // "")",
@@ -10807,12 +10807,12 @@ do_verify_record() {
   [ -n "$verdict_rows" ] && [ "$verdict_rows" != "null" ] \
     || die 52 "verify-record: $verdicts_path holds no verdicts array. The shape is { \"verdicts\": [ ... ] }."
   outofscope_json="$(printf '%s' "$verdicts_doc" | jq -c 'if (.outOfScope | type) == "array" then .outOfScope else [] end')"
-  # Gap row 445. An addressed verdict that cites no file the brief's dependsOn lists, in its file
+  # Gap row 445. An addressed verdict that cites no file the brief's restsOn lists, in its file
   # or its read list, judged nothing the fix rests on. One that names a file it could not read
   # rests on a file nobody checked. Either reads not addressed.
-  local depends_on
-  depends_on="$(jq -c '.dependsOn // empty' "$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json" 2>/dev/null)"
-  [ -z "$depends_on" ] || verdict_rows="$(printf '%s' "$verdict_rows" | jq -c --argjson d "$depends_on" 'map(
+  local rests_on
+  rests_on="$(jq -c '.restsOn // empty' "$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json" 2>/dev/null)"
+  [ -z "$rests_on" ] || verdict_rows="$(printf '%s' "$verdict_rows" | jq -c --argjson d "$rests_on" 'map(
     if .verdict != "addressed" then .
     elif ((.couldNotRead // []) | length) > 0 then
       .verdict = "not-addressed" | .evidence = ((.evidence // "") + " Read as not addressed: the verifier could not read " + ((.couldNotRead // []) | join(", ")) + ".")

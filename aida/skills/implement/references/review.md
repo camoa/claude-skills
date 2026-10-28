@@ -365,7 +365,12 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh verify-record "<task_folder>" <order id> \
   --verdicts <the verdicts path verify-brief printed>
 ```
-Addressed closes a finding. Not addressed keeps it open; attempted is not addressed. New breakage
+Addressed closes a finding. Not addressed keeps it open; attempted is not addressed. The brief's
+`restsOn` lists the files the findings name and the files the fix changed. An addressed verdict
+that cites none of them in `file` or `read`, or that lists a file under `couldNotRead`, reads not
+addressed. That catch rests on the verifier's own lists: a file the fix runs or reads that nobody
+lists, and the verifier leaves out of `couldNotRead`, is not seen. No script can list such a file,
+because what a file calls is language-specific and AIDA parses no source. New breakage
 inside the fix diff opens as a finding under the same rule. Anything the reviewer notices outside
 the fix diff is recorded and opens nothing. It prints the ids addressed and not addressed, the new
 breakage, what is still open, the rulings, the record path and `next:`.

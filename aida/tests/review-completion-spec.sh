@@ -228,6 +228,33 @@ decision_wrong_case() (
 expect "a build's decision ruled test-wrong takes the same route to its order's test author" "$(decision_wrong_case)" \
   "0|tests/a_test.sh|true"
 
+lens_wrong_case() (
+  source "$HERE/records.bash"
+  review_records "" closed
+  tests_record
+  printf '{"findings": []}\n' >"$IMPL/review-wo1.json"
+  reviewed_record
+  edit "$TASK/review/review.json" '.findings = [{id: "f1", lens: "solid", severity: "high", file: "tests/a_test.sh", lines: "1",
+    linkedTo: "", evidence: "the test asserts an internal", disposition: "follow-up"}]'
+  closed_with --row c1=met --row f1=test-wrong
+  printf '%s|' "$(jq -r '[ .warnings[].id ] | join(",")' "$TASK/review/review.json")"
+  run "$IMPLEMENT" reopen "$TASK"
+  printf '%s|%s\n' "$RC" "$(ledger '(.repairs[0].retires // []) | join(",")')"
+)
+expect "a test ruled wrong on a finding with no criterion warns, and reopen routes it" "$(lens_wrong_case)" "f1|0|tests/a_test.sh"
+
+no_text_case() (
+  source "$HERE/records.bash"
+  review_records "" closed
+  reviewed_record
+  edit "$TASK/review/review.json" '.findings = [{id: "f1", lens: "solid", severity: "high", file: "a.php", lines: "1",
+    linkedTo: "c1", evidence: "c1 names a block", disposition: "criterion"}]'
+  closed_with --row c1=met --row "f1=contract-wrong:"
+  printf '%s|%s|%s\n' "$RC" "$(jq -r '.findings[0].ruling // "none"' "$TASK/review/review.json")" \
+    "$(jq '[ (.warnings // [])[] | select(.step == "review close") ] | length' "$TASK/task.json")"
+)
+expect "contract-wrong with no corrected text is named and dropped" "$(no_text_case)" "0|none|1"
+
 # owed_records: wo1 closed and reopened for a wrong test, tests/a_test.sh frozen and retired.
 owed_records() {
   task_records branch
@@ -256,6 +283,21 @@ refreeze_case() (
 )
 expect "the corrected copy of a retired test freezes as the repair's own record" "$(refreeze_case)" "0|tests/a_test.sh|false"
 
+# both_case <command>: the repair's test author runs <command> through Bash, with tests/a_test.sh
+# retired and tests/b_test.sh frozen too.
+both_case() (
+  source "$HERE/records.bash"
+  owed_records
+  edit "$IMPL/tests-wo1.json" '.rows[0].tests += [{path: "tests/b_test.sh", name: "b", sha256: "0", red: "x", redSignal: "unchecked"}]'
+  dispatch_record test-author
+  write_hook "$(jq -nc --arg c "$1" '{command: $c}')" aida:test-author
+)
+expect "a Bash write to the retired test alone is allowed" "$(both_case 'echo x > tests/a_test.sh')" "allow"
+expect "a Bash write to the retired test and another frozen test is refused" \
+  "$(both_case 'echo x > tests/a_test.sh && echo y > tests/b_test.sh')" "deny"
+expect "an in-place edit of the retired test and another frozen test is refused" \
+  "$(both_case 'sed -i s/a/b/ tests/a_test.sh tests/b_test.sh')" "deny"
+
 supersede_case() (
   source "$HERE/records.bash"
   owed_records
@@ -272,7 +314,7 @@ expect "a repair's record holds a retired test to its new hash" "$(supersede_cas
 
 echo "--- the fix verifier cites the files the fix rests on (row 445)"
 # verified <verdict JSON>: wo1 fixed in one round over a.php, verify-brief run, and verify-record
-# run on this one verdict for f1. Prints f1's status.
+# run on this one verdict for f1. Prints the brief's restsOn and f1's status.
 verified() (
   source "$HERE/records.bash"
   task_records branch
@@ -287,14 +329,15 @@ verified() (
   run "$IMPLEMENT" verify-brief "$TASK" wo1
   jq -n --argjson v "$1" '{verdicts: [$v]}' >"$ROOT/v.json"
   run "$IMPLEMENT" verify-record "$TASK" wo1 --verdicts "$ROOT/v.json"
-  jq -r '.findings[] | select(.id == "f1") | .status' "$IMPL/review-wo1.json"
+  printf '%s|%s\n' "$(jq -r '(.restsOn // []) | join(",")' "$IMPL/brief-wo1-verify-1.json")" \
+    "$(jq -r '.findings[] | select(.id == "f1") | .status' "$IMPL/review-wo1.json")"
 )
 expect "an addressed verdict citing a listed file closes the finding" \
-  "$(verified '{"id": "f1", "verdict": "addressed", "file": "a.php", "lines": "1", "evidence": "a says b"}')" "addressed"
+  "$(verified '{"id": "f1", "verdict": "addressed", "file": "a.php", "lines": "1", "evidence": "a says b"}')" "a.php|addressed"
 expect "an addressed verdict citing no listed file reads not addressed" \
-  "$(verified '{"id": "f1", "verdict": "addressed", "file": "b.php", "lines": "1", "evidence": "fine"}')" "open"
+  "$(verified '{"id": "f1", "verdict": "addressed", "file": "b.php", "lines": "1", "evidence": "fine"}')" "a.php|open"
 expect "an addressed verdict naming a file it could not read reads not addressed" \
-  "$(verified '{"id": "f1", "verdict": "addressed", "file": "a.php", "lines": "1", "couldNotRead": ["hooks/h.sh"], "evidence": "fine"}')" "open"
+  "$(verified '{"id": "f1", "verdict": "addressed", "file": "a.php", "lines": "1", "couldNotRead": ["hooks/h.sh"], "evidence": "fine"}')" "a.php|open"
 
 echo "--- completion: the one unattended stop"
 stop_case() (

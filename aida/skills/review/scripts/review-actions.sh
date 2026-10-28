@@ -3023,7 +3023,7 @@ do_close() {
         # one, and completion hands it to scope as a follow-up (gap row 450).
         case "$value" in
           contract-wrong:*)
-            corrected="$corrected$(printf '%s\t%s' "$cid" "${value#contract-wrong:}")
+            is_blank "${value#contract-wrong:}" || corrected="$corrected$(printf '%s\t%s' "$cid" "${value#contract-wrong:}")
 "
             value="contract-wrong" ;;
         esac
@@ -3078,11 +3078,14 @@ do_close() {
   person_checks="$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.checks // [])[] | select(has("answeredBy")) | .id ]')"
   # An answer to a row nobody asked, or a word its row does not take, decides nothing. It is named
   # in the task record and dropped, and the row it meant still waits (gap row 337).
+  local texted
+  texted="$(printf '%s' "$corrected" | cut -f1 | jq -Rsc 'split("\n") | map(select(length > 0))')"
   dropped="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --argjson pf "$rulable_findings" \
-    --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
+    --argjson texted "$texted" --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
     [ ($given | split("\n"))[] | split("\t") | select(length == 2) | . as [$id, $w]
       | if ($po | index($id)) == null and ($pc | index($id)) == null and ($pf | index($id)) == null then $id + "=" + $w + " (no such row waits)"
         elif ($id | row_words | index($w)) == null then $id + "=" + $w + " (it takes " + ($id | row_words | or_list) + ")"
+        elif $w == "contract-wrong" and ($texted | index($id)) == null then $id + "=" + $w + " (it takes the corrected text after a colon)"
         else empty end ] | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS
@@ -3090,10 +3093,11 @@ RW_ROWS
   if [ -n "$dropped" ]; then
     task_warn "$TASK_PATH" "review close" "" "these --row answers decided nothing and were dropped: $dropped"
     rows="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --argjson pf "$rulable_findings" \
-      --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
+      --argjson texted "$texted" --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
       [ ($given | split("\n"))[] | split("\t") | select(length == 2) | . as [$id, $w]
         | select(($po | index($id)) != null or ($pc | index($id)) != null or ($pf | index($id)) != null)
-        | select(($id | row_words | index($w)) != null) | $id + "\t" + $w ] | join("\n")' <<RW_ROWS
+        | select(($id | row_words | index($w)) != null)
+        | select($w != "contract-wrong" or ($texted | index($id)) != null) | $id + "\t" + $w ] | join("\n")' <<RW_ROWS
 $rows
 RW_ROWS
 )"
@@ -3105,7 +3109,8 @@ RW_ROWS
     | .findings = [ (.findings // [])[] | . as $f | ([ $g[] | select(.[0] == $f.id) ][0]) as $r
         | if $r == null or ($rf | index($f.id)) == null then $f
           else $f | .ruling = $r[1]
-            | .disposition = (if $r[1] == "deferred" or $r[1] == "contract-wrong" then "follow-up" else "criterion" end)
+            | .disposition = (if $r[1] == "deferred" or $r[1] == "contract-wrong" then "follow-up"
+                              elif $r[1] == "test-wrong" then .disposition else "criterion" end)
             | if $r[1] == "contract-wrong" then .correctedText = ($text[$f.id] // "") else del(.correctedText) end end ]')"
   [ -n "$RW_RECORD_DOC" ] || die 3 "close: could not apply the person's rulings to the findings in $RECORD_FILE."
   # Each lens check a ruling in this call touched is read again, the way `findings` reads it. A
@@ -3313,7 +3318,8 @@ RW_ROWS
   updated="$(printf '%s' "$updated" | jq -c --arg v "$verdict_word" --arg pv "$(plugin_version)" --arg every "$CHECK_EVERY_CRITERION" '
     .verdict = $v | .pluginVersion = $pv
     | .warnings = ([ (.checks // [])[] | select(.id != $every and (.verdict == "unmet" or .verdict == "unknown")) | {id, verdict} ]
-                   + [ (.criteria // [])[] | select(.verdict == "unanswered") | {id, verdict} ])')"
+                   + [ (.criteria // [])[] | select(.verdict == "unanswered") | {id, verdict} ]
+                   + [ (.findings // [])[] | select(.ruling == "test-wrong") | {id, verdict: "unmet"} ])')"
   rw_write_record "close" "$updated"
 
   # The one field review writes into the contract. The hash covers the whole file, but `start`

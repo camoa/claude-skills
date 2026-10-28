@@ -745,6 +745,17 @@ author_may_write() {
   jq -e --arg id "$UNIT" --arg p "$1" --arg root "$CODE_CANON" '[ (.orders // [])[] | select(.id == $id) ][0].repairs // []
     | any(.[]; .testOwed == true and any((.retires // [])[]; ($root + "/" + .) == $p))' "$ledger" >/dev/null 2>&1
 }
+# One frozen path the Bash door found, $1 the token, after owner_of_arg matched it. A test author
+# may write a frozen file of its own unit, by author_may_write. That one is noted in EXEMPT, and
+# the scan goes on, so a second frozen path in the same command is judged too. Any other is the
+# hit, and the scan stops. Returns 0 on a hit.
+take_hit() {
+  if is_test_author "$AGENT" && [ "$OWNER_UNIT" = "$UNIT" ] && author_may_write "$OWNER_ABS"; then
+    EXEMPT="$EXEMPT$1 "
+    return 1
+  fi
+  HIT="$1"; HIT_OWNER="$OWNER_UNIT"
+}
 # Rule three's exit, reached only when rule one found nothing, and before rule two's. $1 is a
 # suffix naming the door.
 main_exit() {
@@ -792,7 +803,7 @@ case "$TOOL" in
     [ -n "$CMD" ] || { echo '{}'; exit 0; }
     # A frozen path in the WRITE POSITION only, version 5's own boundary carried forward as it
     # stands (this file's own header states the limitations that come with it).
-    HIT=""; HIT_OWNER=""
+    HIT=""; HIT_OWNER=""; EXEMPT=""
     while IFS= read -r seg; do
       [ -n "$HIT" ] && break
       seg="$(expand_known "$seg")"
@@ -811,14 +822,14 @@ case "$TOOL" in
           '>'|'>>'|'1>'|'1>>'|'&>'|'&>>'|'>|')
             if [ "$n" -lt "${#w[@]}" ]; then
               VIA="$t"
-              if owner_of_arg "${w[$n]}"; then HIT="${w[$n]}"; HIT_OWNER="$OWNER_UNIT"; break; fi
+              if owner_of_arg "${w[$n]}" && take_hit "${w[$n]}"; then break; fi
             fi ;;
           '2>'*) ;;
           '>'*|'&>'*)
             x="${t#&}"; x="${x#>>}"; x="${x#>}"; x="${x#|}"
             if [ -n "$x" ]; then
               VIA="${t%"$x"}"
-              if owner_of_arg "$x"; then HIT="$x"; HIT_OWNER="$OWNER_UNIT"; break; fi
+              if owner_of_arg "$x" && take_hit "$x"; then break; fi
             fi ;;
           *'>'*)
             # A redirect glued to a word, as in `echo x>file` or `1>file`. Only a bare word of the
@@ -828,7 +839,7 @@ case "$TOOL" in
             case "$p" in 1|*[!0-9]*) ;; *) x="" ;; esac
             case "$x" in ''|'&'*) ;; *)
               VIA='>'
-              if owner_of_arg "$x"; then HIT="$x"; HIT_OWNER="$OWNER_UNIT"; break; fi ;;
+              if owner_of_arg "$x" && take_hit "$x"; then break; fi ;;
             esac ;;
         esac
         i=$n
@@ -842,7 +853,7 @@ case "$TOOL" in
           for t in "${w[@]:1}"; do
             case "$t" in -*|*'>'*|*'<'*) continue ;; esac
             if [ "$mode_skip" = true ]; then mode_skip=false; continue; fi
-            if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
+            if owner_of_arg "$t" && take_hit "$t"; then break; fi
           done ;;
         git)
           # -C, --git-dir and --work-tree name the tree git works in, and its operands resolve
@@ -859,7 +870,7 @@ case "$TOOL" in
             shell_dir="$RUN_DIR"; RUN_DIR="$GIT_TREE"
             for t in "${w[@]:$((GIT_SUB_AT + 1))}"; do
               case "$t" in -*) continue ;; esac
-              if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
+              if owner_of_arg "$t" && take_hit "$t"; then break; fi
             done
             RUN_DIR="$shell_dir" ;; esac ;;
         sed)
@@ -901,7 +912,7 @@ sed
           if [ "$edit" = true ]; then
             while IFS= read -r t; do
               case "$t" in ''|-*|*'>'*|*'<'*) continue ;; esac
-              if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; break; fi
+              if owner_of_arg "$t" && take_hit "$t"; then break; fi
             done <<<"$files"
           fi ;;
         cp|mv|ln|install|rsync)
@@ -919,12 +930,12 @@ sed
               *'>'*|*'<'*) continue ;;
               *) [ "${w[0]}" = mv ] || continue ;;
             esac
-            if owner_of_arg "$t"; then HIT="$t"; HIT_OWNER="$OWNER_UNIT"; fi
+            owner_of_arg "$t" && take_hit "$t"
           done
           last=""
           for t in "${w[@]:1}"; do case "$t" in *'>'*|*'<'*) ;; *) last="$t" ;; esac; done
           if [ -z "$HIT" ] && [ "$named" = false ] && [ -n "$last" ] && owner_of_arg "$last"; then
-            HIT="$last"; HIT_OWNER="$OWNER_UNIT"
+            take_hit "$last"
           fi ;;
         tar)
           # tar extracts into the folder -C names, else where the shell stands, and creates,
@@ -955,7 +966,7 @@ sed
         dd)
           VIA="dd"
           for t in "${w[@]:1}"; do
-            case "$t" in of=*) if owner_of_arg "${t#of=}"; then HIT="${t#of=}"; HIT_OWNER="$OWNER_UNIT"; break; fi ;; esac
+            case "$t" in of=*) if owner_of_arg "${t#of=}" && take_hit "${t#of=}"; then break; fi ;; esac
           done ;;
         popd) RUN_KNOWN=false ;;
         cd|pushd)
@@ -964,7 +975,7 @@ sed
           # operand is where later relative targets resolve.
           stray_before="$STRAY"; main_before="$MAIN_HIT"
           if owner_of_arg "${w[1]:-}" && printf '%s' "$CMD" | grep -q '>'; then
-            HIT="${w[1]}"; HIT_OWNER="$OWNER_UNIT"
+            take_hit "${w[1]}"
           fi
           STRAY="$stray_before"; MAIN_HIT="$main_before"
           RUN_DIR="$(shell_dir_after "$RUN_DIR" "${w[@]}")"
@@ -980,13 +991,13 @@ sed
     done < <(split_segments "$(strip_heredocs "$CMD")")
     if [ -n "$HIT" ]; then
       [ "$MAIN_SESSION" = false ] || deny_main "$HIT through Bash" "$HIT_OWNER"
-      if is_test_author "$AGENT" && [ "$HIT_OWNER" = "$UNIT" ] && author_may_write "$OWNER_ABS"; then
-        if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
-          echo '{}'; exit 0
-        fi
-        allow_unnamed_role "$HIT" "$HIT_OWNER"
-      fi
       deny "$HIT through Bash: $(frozen_reason "$HIT_OWNER")"
+    fi
+    if [ -n "$EXEMPT" ]; then
+      if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
+        echo '{}'; exit 0
+      fi
+      allow_unnamed_role "${EXEMPT%% *}" "$UNIT"
     fi
     main_exit " through Bash"
     stray_exit " through Bash"

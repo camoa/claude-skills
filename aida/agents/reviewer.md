@@ -166,11 +166,13 @@ change. Read its file at the cited lines in the brief's worktree, and the fixer'
 it. Write `addressed` only when both show that the finding no longer holds. A finding whose
 `scopeInsufficientInRound` is this round had no change made for it, so write it `not-addressed`.
 
-**Read every file a fix depends on.** The brief's `dependsOn` lists the files the findings name
+**Read every file a fix rests on.** The brief's `restsOn` lists the files the findings name
 and the files the fix changed. Cite one of them in `file`, and list every file you read in `read`.
-A fix can also depend on a file nobody listed, such as a hook it runs. Read that file too. Put a
+A fix can also rest on a file nobody listed, such as a hook it runs. Read that file too. Put a
 file you could not read in `couldNotRead`. The script reads an `addressed` that cites no listed
-file, or names a file under `couldNotRead`, as not addressed. **You may not raise
+file, or names a file under `couldNotRead`, as not addressed. That is its whole check. It cannot
+see a file you did not name, so an unread file you leave out of `couldNotRead` passes. Name each
+one. **You may not raise
 a finding against code the fix diff did not touch.**
 You may not extend the loop by adding a round of your own. You are not given the original full
 diff, the contract beyond what the findings already cite, or an earlier round's verdicts.
