@@ -256,13 +256,10 @@ content is a lie.
 
 Judge each of the order's done-when rows against what renders, and each `check` entry of its
 `verify` list whose `kind` is `live-site` the same way. A row that says the page is as it was is
-judged against the before image. Also judge the
-`verification` clause of each machine criterion the order owns, as a row of its own beside the
-done-when rows. The snapshot's criteria hold the clause. The done-when rows may say less than
-the clause, and no script can compare the two, so the look judges the clause itself. Such a row
-carries `criterion` with the id, and `build-record` refuses a clause row without it (exit 96).
-Give one verdict per row, `met` or `unmet`, with one sentence on what you saw. Save each
-screenshot under `<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`.
+judged against the before image. The look judges no criterion's verification clause: a machine
+criterion is proved by frozen tests or a named command. Give one verdict per row, `met` or
+`unmet`, with one sentence on what you saw. Save each screenshot under
+`<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`.
 The screenshot must lie under that folder, and `build-record` refuses one that does not (exit
 94). A tool that refuses to write there writes into a folder inside the worktree. Move the
 file, then remove that folder before you record the attempt, because the tree check reads it.
@@ -270,17 +267,14 @@ Then write `<task_folder>/implementation/observed-<order id>.json`:
 ```
 { "order": "<order id>", "observedAt": "<YYYY-MM-DD>", "judgedBy": "model",
   "rows": [ { "doneWhen": "<the row, verbatim>", "surface": "<id>", "viewport": "<name>",
-              "screenshot": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" },
-            { "doneWhen": "<the criterion's verification clause, verbatim>", "criterion": "<c-id>",
-              "surface": "<id>", "viewport": "<name>", "screenshot": "<absolute path>",
-              "verdict": "met|unmet", "note": "<what you saw>" } ] }
+              "screenshot": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
 ```
 A row that says the page is as it was also holds `"before": "<absolute path of the before
-image>"`. Every done-when row, every live-site verify check and every owned clause goes in
-once, and `build-record` refuses a record missing one (exit 97). The verdict is what the page
-showed, never what the report claims. Pass the record as `--observed` below. Nothing is frozen
-for such an order and no row was judged before the build, so this look is its check. The judge
-on the record is a model. Completion puts each such criterion to the person.
+image>"`. Every done-when row and every live-site verify check goes in once, and
+`build-record` refuses a record missing one (exit 97). The verdict is what the page showed,
+never what the report claims. Pass the record as `--observed` below. Nothing is frozen for such
+an order and no row was judged before the build, so this look is its check. The judge on the
+record is a model. Completion puts each such criterion to the person.
 
 ## Record the attempt
 
