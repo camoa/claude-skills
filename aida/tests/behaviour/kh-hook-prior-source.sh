@@ -198,7 +198,7 @@ mkdir -p "$TASK/deliverables/probe"
 printf 'counts\n' >"$RECORD"; printf 'x\n' >"$SCRIPT"
 git -C "$PROJECT" add -- "$RECORD" "$SCRIPT" && git -C "$PROJECT" commit -qm "wo1 attempt"
 must "$IMPLEMENT" build-record "$TASK" wo1 --interface "$ROOT/iface.md" --report "$ROOT/report.md" \
-  --started-at "$freeze" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "$CHECK_FLAG"
+  --started-at "$freeze" --test-recipe "$TEST_RECIPE_FLAG"
 must "$IMPLEMENT" review-record "$TASK" wo1 --findings "$ROOT/rv-none.json"
 must "$IMPLEMENT" close "$TASK" wo1
 
@@ -231,7 +231,7 @@ freeze="$(git -C "$WT" rev-parse HEAD)"
 (cd "$WT" && mkdir -p src docs && printf 'x\n' >src/rules.sh && printf 'x\n' >docs/guide.md \
   && git add src/rules.sh docs/guide.md && git commit -qm "wo2 attempt" >/dev/null 2>&1)
 must "$IMPLEMENT" build-record "$TASK" wo2 --interface "$ROOT/iface.md" --report "$ROOT/report.md" \
-  --started-at "$freeze" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "$CHECK_FLAG"
+  --started-at "$freeze" --test-recipe "$TEST_RECIPE_FLAG"
 must "$IMPLEMENT" review-record "$TASK" wo2 --findings "$ROOT/rv-none.json"
 must "$IMPLEMENT" close "$TASK" wo2
 must "$IMPLEMENT" tests-freeze "$TASK" wo3 --test-recipe "$TEST_RECIPE_FLAG"

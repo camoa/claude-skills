@@ -247,7 +247,7 @@ build_order() {
   printf 'none\n' >"$ROOT/iface.md"; printf 'report\nStop: none\nDeviation: none\n' >"$ROOT/report.md"
   must "$IMPLEMENT" build-record "$TASK" "$unit" \
     --interface "$ROOT/iface.md" --report "$ROOT/report.md" --started-at "$from" \
-    --test-recipe "fake=$RECIPES/test-execution.md" --check-recipe "fake=$RECIPES/checks.md"
+    --test-recipe "fake=$RECIPES/test-execution.md"
 }
 
 
@@ -503,7 +503,7 @@ FROM="$(git -C "$WT" rev-parse HEAD)"
 commit_change a.php "wo1 fixed"
 printf 'fixed\n' >"$(fix_report wo1)"
 must "$IMPLEMENT" fix-record "$TASK" wo1 --report "$(fix_report wo1)" --started-at "$FROM" \
-  --test-recipe "fake=$RECIPES/test-execution.md" --check-recipe "fake=$RECIPES/checks.md"
+  --test-recipe "fake=$RECIPES/test-execution.md"
 must "$IMPLEMENT" verify-brief "$TASK" wo1
 expect "the verify brief carries the worktree" "$(jq -r '.worktree' "$IMPL/brief-wo1-verify-1.json")" "$WTP"
 

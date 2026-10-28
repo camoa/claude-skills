@@ -249,7 +249,7 @@ freeze_and_build_wo1() {
   BUILD="$(git -C "$WT" rev-parse HEAD)"
   printf 'none\n' >"$ROOT/iface.md"; printf 'report\nStop: none\nDeviation: none\n' >"$ROOT/report.md"
   must "$IMPLEMENT" build-record "$TASK" wo1 --interface "$ROOT/iface.md" --report "$ROOT/report.md" \
-    --started-at "$FREEZE" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "fake=$RECIPES/checks.md"
+    --started-at "$FREEZE" --test-recipe "$TEST_RECIPE_FLAG"
 }
 
 # stop_wo1: wo1's interface changes, design closes again, and the resumed start stops wo1. Since
@@ -309,7 +309,7 @@ freeze_and_build_wo1
 must "$IMPLEMENT" tests-freeze "$TASK" wo2 --test-recipe "$TEST_RECIPE_FLAG" --checklist "c2=look"
 (cd "$WT" && printf 'b2\n' >b.php && git add b.php && git commit -qm "wo2 attempt")
 must "$IMPLEMENT" build-record "$TASK" wo2 --interface "$ROOT/iface.md" --report "$ROOT/report.md" \
-  --started-at "$BUILD" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "fake=$RECIPES/checks.md" \
+  --started-at "$BUILD" --test-recipe "$TEST_RECIPE_FLAG" \
   --implement-recipe "fake=$RECIPES/implement.md"
 stop_wo1
 pa "$TASK" "implement redo" wo1 "wo1 interface changed"

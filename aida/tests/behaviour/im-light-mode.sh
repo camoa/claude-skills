@@ -149,7 +149,7 @@ build_order() {
   must "$IMPLEMENT" build-brief "$TASK" "$1"
   (cd "$WT" && printf '%s\n' "$3" >"$2" && git add "$2" && git commit -qm "$1 attempt" >/dev/null 2>&1)
   must "$IMPLEMENT" build-record "$TASK" "$1" --interface "$ROOT/iface.md" --report "$ROOT/report.md" \
-    --started-at "$freeze" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "$CHECK_RECIPE_FLAG"
+    --started-at "$freeze" --test-recipe "$TEST_RECIPE_FLAG"
   BUILD="$(git -C "$WT" rev-parse HEAD)"
 }
 
@@ -163,7 +163,7 @@ fix_round() {
   (cd "$WT" && printf 'fixed\n' >>"$2" && git add "$2" && git commit -qm "$1 fixed" >/dev/null 2>&1)
   printf 'fixed it\n' >"$(fix_report "$1")"
   must "$IMPLEMENT" fix-record "$TASK" "$1" --report "$(fix_report "$1")" --started-at "$BUILD" \
-    --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "$CHECK_RECIPE_FLAG"
+    --test-recipe "$TEST_RECIPE_FLAG"
   must "$IMPLEMENT" verify-brief "$TASK" "$1"
   printf '{ "verdicts": [{"id":"f1","verdict":"%s"}] }\n' "$3" >"$IMPL/verify-$1-1.json"
 }

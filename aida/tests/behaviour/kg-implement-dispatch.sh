@@ -259,7 +259,7 @@ build_order() {
   printf 'none\n' >"$ROOT/iface.md"; printf 'report\nStop: none\nDeviation: none\n' >"$ROOT/report.md"
   must "$IMPLEMENT" build-record "$TASK" "$unit" \
     --interface "$ROOT/iface.md" --report "$ROOT/report.md" --started-at "$from" \
-    --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "$CHECK_RECIPE_FLAG"
+    --test-recipe "$TEST_RECIPE_FLAG"
 }
 
 # fix_brief <out> [--allow <path>]...: fix-brief for wo1, output to <out>, prints the exit code.
@@ -431,7 +431,7 @@ FROM="$(git -C "$PROJECT" rev-parse HEAD)"
 mkdir -p "$PROJECT/reports" && printf 'the report\n' >"$REPORT_FILE"
 git -C "$PROJECT" add -- reports/t2.md && git -C "$PROJECT" commit -qm "the report"
 must "$IMPLEMENT" build-record "$TASK" wo1 --interface "$ROOT/iface.md" --report "$ROOT/report.md" \
-  --started-at "$FROM" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "$CHECK_RECIPE_FLAG"
+  --started-at "$FROM" --test-recipe "$TEST_RECIPE_FLAG"
 printf '{ "findings": [{"id":"f1","severity":"high","file":"%s","lines":"1","linkedTo":"c1","evidence":"the report is thin","fixScope":["%s"]}] }\n' \
   "$REPORT_FILE" "$REPORT_FILE" >"$ROOT/findings-t2.json"
 must "$IMPLEMENT" review-record "$TASK" wo1 --findings "$ROOT/findings-t2.json"

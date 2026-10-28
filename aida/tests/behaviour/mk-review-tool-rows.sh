@@ -210,7 +210,7 @@ for f in .github/workflows/checks.yml README.md pyproject.toml; do printf 'done\
 git -C "$WT" add -A && git -C "$WT" commit -qm "wo1 attempt" >/dev/null 2>&1
 must "$WT" "$IMPLEMENT" build-record "$TASK" wo1 \
   --interface "$ROOT/iface.md" --report "$ROOT/report.md" --started-at "$FREEZE" \
-  --test-recipe "$FW=$ROOT/recipes/scoped/test-execution.md" --check-recipe "$CHECK_RECIPE_FLAG"
+  --test-recipe "$FW=$ROOT/recipes/scoped/test-execution.md"
 must "$WT" "$IMPLEMENT" review-record "$TASK" wo1 --findings "$ROOT/findings.json"
 must "$WT" "$IMPLEMENT" close "$TASK" wo1
 must "$WT" "$IMPLEMENT" finish "$TASK"

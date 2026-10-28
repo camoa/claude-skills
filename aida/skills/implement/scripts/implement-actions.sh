@@ -57,7 +57,6 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--interface <path to the record the builder wrote>]
 #                            [--observed <path to the observed record, on an order whose proof is observe>]
 #                            [--test-recipe <framework>=<path>]...
-#                            [--check-recipe <framework>=<path>]...
 #                            [--implement-recipe <framework>=<path>]...
 #                            [--value <name>=<value>]...
 #                            [--nothing-ran <literal substring>]
@@ -68,7 +67,6 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            --report <path to the fixer's report>
 #                            --started-at <commit the round began from>
 #                            [--test-recipe <framework>=<path>]...
-#                            [--check-recipe <framework>=<path>]...
 #                            [--implement-recipe <framework>=<path>]...
 #                            [--value <name>=<value>]...
 #                            [--nothing-ran <literal substring>]
@@ -85,7 +83,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh go-on <task_folder> <unit_id> --continue <build|fix|check|close|keep>
 #                            --because <the person's words> [--owns <path relative to codePath>]...
 #                            [--interface <path>] [--test-recipe <framework>=<path>]...
-#                            [--check-recipe <framework>=<path>]... [--implement-recipe <framework>=<path>]...
+#                            [--implement-recipe <framework>=<path>]...
 #                            [--value <name>=<value>]... [--nothing-ran <literal substring>]
 #                            (the recipe flags, --interface and --nothing-ran serve check alone)
 #   implement-actions.sh redo <task_folder> <unit_id> --because <the person's words>
@@ -3755,7 +3753,7 @@ PC_FOLDER
   im_advice="none"
   rv_unresolved="$(printf '%s' "$record_json" | jq -r '[ .frameworks[] | select(.reviewLookup != "resolved") | .framework + "=" + .reviewLookup ] | join(", ")')"
   [ -n "$rv_unresolved" ] \
-    && rv_unresolved="no review recipe for $rv_unresolved, so build-record runs no check command there. Ask for point: review and pass --check-recipe, or --check-lookup-failed with the lookup's word" \
+    && rv_unresolved="no review recipe for $rv_unresolved, so preconditions and review run no check command there. Ask for point: review and pass --check-recipe, or --check-lookup-failed with the lookup's word" \
     || rv_unresolved="none"
   [ -z "$im_notgiven" ] || [ -z "$im_blocked" ] \
     || im_unlooked="nobody looked up $im_notgiven, so nothing here says whether these test-proved orders can freeze: $im_blocked"
@@ -8417,9 +8415,9 @@ BR_EARLIER
 do_build_record() {
   local task_arg="" unit_id="" interface_path="" report_path="" started_at="" observed_path=""
   local nothing_ran="" have_nothing_ran=false accept=""
-  local test_recipes="" check_recipes="" gate_recipes="" values=""
+  local test_recipes="" gate_recipes="" values=""
   while [ "$#" -gt 0 ]; do
-    cr_take_flag "build-record" "--test-recipe=test_recipes --check-recipe=check_recipes --implement-recipe=gate_recipes --value=values" "$@" || { shift "$?"; continue; }
+    cr_take_flag "build-record" "--test-recipe=test_recipes --implement-recipe=gate_recipes --value=values" "$@" || { shift "$?"; continue; }
     case "$1" in
       --interface)
         need_value "build-record" "--interface" "$#" "${2:-}" non-empty
@@ -8832,14 +8830,14 @@ do_build_record() {
 # A load-bearing finding leaves no round for the fix, so a person commits it, and the checks run
 # over the record's range extended to HEAD (live-run row 426). A pass moves the record's commit
 # there, so close reads a record at HEAD; a fail records nothing (exit 123).
-# Call after rv_load_state. $1 the unit id, $2 the --interface path, $3 to $6 the recipe flags
-# (test, check, implement, values), $7 the --nothing-ran text, $8 whether it was given. Sets
+# Call after rv_load_state. $1 the unit id, $2 the --interface path, $3 to $5 the recipe flags
+# (test, implement, values), $6 the --nothing-ran text, $7 whether it was given. Sets
 # GO_CHECK_PASS, true or false, GO_CHECK_LEDGER, the ledger document with the step it reached, and
 # GO_CHECK_SUMMARY, the summary fields.
 GO_CHECK_PASS=""; GO_CHECK_LEDGER=""; GO_CHECK_SUMMARY=""
 go_on_check() {
-  local unit_id="$1" interface_path="$2" test_recipes="$3" check_recipes="$4" gate_recipes="$5" values="$6"
-  local nothing_ran="$7" have_nothing_ran="$8"
+  local unit_id="$1" interface_path="$2" test_recipes="$3" gate_recipes="$4" values="$5"
+  local nothing_ran="$6" have_nothing_ran="$7"
 
   # --- no attempt was recorded, so there is nothing to run the checks over again -----------------
   # After a fix round, the record is that round's own (gap row 310). A stop allows check only on an
@@ -10389,9 +10387,9 @@ FB_ALLOW
 do_fix_record() {
   local task_arg="" unit_id="" report_path="" started_at=""
   local nothing_ran="" have_nothing_ran=false
-  local test_recipes="" check_recipes="" gate_recipes="" values="" scope_raw=""
+  local test_recipes="" gate_recipes="" values="" scope_raw=""
   while [ "$#" -gt 0 ]; do
-    cr_take_flag "fix-record" "--test-recipe=test_recipes --check-recipe=check_recipes --implement-recipe=gate_recipes --value=values" "$@" || { shift "$?"; continue; }
+    cr_take_flag "fix-record" "--test-recipe=test_recipes --implement-recipe=gate_recipes --value=values" "$@" || { shift "$?"; continue; }
     case "$1" in
       --report)
         need_value "fix-record" "--report" "$#" "${2:-}" non-empty
@@ -12137,9 +12135,9 @@ im_clear_stop_in() {
 # snapshot's list. The person's words name each such file, so the answer covers it.
 do_go_on() {
   local task_arg="" unit_id="" because="" choice="" owns_json='[]' interface_path="" nothing_ran="" have_nothing_ran=false
-  local test_recipes="" check_recipes="" gate_recipes="" values=""
+  local test_recipes="" gate_recipes="" values=""
   while [ "$#" -gt 0 ]; do
-    cr_take_flag "go-on" "--test-recipe=test_recipes --check-recipe=check_recipes --implement-recipe=gate_recipes --value=values" "$@" || { shift "$?"; continue; }
+    cr_take_flag "go-on" "--test-recipe=test_recipes --implement-recipe=gate_recipes --value=values" "$@" || { shift "$?"; continue; }
     case "$1" in
       --continue)
         need_value "go-on" "--continue" "$#" "${2:-}" non-empty
@@ -12294,7 +12292,7 @@ GO_OWNS
     # once the check passes, so a refusal inside leaves no grant.
     IM_OWNS_LEDGER="$new_ledger"
     RV_LEDGER_DOC="$new_ledger"
-    go_on_check "$WAY_UNIT" "$interface_path" "$test_recipes" "$check_recipes" "$gate_recipes" "$values" "$nothing_ran" "$have_nothing_ran"
+    go_on_check "$WAY_UNIT" "$interface_path" "$test_recipes" "$gate_recipes" "$values" "$nothing_ran" "$have_nothing_ran"
     new_ledger="$GO_CHECK_LEDGER"
     summary="$GO_CHECK_SUMMARY"
     if [ "$GO_CHECK_PASS" != "true" ]; then

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fixture recipe-fill: build-record and fix-record take a left-out recipe flag from the records
 # (gap rows 397 and 399). preconditions.json holds the test recipe and baseline.json
-# the check recipe, so neither step needs --test-recipe or --check-recipe. One task, one order,
+# the check recipe, so neither step needs --test-recipe, and neither reads a check recipe. One task, one order,
 # a stub runner (`true`) for the tests and the coding-standards tool. The rows:
 #   build    build-record with no recipe flag: exit 0, order-tests reads met.
 #   fix      one finding and one fix round, fix-record with no recipe flag: exit 0, order-tests

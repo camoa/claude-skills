@@ -270,7 +270,7 @@ FREEZE="$(git -C "$WT" rev-parse HEAD)"
 printf 'done\n' >"$WT/a.py"; printf 'done\n' >"$WT/b.py"
 git -C "$WT" add -A && git -C "$WT" commit -qm "wo1 attempt" >/dev/null 2>&1
 must "$IMPLEMENT" build-record "$TASK" wo1 --interface "$ROOT/iface.md" --report "$ROOT/report.md" \
-  --started-at "$FREEZE" --test-recipe "$TREC" --check-recipe "$CREC"
+  --started-at "$FREEZE" --test-recipe "$TREC"
 must "$IMPLEMENT" review-record "$TASK" wo1 --findings "$ROOT/findings.json"
 must "$IMPLEMENT" close "$TASK" wo1
 must "$IMPLEMENT" finish "$TASK"

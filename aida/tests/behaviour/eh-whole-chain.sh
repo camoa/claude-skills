@@ -271,7 +271,7 @@ carry() {
   git -C "$PROJECT" add -- "$task/deliverables/a.md" >>"$LOG" 2>&1
   git -C "$PROJECT" -c user.email=fx@example.invalid -c user.name=fx commit -qm "a.md" >>"$LOG" 2>&1
   must "$wt" "$IMPLEMENT" build-record "$task" wo1 --interface "$ROOT/iface.md" --report "$ROOT/report.md" \
-    --started-at "$from" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "$CHECK_RECIPE_FLAG"
+    --started-at "$from" --test-recipe "$TEST_RECIPE_FLAG"
   must "$wt" "$IMPLEMENT" review-record "$task" wo1 --findings "$ROOT/no-findings.json"
   must "$wt" "$IMPLEMENT" close "$task" wo1
   must "$wt" "$IMPLEMENT" finish "$task"
