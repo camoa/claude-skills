@@ -1303,8 +1303,9 @@ do_save() {
 # `root:` that is not the worktree stops before the later blocks: the environment resolved to
 # another tree. After the last block, `up` runs the `## Install` blocks of each enabled surfaces
 # kind's setup recipe, given as `--setup-recipe <kind>=<path>`, because a worktree has no
-# node_modules. `up` records `environment: {address, recipe, upAt, <keys>}` in task.json; `down`
-# reads the recipe path and the keys from that record, so it takes no recipe flag. Once
+# node_modules. `up` records `environment: {address, recipe, upAt, <keys>, <tokens>}` in task.json;
+# `down` reads the recipe path, the keys and the token values from that record, so it takes no
+# recipe flag. Once
 # task_env_restore_commit finds the recorded files back at their fork point content, `up` and
 # `down` refuse and `show` runs no status line (gap row 262).
 # ------------------------------------------------------------------------------------------------
