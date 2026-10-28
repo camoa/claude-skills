@@ -360,8 +360,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      can match, and both hooks then allow every read and every write in silence, so this refuses
 #      rather than writing a record that looks like a permission and is not one.
 #  47  `dispatch-open` was asked to open a dispatch whose derived path list would be empty: a test
-#      author or a row-checker on a snapshot whose work orders declare no owned file between them,
-#      or an implementer
+#      author or a row-checker on a snapshot whose work orders declare no owned file outside the
+#      test tree between them, unless every order changes tests alone (audit/24a), or an implementer
 #      or a fixer on an order that declares none of its own. A role's lists are derived from those
 #      files, so an empty set means the denial the role exists for would apply to nothing, or the
 #      role would be dispatched with nowhere it is meant to write. Or a test author on an order
@@ -7780,13 +7780,23 @@ br_build_checks() {
   done <<BR_DIFF
 $diff_output
 BR_DIFF
-  # A tests-only order deletes whole files and edits none (audit/24a). So a path any of its commits
-  # changes with a status other than deleted reads unmet, whatever the role says. A restore reads
-  # unmet too: redo reverts the commits, and the person changes the design.
+  # A tests-only order deletes whole files and edits none (audit/24a). So an owned path any of its
+  # commits changes with a status other than deleted reads unmet, whatever the role says. A restore
+  # reads unmet too: redo reverts the commits, and the person changes the design. Only the order's
+  # own paths are read, so a file set aside above, or a path a person allowed, is judged as above.
   local edited=""
   if tests_only_order "$TASK_PATH" "$BRC_UNIT_JSON"; then
-    edited="$(im_commits_paths "$BRC_CODEPATH" "$(jq -cn --argjson a "$BRC_COMMITS_BEFORE" --argjson b "$BRC_COMMITS" '$a + $b')" \
-      "$BRC_SCOPE" d | LC_ALL=C sort -u | paste -sd, - | sed 's/,/, /g')"
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      while IFS= read -r g; do
+        tf_path_matches_catalog_glob "$p" "$g" && { edited="$edited$p, "; break; }
+      done <<BR_OWN
+$(printf '%s' "$BRC_UNIT_JSON" | jq -r '(.ownedFiles // [])[]')
+BR_OWN
+    done <<BR_EDITED
+$(im_commits_paths "$BRC_CODEPATH" "$(jq -cn --argjson a "$BRC_COMMITS_BEFORE" --argjson b "$BRC_COMMITS" '$a + $b')" "$BRC_SCOPE" d | LC_ALL=C sort -u)
+BR_EDITED
+    edited="${edited%, }"
   fi
   if [ -n "$unmatched" ]; then
     ofc_verdict="unmet"
@@ -12958,7 +12968,21 @@ TG_OWNED
     fi
     owned_count="$(printf '%s' "$owned_json" | jq 'length' 2>/dev/null)"
     [ -n "$owned_count" ] || owned_count=0
-    [ "$owned_count" -gt 0 ] 2>/dev/null \
+    # A task that changes tests alone owns no file outside the test tree, and no production source
+    # is in reach to deny (audit/24a). Each order is then a `tests` order of test files only, or a
+    # tests-only order. Any other order on such a snapshot still refuses.
+    local tests_alone=false o
+    if [ "$owned_count" -eq 0 ] 2>/dev/null; then
+      tests_alone=true
+      while IFS= read -r o; do
+        [ -n "$o" ] || continue
+        [ "$(printf '%s' "$o" | jq -r '.proof // "tests"')" = tests ] || tests_only_order "$TASK_PATH" "$o" \
+          || { tests_alone=false; break; }
+      done <<TA_ORDERS
+$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.workOrders[]?')
+TA_ORDERS
+    fi
+    [ "$owned_count" -gt 0 ] 2>/dev/null || [ "$tests_alone" = true ] \
       || die 47 "dispatch-open: no work order in $IMPL_DIR/snapshot.json declares an owned file outside the test globs, so a $role_bare would be dispatched with nothing denied and could read every file in the repository. Design has to name what each order owns before the tests for it are written."
     # The freeze refuses a test in a file the order does not own (gap row 249). Refused here, before
     # the author spends its run, when the order owns no file a test glob matches and no directory.

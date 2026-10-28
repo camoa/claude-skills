@@ -38,8 +38,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - a tests-only order names each owned file in a done-when row, and each row names an owned
 #     file, so the rows a person confirms at review list every file in its reach. It reaches every
 #     `tests` order of its task through dependsOn, so the kept tests are frozen first (audit/24a);
-#   - no order owns a test that a freeze of another task holds while that task is not complete
-#     (audit/24a);
+#   - no tests-only order, and no `tests` order whose every owned file is a test, owns a test that
+#     a freeze of another task holds while that task is not complete (audit/24a);
 #   - a work order whose proof is tests is not text only, and no text-only order owns a criterion
 #     whose verifiedBy is machine. A document or configuration holds no logic, so a test of it only
 #     reads the text back, and nothing tests the criterion: it is a person's (gap row 461);
@@ -90,7 +90,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/lib/proof.sh: what one order's proof kind means, sourced, never run
 #   <plugin root>/scripts/lib/task-helpers.sh: automated_tests and task_is_light, sourced, never run
 #   <project folder>/tasks/*/implementation*/tests-*.json: the test globs each freeze recorded,
-#     read only when an order's proof is confirm, and the paths each freeze of another open task holds
+#     and the paths each freeze of another open task holds
 #   <project folder>/tasks/*/task.json: whether the task that wrote such a freeze is complete
 #   <project folder>/test-cleanup/run-*/groups.json: the tests of the cleanup run the goal names
 #   <plugin root>/scripts/lib/recipes.sh: tf_path_matches_catalog_glob, sourced in a subshell
@@ -116,10 +116,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      an owned path that is not one literal path, a dependency cycle, an order whose proof does
 #      not fit its tests, rows or files, a confirm order that is code on a task with tests or that
 #      owns a test file, a tests-only order whose done-when rows and owned files do not name each
-#      other or that does not come after every tests order, an order that owns a test another
-#      open task froze, a machine criterion an observe or record order owns with
-#      no run line proving it, or a light order that owns the registered script that walks the
-#      demo path. Implementation's `start` refuses on this code.
+#      other or that does not come after every tests order, such an order or a tests order of
+#      test files only that owns a test another open task froze, a machine criterion an observe
+#      or record order owns with no run line proving it, or a light order that owns the
+#      registered script that walks the demo path. Implementation's `start` refuses on this code.
 #
 # `open` sorts every finding by what it does, one line each. Both callers print these lines, so
 # they are written once, here. `stop` raises exit 4. `unattended` stops an autonomous close and
@@ -593,19 +593,60 @@ TESTS_ONLY_ROWS_UNMATCHED_JSON='[]'
 PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
 TAB="$(printf '\t')"
 
-# The tests-only orders (audit/24a), by the one classifier the build's owned-files check calls too.
-# recipes.sh empties TASK_PATH when it loads, so it loads only inside this subshell.
-TESTS_ONLY_IDS_JSON='[]'
-if printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .proof == "confirm")' >/dev/null; then
-  TESTS_ONLY_IDS_JSON="$(
+# Every freeze record in the project, read once. Each freeze recorded the implement recipe's test
+# globs, so the records say which path is a test with no lookup. A project that froze no test yet
+# records none. A record of another task that is not complete also gives the paths it froze. A
+# task with no task.json counts as open. This task's own freezes are left out of those paths,
+# because the frozen-test hook guards them. Each record gets its own jq call: one record jq
+# cannot parse then hides nothing of the others.
+FREEZE_READ="$(
+  [ -z "${ZSH_VERSION:-}" ] || setopt NULL_GLOB
+  for FREEZE_RECORD in "$PROJECT_PATH"/tasks/*/implementation*/tests-*.json; do
+    [ -f "$FREEZE_RECORD" ] || continue
+    FREEZE_TASK="${FREEZE_RECORD%/implementation*}"
+    FREEZE_OPEN=false
+    [ "$FREEZE_TASK" = "$TASK_PATH" ] || [ "$(jq -r '.state // ""' "$FREEZE_TASK/task.json" 2>/dev/null)" = complete ] \
+      || FREEZE_OPEN=true
+    jq -r --arg t "${FREEZE_TASK##*/}" --argjson open "$FREEZE_OPEN" '
+      ((.testGlobs // [])[]? | strings | ["glob", .] | @tsv),
+      (select($open) | ((.rows // [])[]?.tests // [])[]?.path?, (.support // [])[]?.path? | strings | ["frozen", $t, .] | @tsv)
+    ' "$FREEZE_RECORD" 2>/dev/null
+  done)"
+CONFIRM_TEST_GLOBS="$(printf '%s\n' "$FREEZE_READ" | grep "^glob$TAB" | cut -f2 | LC_ALL=C sort -u)"
+
+# The tests-only orders (audit/24a), by the one classifier the build's owned-files check calls
+# too. Beside them, the orders of the row-369 route: a `tests` order whose every owned file
+# matches a recorded test glob. recipes.sh empties TASK_PATH when it loads, so it loads only
+# inside this subshell. Prints one `<id><tab><kind>` line per such order.
+ROUTE_ORDERS=""
+if printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .proof == "confirm")' >/dev/null || [ -n "$CONFIRM_TEST_GLOBS" ]; then
+  ROUTE_ORDERS="$(
     TO_TASK="$TASK_PATH"
     # shellcheck source=/dev/null
     source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
-    printf '%s' "$WORK_ORDERS_JSON" | jq -c '.[] | select(.proof == "confirm")' | while IFS= read -r TO_ORDER; do
-      if tests_only_order "$TO_TASK" "$TO_ORDER"; then printf '%s' "$TO_ORDER" | jq -r '.id'; fi
-    done | jq -R -s -c 'split("\n") | map(select(length > 0))'
+    printf '%s' "$WORK_ORDERS_JSON" | jq -c '.[]' | while IFS= read -r TO_ORDER; do
+      if tests_only_order "$TO_TASK" "$TO_ORDER"; then
+        printf '%s\ttests-only\n' "$(printf '%s' "$TO_ORDER" | jq -r '.id')"
+      elif [ -n "$CONFIRM_TEST_GLOBS" ] && [ "$(printf '%s' "$TO_ORDER" | jq -r '.slot')" = order-tests ]; then
+        TO_ALL=true
+        while IFS= read -r TO_FILE; do
+          TO_HIT=false
+          while IFS= read -r TO_GLOB; do
+            tf_path_matches_catalog_glob "$TO_FILE" "$TO_GLOB" && { TO_HIT=true; break; }
+          done <<TO_GLOBS
+$CONFIRM_TEST_GLOBS
+TO_GLOBS
+          [ "$TO_HIT" = true ] || { TO_ALL=false; break; }
+        done <<TO_FILES
+$(printf '%s' "$TO_ORDER" | jq -r '.ownedFiles[]')
+TO_FILES
+        if [ "$TO_ALL" = true ]; then printf '%s' "$TO_ORDER" | jq -r '.id + "\ttests"'; fi
+      fi
+    done
   )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"
 fi
+TESTS_ONLY_IDS_JSON="$(printf '%s\n' "$ROUTE_ORDERS" | grep "${TAB}tests-only\$" | cut -f1 | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+ROUTE_IDS_JSON="$(printf '%s\n' "$ROUTE_ORDERS" | cut -f1 | jq -R -s -c 'split("\n") | map(select(length > 0))')"
 
 if [ "$CONTRACT_READABLE" != "true" ]; then
   COVERAGE_NOTE="$CONTRACT_NOTE"
@@ -726,22 +767,9 @@ else
   ')"
   # A confirm order is built with no test. So a test file it owns is written as plain code that no
   # check runs and the freeze never sees (gap row 367). Which path is a test is the framework's to
-  # say, and this script knows no framework. Each freeze in this project recorded the implement
-  # recipe's test globs, so those records answer here with no lookup. A project that froze no test
-  # yet records none, and notChecked says so. recipes.sh empties TASK_PATH when it loads, so it
-  # loads only inside the subshell that matches.
-  if printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .slot == "confirm-at-review")' >/dev/null; then
-    # One jq call reads every record. jq stops at a record it cannot parse, so only then does
-    # each record get a call of its own.
-    CONFIRM_TEST_GLOBS="$(
-      [ -z "${ZSH_VERSION:-}" ] || setopt NULL_GLOB
-      set -- "$PROJECT_PATH"/tasks/*/implementation*/tests-*.json
-      [ -f "${1:-}" ] || exit 0
-      jq -r '(.testGlobs // [])[]? | strings' "$@" 2>/dev/null \
-        || for TEST_RECORD in "$@"; do jq -r '(.testGlobs // [])[]? | strings' "$TEST_RECORD" 2>/dev/null; done
-      )"
-    CONFIRM_TEST_GLOBS="$(printf '%s\n' "$CONFIRM_TEST_GLOBS" | sort -u | sed '/^$/d')"
-  fi
+  # say, and this script knows no framework: the recorded test globs answer, read once above. A
+  # project that froze no test yet records none, and notChecked says so. recipes.sh empties
+  # TASK_PATH when it loads, so it loads only inside the subshell that matches.
   CONFIRM_ORDERS_OWNING_TEST_FILES_JSON="$(
     # shellcheck source=/dev/null
     [ -z "$CONFIRM_TEST_GLOBS" ] || source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
@@ -960,23 +988,15 @@ else
 
   TESTS_ONLY_BEFORE_TESTS_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.testsOnlyBeforeTests')"
 
-  # No order owns a test that a freeze of another task holds while that task is not complete: its
-  # build would change a file that task's frozen-tests check still reads (audit/24a). A freeze path
-  # and an owned file are both relative to the code repository root. This task's own freezes are
-  # left out, because the frozen-test hook guards them. A task with no task.json counts as open.
-  FROZEN_ELSEWHERE="$(
-    [ -z "${ZSH_VERSION:-}" ] || setopt NULL_GLOB
-    for FROZEN_RECORD in "$PROJECT_PATH"/tasks/*/implementation*/tests-*.json; do
-      [ -f "$FROZEN_RECORD" ] || continue
-      FROZEN_TASK="${FROZEN_RECORD%/implementation*}"
-      [ "$FROZEN_TASK" != "$TASK_PATH" ] || continue
-      [ "$(jq -r '.state // ""' "$FROZEN_TASK/task.json" 2>/dev/null)" != complete ] || continue
-      jq -r --arg t "${FROZEN_TASK##*/}" '((.rows // [])[]?.tests // [])[]?.path?, (.support // [])[]?.path?
-        | strings | [$t, .] | @tsv' "$FROZEN_RECORD" 2>/dev/null
-    done)"
-  ORDERS_OWNING_FROZEN_PATHS_JSON="$(printf '%s\n' "$FROZEN_ELSEWHERE" | jq -R -s -c --argjson orders "$WORK_ORDERS_JSON" '
-    [ split("\n")[] | select(length > 0) | split("\t") | {task: .[0], path: .[1]} ] as $frozen
-    | [ $orders[] | .id as $id | (.ownedFiles // [])[] | (ltrimstr("./") | rtrimstr("/")) as $p
+  # A tests-only order and a row-369 order change tests only. Neither may own a test that a
+  # freeze of another task holds while that task is not complete: its build would change a file
+  # that task's frozen-tests check still reads (audit/24a). A freeze path and an owned file are
+  # both relative to the code repository root.
+  ORDERS_OWNING_FROZEN_PATHS_JSON="$(printf '%s\n' "$FREEZE_READ" | grep "^frozen$TAB" | jq -R -s -c \
+    --argjson orders "$WORK_ORDERS_JSON" --argjson route "$ROUTE_IDS_JSON" '
+    [ split("\n")[] | select(length > 0) | split("\t") | {task: .[1], path: .[2]} ] as $frozen
+    | [ $orders[] | .id as $id | select($route | index($id) != null)
+        | (.ownedFiles // [])[] | (ltrimstr("./") | rtrimstr("/")) as $p
         | $frozen[] | select(.path == $p or (.path | startswith($p + "/")))
         | {id: $id, path: .path, task: .task} ] | unique')"
 
@@ -1068,7 +1088,9 @@ def open: {
     ((.graph.unknownDependsOnIds // [])[] | "file " + .path + " depends on an unknown work order id " + .id),
     ((.graph.globbedOwnedFiles // [])[] | "order " + .id + " owns " + .path + ", which is not one literal path"),
     ((.graph.lightOrdersOwningPathScript // [])[] | "order " + .id + " owns " + .path + ", the registered script that walks the demo path, and on a light task no order extends it: remove-owned-file"),
-    ((.coverage.testsOnlyRowsUnmatched // [])[] | "order " + .id + " deletes the tests of a cleanup run, and its " + .problem + ": " + .item + ". Each owned file needs a done-when row that names it"),
+    ((.coverage.testsOnlyRowsUnmatched // [])[] | "order " + .id + " deletes the tests of a cleanup run, and "
+      + (if .problem == "owned file named in no done-when row" then "no done-when row names its file " + .item + ": add-done-when"
+         else "its done-when row \"" + .item + "\" names no file it owns: remove-done-when, or name the file in it" end)),
     ((.graph.testsOnlyOrdersBeforeTests // [])[] | "order " + .id + " deletes the tests of a cleanup run and does not come after the tests order " + .testsOrder + ": add " + .testsOrder + " to its dependsOn"),
     ((.graph.ordersOwningFrozenPaths // [])[] | "order " + .id + " owns " + .path + ", a test that task " + .task + " froze and has not completed: remove-owned-file, or wait until " + .task + " is complete")
   ],

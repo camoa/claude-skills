@@ -49,10 +49,8 @@ design_case() (
   printf '%s|%s\n' "$?" "$(jq -c "$1" "$OUT")"
 )
 
-# build_case <change>: build-record on wo1, an order that deletes tests/a_test.sh, after one
-# commit that makes <change> to that file: edit or delete. Prints the owned-files verdict.
-build_case() (
-  source "$HERE/records.bash"
+# deletion_records: wo1 deletes tests/a_test.sh, the one test of run-1, and is at tests-frozen.
+deletion_records() {
   task_records branch
   mkdir -p "$PROJECT/test-cleanup/run-1" "$WT/tests"
   jq -n '[{id: "g1", files: ["tests/a_test.sh"], lines: 2}]' >"$PROJECT/test-cleanup/run-1/groups.json"
@@ -66,12 +64,35 @@ build_case() (
   jq -n --arg c "$(git -C "$WT" rev-parse HEAD)" \
     '{schemaVersion: 1, takenAt: "2026-10-28", unit: "wo1", commit: $c, testGlobs: [], rows: [],
       proof: "confirm", support: [], freezeCommits: []}' >"$IMPL/tests-wo1.json"
-  if [ "$1" = edit ]; then printf 'exit 1\n' >"$WT/tests/a_test.sh"; git -C "$WT" commit -qam "build wo1"
-  else git -C "$WT" rm -q tests/a_test.sh && git -C "$WT" commit -qm "build wo1"; fi
+}
+
+# build_case <change>: build-record on wo1 after one commit that makes <change> to its test: edit,
+# delete, or delete-env, which also adds .env.local, a file `task environment up` recorded.
+# Prints the owned-files verdict.
+build_case() (
+  source "$HERE/records.bash"
+  deletion_records
+  if [ "$1" = edit ]; then printf 'exit 1\n' >"$WT/tests/a_test.sh"; git -C "$WT" add tests/a_test.sh
+  else git -C "$WT" rm -q tests/a_test.sh; fi
+  if [ "$1" = delete-env ]; then
+    printf 'X=1\n' >"$WT/.env.local" && git -C "$WT" add .env.local
+    blob="$(git -C "$WT" hash-object .env.local)"
+    edit ".worktree.recipeChanges = [{path: \".env.local\", blob: \"$blob\"}]" "$TASK/task.json"
+  fi
+  git -C "$WT" commit -qm "build wo1"
   printf 'Stop: none\nDeviation: none\n' >"$IMPL/answers-wo1-attempt1.md"
   run "$IMPLEMENT" build-record "$TASK" wo1 --report "$IMPL/answers-wo1-attempt1.md" --interface "$IMPL/interface-wo1.md" \
     --started-at "$(git -C "$WT" rev-parse HEAD~1)"
   jq -r '.checks[] | select(.id == "owned-files") | .verdict' "$IMPL/build-wo1.json" 2>/dev/null || { echo "exit $RC"; cat "$OUT"; }
+)
+
+# dispatch_case <role>: dispatch-open of that role on wo1, on a task whose one order deletes a
+# test. Prints the exit.
+dispatch_case() (
+  source "$HERE/records.bash"
+  deletion_records
+  run "$IMPLEMENT" dispatch-open "$TASK" "aida:$1" wo1 --test-glob 'tests/*_test.sh'
+  echo "$RC"
 )
 
 CONFIRM='[.coverage.confirmOrdersOnTaskWithTests[].id, .coverage.confirmOrdersOwningTestFiles[].id] | unique'
@@ -95,9 +116,34 @@ expect "an order that does not come after every tests order of its task is refus
 expect "a test that another open task froze is refused, and this task's own freeze is not" \
   "$(design_case '.graph.ordersOwningFrozenPaths' 'edit ".state = \"in_progress\"" "$PROJECT/tasks/t0/task.json"')" \
   '4|[{"id":"wo2","path":"tests/a_test.sh","task":"t0"}]'
+expect "a tests order that owns only a test another open task froze is refused" \
+  "$(design_case '.graph.ordersOwningFrozenPaths' 'edit ".state = \"in_progress\"" "$PROJECT/tasks/t0/task.json"; frozen_record t0 tests/k_test.sh')" \
+  '4|[{"id":"wo1","path":"tests/k_test.sh","task":"t0"}]'
+expect "an order that also builds code may own a test another open task froze" \
+  "$(design_case '.graph.ordersOwningFrozenPaths' 'edit ".state = \"in_progress\"" "$PROJECT/tasks/t0/task.json"; frozen_record t0 tests/k_test.sh; edit ".ownedFiles += [\"a.php\"]" "$TASK/design/wo1.json"')" \
+  '0|[]'
+
+echo "--- design: each refusal prints its line, naming the order and the file"
+STOP='[.open.stop[] | select(startswith("order wo2"))]'
+expect "an owned file no row names" \
+  "$(design_case "$STOP" 'edit ".doneWhen = [\"tests/a_test.sh is deleted\"]" "$TASK/design/wo2.json"')" \
+  '4|["order wo2 deletes the tests of a cleanup run, and no done-when row names its file tests/b_test.sh: add-done-when"]'
+expect "a row that names no owned file" \
+  "$(design_case "$STOP" 'edit ".doneWhen += [\"the suite is smaller\"]" "$TASK/design/wo2.json"')" \
+  '4|["order wo2 deletes the tests of a cleanup run, and its done-when row \"the suite is smaller\" names no file it owns: remove-done-when, or name the file in it"]'
+expect "an order before a tests order" \
+  "$(design_case "$STOP" 'edit ".dependsOn = []" "$TASK/design/wo2.json"')" \
+  '4|["order wo2 deletes the tests of a cleanup run and does not come after the tests order wo1: add wo1 to its dependsOn"]'
+expect "a test another open task froze" \
+  "$(design_case "$STOP" 'edit ".state = \"in_progress\"" "$PROJECT/tasks/t0/task.json"')" \
+  '4|["order wo2 owns tests/a_test.sh, a test that task t0 froze and has not completed: remove-owned-file, or wait until t0 is complete"]'
 
 echo "--- build: the order deletes, and never edits"
 expect "a commit that edits the owned test reads owned-files unmet" "$(build_case edit)" "unmet"
 expect "a commit that deletes the owned test reads owned-files met" "$(build_case delete)" "met"
+expect "a file task environment up recorded is set aside, not read as an edit" "$(build_case delete-env)" "met"
+
+echo "--- dispatch: a cleanup task with no file outside the test tree"
+expect "the row-checker of a deletion order is dispatched" "$(dispatch_case row-checker)" "0"
 
 finish

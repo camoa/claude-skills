@@ -97,7 +97,8 @@ every `tests` order. A runner configuration or script entry that names a deleted
 another order, which depends on the deletion order. On a light run, wo1 is the first `tests`
 order, or the deletion order when there is none. A removed end-to-end test that is a registered
 surface goes with `surfaces-actions.sh unregister <id>`." Then ask whether to run it light, and
-on a yes run `/aida:task set-run-mode <task-id> light`. The task skill asks for the person's answer there.
+on a yes run `/aida:task set-run-mode <task-id> light`. The task skill asks for the person's
+answer there.
 
 With no approved change, say that nothing will change, and stop.
 
