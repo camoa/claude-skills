@@ -1061,8 +1061,12 @@ IM_MOVED="[]"; IM_BREACH=""; IM_BREACH_ALLOWS="[]"
 im_moved_guard() {
   local who="$1" unit_id="$2" repo="$3" from="$4" to="$5" what="$6" paths p c fp f frozen="" hits="" owned outside
   local BRC_CODEPATH="$repo"
-  git -C "$repo" merge-base --is-ancestor "$from" "$to" 2>/dev/null \
-    || die 63 "$who: $repo is at $to, and $what $unit_id began at $from, which that history does not hold. A person moves the branch back to it, or redoes the order."
+  if ! git -C "$repo" merge-base --is-ancestor "$from" "$to" 2>/dev/null; then
+    IM_MOVED="[]"; IM_BREACH_ALLOWS="[]"
+    IM_BREACH="$repo is at $to, and $what $unit_id began at $from, which that history does not hold"
+    [ "${7:-}" = "stop" ] && return 1
+    die 63 "$who: $IM_BREACH. A person moves the branch back to it, or redoes the order."
+  fi
   IM_MOVED="$(im_role_commits "$repo" "$from" "$to" "$unit_id")"
   br_order_facts "$RV_UNIT_JSON"
   if [ "$BR_ORDER_RANGE" = "project" ] && [ "$IM_MOVED" != "[]" ]; then
@@ -12451,9 +12455,11 @@ do_go_on() {
   # --- exit 67: every reason the order is stopped for, or warned of, allows this choice -----------
   # An attended change mid-build leaves the order going on with a `changed` list, which go-on keep
   # and redo answer the way they answer the same change as a stop.
-  # A real stop is answered by its own choices; the change list then waits for its own keep.
+  # A real stop is answered by its own choices; the change list then waits for its own keep. A keep
+  # clears the change list too, so it must be one the change list allows, and the reasons name it.
   local allowed why view
-  view="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c 'if (.stopped // []) == [] then .stopped = (.changed // []) else . end')"
+  view="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c --arg c "$choice" '
+    if (.stopped // []) == [] or $c == "keep" then .stopped = ((.stopped // []) + (.changed // [])) else . end')"
   why="$(stop_text "$view")"
   [ -n "$why" ] \
     || rv_exit_nothing "go-on" "$WAY_UNIT" "$WAY_UNIT is not stopped, so there is nothing to go on from"
@@ -13761,7 +13767,9 @@ do_dispatch_close() {
         [ -n "$nr_ledger" ] || die3 "dispatch-close: the stop on $nr_unit could not be written."
         write_atomic "$IMPL_DIR/ledger.json" "$nr_ledger"
         rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
-        die 63 "dispatch-close: $IM_BREACH. $nr_unit is stopped, and the record is removed. A person moves the branch back to $nr_head, goes on with --owns naming the file, redoes the order, or drops it."
+        [ "$IM_BREACH_ALLOWS" = "[]" ] \
+          || die 63 "dispatch-close: $IM_BREACH. $nr_unit is stopped, and the record is removed. A person moves the branch back to $nr_head, goes on with --owns naming the file, redoes the order, or drops it."
+        die 63 "dispatch-close: $IM_BREACH. $nr_unit is stopped, and the record is removed. The stop allows no go-on, so a person redoes the order or drops it."
       fi
       nr_ledger="$(im_listed_commits_in "$nr_ledger" "$nr_unit" "$IM_MOVED")"
       [ -n "$nr_ledger" ] || die3 "dispatch-close: the capped ${nr_role##*:}'s commits on $nr_unit could not be written."
