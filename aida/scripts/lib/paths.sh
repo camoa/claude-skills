@@ -27,6 +27,10 @@
 #                               remembered for it, else the one open record naming this plugin's
 #                               role in any registered project. Sets DISPATCH_PROJECT too. Needs
 #                               registry.sh sourced.
+#   in_task_worktree <project path> <dir>
+#                               true when dir lies in the worktree of a task that is not complete,
+#                               in that project, else in any registered project. Needs registry.sh
+#                               sourced. One of the functions here that read the disk.
 #   plugin_role <plugin root> <agent type>
 #                               true when the type names one of that plugin's roles
 #   main_checkout <project codePath> <canonical record codePath>
@@ -247,6 +251,23 @@ DRR_PROJECTS
   elif [ "$DISPATCH_OPEN_COUNT" -eq 1 ]; then DISPATCH_RECORD="$matched"; fi
   [ -z "$DISPATCH_RECORD" ] || DISPATCH_PROJECT="${DISPATCH_RECORD%/tasks/*/implementation/dispatch.json}"
   [ "$DISPATCH_OPEN_COUNT" -gt 0 ]
+}
+
+# True when the canonical directory $2 lies in the worktree of a task that is not complete, in
+# project folder $1, else, when $1 is empty, in any registered project. Both permission hooks ask
+# it before they say that no dispatch record covered a call. A call outside every task's worktree
+# is not their business, so they say nothing (gap row 466).
+in_task_worktree() {
+  local p wt
+  [ -z "${ZSH_VERSION:-}" ] || setopt LOCAL_OPTIONS NULL_GLOB
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    while IFS= read -r wt; do
+      wt="$(cd "$wt" 2>/dev/null && pwd -P)" || continue
+      is_under "$2" "$wt" && return 0
+    done < <(jq -r 'select(.state != "complete") | .worktree | objects | .path // empty' "$p"/tasks/*/task.json 2>/dev/null </dev/null)
+  done <<<"${1:-$(registry_list_projects 2>/dev/null | jq -r '.path // empty' 2>/dev/null)}"
+  return 1
 }
 
 # True when agent type $2 names one of the roles of the plugin at $1: agents/<name>.md exists, and

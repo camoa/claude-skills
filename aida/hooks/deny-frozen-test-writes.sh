@@ -259,6 +259,12 @@ is_task_record() {
   dir="$(cd "${p%/*}" 2>/dev/null && pwd -P)" || dir="${p%/*}"
   [ "$(basename "$(dirname "$dir")")" = tasks ] && [ -f "$(dirname "$(dirname "$dir")")/project.json" ]
 }
+# Prints each operand of a literal cd or git -C in command $1, one per line, quotes dropped. An
+# operand holding a variable is left out.
+cd_operands() {
+  printf '%s\n' "${1//$'\\\n'/}" | grep -oE "(^|[;&|(]|[[:space:]])(cd|-C)[[:space:]]+[^[:space:];&|]+" \
+    | sed -E 's/^[;&|([:space:]]*(cd|-C)[[:space:]]+//' | tr -d "\"'" | grep -v '\$'
+}
 # True when ROLE_CMD, heredoc bodies included, names a task's own copy of record $1. A word holding a
 # variable counts when it ends in /tasks/<id>/$1, and for person-answers.json, a name only AIDA
 # uses, whatever it holds; the bare name counts for that file too. Any other word counts when
@@ -268,8 +274,7 @@ names_task_record() {
   local w d name_re bases
   case "$ROLE_CMD" in *"$1"*) ;; *) return 1 ;; esac
   name_re="$(printf '%s' "$1" | sed 's/\./\\./g')"
-  bases="$(printf '%s\n' "${ROLE_CMD//$'\\\n'/}" | grep -oE "(^|[;&|(]|[[:space:]])(cd|-C)[[:space:]]+[^[:space:];&|]+" \
-    | sed -E 's/^[;&|([:space:]]*(cd|-C)[[:space:]]+//' | tr -d "\"'" | grep -v '\$')"
+  bases="$(cd_operands "$ROLE_CMD")"
   while IFS= read -r w; do
     w="$(printf '%s' "$w" | tr -d "\"'")"
     case "$w" in
@@ -415,33 +420,32 @@ PROJECT_PATH="$DISPATCH_PROJECT"
 DISPATCH_FILE="$DISPATCH_RECORD"
 MAIN_SESSION=false
 [ -n "$AGENT_ID" ] || MAIN_SESSION=true
-# True when directory $1 lies in the worktree of a task that is not complete, in the project read,
-# else in any registered project. Only such a write is a gap in this guard (gap row 466).
-in_task_worktree() {
-  local p wt
-  [ -z "${ZSH_VERSION:-}" ] || setopt LOCAL_OPTIONS NULL_GLOB
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    while IFS= read -r wt; do
-      wt="$(cd "$wt" 2>/dev/null && pwd -P)" || continue
-      is_under "$1" "$wt" && return 0
-    done < <(jq -r 'select(.state != "complete") | .worktree | objects | .path // empty' "$p"/tasks/*/task.json 2>/dev/null </dev/null)
-  done <<<"${PROJECT_PATH:-$(registry_list_projects 2>/dev/null | jq -r '.path // empty' 2>/dev/null)}"
-  return 1
-}
 # What the record path says when no record answers for this tree. It is said only for a write in a
-# task's worktree: the file tool's target folder, else the shell's folder. The main session goes on
-# to rule one, and the note is said only when nothing refused the write and the payload names an
-# agent type.
+# task's worktree (scripts/lib/paths.sh, in_task_worktree). A file tool writes in its target's
+# folder. A command that holds a write signal writes in the shell's folder, or in a folder a literal
+# cd or git -C names. The note names the folder. The main session goes on to rule one, and the note
+# is said only when nothing refused the write and the payload names an agent type.
 RECORD_NOTE=""
 if [ -z "$DISPATCH_FILE" ]; then
-  WRITE_DIR="$CWD_CANON"
-  if [ -n "${RECORD_TARGET:-}" ]; then
-    WRITE_DIR="$(dirname -- "$(normalize_abs "$(resolve_against "$RECORD_TARGET" "$CWD_CANON")")")"
-    WRITE_DIR="$(cd "$WRITE_DIR" 2>/dev/null && pwd -P || printf '%s' "$WRITE_DIR")"
+  write_dirs=""
+  if [ "$DISPATCH_OPEN_COUNT" -eq 0 ]; then :
+  elif [ "$TOOL" != Bash ]; then
+    [ -z "${RECORD_TARGET:-}" ] \
+      || write_dirs="$(dirname -- "$(normalize_abs "$(resolve_against "$RECORD_TARGET" "$CWD_CANON")")")"
+  elif answer_write_signal "$ROLE_CMD"; then
+    write_dirs="$CWD_CANON"
+    while IFS= read -r op; do
+      [ -z "$op" ] || write_dirs="$write_dirs
+$(shell_dir_after "$CWD_CANON" cd "$op")"
+    done < <(cd_operands "$ROLE_CMD")
   fi
-  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || ! in_task_worktree "$WRITE_DIR" \
-    || RECORD_NOTE="$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $CWD_CANON, so this write was allowed without being checked"
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    d="$(cd "$d" 2>/dev/null && pwd -P || printf '%s' "$d")"
+    in_task_worktree "$PROJECT_PATH" "$d" || continue
+    RECORD_NOTE="$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $d, so this write was allowed without being checked"
+    break
+  done <<<"$write_dirs"
   if [ "$MAIN_SESSION" = false ] || [ -z "$PROJECT_PATH" ]; then
     [ -z "$RECORD_NOTE" ] || not_enforced "$RECORD_NOTE"
     echo '{}'; exit 0

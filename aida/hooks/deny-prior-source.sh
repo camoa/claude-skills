@@ -59,8 +59,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # one whose codePath holds the payload's working directory, else the one open record naming the
 # agent's type (scripts/lib/paths.sh, dispatch_record_for). With no project for the working
 # directory, the project remembered for it answers the same way, else the one open record naming
-# this plugin's role in any registered project (dispatch_record_resolve). Records open for other trees only: allow, through `systemMessage` naming
-# why. dispatch.json
+# this plugin's role in any registered project (dispatch_record_resolve). Records open for other trees only: allow, silent outside every
+# task's worktree, else through `systemMessage` naming why. dispatch.json
 # unreadable, a record naming no role, an agent whose type is not the role the record names, or a
 # dispatch whose denyRead list is empty:
 # allow, but through `systemMessage`, the one hook-output channel the model sees on exit 0, naming
@@ -121,7 +121,8 @@ CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 
 # Each task keeps its own record under its implementation folder (live-run row 139). The one this
 # agent works under is the one whose codePath holds the payload's working directory. A record
-# open for another tree is another task's dispatch, and it says so rather than passing in silence.
+# open for another tree is another task's dispatch. The hook says so only for a read in a task's
+# worktree, and passes any other read in silence.
 # The directory is held in the same canonical form codePath is, so the two compare as strings.
 # The Bash door below resolves a relative operand against it too. A session outside every code
 # path reads the project remembered for its folder, else a role finds its record across the
@@ -135,8 +136,21 @@ case $? in
 esac
 PROJECT_PATH="$DISPATCH_PROJECT"
 DISPATCH_FILE="$DISPATCH_RECORD"
+# With no record for this tree, the note is said only for a read in a task's worktree
+# (scripts/lib/paths.sh, in_task_worktree): the folder Read or Grep names, else the shell's folder.
 if [ -z "$DISPATCH_FILE" ]; then
-  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $CWD_CANON, so this read was allowed without being checked"
+  if [ "$DISPATCH_OPEN_COUNT" -gt 0 ]; then
+    READ_DIR="$(jq -r '.tool_input.file_path // .tool_input.path // empty' <<<"$INPUT" 2>/dev/null)"
+    if [ -n "$READ_DIR" ]; then
+      READ_DIR="$(normalize_abs "$(resolve_against "$READ_DIR" "$CWD_CANON")")"
+      [ -d "$READ_DIR" ] || READ_DIR="$(dirname -- "$READ_DIR")"
+      READ_DIR="$(cd "$READ_DIR" 2>/dev/null && pwd -P || printf '%s' "$READ_DIR")"
+    else
+      READ_DIR="$CWD_CANON"
+    fi
+    ! in_task_worktree "$PROJECT_PATH" "$READ_DIR" \
+      || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $READ_DIR, so this read was allowed without being checked"
+  fi
   echo '{}'; exit 0
 fi
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
