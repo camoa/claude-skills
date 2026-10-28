@@ -1081,7 +1081,8 @@ im_moved_guard() {
   for f in "$IMPL_DIR"/tests-*.json; do
     [ -e "$f" ] || continue
     frozen="$frozen$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$f" 2>/dev/null | while IFS= read -r fp; do
-        [ -z "$fp" ] || normalize_abs "$(resolve_against "$fp" "$RV_CODEPATH")"; done)
+        [ -z "$fp" ] || normalize_abs "$(resolve_against "$fp" "$RV_CODEPATH")"
+      done)
 "
   done
   while IFS= read -r p; do
