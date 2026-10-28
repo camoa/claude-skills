@@ -1358,7 +1358,8 @@ im_next_step() {
     # A failed task review of this finish, or one holding a test ruled wrong, sends its findings
     # back into the orders (gap rows 390 and 449).
     if [ "$(jq -r --arg r "$(jq -r '.commitRange // ""' "$impl/finished.json" 2>/dev/null)" \
-      '(.verdict == "failed" or any((.findings // [])[]; .ruling == "test-wrong")) and .reviewedRange == $r' \
+      '(.verdict == "failed" or any((.findings // [])[]; .ruling == "test-wrong")
+        or any((.checks // [])[]; (.id | startswith("decision-")) and .answer == "test-wrong")) and .reviewedRange == $r' \
       "$impl/../review/review.json" 2>/dev/null)" = "true" ]; then
       printf 'finish: reopen, the task review of this finish failed or ruled a test wrong, and its findings go back to the orders that own their files'
     else
@@ -10633,7 +10634,17 @@ do_verify_brief() {
   local round_scope
   round_scope="$(jq -c '.fixScope // []' "$IMPL_DIR/brief-$unit_id-fix-$rounds_used.json" 2>/dev/null)"
   [ -n "$round_scope" ] || round_scope='[]'
+  # Gap row 445. The files a verdict must cite: each open finding's file and each file the fix
+  # changed. What those files call or read is not listed: that is language-specific, and a call
+  # can be a program run by name, so no framework-neutral script can know it. The verifier names
+  # a file it could not read under couldNotRead, and verify-record reads that as not addressed.
+  local depends_on
+  depends_on="$( { printf '%s' "$open_json" | jq -r '.[].file // empty'
+      git -C "$RV_RANGE_REPO" diff --no-renames --name-only "$(printf '%s' "$fix_doc" | jq -r '.startedAt // empty')" \
+        "$(printf '%s' "$fix_doc" | jq -r '.commit // empty')" 2>/dev/null; } | jq -Rsc 'split("\n") | map(select(length > 0)) | unique')"
+  [ -n "$depends_on" ] || depends_on='[]'
   brief_json="$(jq -n --arg unit "$unit_id" --argjson round "$rounds_used" --argjson findings "$open_json" \
+    --argjson dependsOn "$depends_on" \
     --slurpfile fix "$fix_file" --arg fixRecord "$fix_file" --argjson fixScope "$round_scope" \
     --arg verdictsPath "$IMPL_DIR/verify-$unit_id-$rounds_used.json" --arg worktree "$RV_CODEPATH" '
     $fix[0] as $fix
@@ -10643,6 +10654,7 @@ do_verify_brief() {
      round: $round,
      findings: $findings,
      fixScope: $fixScope,
+     dependsOn: $dependsOn,
      fixDiffPath: ($fix.diffPath // ""),
      fixReportPath: ($fix.reportPath // ""),
      fixRange: "\($fix.startedAt // "")..\($fix.commit // "")",
@@ -10795,6 +10807,18 @@ do_verify_record() {
   [ -n "$verdict_rows" ] && [ "$verdict_rows" != "null" ] \
     || die 52 "verify-record: $verdicts_path holds no verdicts array. The shape is { \"verdicts\": [ ... ] }."
   outofscope_json="$(printf '%s' "$verdicts_doc" | jq -c 'if (.outOfScope | type) == "array" then .outOfScope else [] end')"
+  # Gap row 445. An addressed verdict that cites no file the brief's dependsOn lists, in its file
+  # or its read list, judged nothing the fix rests on. One that names a file it could not read
+  # rests on a file nobody checked. Either reads not addressed.
+  local depends_on
+  depends_on="$(jq -c '.dependsOn // empty' "$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json" 2>/dev/null)"
+  [ -z "$depends_on" ] || verdict_rows="$(printf '%s' "$verdict_rows" | jq -c --argjson d "$depends_on" 'map(
+    if .verdict != "addressed" then .
+    elif ((.couldNotRead // []) | length) > 0 then
+      .verdict = "not-addressed" | .evidence = ((.evidence // "") + " Read as not addressed: the verifier could not read " + ((.couldNotRead // []) | join(", ")) + ".")
+    elif ([ ([.file // empty] + (.read // []))[] | . as $f | $d | index($f) ] | map(select(. != null)) | length) == 0 then
+      .verdict = "not-addressed" | .evidence = ((.evidence // "") + " Read as not addressed: the verdict cites no file the fix depends on: " + ($d | join(", ")) + ".")
+    else . end)')"
   breakage_rows='[]'
   if [ "$(printf '%s' "$verdicts_doc" | jq -r 'if (.newBreakage | type) == "array" then "yes" else "no" end')" = "yes" ]; then
     rv_read_findings_array "$verdicts_path" "newBreakage" "verify-record" minted
@@ -11923,6 +11947,18 @@ do_reopen() {
   local review_doc new_id raw built routed='{}' not_routed="" reopened='[]' ledger_doc order rf retired
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
   findings="$(jq -c '[ (.findings // [])[] | select((.disposition == "criterion" and (.ruling // "") != "wrong") or .ruling == "test-wrong") ]' "$review_file")"
+  # A decision a build left and the person ruled test-wrong at the task review takes the same
+  # route as a finding ruled so (gap row 449). Its finding is the order's own, on its review record.
+  local decided
+  decided="$(jq -c '[ (.checks // [])[] | select((.id | startswith("decision-")) and .answer == "test-wrong") | .id ]' "$review_file")"
+  for one in $(printf '%s' "$decided" | jq -r '.[]'); do
+    fid="${one#decision-}"
+    findings="$(printf '%s' "$findings" | jq -c --arg id "$one" --arg f "${fid##*-}" \
+      --slurpfile r <(cat "$IMPL_DIR/review-${fid%-*}.json" 2>/dev/null || echo '{}') '
+      . + [ ($r[0].findings // [])[] | select(.id == $f)
+            | {id: $id, severity, file: (.file // ""), lines: (.lines // ""), linkedTo: (.linkedTo // ""),
+               lens: "decision", evidence, ruling: "test-wrong"} ]')"
+  done
   count="$(printf '%s' "$findings" | jq 'length')"
   i=0
   while [ "$i" -lt "$count" ]; do

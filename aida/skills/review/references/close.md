@@ -33,12 +33,15 @@ The answer decides what happens next:
   frozen text back with `scope update`, then archive the review and run it again. For an added
   non-goal, use `scope remove`. A removed one cannot come back that way, because `scope remove`
   retires its id, so the route is `redo` in the implement skill, for the orders it bounds.
-- `load-bearing`, `test-wrong` or `rebuild`: the check reads unmet, which is a warning. The
+- `test-wrong`: the check reads unmet, which is a warning. The implement skill's `reopen` sends
+  the finding to the test author of the order that froze the test, the same way as a finding
+  ruled `test-wrong`. Nobody corrects a frozen test by hand.
+- `load-bearing` or `rebuild`: the check reads unmet, which is a warning. The
   order is closed, so the routes inside implement no longer reach it. The route is a fix
   commit on the task branch, then finish again, per "Finish runs again after a failed review"
-  in `skills/implement/references/finish.md`. A load-bearing finding is fixed. A wrong
-  test is corrected by the person, not a model. A departure is rebuilt to the design. That
-  finish carries no decision the person already answered, so the next review asks it no more.
+  in `skills/implement/references/finish.md`. A load-bearing finding is fixed. A departure is
+  rebuilt to the design. That finish carries no decision the person already answered, so the
+  next review asks it no more.
   A `rebuild` reads met when the reviewed branch already holds it: a commit after the order's own
   review record changes a file the order owns.
 

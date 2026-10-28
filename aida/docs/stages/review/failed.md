@@ -24,7 +24,8 @@ When it can send none, it refuses and keeps the build record.
 - a failed check that cites no finding;
 - a medium or high finding that cites no criterion, unless you ruled it `test-wrong`. Rule it at
   the [close](close.md), or fix it yourself;
-- a decision you ruled `load-bearing`, `test-wrong` or `rebuild`.
+- a decision you ruled `load-bearing` or `rebuild`. A decision you ruled `test-wrong` goes to
+  its order's test author, like a finding.
 
 For each one you fix yourself, commit the fix on the task branch, then run the build's finish
 again. Keep the fix inside the files the orders own. A file no order owns reads unmet at

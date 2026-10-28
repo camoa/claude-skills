@@ -3246,7 +3246,7 @@ RW_REBUILT
                        + ({"wrong": " The person ruled it wrong, so the work stands as built.",
                            "deferred": " The person deferred it, so completion offers it as a follow up task.",
                            "load-bearing": " The person ruled it load-bearing, so the check reads unmet. Fix it on the task branch, then finish and review again.",
-                           "test-wrong": " The person ruled a frozen test wrong, so the check reads unmet. Correct the test on the task branch, then finish and review again.",
+                           "test-wrong": " The person ruled a frozen test wrong, so the check reads unmet. The implement skill'"'"'s reopen sends it to the order'"'"'s test author.",
                            "keep": " The person kept the departure.",
                            "rebuild": " The person did not keep the departure, so the check reads unmet. Rebuild the order on the task branch, then finish and review again.",
                            "accept": " The person accepted the live text.",

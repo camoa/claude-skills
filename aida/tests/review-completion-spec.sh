@@ -189,6 +189,21 @@ test_wrong_case() (
 expect "reopen sends a test ruled wrong to its order, which owes the corrected test" "$(test_wrong_case)" \
   "0|tests/a_test.sh|true"
 
+decision_wrong_case() (
+  source "$HERE/records.bash"
+  review_records "" closed
+  tests_record
+  jq -n '{schemaVersion: 1, unit: "wo1", findings: [{id: "f2", severity: "medium", file: "tests/a_test.sh", lines: "1",
+    linkedTo: "c1", evidence: "the test reads the wrong file", status: "pending"}]}' >"$IMPL/review-wo1.json"
+  reviewed_record
+  edit "$TASK/review/review.json" '.verdict = "passed" | .checks += [{id: "decision-wo1-f2", verdict: "unmet",
+    answeredBy: "person", answer: "test-wrong", detail: "wo1 finding f2 waits"}]'
+  run "$IMPLEMENT" reopen "$TASK"
+  printf '%s|%s|%s\n' "$RC" "$(ledger '(.repairs[0].retires // []) | join(",")')" "$(ledger '.repairs[0].testOwed')"
+)
+expect "a build's decision ruled test-wrong takes the same route to its order's test author" "$(decision_wrong_case)" \
+  "0|tests/a_test.sh|true"
+
 # owed_records: wo1 closed and reopened for a wrong test, tests/a_test.sh frozen and retired.
 owed_records() {
   task_records branch
@@ -230,6 +245,32 @@ supersede_case() (
   printf '%s\n' "$RC"
 )
 expect "a repair's record holds a retired test to its new hash" "$(supersede_case)" "0"
+
+echo "--- the fix verifier cites the files the fix rests on (row 445)"
+# verified <verdict JSON>: wo1 fixed in one round over a.php, verify-brief run, and verify-record
+# run on this one verdict for f1. Prints f1's status.
+verified() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records fixed
+  order_commit
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")) |= (.roundsUsed = 1 | del(.unrecordedCommits))'
+  jq -n --arg h "$(git -C "$WT" rev-parse HEAD)" '{schemaVersion: 1, takenAt: "2026-10-28", unit: "wo1", reviewedAt: $h,
+    findingsPath: "x", rounds: [], findings: [{id: "f1", severity: "high", file: "a.php", lines: "1", linkedTo: "c1",
+    evidence: "a says a", actionable: true, status: "open", origin: "review", fixScope: ["a.php"]}]}' >"$IMPL/review-wo1.json"
+  jq -n --arg h "$(git -C "$WT" rev-parse HEAD)" --arg s "$(git -C "$WT" rev-parse HEAD~1)" \
+    '{schemaVersion: 1, unit: "wo1", round: 1, startedAt: $s, commit: $h}' >"$IMPL/fix-wo1-1.json"
+  run "$IMPLEMENT" verify-brief "$TASK" wo1
+  jq -n --argjson v "$1" '{verdicts: [$v]}' >"$ROOT/v.json"
+  run "$IMPLEMENT" verify-record "$TASK" wo1 --verdicts "$ROOT/v.json"
+  jq -r '.findings[] | select(.id == "f1") | .status' "$IMPL/review-wo1.json"
+)
+expect "an addressed verdict citing a listed file closes the finding" \
+  "$(verified '{"id": "f1", "verdict": "addressed", "file": "a.php", "lines": "1", "evidence": "a says b"}')" "addressed"
+expect "an addressed verdict citing no listed file reads not addressed" \
+  "$(verified '{"id": "f1", "verdict": "addressed", "file": "b.php", "lines": "1", "evidence": "fine"}')" "open"
+expect "an addressed verdict naming a file it could not read reads not addressed" \
+  "$(verified '{"id": "f1", "verdict": "addressed", "file": "a.php", "lines": "1", "couldNotRead": ["hooks/h.sh"], "evidence": "fine"}')" "open"
 
 echo "--- completion: the one unattended stop"
 stop_case() (
