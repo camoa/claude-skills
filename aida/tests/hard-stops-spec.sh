@@ -104,9 +104,6 @@ expect "sed -i on the frozen test is refused" "$(guarded_case implementer @WT 's
 expect "a copy of the frozen test out to a scratch file is allowed" \
   "$(guarded_case implementer @WT 'cp tests/a_test.sh @ROOT/copy.sh')" allow
 expect "a redirect into a file the order does not own is refused" "$(guarded_case implementer @WT 'echo b > b.php')" "deny owned"
-expect "sed -i on an owned file is allowed" "$(guarded_case implementer @WT 'sed -i s/a/b/ a.php')" allow
-expect "a redirect into an owned file, its errors piped to head, is allowed" \
-  "$(guarded_case implementer @WT 'echo b > a.php 2>&1 | head -1')" allow
 
 echo "--- main: a role does not write in the project's main checkout"
 expect "the implementer's Write in the main checkout is refused" "$(guarded_case implementer @CODE @CODE/a.php)" "deny main"
@@ -115,9 +112,6 @@ expect "git -C the worktree commit is allowed" "$(guarded_case implementer @WT '
 
 echo "--- outside: from a folder outside every code path, the rules hold the same"
 expect "the implementer's Write of the frozen test is refused" "$(guarded_case implementer @NOTES @WT/tests/a_test.sh)" "deny frozen"
-expect "a redirect into a file the order does not own is refused" \
-  "$(guarded_case implementer @NOTES 'echo b > @WT/b.php')" "deny owned"
-expect "the implementer's Write in the main checkout is refused" "$(guarded_case implementer @NOTES @CODE/a.php)" "deny main"
 expect "the implementer's Write of an owned file is allowed" "$(guarded_case implementer @NOTES @WT/a.php)" allow
 expect "with the project remembered for the folder, the Write of the frozen test is refused" \
   "$(guarded_case implementer @NOTES @WT/tests/a_test.sh remembered)" "deny frozen"

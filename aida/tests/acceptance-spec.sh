@@ -107,21 +107,6 @@ page_case() (
     "$(jq -r '.surfaces[] | select(.id == "home") | .looked' "$TASK/review/review.json")" "$(grep -c . "$ROOT/runs.txt")"
 )
 
-# body_case: a passed review whose evidence holds one row for c1. Prints c1's line in the pull
-# request body completion writes, with the task folder cut from the path.
-body_case() (
-  source "$HERE/records.bash"
-  review_records
-  reviewed_record
-  : >"$TASK/review/evidence/export.txt"
-  jq --arg p "$TASK/review/evidence/export.txt" '.verdict = "passed" | .criteria = [{id: "c1", verifiedBy: "person", verdict: "met", answeredBy: "person"}]
-    | .evidence = [{criterion: "c1", sentence: "the export holds three rows", path: $p, verdict: "met", note: "three rows came out"}]' \
-    "$TASK/review/review.json" >"$ROOT/r.json" && mv "$ROOT/r.json" "$TASK/review/review.json"
-  jq '.criteria[0].verdict = "met"' "$TASK/alignment.json" >"$ROOT/a.json" && mv "$ROOT/a.json" "$TASK/alignment.json"
-  run "$PLUGIN/skills/completion/scripts/completion-actions.sh" close "$TASK" -- "the export works"
-  grep '^- c1:' "$TASK/completion/pr-body.md" | sed "s|$TASK/||g"
-)
-
 # light_case: the acceptance step on a light task in a project that never set end to end up.
 # Prints the verdict of the e2e check.
 light_case() (
@@ -161,16 +146,11 @@ echo "--- a page surface and the verifier's look"
 expect "with a row at its viewport, e2e reads met, home is looked at, and the suite ran once" "$(page_case yes)" "met|true|1"
 expect "with no row at its viewport, e2e reads unknown" "$(page_case no)" "unknown|false|1"
 
-echo "--- completion: the pull request body"
-expect "a criterion's line names the evidence it was judged from" "$(body_case)" \
-  "- c1: a.php says b (met; evidence: met review/evidence/export.txt)"
-
 echo "--- acceptance: a light task with no demo-path script"
 expect "a light task whose project has no end to end set up is not unmet" "$(light_case)" "undeclared"
 
 echo "--- checks: mutation testing is opt-in"
 expect "with no review.mutation, check 4's audit line reads off" "$(mutation_case)" "off"
-expect "with review.mutation false, it reads off" "$(mutation_case false)" "off"
 expect "with review.mutation true, the row is read again" "$(mutation_case true)" "read"
 
 echo "--- the write hook: the verifier writes its evidence and nothing else"

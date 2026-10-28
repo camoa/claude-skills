@@ -26,9 +26,7 @@ expect "a single-quoted -c argument to python names a git verb in backticks: all
   "$(decision "$(printf 'python3 -c %sprint("a \140git archive\140 export")%s' "'" "'")")" allow
 expect "a double-quoted -c argument to python runs its backticks: refused" \
   "$(decision "$(printf 'python3 -c "print(%s\140git \044x\140%s)"' "'" "'")")" deny
-expect "a single-quoted -c argument to su starts a shell: refused" \
-  "$(decision "$(printf 'su -c %sgit \140echo push\140%s' "'" "'")")" deny
-expect "a single-quoted argument to sudo -s starts a shell: refused" \
-  "$(decision "$(printf 'sudo -s %sgit \140echo push\140%s' "'" "'")")" deny
+expect "a single-quoted argument to su -c or sudo -s starts a shell: refused" \
+  "$(decision "$(printf 'su -c %sgit \140echo push\140%s' "'" "'")")|$(decision "$(printf 'sudo -s %sgit \140echo push\140%s' "'" "'")")" "deny|deny"
 
 finish

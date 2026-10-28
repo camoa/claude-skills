@@ -19,6 +19,15 @@ stopped_case() (
   printf '%s|%s\n' "$RC" "$(ls "$IMPL"/brief-wo1-* 2>/dev/null | wc -l | tr -d ' ')"
 )
 
+# read_case: the read's next line on wo1, stopped for one reason that allows fix.
+read_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records code-written '["fix"]'
+  run "$IMPLEMENT" read "$TASK"
+  sed -n 's/^next: //p' "$OUT"
+)
+
 # way_case <action> <answer step> <words> [<args>...]: runs the way out on wo1, stopped for a build
 # with one commit of its builder, first with no answer and then with one. Prints the first exit,
 # whether that run left the ledger as it was, and the second exit. Then the jq filter in $LOOK runs
@@ -42,10 +51,12 @@ way_case() (
   echo
 )
 
-echo "--- stopped: a stopped order refuses tests, build and review"
+echo "--- stopped: a stopped order refuses tests, build and review, and the read offers the ways out"
 expect "tests-brief on a stopped order refuses and writes no brief" "$(stopped_case tests-brief planned)" "49|0"
 expect "build-brief on a stopped order refuses and writes no brief" "$(stopped_case build-brief tests-frozen)" "49|0"
 expect "review-brief on a stopped order refuses and writes no brief" "$(stopped_case review-brief checks-passed)" "49|0"
+expect "stopped, the read offers the ways out the stop allows" "$(read_case)" \
+  "finish: wo1 is stopped, so offer the ways out: go-on with fix, redo or drop"
 
 echo "--- go-on: a choice the stop does not allow refuses; an allowed one clears the stop"
 expect "go-on fix on a stop that allows build refuses with the answer, and writes nothing" \

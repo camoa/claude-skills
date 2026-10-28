@@ -1,9 +1,9 @@
 # The controlled vocabulary: <word> | <the thing it names> | <banned synonyms, comma separated>.
 # A word is here because the docs say it must mean one thing (foundations.md, "One name per
 # thing, enforced"). tests/vocabulary-spec.sh flags every banned synonym, as a whole word,
-# case-insensitive, in shipped prose outside fenced blocks and code spans. A synonym goes in the
-# third column only when it has no other sense in the plugin's prose. The check cannot read
-# meaning, so a word with a second legitimate use is left off and named here instead.
+# case-insensitive, in skills, agents and templates, outside fenced blocks and code spans. A
+# synonym goes in the third column only when it has no other sense in the plugin's prose. The check
+# cannot read meaning, so a word with a second legitimate use is left off and named here instead.
 #
 # The stages, named as their skills are.
 scope | the first stage: the contract a task is judged against |

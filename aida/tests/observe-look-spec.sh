@@ -16,10 +16,6 @@ observe_records() {
   jq --argjson d "$1" '.proof = "observe" | .surfaces = ["home"] | .ownedFiles = ["a.php"] | .tests = [] | .interface = "" | .doneWhen = $d' \
     "$TASK/design/wo1.json" >"$ROOT/wo1.json" && mv "$ROOT/wo1.json" "$TASK/design/wo1.json"
   jq --arg v "${2:-person}" '.criteria[0].verifiedBy = $v' "$TASK/alignment.json" >"$ROOT/a.json" && mv "$ROOT/a.json" "$TASK/alignment.json"
-  # The surface file the look read for its viewports before 6.1.0. It is kept so the case runs
-  # the same on an older plugin, where its absence refused first.
-  jq '.surfaces = {registryPath: "'"$ROOT"'/surfaces.json"}' "$PROJECT/project.json" >"$ROOT/p.json" && mv "$ROOT/p.json" "$PROJECT/project.json"
-  jq -n '{surfaces: [{id: "home", url: "/", kinds: ["e2e"], enabled: true}], viewports: [{name: "wide"}]}' >"$ROOT/surfaces.json"
   order_records tests-frozen
   jq -n --arg c "$(git -C "$WT" rev-parse HEAD)" \
     '{schemaVersion: 1, takenAt: "2026-10-28", unit: "wo1", commit: $c, testGlobs: [], rows: [],
