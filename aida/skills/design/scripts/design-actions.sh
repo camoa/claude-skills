@@ -1198,19 +1198,6 @@ do_add_test() {
   file="$(wo_file_for "$id")"
   jq empty "$file" 2>/dev/null || die3 "add-test: $file exists but is not valid JSON"
 
-  # A test on a `tests` order is a file a test author writes, red then green. A description that
-  # names one of the order's own surfaces reads as review's surface row over that page. That row
-  # is no file and runs after every order closes (live-run row 97). A script cannot judge wording, so
-  # the match is a warning. The id must appear as a whole word, case as written.
-  local proof surface_hit
-  proof="$(jq -r '.proof // "tests"' "$file")"
-  if [ "$proof" = "tests" ]; then
-    surface_hit="$(jq -r --arg d "$description" \
-      '[$d | match("[A-Za-z0-9_-]+"; "g").string] as $words
-       | [(.surfaces // [])[] | select(. as $s | any($words[]; . == $s))] | first // ""' "$file")"
-    [ -z "$surface_hit" ] \
-      || task_warn "$TASK_PATH" "design add-test" "$id" "the test description names the surface $surface_hit, so it may be the review stage's surface row over that page. Describe the behaviour beneath it, one behaviour a test can prove before the code exists (skills/implement/references/what-a-test-is.md)"
-  fi
   if is_blank "$level"; then
     doc="$(jq --arg d "$description" \
       '.tests = ((.tests // []) + [{description: $d}])' "$file")"

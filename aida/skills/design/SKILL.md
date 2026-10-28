@@ -214,8 +214,8 @@ AIDA cannot know on its own:
   `--surface` and declares no test. Each done-when row is the sentence a model judges. After
   the build, the orchestrator opens the page the order builds at one size in a browser. It
   judges the row against what renders, with a screenshot as the evidence. Write each row as one thing
-  the page must show. The judge is a model, and completion puts each such criterion to the
-  person to accept.
+  the page must show. The judge is a model. At review's close, the person answers each such
+  criterion from the acceptance verifier's evidence.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
   schema. Name these in the order, or whoever builds it invents them.
 - What one unit exposes to another, which is what the `interface` field holds.
@@ -584,8 +584,8 @@ such as "contains no static call and saves no entity", cannot be routed without 
 
 A criterion whose `verifiedBy` is `machine`, on the `tests` order that owns it, needs a test
 here. The check below refuses an order that skips this. The other kinds declare no test. The
-configuration check judges a `gate` order's machine criterion at build time. A `record` order's
-done-when rows are judged at the checkpoint. A model judges an `observe` order's done-when rows
+configuration check judges a `gate` order's machine criterion at build time. A `record` order has
+no checkpoint: its reviewer reads the document against its done-when rows. A model judges an `observe` order's done-when rows
 against its surfaces after the build. The person confirms a `confirm` order's done-when rows at
 review. A criterion whose `verifiedBy` is `person` needs no test.
 
@@ -593,8 +593,7 @@ A test is what this page defines:
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`. Add its file to the order
 with `add-owned-file`. The test author writes into it, and the freeze refuses a test in a
 file the order does not own. Each description names the one behaviour its test proves, and that
-page says what a test is not. `add-test` writes a warning for a description that names one of a
-`tests` order's own surfaces.
+page says what a test is not.
 
 To change a scalar or an id list on an order already created, `update` takes the same flags as
 `create`, replacing whichever are given:

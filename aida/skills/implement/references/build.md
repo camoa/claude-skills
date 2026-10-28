@@ -275,7 +275,8 @@ image>"`. Every done-when row and every live-site verify check goes in once, and
 `build-record` refuses a record missing one (exit 97). The verdict is what the page showed,
 never what the report claims. Pass the record as `--observed` below. Nothing is frozen for such
 an order and no row was judged before the build, so this look is its check. The judge on the
-record is a model. Completion puts each such criterion to the person.
+record is a model. At review's close, the person answers each such criterion from the
+acceptance verifier's evidence.
 
 ## Record the attempt
 

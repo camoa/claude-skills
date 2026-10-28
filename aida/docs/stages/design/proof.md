@@ -55,9 +55,10 @@ When the product is unclear, `tests` stays the default on a task that has tests.
 
 ## Tests and surfaces
 
-A test lives in a file the order owns: see [Owned files](files.md). The review stage's check of a page is not a test. On a `tests` order, a test description that names one of the
-order's own surfaces is written with a warning. Describe the one behaviour beneath it instead. What a test is, and what it
-is not: skills/implement/references/what-a-test-is.md.
+A test lives in a file the order owns: see [Owned files](files.md). The review stage's check of a
+page is not a test. Describe the one behaviour a test proves. The row checker rejects a test that
+walks a whole flow as too heavy. What a test is, and what it is not:
+skills/implement/references/what-a-test-is.md.
 
 ## Write an absence as its own row
 
