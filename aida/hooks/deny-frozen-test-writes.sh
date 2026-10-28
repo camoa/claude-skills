@@ -358,12 +358,15 @@ fi
 if [ "$TOOL" != "Bash" ]; then
   OWN_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
   OWN_OWNER="$(own_record_owner "$OWN_TARGET")"
+  # The acceptance verifier holds no dispatch record, so no other rule reads its writes: it writes
+  # its own records only. The four design-stage roles carry Read, Glob, Grep and Write, and that
+  # rule refused the distiller itself (gap row 320), so they write elsewhere too.
   case "${AGENT##*:}" in
-    disposition-confirmer|design-critic|distiller|test-reader|acceptance-verifier)
+    acceptance-verifier)
       [ "$OWN_OWNER" = "${AGENT##*:}" ] \
         || deny_own_record "$OWN_TARGET: the ${AGENT##*:} writes only its own record, and nothing else." ;;
     *)
-      [ -z "$OWN_OWNER" ] \
+      [ -z "$OWN_OWNER" ] || [ "$OWN_OWNER" = "${AGENT##*:}" ] \
         || deny_own_record "$OWN_TARGET: only the $OWN_OWNER writes this record, and this write's agent_type is ${AGENT:-empty, the main thread}. Dispatch it; do not write the record yourself." ;;
   esac
 fi

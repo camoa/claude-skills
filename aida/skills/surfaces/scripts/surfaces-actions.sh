@@ -36,7 +36,6 @@
 #      wrote the surface file
 #   4  a recipe command ran and failed; its own output, in the file, is the answer
 #  70  `--confirmed` or `decline` was passed with nobody present
-#  72  two frameworks each carry a recipe for one kind, or two accept rows for one baseline
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no variable as a case pattern.
 
@@ -331,7 +330,13 @@ do_baseline() {
   done
   accept="$(jq -sc '[ .[] | select(.id == "visual-regression-accept" and has("argv")) ]' "$rows_file")"; rm -f "$rows_file"
   count="$(printf '%s' "$accept" | jq 'length')"
-  [ "$count" -le 1 ] || die 72 "baseline: $(printf '%s' "$accept" | jq -r '[ .[].framework ] | join(" and ")') each declare a visual-regression-accept row."
+  # Two accept rows are two answers to one question: the first framework in project.json runs it.
+  if [ "$count" -gt 1 ]; then
+    accept="$(cr_by_project_order "$accept" "$PROJECT_FILE")"
+    printf 'warning: baseline: %s each declare a visual-regression-accept row. %s is taken, the first in project.json\n' \
+      "$(printf '%s' "$accept" | jq -r '[ .[].framework ] | join(" and ")')" "$(printf '%s' "$accept" | jq -r '.[0].framework')"
+    accept="$(printf '%s' "$accept" | jq -c '.[:1]')"; count=1
+  fi
   [ "$count" -eq 1 ] || die 3 "baseline: no review recipe given carries a visual-regression-accept row with a command, so there is no command that writes a baseline. Pass --check-recipe <framework>=<path>."
   require_surface_file
   [ -n "$(pc_trim "$ids")" ] || ids="$(printf '%s' "$SF_SURFACES" | jq -r '[ .[] | select(.enabled and (.kinds | index("visual-regression"))) | .id ] | join(" ")')"

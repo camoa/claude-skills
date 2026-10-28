@@ -410,6 +410,11 @@ TOOL_STEPS
       recipe_output_summary 0 "$OUTFILE" 1
       exit 0
     fi
+    # A line with a shell character was not run, so its result is unknown, never 0.
+    if [ "$RL_UNKNOWN" = true ]; then
+      recipe_output_summary unknown "$OUTFILE" 1
+      exit "$RL_UNKNOWN_STATUS"
+    fi
     # Line 2: the record opens with the command as it ran, and `first:` quotes its output.
     recipe_output_summary "$RC" "$OUTFILE" 2
     exit 4

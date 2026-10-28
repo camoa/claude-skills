@@ -84,7 +84,6 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  63  the previous record could not be archived, so the write was refused.
 #  66  implementation has not finished, so there is no finished.json.
 #  70  a person's answer was passed on a run with nobody present.
-#  72  two frameworks each command one tool.
 #  73  the check recipe resolved now is not the one the baseline was taken with.
 #  77  the project records no framework.
 #  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
@@ -2330,9 +2329,10 @@ RW_RESEARCH_FILES
 # ------------------------------------------------------------------------------------------------
 
 # The surface rows the review recipe declares, across every framework the record resolved one for,
-# each tagged with its framework. One surface row may carry a command from one framework only, the
-# same rule cr_resolve applies to a tool row and the same refusal (exit 72), because nothing here
-# may choose between two answers to one question. Sets RW_SURFACE_ROWS and RW_SURFACE_BLOCK_STATE.
+# each tagged with its framework. One surface row carries a command from one framework only, the
+# same rule cr_resolve applies to a tool row: where two frameworks command one row, the first in
+# project.json runs it, the other's row is dropped, and the task record gets a warning. Sets
+# RW_SURFACE_ROWS and RW_SURFACE_BLOCK_STATE.
 RW_SURFACE_ROWS="[]"; RW_SURFACE_BLOCK_STATE="undeclared"
 rw_load_surface_rows() {
   local who="$1" count i fw recipe_file rows_file all one_id commanded
@@ -2361,7 +2361,11 @@ rw_load_surface_rows() {
     commanded="$(printf '%s' "$all" | jq -c --arg id "$one_id" \
       '[ .[] | select(.id == $id and (has("argv")) and (((.unreadable // []) | index("argv")) == null)) ]')"
     if [ "$(printf '%s' "$commanded" | jq 'length')" -gt 1 ]; then
-      die 72 "$who: $(printf '%s' "$commanded" | jq -r '[ .[].framework ] | join(" and ")') each declare a $one_id surface command, and nothing here may choose between two answers to one question. Resolve one review recipe for this task, or split the frameworks into two tasks."
+      commanded="$(cr_by_project_order "$commanded" "$(resolve_project_folder "$TASK_PATH")/project.json")"
+      task_warn "$TASK_PATH" "$who" "" "$(printf '%s' "$commanded" | jq -r --arg t "$one_id" \
+        '"\([ .[].framework ] | join(" and ")) each declare a \($t) surface command. \(.[0].framework) runs it, the first in project.json"')"
+      all="$(printf '%s' "$all" | jq -c --arg id "$one_id" --arg fw "$(printf '%s' "$commanded" | jq -r '.[0].framework')" \
+        '[ .[] | select(.id != $id or .framework == $fw) ]')"
     fi
     i=0
   done <<RW_SURFACE_IDS

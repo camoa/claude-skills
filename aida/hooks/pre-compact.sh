@@ -58,8 +58,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # tests/records-folder-spec.sh holds this rule. tests/records-folder.txt names every file this
 # folder may hold and what makes each one. Its header names what the spec cannot see.
 #
-# The hook never refuses: it exits 0, and nothing is printed on stdout in any case. The platform
-# reads a PreCompact hook's stdout as its decision (the platform's hooks reference, PreCompact).
+# The hook never refuses, and nothing is printed on stdout in any case: the platform reads a
+# PreCompact hook's stdout as its decision. A warning is shown to the person through exit 1, the
+# non-blocking status: Claude Code shows the first line of stderr, and the compaction runs (the
+# docs mirror, hooks reference, "Other exit codes"). PreCompact discards systemMessage.
 set -uo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 INPUT="$(cat 2>/dev/null)" || exit 0
@@ -112,14 +114,16 @@ UNSAVED="false"
 case "$TRIGGER" in
   manual)
     [ "$UNSAVED" = "true" ] || exit 0
-    # task_warn writes the warning, the one writer of task warnings. Its die3 is this hook's exit 0,
-    # and the two exports skip the version warnings that sourcing it runs.
+    # task_warn writes the warning, the one writer of task warnings, and prints it on one line,
+    # which goes to stderr for the person. Its die3 is this hook's exit 0, and the two exports skip
+    # the version warnings that sourcing it runs.
     die3() { exit 0; }
     export AIDA_NEWER_CHECKED=1 AIDA_SESSION_CHECKED=1
     # shellcheck source=/dev/null
     source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" 2>/dev/null || exit 0
     task_warn "$TASK_PATH" compact "" "a manual compaction ran with unsaved $STAGE stage work: $(printf '%s\n' "$NEWER" \
-      | sed "s#^$TASK_PATH/##" | paste -sd, - | sed 's/,/, /g'). /aida:task save $TASK_ID keeps that work on record" >/dev/null
+      | sed "s#^$TASK_PATH/##" | paste -sd, - | sed 's/,/, /g'). /aida:task save $TASK_ID keeps that work on record" >&2
+    exit 1
     ;;
   auto)
     mkdir -p "$TASK_PATH/records" 2>/dev/null || exit 0

@@ -48,7 +48,8 @@ Compaction keeps a summary and drops the conversation. A decision not yet in a r
 forgets. The checks below apply to the task this session works on.
 
 - **A manual `/compact` with unsaved work runs, and AIDA records a warning** in the task record.
-  The warning names the unsaved files, and review lists it. Save first to keep that work on
+  The warning names the unsaved files. Claude Code shows it to you as a hook notice, and review
+  lists it. Save first to keep that work on
   record. See [save a decision](save.md).
 - **An automatic compaction is never refused.** AIDA leaves a marker in the task folder instead.
   The next session start names it once, with the time and whether work was unsaved. It tells the

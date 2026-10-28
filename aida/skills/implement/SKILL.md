@@ -197,7 +197,7 @@ green with nothing to name: reported, and the step stops. Failed: frozen with it
 **The script reads a recipe's command blocks, never you.** Pass a recipe path straight through to
 the action that takes it. `## Test commands` and `## Check commands` are parsed by the script, one
 entry per tool, each with its own argv, its `{paths}` placeholder, and its `signal` and `extensions`
-keys where present. `## Configuration gate` is parsed the same way for an order whose proof is `gate`. An order whose proof is `record` runs no block at all: its reviewer reads the document, and its range lives in the project folder. When two frameworks each command one tool, the first in project.json runs it and the task record gets a warning. Two configuration gates still refuse (exit 72).
+keys where present. `## Configuration gate` is parsed the same way for an order whose proof is `gate`. An order whose proof is `record` runs no block at all: its reviewer reads the document, and its range lives in the project folder. When two frameworks each command one tool, the first in project.json runs it and the task record gets a warning. Two configuration gates are taken the same way.
 Verdict words and a missing heading follow
 `${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
 

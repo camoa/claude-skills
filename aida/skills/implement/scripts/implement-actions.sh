@@ -488,9 +488,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      that is not a commit, or not an ancestor of HEAD, is an error, exit 3. `build-record` starts
 #      the range at the freeze commit's parent when HEAD is the order's own freeze commit and every
 #      frozen test locks in (live-run row 371).
-#  72  two frameworks each carry a `## Configuration gate`, and nothing here may choose between two
-#      answers to one question. A check row two frameworks command does not refuse: the first in
-#      project.json runs it, with a warning (scripts/lib/recipes.sh, cr_resolve).
+#  72  retired in 6.1.0. Where two frameworks answer one question, a check row or a
+#      `## Configuration gate`, the first in project.json runs it, with a warning
+#      (scripts/lib/recipes.sh, cr_by_project_order).
 #  73  the check recipe resolved for a framework moved after this task's baseline was taken: its
 #      sha256 differs (cr_require_baseline_recipes in scripts/lib/recipes.sh, which review runs
 #      before its tool rows). The build runs no tool row, so the record steps never refuse on it.
@@ -7333,7 +7333,7 @@ BR_RUN_VALUES
 # does not is named, with its exit and its output. Both lists run through br_run_lines from the
 # worktree. The first block line restores the snapshot the environment's bring-up took, so a task
 # with no environment recorded reads unknown before any line runs. Two recipes each carrying the
-# block are two answers to one question, exit 72. The gate is the section's first `sh` block. Its
+# block are two answers to one question: the first in project.json runs, with a warning. The gate is the section's first `sh` block. Its
 # second is the put-back line, which puts the site back after a gate that reached its fourth line,
 # whatever the gate's verdict (gap row 288). It runs into the same output and never changes the
 # verdict or the exit code. A put-back that fails leads the detail, because the summary cuts a
@@ -7375,12 +7375,17 @@ br_gate_check() {
       lines="$(sh_blocks_under "$rp" "Configuration gate" 1 | grep '[^[:space:]]')"
       [ -n "$lines" ] || continue
       count=$((count + 1))
-      [ "$count" -le 1 ] \
-        || die 72 "$BRC_WHO: $gate_fw and $fw each carry a ## Configuration gate, and nothing here may choose between two answers to one question."
+      if [ "$count" -gt 1 ]; then
+        task_warn "$TASK_PATH" "$BRC_WHO" "$(printf '%s' "$BRC_UNIT_JSON" | jq -r '.id')" \
+          "$gate_fw and $fw each carry a ## Configuration gate. $gate_fw runs it, the first in project.json" >&2
+        continue
+      fi
       gate_fw="$fw"; gate_recipe="$rp"; gate_lines="$lines"
       back_lines="$(sh_blocks_under "$rp" "Configuration gate" 2 | grep '[^[:space:]]')"
     done <<BR_GATE
-$BRC_GATE_RECIPES
+$(printf '%s' "$BRC_GATE_RECIPES" | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {framework: .[0], path: .[1]})' \
+  | { read -r rows; cr_by_project_order "$rows" "$(resolve_project_folder "$TASK_PATH")/project.json"; } \
+  | jq -r '.[] | "\(.framework)\t\(.path)"')
 BR_GATE
     if [ -z "$gate_recipe" ]; then
       if [ "$own_json" = "[]" ]; then

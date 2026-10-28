@@ -45,4 +45,21 @@ expect "a stage recipe from two frameworks: the first in project.json's order is
   cr_resolve_recipe --recipe "zeta=$ROOT/check-zeta.md" --recipe "alpha=$ROOT/check-alpha.md" >/dev/null 2>&1 || exit 1
   printf '%s' "$RECIPE_FW")" zeta
 
+expect "rows from two frameworks sort in project.json's order, as review's surface rows and the gate read them" "$(
+  libs
+  cr_by_project_order '[{"framework":"alpha","id":"x"},{"framework":"zeta","id":"x"}]' "$PROJECT/project.json" \
+    | jq -r '[ .[].framework ] | join(",")')" zeta,alpha
+
+# accept_recipe <framework>: a review recipe whose visual-regression-accept row runs true.
+accept_recipe() {
+  printf -- '---\nname: %s_review\n---\n\n## Surface commands\n\n```yaml\nsurface_commands:\n  - id: visual-regression-accept\n    argv: ["true"]\n```\n' \
+    "$1" >"$ROOT/review-$1.md"
+}
+accept_recipe zeta; accept_recipe alpha
+(cd "$CODE" && bash "$PLUGIN/skills/surfaces/scripts/surfaces-actions.sh" baseline \
+  --check-recipe "alpha=$ROOT/review-alpha.md" --check-recipe "zeta=$ROOT/review-zeta.md") >"$OUT" 2>&1
+RC=$?
+expect "surfaces baseline with two accept rows goes on past them, with a warning naming the first" \
+  "$([ "$RC" -ne 72 ] && grep -c '^warning: .*zeta.*alpha.*zeta' "$OUT")" 1
+
 finish

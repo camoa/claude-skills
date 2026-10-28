@@ -103,7 +103,6 @@ already changed before the install stays out. It commits the project record too.
 | 0 | Every step ran, or `not-applicable`: no framework has a recipe. | Nothing more for this kind. Name `templates/process-recipe-setup.md` in this plugin as the shape a catalog recipe follows. |
 | 3 | A recipe with no install block, a refused command, a file present with content no version of the recipe declares, or `unknown`: nobody looked. | Show the text and stop. It names the recipe or the file, which is where the fix belongs. |
 | 4 | A step failed. | The `first:` line quotes its first line of output. Show it; do not install by hand. |
-| 72 | Two frameworks each carry a recipe. | Say which two, and stop. |
 
 `--viewport <name>=<w>x<h>` replaces the recipe's viewport list. Pass it only when a person gave
 it. A surface file another branch holds prints a `warning:` line, and the install goes on.

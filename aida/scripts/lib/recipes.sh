@@ -176,6 +176,16 @@ resolve_project_folder() {
   printf '%s' "$p"
 }
 
+# Prints the JSON array $1, rows that each name a framework, ordered as project.json $2 lists the
+# frameworks. A framework it does not list comes last. Where two frameworks answer one question,
+# the first row after this is the one that runs, with a warning (summary conflict 6).
+cr_by_project_order() {
+  local order
+  order="$(jq -c '.frameworks // []' "$2" 2>/dev/null)"
+  [ -n "$order" ] || order='[]'
+  printf '%s' "$1" | jq -c --argjson o "$order" 'sort_by(.framework as $f | ($o | index($f)) // length)'
+}
+
 # The task's own project, and the code repository it records. $1 the action's own name. Sets
 # RV_PROJECT_FOLDER and RV_CODEPATH. Every action that needs either asks here, so all of them name
 # the same facts in the same words: a project folder that cannot be resolved, a project.json that
@@ -720,7 +730,7 @@ cr_resolve() {
   local tc_state cc_state markers marker_json
   local suite_json order_json tool_id
   local test_sha check_sha
-  local all_tools tools_out commanded count absent_rows tool_ids order
+  local all_tools tools_out commanded count absent_rows tool_ids
 
   records_hash__resolve_sha256_cmd \
     || die 3 "$CR_WHO: neither sha256sum nor 'shasum -a 256' was found on PATH"
@@ -807,15 +817,13 @@ security'
   if [ "$CR_TOOL_IDS_ALL" = "true" ]; then
     tool_ids="$(printf '%s' "$all_tools" | jq -r '[ .[].id ] | unique | .[]')"
   fi
-  order="$(jq -c '.frameworks // []' "$(resolve_project_folder "$TASK_PATH")/project.json" 2>/dev/null)"
-  [ -n "$order" ] || order='[]'
   while IFS= read -r tool_id; do
     [ -n "$tool_id" ] || continue
     commanded="$(printf '%s' "$all_tools" | jq -c --arg id "$tool_id" \
       '[ .[] | select(.id == $id and (has("argv")) and (((.unreadable // []) | index("argv")) == null)) ]')"
     count="$(printf '%s' "$commanded" | jq 'length')"
     if [ "$count" -gt 1 ]; then
-      commanded="$(printf '%s' "$commanded" | jq -c --argjson o "$order" 'sort_by(.framework as $f | ($o | index($f)) // length)')"
+      commanded="$(cr_by_project_order "$commanded" "$(resolve_project_folder "$TASK_PATH")/project.json")"
       task_warn "$TASK_PATH" "$CR_WHO" "" "$(printf '%s' "$commanded" | jq -r --arg t "$tool_id" \
         '"\([ .[].framework ] | join(" and ")) each declare a \($t) command. \(.[0].framework) runs it, the first in project.json"')"
       commanded="$(printf '%s' "$commanded" | jq -c '.[:1]')"; count=1
@@ -1948,16 +1956,19 @@ recipe_files_into() {
 
 # Runs one recipe line as arguments and appends its output to $4. $1 the script's own name, $2 the
 # recipe, $3 the line, the rest extra arguments. A line refuse_if_unsafe refuses is not run: a
-# `warning:` line in the output and in $4 names it unknown, and the call returns 0, so the lines
-# after it run (summary conflict 8). zsh does not split an unquoted expansion. The split happens in
+# `warning:` line in the output and in $4 names it unknown, RL_UNKNOWN turns true, and the call
+# returns RL_UNKNOWN_STATUS. A caller reads the flag, because a tool may exit 9 too (summary
+# conflict 8). zsh does not split an unquoted expansion. The split happens in
 # a subshell that sets SH_WORD_SPLIT for zsh, and the option never leaks to the caller.
+RL_UNKNOWN=false; RL_UNKNOWN_STATUS=9
 run_recipe_line() {
   local who="$1" recipe="$2" line="$3" outfile="$4"
   shift 4
   if ! refuse_if_unsafe "$who" "$recipe" "$line" 2>/dev/null; then
     printf 'warning: %s: not run, so its result is unknown: a line of %s carries a shell character: %s\n' \
       "$who" "$recipe" "$line" | tee -a "$outfile"
-    return 0
+    RL_UNKNOWN=true
+    return "$RL_UNKNOWN_STATUS"
   fi
   printf '+ %s\n' "$line"
   # The record says what ran, above the output that run produced. The extra arguments come from
@@ -1977,13 +1988,13 @@ run_recipe_line() {
   ) >>"$outfile" 2>&1
 }
 
-# The one summary printer for a recipe command's run. $1 the exit status, $2 the output file, $3
-# the line to quote on a failure, counted from one.
+# The one summary printer for a recipe command's run. $1 the exit status, or unknown when a line
+# was not run, $2 the output file, $3 the line to quote on a failure or an unknown, counted from one.
 recipe_output_summary() {
   printf 'status: %s\n' "$1"
   printf 'lines: %s\n' "$(wc -l <"$2" | tr -d '[:space:]')"
   printf 'output: %s\n' "$2"
-  if [ "$1" -ne 0 ]; then
+  if [ "$1" != 0 ]; then
     printf 'first: %s\n' "$(sed -n "${3}p" "$2")"
   fi
 }
@@ -2063,18 +2074,25 @@ RT_LIST
 }
 
 # Runs every non-blank line of $3 as one command where the caller stands, output appended to $4,
-# and exits 4 at the first failure with the `first:` line. $1 the name run_recipe_line refuses
+# and exits 4 at the first failure with the `first:` line. A line not run, which run_recipe_line
+# names unknown, does not stop the run. After the last line the run then prints `status: unknown`
+# and exits RL_UNKNOWN_STATUS, so no caller reports a success nobody got. $1 the name run_recipe_line refuses
 # under, $2 the recipe the lines came from, $5 the text the failure message opens with. $6, when
 # given, is a function that prints each line filled before it runs, or exits 3 to refuse it; it
 # runs in a command substitution, so its exit status is the loop's. Every recipe skill ran this
 # loop itself before it lived here, and the messages are each caller's own.
 run_recipe_lines() {
-  local who="$1" recipe="$2" steps="$3" outfile="$4" label="$5" fill="${6:-}" line before
+  local who="$1" recipe="$2" steps="$3" outfile="$4" label="$5" fill="${6:-}" line before unknown_at=""
+  RL_UNKNOWN=false
   while IFS= read -r line; do
     [ -n "${line// /}" ] || continue
     if [ -n "$fill" ]; then line="$("$fill" "$line" "$who")" || exit $?; fi
     before="$(wc -l <"$outfile" | tr -d '[:space:]')"
     run_recipe_line "$who" "$recipe" "$line" "$outfile" && continue
+    if [ "$RL_UNKNOWN" = true ]; then
+      [ -n "$unknown_at" ] || unknown_at=$((before + 1))
+      RL_UNKNOWN=false; continue
+    fi
     printf '%s step failed: %s\n' "$label" "$line" >&2
     # Two past the count: the command's own line, then its first line of output, which is what
     # `first:` quotes.
@@ -2082,6 +2100,7 @@ run_recipe_lines() {
   done <<RL_STEPS
 $steps
 RL_STEPS
+  [ -z "$unknown_at" ] || { recipe_output_summary unknown "$outfile" "$unknown_at"; exit "$RL_UNKNOWN_STATUS"; }
 }
 
 # The prose under the H2 $2 of the recipe $1, indented, the way show prints it.

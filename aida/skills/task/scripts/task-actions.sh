@@ -1486,6 +1486,8 @@ environment_check() {
   if [ -n "$preconditions" ]; then
     result="$(run_recipe_lines "$sub" "$RECIPE" "$preconditions" "$outfile" "environment: precondition" fill_line_or_refuse)" || rc=$?
   fi
+  # A precondition line not run is unknown: its summary is printed, and the step stops on it.
+  [ "$rc" -ne "$RL_UNKNOWN_STATUS" ] || { printf '%s\n' "$result"; exit "$rc"; }
   if [ "$rc" -ne 0 ]; then
     cat "$outfile" >&2
     # run_recipe_lines exits 4 when a line ran and failed, and 3 when a line holds a token nothing fills.
