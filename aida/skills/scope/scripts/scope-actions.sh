@@ -457,16 +457,6 @@ do_set_tests() {
 # sets author from --author when given or from the run mode otherwise, and appends it.
 # ------------------------------------------------------------------------------------------------
 
-# Warns when criterion $2's machine verify clause names an end-to-end check or a browser test
-# (gap row 451). That check is a surface review runs; the clause names the
-# behaviour a test proves. $1 the step.
-warn_surface_clause() {
-  local clause
-  clause="$(jq -r --arg id "$2" '(.criteria // [])[] | select(.id == $id and .verifiedBy == "machine") | .verification' "$ALIGNMENT_FILE")"
-  [ -n "$clause" ] && names_a_surface_check "$clause" || return 0
-  task_warn "$TASK_PATH" "$1" "" "criterion $2's verify clause names an end-to-end check or a browser test. That check is a surface review runs; name the behaviour a test proves (skills/implement/references/what-a-test-is.md)"
-}
-
 do_add() {
   local text="" verification="" verified_by="" author="" author_given=0
   while [ "$#" -gt 0 ]; do
@@ -523,7 +513,6 @@ do_add() {
        | .nextCriterionId = $next' "$ALIGNMENT_FILE")" \
     || die3 "add: could not add the new criterion to $ALIGNMENT_FILE"
   write_atomic "$ALIGNMENT_FILE" "$updated"
-  warn_surface_clause "scope add" "$id"
 
   echo "ADDED: $id"
   echo "verifiedBy: $verified_by"
@@ -663,7 +652,6 @@ do_update() {
           else . end
         ))' "$ALIGNMENT_FILE")" || die3 "update: could not update $ALIGNMENT_FILE"
   write_contract update "$updated"
-  warn_surface_clause "scope update" "$id"
 
   echo "UPDATED: $id"
   local fields_set=""

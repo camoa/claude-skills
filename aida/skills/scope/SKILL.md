@@ -200,6 +200,10 @@ admin can download the user list as CSV." It is written from outside the code. I
 class, a file, or a stage. It is not a note about how a stage should work, a reminder to check
 something, or a task for one stage to do.
 
+A criterion states what must work, in the person's words. Scope does not police those words.
+"Test that the export works", "check" and "make sure" mean that review verifies it: review runs
+the thing and keeps the evidence. They never mean "write an automated test".
+
 For each one, in order, in the draft:
 
 1. Draft the outcome, in that outward phrasing.
@@ -208,10 +212,8 @@ For each one, in order, in the draft:
    observable outcome is a gap: ask, one question, with a recommended answer, rather than write
    the restatement. A machine clause names the behaviour a test proves, not a flow to run. A test
    is what this page defines:
-   `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
-   `add` and `update` warn on a clause that names an end-to-end check or a browser test. See
-   "Tests and checks" below for what changes when the project has end to end testing or visual
-   regression on.
+   `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`. See "Tests and
+   checks" below for what changes when the project has end to end testing on.
 3. Record who asked. `designer` for every line the draft wrote, until `approve` promotes it at
    "Approval". `owner` when a person wrote or corrected this criterion, in this conversation.
    There is no third value, and a missing answer is never `owner`.
@@ -222,10 +224,15 @@ For each one, in order, in the draft:
      --verified-by <machine|person> --author <owner|designer>
    ```
 
-Recommend `machine` whenever a command can read the fact: a test, a linter, or a status call to
-an API. Keep `person` for what only a person judges, such as how a page looks. Some facts exist
-only after a step the task never takes, such as a push behind a sudo gate. No build step runs
-after that step, so write `person`. Say the step in the outcome as the person's action. For such
+Recommend the kind from what the outcome is, never from the words that state it. Recommend
+`machine` for a behaviour of code with logic, which a small test or a named command observes. "An
+admin can download the user list as CSV" is `machine` when a test can observe the export. Review
+sees the journey around it. Recommend `person` for anything else: a document, configuration,
+metadata, layout, how a page looks, or a whole journey. A person or a reviewer reads it. A
+`machine` criterion about a document forces a frozen test that only reads the text back.
+
+Some facts exist only after a step the task never takes, such as a push behind a sudo gate. No
+build step runs after that step, so write `person`. Say the step in the outcome as the person's action. For such
 a step, name in the verify clause the command that reads the fact, not a page the person opens.
 At review's close, the session runs that command and shows its output. The person answers met or
 unmet; no script runs the clause.
@@ -293,17 +300,8 @@ Read `<projectPath>/project.json` once, at the point criteria are being drafted:
 
 - **`surfaces.e2e.enabled` is true.** The end to end test is the surface's own check, and review
   runs it after the build. So do not ask a separate question about coverage, and do not ask per
-  criterion whether to automate it. In the whole draft, write each criterion's verify clause
-  (step 2 above) as `machine`. The clause names the behaviour a test proves, never the end to end
-  test. The person corrects a line back to `person` like any other line, with `update`.
-- **`surfaces.visualRegression.enabled` is true.** Check whether a surface this task changes already
-  has a baseline in the surface file, `.visual-review/surfaces.json` in the tree scope runs from.
-  One that does becomes a criterion whose verify clause names the visual regression check that
-  must pass. One that does not becomes a criterion too, that creating its baseline is this task's
-  own work. Either way this is a criterion scope is proposing, not one the person asked for
-  outright: draft it, show it with a recommended answer, and write it with `add --author
-  designer`, whatever the person says to the draft. It stays `designer` until `approve` promotes
-  it at "Approval" below; a yes on the draft alone does not promote it.
+  criterion whether to automate it. Recommend each criterion's kind from its outcome, as above. A
+  verify clause never names the end to end test.
 - **A kind is off and not declined, or `surfaces` is null.** The decline is that kind's
   `declined` field in `project.json`. Interactive only. Skip a kind that `read` names under
   `surfaces-deferred:`. Look at the goal once, at this same point. Before you ask, run
@@ -315,7 +313,7 @@ Read `<projectPath>/project.json` once, at the point criteria are being drafted:
   three answers per kind: yes, not this task, or no. Say the difference between "not this task"
   and "no" in the ask itself, so the person knows what a "no" silences. A yes on a kind invokes the
   `surfaces` skill through the Skill tool, naming that kind. Do this once per kind said yes to.
-  Then read `project.json` again, so the two bullets above apply to this task. "Not this task" on
+  Then read `project.json` again, so the bullet above applies to this task. "Not this task" on
   a kind runs `"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh defer-surface --project
   "<projectPath>" <task-id> <kind>`, and no later stage of this task asks again. A no on a kind
   runs `"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline <kind>`,
