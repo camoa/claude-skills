@@ -49,8 +49,8 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh acceptance "<task_folder>"
 ```
-It runs every row the surface block declares, and it records checks 13 to 15 and one row per
-registered surface, with the verdict and whether it ran. It prints one summary line per surface. A
+It runs every row the surface block declares. It records checks 13 to 15, and one row per
+registered surface with the verdict and whether it ran. It prints one summary line per surface. A
 harness's own output stays in the record, per SKILL.md. When the task record has
 `environment.address`, pass it as `--value base-url=<address>` and do not ask for one.
 
@@ -64,10 +64,10 @@ so.
 **Zero tests ran is never a pass.** A run that selected nothing reads unknown. A registry surface
 with no result reads unmet, because a check that cannot notice its subject going absent cannot inform.
 
-**Every command waits for the recipe.** Until the surface block lands in the `review` recipe, the
-script records checks 13 to 15 as undeclared and says why. **Visual parity gets no more than that**:
-it has no recipe, no field and no harness, and version 6 records it as unavailable. Say that plainly
-rather than reporting parity as a check that passed.
+**Every command waits for the recipe.** The surface block may not be in the `review` recipe
+yet. Until it is, the script records checks 13 to 15 as undeclared and says why. **Visual parity
+gets no more than that**: it has no recipe, no field and no harness, and version 6 records it as
+unavailable. Say that plainly rather than reporting parity as a check that passed.
 
 ## Dispatch the acceptance verifier
 
@@ -90,19 +90,22 @@ Then record its rows:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh acceptance "<task_folder>" --evidence
 ```
-It runs the surfaces again and writes the rows into the review record. The evidence file stays
-under `records/`, which git ignores. The screenshots stay under `review/evidence/`, where git keeps
-text and no image. It refuses at exit 52 when a row is not an
-evidence row, names a criterion, surface or viewport this task does not hold, or names a file not on
-disk, and when a criterion has no row. Give the refusal to the verifier's next dispatch.
+It writes the rows into the review record over the surface runs already recorded, so no suite
+runs twice. The evidence file stays under `records/`, which git ignores. The screenshots stay
+under `review/evidence/`, where git keeps text and no image. It refuses at exit 52 in four cases.
+A row is not an evidence row, or names a criterion, surface or viewport this task does not hold. A
+path lies outside `review/evidence/`. A file is not on disk. A criterion has no row. Give the
+refusal to the verifier's next dispatch.
 
 **A page surface with no row at every viewport reads unknown.** The look is half the answer. A
 command surface needs no look, because its exit status is the whole answer.
 
 **The verifier's `unmet` decides nothing alone.** A surface check whose run passed, with a row the
 verifier did not judge met, waits for the person at close. A criterion's rows are shown beside it
-at close. A bug the verifier names reaches the person in its row's note. The person answers that
-criterion or check unmet, and the review fails on it.
+at close. A row reading unmet that names the code file of a bug becomes a finding on the
+`acceptance` lens. It cites the row's criterion, so it fails that criterion. The person rules it at
+close like any finding. Unruled, the review fails, and the implement skill's `reopen` sends it to
+the order that owns the file.
 
 The verifier may propose a surface, or an extension of the demo-path script, in a note. It never
 writes one. Read each such note to the person, who adds it with `/aida:surfaces register`.

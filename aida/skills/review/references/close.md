@@ -12,8 +12,9 @@ summary asks a different question than the row a person signed up to answer. Sho
 pass, and ask for each one only once.
 
 Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. A lens
-check names the low findings of one lens. A surface check names the verifier's rows that did not
-read met; show its `evidence(<surface>@<viewport>)` lines, and the person judges it met or unmet. The person confirms them, met, or rejects them, unmet.
+check names the low findings of one lens. The person confirms those findings, met, or rejects
+them, unmet. A surface check names the verifier's rows that did not read met. Show its
+`evidence(<surface>@<viewport>)` lines, and the person judges the check met or unmet.
 The guides check and the practices check can wait the same way when no guide body is on disk.
 Then the review's own search found no practice, or the reviewer named none it judged against.
 Ask whether any guide covers the task. When none does, the person judges the diff, met or unmet.

@@ -460,12 +460,18 @@ cp_render_body() {
     --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" '
     def section($title; $lines): ["## " + $title, ""] + $lines + [""];
     def none_when_empty($lines; $word): if ($lines | length) == 0 then [$word] else $lines end;
+    # The rows the acceptance verifier wrote for a criterion, beside its verdict, each with the file it
+    # was judged from, such as a screenshot.
+    def evidence_note($id):
+      ([ (($review // {}).evidence // [])[] | select(.criterion == $id)
+         | .verdict + " " + (if .path == "" then "(no file)" else .path end) ]) as $rows
+      | if ($rows | length) == 0 then "" else "; evidence: " + ($rows | join(", ")) end;
     ["# " + $task, ""]
     + section("Goal";
         if $alignment == null then ["no contract; see task.md"] else [$alignment.goal // ""] end)
     + section("Success criteria";
         if $alignment == null then ["no contract"]
-        else none_when_empty([ ($alignment.criteria // [])[] | "- " + .id + ": " + .text + " (" + (.verdict // "unanswered") + ")" ]; "none") end)
+        else none_when_empty([ ($alignment.criteria // [])[] | "- " + .id + ": " + .text + " (" + (.verdict // "unanswered") + evidence_note(.id) + ")" ]; "none") end)
     + section("Non-goals";
         if $alignment == null then ["no contract"]
         else none_when_empty([ ($alignment.nonGoals // [])[] | "- " + .id + ": " + .text ]; "none") end)

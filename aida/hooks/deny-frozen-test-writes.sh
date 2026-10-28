@@ -138,13 +138,15 @@ is_test_author() {
   return 1
 }
 
-# Rule four, added for gap row 293, runs before every other rule and needs no project. Four roles
+# Rule four, added for gap row 293, runs before every other rule and needs no project. Five roles
 # each write one kind of record, and that role alone writes it, through the file tools. The Bash
-# door is not this rule's: none of the four has Bash, and a script's own write runs there.
+# door is not this rule's: a script's own write runs there. The acceptance verifier alone of the
+# five holds Bash, to run the product, so a write it makes through Bash is not held here.
 #   disposition-confirmer  records/disposition-<order>.json
 #   design-critic          records/design-critique-<lens>.md
 #   distiller              records/<stage>-distill.json
 #   test-reader            test-cleanup/<run>/reports/<group>.json
+#   acceptance-verifier    records/evidence.json, and its files under review/evidence/
 # A confirmer keeps every value the verdict file already holds, so a disagreement it recorded is
 # never cleared by asking again. Only design-actions.sh's `dispose` removes a value.
 own_record_owner() {
@@ -153,6 +155,7 @@ own_record_owner() {
     */records/design-critique-*.md) echo design-critic ;;
     */records/*-distill.json) echo distiller ;;
     */test-cleanup/*/reports/*.json) echo test-reader ;;
+    */records/evidence.json|*/review/evidence/*) echo acceptance-verifier ;;
   esac
 }
 deny_own_record() {
@@ -357,7 +360,7 @@ if [ "$TOOL" != "Bash" ]; then
   OWN_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
   OWN_OWNER="$(own_record_owner "$OWN_TARGET")"
   case "${AGENT##*:}" in
-    disposition-confirmer|design-critic|distiller|test-reader)
+    disposition-confirmer|design-critic|distiller|test-reader|acceptance-verifier)
       [ "$OWN_OWNER" = "${AGENT##*:}" ] \
         || deny_own_record "$OWN_TARGET: the ${AGENT##*:} writes only its own record, and nothing else." ;;
     *)

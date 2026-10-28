@@ -110,8 +110,9 @@ mode, `interactive` or `autonomous`, then each path the step hands over. Nothing
 The role's rules and its return shape live in its agent definition, which reaches it on every
 dispatch. The data it needs lives in the brief the paths name. So the message restates neither,
 and two runs of one step hand the role the same words. The step file names this shape and lists
-its own paths. Two exceptions: `outward-searcher`, whose message carries the words to search and the
-bound in place of paths, and `acceptance-verifier`, whose message also carries the site address.
+its own paths. There are two exceptions. The message to `outward-searcher` carries the words to
+search and the bound in place of paths. The message to `acceptance-verifier` also carries the site
+address.
 
 **A recipe lookup answers four ways, and review passes the one that happened.** One answer is a path
 on disk. The other three are no recipe for this framework, a listing that could not be reached, and
