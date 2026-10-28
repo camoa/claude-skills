@@ -53,8 +53,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # its project file. The check's own report follows where the skill shows it to the person.
 #
 # A reader that cannot read fails loudly here too: every action that cannot do its job prints
-# why to stderr and exits 3. A miss that is a real, expected outcome, such as switch finding
-# nothing, exits 1 and prints nothing to stdout, never confused with 3.
+# why to stderr and exits 3. So does a call this script cannot run as typed, such as a target no
+# project answers to. Two read actions answer with exit 1: read-projects-base and
+# read-worktree-base, when nothing is recorded.
 
 set -uo pipefail  # not -e: several branches test a command's exit code on purpose.
 trap '' PIPE  # a closed pipe must not kill the writes after a print; research-actions.sh says why
@@ -235,11 +236,11 @@ resolve_target() {
   esac
 }
 
-# The caller's half of a failed resolve_target: exit 3 when the target named two projects, else
-# print NOT FOUND and return, so the caller returns 1.
+# The caller's half of a failed resolve_target: exit 3 when the target named two projects, or
+# named none.
 unresolved() {
   [ "$1" -ne 3 ] || exit 3
-  echo "NOT FOUND: $2" >&2
+  die3 "$action: no project is named $2"
 }
 
 # Succeeds when a registry row, other than the one whose project folder is <except>, holds <path>
@@ -343,21 +344,25 @@ run_check() {
   return $?
 }
 
-# The check closes every action that writes project.json. It exits 6 on uncommitted work anywhere
-# in the folder, such as a stage's edits in progress. That made a write that landed read as a
-# failure. When the files the action wrote are committed, the action did its job, so this returns 0
-# with a note. A folder that is not a repository, or an own file the commit missed, keeps exit 6.
+# The check closes every action that writes project.json. It exits 6 when the folder is no git
+# repository or holds uncommitted work, such as a stage's edits in progress. The write landed, so
+# the action did its job: this returns 0 and names the git state in a note (gap row 376).
 # $1 the project folder, then the files the action wrote, relative to it.
 check_after_write() {
   local project_path="$1" rc own
   shift
   run_check "$project_path"; rc=$?
   [ "$rc" -eq 6 ] || return "$rc"
-  git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1 || return 6
-  # A git status that fails says nothing about the own files, so it keeps exit 6.
-  own="$(git -C "$project_path" status --porcelain -- "$@")" || return 6
-  [ -z "$own" ] || return 6
-  echo "NOTE: this action committed its own change. The uncommitted work listed above is not its own, and it was left as it is."
+  if ! git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1; then
+    echo "NOTE: the change is written. $project_path is no git repository, so nothing was committed. git-init makes it one."
+    return 0
+  fi
+  own="$(git -C "$project_path" status --porcelain -- "$@" 2>/dev/null)"
+  if [ -n "$own" ]; then
+    echo "NOTE: the change is written and not committed: $(printf '%s' "$own" | tr '\n' ' ')"
+  else
+    echo "NOTE: this action committed its own change. The uncommitted work listed above is not its own, and it was left as it is."
+  fi
   return 0
 }
 
@@ -388,11 +393,11 @@ do_create() {
   local name="" code_path="" frameworks=() projects_home="$PROJECTS_HOME_DEFAULT" worktree_base=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --name) name="${2:?--name needs a value}"; shift 2 ;;
-      --path) code_path="${2:?--path needs a value}"; shift 2 ;;
-      --projects-home) projects_home="${2:?--projects-home needs a value}"; shift 2 ;;
-      --framework) frameworks+=("${2:?--framework needs a value}"); shift 2 ;;
-      --worktree-base) worktree_base="${2:?--worktree-base needs a value}"; shift 2 ;;
+      --name) [ "$#" -ge 2 ] || die3 "create: --name needs a value"; name="$2"; shift 2 ;;
+      --path) [ "$#" -ge 2 ] || die3 "create: --path needs a value"; code_path="$2"; shift 2 ;;
+      --projects-home) [ "$#" -ge 2 ] || die3 "create: --projects-home needs a value"; projects_home="$2"; shift 2 ;;
+      --framework) [ "$#" -ge 2 ] || die3 "create: --framework needs a value"; frameworks+=("$2"); shift 2 ;;
+      --worktree-base) [ "$#" -ge 2 ] || die3 "create: --worktree-base needs a value"; worktree_base="$2"; shift 2 ;;
       *) die3 "create: unrecognized argument: $1" ;;
     esac
   done
@@ -410,8 +415,7 @@ do_create() {
   esac
 
   code_path="$(canon_path "$code_path")"
-  # Without the option nothing is recorded: an unattended run uses the default, and the next attended
-  # project or task create asks once.
+  # Without the option nothing is recorded, and the default is used: the parent of the code path.
   if [ -n "$worktree_base" ]; then
     worktree_base="$(worktree_base_value "$worktree_base" "$code_path" create)" || exit 3
   fi
@@ -662,7 +666,8 @@ register_v6_folder() {
 }
 
 do_switch() {
-  local target="${1:?switch: a name or a path is required}" match project_path cwd
+  local target="${1:-}" match project_path cwd
+  [ -n "$target" ] || die3 "switch: a name or a path is required"
   local registered=0 rc
   # resolve_target answers a registered project named by its own folder path. Without that, the
   # version 6 pickup below refused on this project's own name, and its advice to edit the name in
@@ -680,7 +685,7 @@ do_switch() {
     target="$PICKED_UP_NAME"
     match="$(resolve_target "$target")"
   fi
-  [ -n "$match" ] || { echo "NOT FOUND: ${target}" >&2; return 1; }
+  [ -n "$match" ] || die3 "switch: no project is named ${target}"
 
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   cwd="$(pwd -P)"
@@ -724,7 +729,7 @@ do_switch() {
 
 do_list() {
   local rows
-  rows="$(registry_list_projects "$@")" || return 1
+  rows="$(registry_list_projects "$@")" || die3 "list: the registry could not be read. See the error above"
   [ -n "$rows" ] || { echo "PROJECTS: (none registered)"; return 0; }
   local row cp exists
   while IFS= read -r row; do
@@ -740,8 +745,10 @@ do_list() {
 # ------------------------------------------------------------------------------------------------
 
 do_state() {
-  local target="${1:?state: a name or a path is required}"
-  local new_state="${2:?state: active, complete or archived is required}"
+  local target="${1:-}"
+  [ -n "$target" ] || die3 "state: a name or a path is required"
+  local new_state="${2:-}"
+  [ -n "$new_state" ] || die3 "state: active, complete or archived is required"
   shift 2
   [ "${1:-}" = "--" ] && shift
   local why="$*"
@@ -753,7 +760,7 @@ do_state() {
   esac
 
   local match project_path old_state
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   old_state="$(jq -r '.state' "$project_path/project.json" 2>/dev/null)"
 
@@ -804,10 +811,12 @@ do_state() {
 # ------------------------------------------------------------------------------------------------
 
 do_set_code_path() {
-  local target="${1:?set-code-path: a name or a path is required}"
-  local new_path="${2:?set-code-path: a new code path is required}"
+  local target="${1:-}"
+  [ -n "$target" ] || die3 "set-code-path: a name or a path is required"
+  local new_path="${2:-}"
+  [ -n "$new_path" ] || die3 "set-code-path: a new code path is required"
   local match project_path old_path
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   old_path="$(printf '%s' "$match" | jq -r '.codePath')"
 
@@ -879,11 +888,12 @@ do_set_code_path() {
 # ------------------------------------------------------------------------------------------------
 
 do_set_frameworks() {
-  local target="${1:?set-frameworks: a name or a path is required}"
+  local target="${1:-}"
+  [ -n "$target" ] || die3 "set-frameworks: a name or a path is required"
   shift
   [ "$#" -ge 1 ] || die3 "set-frameworks: at least one framework is required"
   local match project_path
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
   write_project_field "$project_path" "could not update frameworks in $project_path/project.json" \
@@ -904,8 +914,9 @@ do_set_frameworks() {
 # given. It is the repair the check names when the field is missing. A refused folder writes
 # nothing. A tree that a task already records stays where it is, so this moves no tree.
 do_set_worktree_base() {
-  local target="${1:?set-worktree-base: a name or a path is required}" match project_path base
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  local target="${1:-}" match project_path base
+  [ -n "$target" ] || die3 "set-worktree-base: a name or a path is required"
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   base="$(worktree_base_value "${2:-}" "$(printf '%s' "$match" | jq -r '.codePath')" set-worktree-base)" || exit 3
   write_project_field "$project_path" "could not update worktreeBase in $project_path/project.json" \
@@ -917,11 +928,12 @@ do_set_worktree_base() {
 }
 
 # read-worktree-base: prints the recorded worktreeBase as an absolute path and exits 0. When the
-# project records none, prints the default, the parent of the code path, and exits 1, so the skill
-# asks once and offers that default.
+# project records none, prints the default, the parent of the code path, and exits 1, so the task
+# skill names the folder its first tree goes in.
 do_read_worktree_base() {
-  local target="${1:?read-worktree-base: a name or a path is required}" match project_path base rc=0
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 3; }
+  local target="${1:-}" match project_path base rc=0
+  [ -n "$target" ] || die3 "read-worktree-base: a name or a path is required"
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   base="$(jq -r '.worktreeBase // empty' "$project_path/project.json" 2>/dev/null)"
   [ -n "$base" ] || { base=".."; rc=1; }
@@ -936,9 +948,10 @@ do_read_worktree_base() {
 
 # Records review.mutation, true for on and false for off. Review reads an absent field as off.
 do_set_mutation() {
-  local target="${1:?set-mutation: a name or a path is required}" match project_path
+  local target="${1:-}" match project_path
+  [ -n "$target" ] || die3 "set-mutation: a name or a path is required"
   case "${2:-}" in on|off) ;; *) die3 "set-mutation: takes on or off, got: ${2:-nothing}" ;; esac
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   write_project_field "$project_path" "could not update review.mutation in $project_path/project.json" \
     --argjson m "$([ "$2" = on ] && echo true || echo false)" '.review.mutation = $m'
@@ -955,8 +968,9 @@ do_set_mutation() {
 # Only a version 5 folder reaches this: create makes its folder a repository. The files already
 # there are committed at once, so the check does not next report them as uncommitted work.
 do_git_init() {
-  local target="${1:?git-init: a name or a path is required}" match project_path
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  local target="${1:-}" match project_path
+  [ -n "$target" ] || die3 "git-init: a name or a path is required"
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   if git -C "$project_path" rev-parse --git-dir >/dev/null 2>&1; then
     echo "GIT: already a repository $project_path"
@@ -983,9 +997,12 @@ do_git_init() {
 # declaration is not load-bearing yet, and it becomes so the moment the comparison descends.
 # Nothing here fetches anything; declaring is cheap and fetching stays lazy.
 do_add_source() {
-  local target="${1:?add-source: a name or a path is required}"
-  local kind="${2:?add-source: a kind is required}"
-  local folder="${3:?add-source: a folder, or the word catalog, is required}"
+  local target="${1:-}"
+  [ -n "$target" ] || die3 "add-source: a name or a path is required"
+  local kind="${2:-}"
+  [ -n "$kind" ] || die3 "add-source: a kind is required"
+  local folder="${3:-}"
+  [ -n "$folder" ] || die3 "add-source: a folder, or the word catalog, is required"
   case "$kind" in
     guides|playbooks|processRecipes|agenticRecipes|toolingRecipes) : ;;
     *) die3 "add-source: kind must be one of guides, playbooks, processRecipes, agenticRecipes or toolingRecipes, got: $kind" ;;
@@ -1002,7 +1019,7 @@ do_add_source() {
   fi
 
   local match project_path
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
   # A new source for a kind takes the next precedence number. The order sources are declared in
@@ -1052,9 +1069,12 @@ do_add_source() {
 # the catalog's own word, so a folder keys on what a stage asks for. Takes the project folder,
 # not a registry target, so a worktree session with no registry can run it as one plain command.
 do_recipe_source() {
-  local project_path="${1:?recipe-source: a project folder is required}"
-  local phase="${2:?recipe-source: a phase is required}"
-  local fw="${3:?recipe-source: a framework is required}"
+  local project_path="${1:-}"
+  [ -n "$project_path" ] || die3 "recipe-source: a project folder is required"
+  local phase="${2:-}"
+  [ -n "$phase" ] || die3 "recipe-source: a phase is required"
+  local fw="${3:-}"
+  [ -n "$fw" ] || die3 "recipe-source: a framework is required"
   case "$phase" in
     research|design|implement|test-authoring|test-execution|review|worktree-environment|e2e-setup|visual-regression) : ;;
     *) die3 "recipe-source: phase must be one of research, design, implement, test-authoring, test-execution, review, worktree-environment, e2e-setup or visual-regression, got: $phase" ;;
@@ -1098,8 +1118,10 @@ do_recipe_source() {
 # already makes when the catalog answers with two. Nothing is fetched and no body is opened. A
 # project declaring no folder of the kind prints nothing, and the caller asks the catalog.
 do_agentic_source() {
-  local project_path="${1:?agentic-source: a project folder is required}"
-  local fw="${2:?agentic-source: a framework is required}"
+  local project_path="${1:-}"
+  [ -n "$project_path" ] || die3 "agentic-source: a project folder is required"
+  local fw="${2:-}"
+  [ -n "$fw" ] || die3 "agentic-source: a framework is required"
   [ -f "$project_path/project.json" ] || die3 "agentic-source: no project.json in $project_path"
   local line name loc rest tab unread=""
   tab="$(printf '\t')"
@@ -1127,23 +1149,24 @@ AS_NAMES
 # ------------------------------------------------------------------------------------------------
 
 # Writes or removes one set id under playbookSubscriptions[<framework>] (ideal/playbooks.md,
-# "Subscribing and listing"). The framework must be one the project declares, the rule the check
-# tests, so the refusal here uses the check's own words. A set id is <framework>/best-practices/
+# "Subscribing and listing"). A framework the project does not declare is a warning beside the
+# write, in the check's own words, and the check names it on every run until a person fixes it. A set id is <framework>/best-practices/
 # <author>. Nothing is fetched: the first `playbooks load` records a set the catalog lacks as
 # unreachable. A framework left with no set loses its key, since the schema wants one item.
 # $1 add or remove, then the target, the framework and the set id.
 do_subscription() {
-  local op="$1" target="${2:?$1-playbook: a name or a path is required}"
-  local fw="${3:?$1-playbook: a framework is required}" set_id="${4:?$1-playbook: a set id is required}"
+  local op="$1" target="${2:-}"
+  [ -n "$target" ] || die3 "$1-playbook: a name or a path is required"
+  local fw="${3:-}" set_id="${4:-}"
+  [ -n "$fw" ] || die3 "$1-playbook: a framework is required"
+  [ -n "$set_id" ] || die3 "$1-playbook: a set id is required"
   local match project_path
   printf '%s' "$set_id" | grep -Eq '^[a-z0-9-]+/best-practices/[a-z0-9-]+$' \
     || die3 "$op-playbook: a set id is <framework>/best-practices/<author>, got: $set_id"
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
-  if [ "$(jq --arg k "$fw" '(.frameworks // []) | index($k) != null' "$project_path/project.json")" != "true" ]; then
-    printf 'project-actions: %s-playbook: key "%s" names a framework this project never declared\n' "$op" "$fw" >&2
-    return 1
-  fi
+  [ "$(jq --arg k "$fw" '(.frameworks // []) | index($k) != null' "$project_path/project.json")" = "true" ] \
+    || printf 'warning: %s-playbook: key "%s" names a framework this project never declared\n' "$op" "$fw"
   if [ "$op" = subscribe ]; then
     write_project_field "$project_path" "could not update playbookSubscriptions in $project_path/project.json" \
       --arg k "$fw" --arg id "$set_id" '.playbookSubscriptions[$k] = (((.playbookSubscriptions // {})[$k] // []) + [$id] | unique)'
@@ -1166,8 +1189,9 @@ do_subscription() {
 # retired may be a person's own, so it stays and the check keeps naming it. Only AIDA's own
 # project file changes, so this runs in both modes.
 do_drop_retired() {
-  local target="${1:?drop-retired: a name or a path is required}" match project_path retired present subject
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  local target="${1:-}" match project_path retired present subject
+  [ -n "$target" ] || die3 "drop-retired: a name or a path is required"
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   retired="$(pf_retired_fields "${PLUGIN_ROOT}/scripts/project-schema.json" "$project_path/project.json")" \
     || die3 "drop-retired: $project_path/project.json could not be read"
@@ -1192,8 +1216,9 @@ do_drop_retired() {
 # ------------------------------------------------------------------------------------------------
 
 do_unregister() {
-  local target="${1:?unregister: a name or a path is required}" match project_path code_path base
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  local target="${1:-}" match project_path code_path base
+  [ -n "$target" ] || die3 "unregister: a name or a path is required"
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
 
@@ -1233,14 +1258,17 @@ TASK_RULE_END="<!-- task-rule:end -->"
 # one out, so a picked-up repository never holds two blocks. --decline looks only for this version's.
 # TASK_RULE_V5_BEGIN and TASK_RULE_V5_END come from scripts/lib/project-findings.sh.
 
-# Stops the script when a block in $1, between the markers $2 and $3, opens and never closes. The
-# text below that marker may be the person's own, so neither the rewrite nor the removal runs
-# blind. The detection is scripts/lib/project-findings.sh's, the same one the check reports.
+# Ends the script, having written nothing, when a block in $1, between the markers $2 and $3, opens
+# and never closes. The text below that marker may be the person's own, so neither the rewrite nor
+# the removal runs blind. It is a warning: the check reports the same block on every run, through
+# scripts/lib/project-findings.sh, so a person sees it until the file is fixed.
 refuse_open_block() {
   local lines
   lines="$(pf_block_lines "$1" "$2" "$3")"
-  [ "${lines#* }" != "0" ] \
-    || die3 "$1: line ${lines%% *} holds $2 and no end marker follows it. Nothing was changed. Add $3 where that block ends, or delete the block by hand, then run this again."
+  [ "${lines#* }" = "0" ] || return 0
+  printf 'warning: %s: line %s holds %s and no end marker follows it. Nothing was changed. Add %s where that block ends, or delete the block by hand, then run this again.\n' \
+    "$1" "${lines%% *}" "$2" "$3"
+  exit 0
 }
 
 task_rule_block() {
@@ -1270,7 +1298,8 @@ do_task_rule() {
   # Both paths are a person's answer to the same offer. The write puts an instruction the harness
   # enforces into a repository the person owns; the decline suppresses the offer for good.
   cr_require_person task-rule "a person answered the task-rule offer"
-  local target="${1:?task-rule: a name or a path is required}"
+  local target="${1:-}"
+  [ -n "$target" ] || die3 "task-rule: a name or a path is required"
   shift
   local declining="false"
   [ "${1:-}" = "--decline" ] && { declining="true"; shift; }
@@ -1279,7 +1308,7 @@ do_task_rule() {
   [ -n "$why" ] || why="requested"
 
   local match code_path project_path project_name claude_md present tmp
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
   project_name="$(printf '%s' "$match" | jq -r '.name')"
   # The project file is authoritative and the registry is an index (ideal/project.md, "What a
@@ -1296,8 +1325,7 @@ do_task_rule() {
     claude_md="${code_path%/}/CLAUDE.md"
     if [ -n "$code_path" ] && [ "$code_path" != "null" ] && [ -f "$claude_md" ] \
        && grep -qF "$TASK_RULE_BEGIN" "$claude_md" 2>/dev/null; then
-      echo "REFUSED: the task rule is already installed in ${claude_md}. Use --remove to take it out." >&2
-      return 1
+      die3 "task-rule: the task rule is already installed in ${claude_md}. Use --remove to take it out"
     fi
     write_project_field "$project_path" "could not record the declined task rule in $project_path/project.json" \
       '.taskRule = {offered: true, accepted: false}'
@@ -1315,14 +1343,9 @@ do_task_rule() {
 
   # ideal/project.md, "Starting a new project": everything opted into can be set at any time, but
   # the task rule needs a repository to write into. There is no repository without a code path.
-  [ -n "$code_path" ] && [ "$code_path" != "null" ] || {
-    echo "REFUSED: no code path is set for ${project_name}. There is no repository to write the task rule into." >&2
-    return 1
-  }
-  [ -d "$code_path" ] || {
-    echo "REFUSED: ${code_path} does not exist yet. The task rule needs a real repository to write into." >&2
-    return 1
-  }
+  [ -n "$code_path" ] && [ "$code_path" != "null" ] \
+    || die3 "task-rule: no code path is set for ${project_name}. There is no repository to write the task rule into"
+  [ -d "$code_path" ] || die3 "task-rule: ${code_path} does not exist yet. The task rule needs a real repository to write into"
 
   claude_md="${code_path%/}/CLAUDE.md"
   refuse_open_block "$claude_md" "$TASK_RULE_V5_BEGIN" "$TASK_RULE_V5_END"
@@ -1333,15 +1356,9 @@ do_task_rule() {
   # Ported from version 5's task-rule-install.sh: check writability before writing, and report a
   # distinct failure rather than printing WRITTEN or REFRESHED regardless of what happened.
   if [ ! -f "$claude_md" ]; then
-    : > "$claude_md" || {
-      echo "REFUSED: ${claude_md} could not be created. Check permissions on ${code_path}." >&2
-      return 1
-    }
+    : > "$claude_md" || die3 "task-rule: ${claude_md} could not be created. Check permissions on ${code_path}"
   fi
-  [ -w "$claude_md" ] || {
-    echo "REFUSED: ${claude_md} is not writable. The task rule was not written." >&2
-    return 1
-  }
+  [ -w "$claude_md" ] || die3 "task-rule: ${claude_md} is not writable. The task rule was not written"
 
   if [ "$present" = "true" ]; then
     local block_file
@@ -1354,8 +1371,7 @@ do_task_rule() {
       !skip{print}
     ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md" || {
       rm -f "$tmp" "$block_file"
-      echo "REFUSED: rewriting ${claude_md} failed. The task rule was not refreshed." >&2
-      return 1
+      die3 "task-rule: rewriting ${claude_md} failed. The task rule was not refreshed"
     }
     rm -f "$block_file"
     echo "REFRESHED: ${claude_md}"
@@ -1363,10 +1379,7 @@ do_task_rule() {
     {
       [ -s "$claude_md" ] && printf '\n'
       task_rule_block "$project_name"
-    } >> "$claude_md" || {
-      echo "REFUSED: appending to ${claude_md} failed. The task rule was not written." >&2
-      return 1
-    }
+    } >> "$claude_md" || die3 "task-rule: appending to ${claude_md} failed. The task rule was not written"
     echo "WRITTEN: ${claude_md}"
   fi
 
@@ -1386,8 +1399,9 @@ do_task_rule() {
 
 do_task_rule_remove() {
   cr_require_person task-rule-remove "a person asked for the block to leave their own repository"
-  local target="${1:?task-rule-remove: a name or a path is required}" match code_path project_path
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  local target="${1:-}" match code_path project_path
+  [ -n "$target" ] || die3 "task-rule-remove: a name or a path is required"
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   code_path="$(printf '%s' "$match" | jq -r '.codePath')"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
@@ -1408,8 +1422,7 @@ do_task_rule_remove() {
       END { if (held) print "" }
     ' "$claude_md" > "$tmp" && mv "$tmp" "$claude_md" || {
       rm -f "$tmp"
-      echo "REFUSED: rewriting ${claude_md} failed. The task rule was not removed." >&2
-      return 1
+      die3 "task-rule-remove: rewriting ${claude_md} failed. The task rule was not removed"
     }
     echo "REMOVED: ${claude_md}"
   else
@@ -1431,8 +1444,9 @@ do_task_rule_remove() {
 
 do_uninstall() {
   cr_require_person uninstall "a person asked for AIDA to leave their own repository"
-  local target="${1:?uninstall: a name or a path is required}" match project_path
-  match="$(resolve_target "$target")" || { unresolved $? "$target"; return 1; }
+  local target="${1:-}" match project_path
+  [ -n "$target" ] || die3 "uninstall: a name or a path is required"
+  match="$(resolve_target "$target")" || unresolved $? "$target"
   project_path="$(printf '%s' "$match" | jq -r '.path')"
 
   local task_rule_state code_path
@@ -1458,8 +1472,9 @@ do_record_declined() {
   # A recorded no is never asked again, so nobody's silence may write one (foundations.md, Run
   # mode). An unrecorded question is offered again at the next interactive session, which is right.
   cr_require_person record-declined "a person declined the offer of a project here"
-  local directory="${1:?record-declined: a directory is required}"
-  registry_record_declined_offer "$directory"
+  local directory="${1:-}"
+  [ -n "$directory" ] || die3 "record-declined: a directory is required"
+  registry_record_declined_offer "$directory" || die3 "record-declined: the registry could not be written. See the error above"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1469,7 +1484,7 @@ do_record_declined() {
 do_rebuild_registry() {
   local base="${1:-}"
   [ -n "$base" ] || base="$(settings_get_projects_base 2>/dev/null)" || base="$PROJECTS_HOME_DEFAULT"
-  registry_rebuild "$base"
+  registry_rebuild "$base" || die3 "rebuild-registry: the registry could not be rebuilt. See the error above"
 }
 
 do_read_projects_base() {

@@ -20,8 +20,8 @@ The run mode does not decide whether you answered. An interactive run asks for y
 - In review: `close --row`.
 - In completion: `close` with `--reason`, `--leave`, `--captures-offered` or
   `--observed-accepted`.
-- In the task skill: `environment up`, `environment not-applicable`, and a second
-  `environment down` on an adopted site when no status line can tell whether it is gone.
+- In the task skill: a second `environment down` on an adopted site when no status line can tell
+  whether it is gone.
 
 `/aida:task prune` with a task id or `--all` takes no recorded answer. Run it yourself.
 

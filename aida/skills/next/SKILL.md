@@ -195,7 +195,7 @@ Read the first line.
   inside one. Move it, above. Then run the same action again. Read it as `FOUND: new`.
 - **`FOUND: legacy_complete`.** The same lines follow. Say plainly that this task finished before
   the tasks folder existed and stays where it is: no contract is offered on it here.
-- **`REFUSED: ...`** on stderr. The name is not a safe task id (a path separator, `.` or `..`).
+- **Exit 3** naming the target: the name is not a safe task id (a path separator, `.` or `..`).
   Say so and ask for a different one.
 - **`NOT FOUND: <target>`** on stderr. Say so, then offer the same choice as "With nothing open,"
   above: start a new task with this name, or show what is open instead.

@@ -1,6 +1,6 @@
 ---
 name: task
-description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
+description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks and of tasks nobody started.
 argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
 arguments: [action, target]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh read-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh --run-mode * set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh distill *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh distill *), Agent, EnterWorktree
@@ -53,32 +53,28 @@ check only saves a round trip.
 Autonomous with no name given: **halt.** A task cannot be filed without one.
 
 **2. Goal.** Ask what this task is for, in the spirit of a user story: what someone wants to
-accomplish and why, not a ticket. Write it back in one or two sentences and confirm with a plain
-yes or no before writing anything. Autonomous with no goal given or implied by the conversation:
-**halt.** A task with no stated goal is not a record of anything.
+accomplish and why, not a ticket. Write it back in one or two sentences and go on. Scope reads the
+goal with the person before anything is built. Autonomous with no goal given or implied by the
+conversation: **halt.** A task with no stated goal is not a record of anything.
 
 **3. Write it.** First the worktree base. A project made before this setting may record none. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh read-worktree-base "<projectPath>"
 ```
-Exit 0: a base is recorded. Use it silently; this is never asked a second time. Exit 1: it
-printed the default. Interactive: ask once, "Where should task worktrees go? Default:
-`<printed folder>`." An empty answer passes no folder, which records the default. A typed
-absolute path passes that path. Record it:
+Exit 0: a base is recorded. Use it silently. Exit 1: it printed the default, and the tree goes
+there. Nothing is asked. Name that folder once, and say that the project's `set-worktree-base`
+action moves the next tree elsewhere:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   set-worktree-base "<projectPath>" ["<folder>"]
 ```
-Exit 3 refuses the folder, for the reason it prints: ask again. Autonomous: do not ask, and
-record nothing. The tree goes in the default folder. Say so; the next attended create asks. This
-is asked here
-because the first tree is about to be made, and a tree once made stays where it is.
+A tree once made stays where it is.
 
 Then run the create, with the run mode set as decided above. Add `--after <task-id>` when the
 person said this task builds on another task of this project:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
-  create --project "<projectPath>" --name "<name>" [--after <task-id> [--in-tree]] -- <goal...>
+  create --project "<projectPath>" --name "<name>" [--after <task-id> [--in-tree]] [--tree-at-start] -- <goal...>
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree in one folder per repository beside the code path, at
@@ -89,9 +85,10 @@ slug of the code folder plus the task name, so a site name is predictable and un
 outside the code path for one reason. A nested worktree is invisible to a tool that registers
 projects by folder, and DDEV hands it to the parent project. A tree that `task.json` already
 records on disk stays where it is.
-The tree is cut from the trunk, HEAD of the code path. Made from inside another task's tree, it
-starts from that task's work only while that task is open and its branch is not in the trunk.
-The `base:` line names the commit and the reason. Show it. With `--after`, the tree is cut from
+The tree is cut from the trunk, HEAD of the code path, wherever `create` runs. The `base:` line
+names the commit. Show it. With `--tree-at-start`, `create` makes no tree: `start` makes it.
+Completion makes each follow-up task this way, so a follow-up nobody starts costs no tree. Skip
+steps 4 and 5 then. With `--after`, the tree is cut from
 that task's branch, and `task.json` records `after`. Use it for a chain of tasks made up front,
 because a tree cut now from trunk holds none of the earlier builds. While that task's build is
 unfinished, no tree is made: `worktree:` reads `none` and `after-build:` reads `unfinished`. Skip
@@ -111,18 +108,8 @@ came without `--after`. Or the worktree could not be made. In the last case the 
 repair the message gives and stop.
 
 **4. Enter the tree.** Every stage action of this task runs inside that worktree, and refuses
-from anywhere else. The `worktree:` line names it. Call the `EnterWorktree` tool with that path,
-so scoping in this same window is not refused. The tool asks for approval, because the path is
-outside `.claude/worktrees/`; that is expected. From a window outside the code repository the
-tool refuses on first entry, and from a session already inside a worktree it refuses too. A
-person may also decline the prompt, which is not a refusal. After either outcome, do not call the
-tool again. Take the other route, and read `/aida:next` for the whole rule. The scripts stay
-reachable without entry: start every Bash
-call with `cd <path> &&`. Every call needs it, because the shell's directory resets between
-calls. The `cd` part asks for approval, because the tree sits outside this window's directory.
-The exit 79 message names that form too. The way in is `/cd <path>`, typed by the person: it
-moves this session into the tree and keeps the conversation (Claude Code 2.1.169 or later).
-Print the path and say so. Go on to step 5 either way.
+from anywhere else. The `worktree:` line names it. Enter it as `/aida:next` says under "Enter the
+tree", the one copy of that rule. Go on to step 5 either way.
 
 **5. Offer the site.** Runs here after step 4, and again at `start` whenever the task record
 still has no `environment`, whoever called `start`. A worktree has the branch's files and no
@@ -164,8 +151,8 @@ and the `--setup-recipe` flags. `down` takes none: it reads the recipe path the 
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   environment --project "<projectPath>" "<task-id>" not-applicable -- <reason...>
 ```
-`not-applicable` writes `environment` as the reason alone, and commits. It is a person's answer,
-so it refuses unattended at 70. `up` replaces it; `down` with it recorded says nothing was up.
+`not-applicable` writes `environment` as the reason alone, and commits. `up` replaces it; `down`
+with it recorded says nothing was up.
 `show` prints the recipe path, the preconditions prose and the build-in-place prose. It prints
 the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs none of
 them. It prints the paths of the `## Files` blocks, the files `up` writes, and one
@@ -182,7 +169,7 @@ there. Exit 0 prints `status: up`. Any other exit prints `status: down` and the 
 output. The line may run a script from `## Files`. The script is written where absent, and taken
 out after the line. The implementation step runs the same line before an order's verify lines.
 
-`up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with each
+`up` needs no person's answer, because `down` takes the site away again. It runs in the task's worktree, with each
 command as it ran and that command's own output in `records/environment-up.txt`, in this order,
 and one line in that record marking the address command, so `down` can find that command's output
 later.
@@ -266,34 +253,37 @@ site in a file absent where the branch started.
 
 ## `prune [<task-id>]...`
 
-The worktrees of complete tasks. A worktree kept after completion costs disk and a DDEV project
-each, and a tree removed too early loses uncommitted work. So this lists first, asks per tree,
-and removes only what a person named. Run it from the main checkout, never from inside a tree
-it may remove.
+The worktrees of complete tasks, and of tasks nobody started. A worktree kept after completion
+costs disk and a DDEV project each, and a tree removed too early loses uncommitted work. So this
+lists first, asks once, and removes only what a person named. Run it from the main checkout,
+never from inside a tree it may remove.
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   prune --project "<projectPath>" [--all] [<task-id>]...
 ```
-**1. List.** With no id the script prints one `id:` line per complete task that records a
-worktree. The line holds the path, the branch, and whether the branch is merged into the code
-path's current branch. It also says whether the tree is on disk and whether a site is up,
-which reads `coming-up` for a tree whose bring-up did not finish.
-`prune: none` means nothing to remove. Show the lines. Autonomous: this is the whole action.
-Say once that a tree goes only on a person's yes, and stop. The script refuses an id unattended
-at 70.
+**1. List.** With no id the script prints one `id:` line per complete task, and per task in
+state `new`, that records a worktree. The line holds the path, the branch, and whether the branch
+is merged into the code path's current branch. It also says whether the tree is on disk, whether
+a site is up, and the task's state. A site reads `coming-up` for a tree whose bring-up did not
+finish. `prune: none` means nothing to remove. Show the lines. Autonomous: this is the whole
+action. Say once that a tree goes only on a person's yes, and stop. The script refuses an id
+unattended at 70.
 
-**2. Ask per tree.** For each listed tree ask a plain yes or no, one at a time, with the line.
-Never ask once for all of them. An unmerged branch is a reason to say so before asking: the
-tree goes, the branch stays.
+**2. Ask once.** Show the list and ask which trees go. The answer names the trees, or says all
+of them. Say first which branches are unmerged and hold a commit of their own: the tree goes,
+that branch stays.
 
-**3. Remove.** Run the action once with every id that got a yes, in the order given, or with
-`--all` when every tree got one. For each tree the script tears the site down when one is up,
+**3. Remove.** Run the action once with every id the answer named, in the order given, or with
+`--all` when it named every tree. For each tree the script tears the site down when one is up,
 then removes the tree. It removes the group folder when it is empty, never the worktree base
-itself. It deletes the branch when it is merged. It clears `worktree` and
+itself. It deletes the branch when it is merged, or when it holds no commit of its own. A task in
+state `new` gets a tree again when it starts. A task that records no tree prints `unchanged:`.
+It clears `worktree` and
 `environment` from `task.json` and commits. It prints one `pruned:` line per tree naming what
 happened to the branch. A tree that another task also records stays, and its line says `kept`:
-a later task made with `--in-tree` builds in it. Show them. Exit 3 names the tree it stopped at and why. The task is not
-complete, git refused a tree with uncommitted changes, or the tear-down failed. Nothing after
+a later task made with `--in-tree` builds in it. Show them. Exit 3 names the tree it stopped at and why. The task is
+started and not complete, or it was never started and its branch holds a commit. Or git refused a
+tree with uncommitted changes, or the tear-down failed. Nothing after
 that tree was touched, and nothing is ever forced. Say what it printed and stop.
 
 ## `repair <old-task-folder>`
@@ -308,7 +298,8 @@ Given the path to a task folder still sitting under `implementation_process/in_p
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh repair --project "<projectPath>" "<old-task-folder>"
 ```
 No confirmation is needed: nothing here is destructive. The script refuses outright when the
-destination already exists. It reads the goal under `## Goal`, or under `## Problem` when there
+destination already exists. When the old folder is gone and `tasks/` holds the task, it was
+repaired already: it prints `UNCHANGED` and exits 0. It reads the goal under `## Goal`, or under `## Problem` when there
 is no `## Goal`, the heading some version 5 records used. With neither it refuses, naming both,
 rather than moving something it cannot verify. It prints `goal-heading:` with the one it read.
 It reads the goal, and the parent and children when an old header carries them, back from the
@@ -341,19 +332,20 @@ it is not usually a person typing a command. By hand, run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   start --project "<projectPath>" "<task-id>" -- <why...>
 ```
-Already `in_progress`: prints `UNCHANGED` and does nothing further. Already `complete`: refused,
-since a completed task is not reopened here. Otherwise it writes the new state, commits, and runs
-the task check. Show the whole output. The check reports and never repairs, so a finding here is
-the one thing to repair now, before the stage writes anything.
+Already `in_progress`: prints `UNCHANGED` and does nothing further. Already `complete`: refused at
+3, since a completed task is not reopened here. Otherwise it makes the tree when the task records
+none, as a follow-up does, cut from the trunk. Then it writes the new state, commits, and runs the
+task check. Show the whole output. The check reports and never repairs, and `start` exits 0
+whatever it found. A finding here is the one thing to repair now, before the stage writes anything.
 
 A task made with `--after` starts only when the task it builds on has finished its build. That
-task then holds `implementation/finished.json`, or reads complete. Otherwise `start` prints
-`REFUSED` and exits 1, and the stage that called it writes nothing. Say which task to build first.
+task then holds `implementation/finished.json`, or reads complete. Otherwise `start` refuses at 3, and the stage
+that called it writes nothing. Say which task to build first.
 When it starts, `start` cuts the tree from that task's branch, and `worktree:` names the tree.
 That task may be complete with its branch merged and pruned. The tree is then cut by the base
 rule above, because that work is on trunk. A tree that cannot be cut exits 3, and no state is
 written.
-Enter it as `create` step 4 says.
+Enter it as `/aida:next` says under "Enter the tree".
 
 When the output holds `environment: none`, run `create`'s step 5 now, whoever called `start`: a
 person by hand, or a stage's script through scope's `init`. A stage's script passes that line
@@ -375,6 +367,8 @@ one outright. By hand, the call is:
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   complete --project "<projectPath>" "<task-id>" -- <summary...>
 ```
+A task nobody started closes here too, such as a follow-up the person finds moot. The summary is
+the reason, and `prune` then removes its tree.
 It sets the state to `complete`, appends a dated `## Completed` section holding the summary to
 `task.md`, and commits this task's folder, `tasks/<id>`, alone. Every task action commits that
 way, never `tasks/` whole, so another task's uncommitted file is never taken. That commit carries
@@ -393,8 +387,8 @@ split advisor recommends the children and their criteria after research closes. 
 `split-read` action checks that every criterion is claimed once, before this action runs. This only performs
 the mechanical split.
 
-Each child takes the parent's `after`, so it waits for the same build, and gets its tree as
-`create` gives one. The two-level limit stays: a task that already has a parent cannot be split again, and a child
+Each child takes the parent's `after`, so it waits for the same build. It gets its tree when it
+starts, so a tree refused for one child never leaves a split half written. The two-level limit stays: a task that already has a parent cannot be split again, and a child
 always lives in the same project as its parent, never another one. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
@@ -404,11 +398,10 @@ always lives in the same project as its parent, never another one. Run:
 ```
 Repeat `--child ... --goal ... [--criterion ...]` once per child, at least twice. It creates each
 child's folder and `task.json` with `parent` set to the split task's own id, writes each child's
-goal and any handed-down criteria into its `task.md`, makes each child's own worktree the way
-`create` does, adds every new id to the parent's own
-`children` list, reads all of that back, and commits everything together. Exit code 1 means it
-stopped before writing anything: `NOT FOUND` says the named task does not exist, `REFUSED` says
-the two-level limit stopped it. Say which and stop. Show the whole output otherwise.
+goal and any handed-down criteria into its `task.md`, adds every new id to the parent's own
+`children` list, reads all of that back, and commits everything together. Exit code 3 before any
+write means the named task does not exist, a child id is refused, or the two-level limit stopped
+it. Say which and stop. Show the whole output otherwise.
 
 ## `set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]...`
 
@@ -514,11 +507,11 @@ read the sidecar it writes. A record path absent mid-stage is normal; the distil
 a gap.
 
 Name what this conversation decided that neither the sidecar's `decisions` nor the stage's own
-files hold. Each is one sentence: what was decided and what it applies to. Show the list and ask
-for a plain yes or no. Nothing is written before yes. Nothing to save is said in one line, and
-`save` still runs with no text. That records the time, which clears the compaction hook's refusal.
+files hold. Each is one sentence: what was decided and what it applies to. Write them, then show
+what was saved. Nothing to save is said in one line, and `save` still runs with no text. That
+records the time, which clears the compaction hook's refusal.
 
-Yes: run once per sentence, or once with all of them:
+Run once per sentence, or once with all of them:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   save --project "<projectPath>" "<task-id>" -- <text...>

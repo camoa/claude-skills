@@ -31,13 +31,13 @@
 #   1  no project owns this directory
 #   3  could not do its job: a bad argument, a refused command, a differing file, a recipe with no
 #      block, a lookup nobody completed, an id registered with different fields, an absent accept row,
-#      a surface file another branch holds, a command surface beside a page surface for e2e, an e2e
-#      surface with no reason, an id unregister does not find
+#      a command surface beside a page surface for e2e, an e2e surface with no reason, an id
+#      unregister does not find, or `register --url`, `unregister` or `baseline` before `install`
+#      wrote the surface file
 #   4  a recipe command ran and failed; its own output, in the file, is the answer
-#  61  the tree is dirty, so an install, register, unregister or baseline commit would sweep other
-#      work in
-#  62  `register --url`, `unregister` or `baseline` before `install` wrote the surface file
-#  70  a person's answer was passed with nobody present
+#  61  the tree is dirty, so an install or baseline commit would sweep other work in. A register or
+#      unregister commits the surface file alone, so a dirty tree does not refuse it
+#  70  `--confirmed` or `decline` was passed with nobody present
 #  72  two frameworks each carry a recipe for one kind, or two accept rows for one baseline
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no variable as a case pattern.
@@ -102,21 +102,22 @@ write_project_field() {
     || printf 'surfaces-actions: the surfaces field was written but not committed.\n' >&2
 }
 
-# Refuses a new surface file here while another branch holds one, since the two would collide at
-# merge (gap row 278). Install and a command's register both write a new file.
-refuse_surface_file_elsewhere() {
+# Warns that another branch holds a surface file while this one writes a new one here, since the
+# two meet at merge (gap row 278). git shows the clash there as a conflict on one file. Install and
+# a command's register both write a new file.
+warn_surface_file_elsewhere() {
   local branch
   [ ! -f "$SURFACE_FILE" ] || return 0
   branch="$(sf_branch_with "$TREE" "$SURFACE_REL")"
-  [ -z "$branch" ] || die 3 "$ACTION: branch $branch holds $SURFACE_REL, and a new one here would collide with it. The file reaches this tree once that branch lands on the trunk. If that branch is abandoned, deleting it, local and remote, lets $ACTION run."
+  [ -z "$branch" ] || printf 'warning: %s: branch %s holds %s too, so the two files meet when both branches reach the trunk\n' "$ACTION" "$branch" "$SURFACE_REL"
 }
 
-# Loads the surface file and refuses every state but ok: missing is a step out of order (62).
+# Loads the surface file and refuses every state but ok: missing is a step out of order.
 require_surface_file() {
   sf_load_surfaces "$SURFACE_FILE"
   case "$SF_STATE" in
     ok) ;;
-    missing) die 62 "$ACTION: there is no surface file at $SURFACE_FILE. Run install first." ;;
+    missing) die 3 "$ACTION: there is no surface file at $SURFACE_FILE. Run install first." ;;
     *) die 3 "$ACTION: $SURFACE_FILE is $SF_STATE" ;;
   esac
 }
@@ -143,7 +144,6 @@ load_viewports() {
     out="$(fenced_blocks_under "$RECIPE" Viewports json | jq -c 'if type == "array" then . else empty end' 2>/dev/null)"
     VIEWPORTS_JSON="${out:-[]}"; return 0
   fi
-  cr_require_person "--viewport" "a person chose the viewports"
   out='[]'
   while IFS= read -r one; do
     [ -n "$one" ] || continue
@@ -179,7 +179,7 @@ do_show_or_install() {
     rm -rf "$files_dir"; exit 0
   fi
   recipe_files_refuse_differing install "$RECIPE" "$list" "$TREE" "$files_dir"
-  refuse_surface_file_elsewhere
+  warn_surface_file_elsewhere
   br_require_clean_tree install "$TREE"
   load_viewports
   [ "$RUN_MODE" = "interactive" ] && { printf 'ABOUT TO RUN, from %s:\n' "$RECIPE"; printf '%s\n' "$steps" | sed 's/^/  /'; }
@@ -211,7 +211,7 @@ do_register() {
   shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --enable) cr_require_person "--enable" "a person confirmed this surface"; enabled=true; shift; continue ;;
+      --enable) enabled=true; shift; continue ;;
       --critical) critical=true; shift; continue ;;
       --url|--command|--kind|--mask|--path|--reason) [ "$#" -ge 2 ] || die 3 "register: $1 needs a value" ;;
       *) die 3 "register: unrecognized argument: $1" ;;
@@ -243,10 +243,8 @@ do_register() {
   # A command surface needs no recipe and no harness, so it writes the surface file and turns end
   # to end on when nothing has: a command-line project has no install to run first.
   sf_load_surfaces "$SURFACE_FILE"
-  local created=""
   if [ -n "$command" ] && [ "$SF_STATE" = "missing" ]; then
-    refuse_surface_file_elsewhere
-    br_require_clean_tree register "$TREE"; created=yes
+    warn_surface_file_elsewhere
     mkdir -p "$TREE/.visual-review" || die 3 "register: could not create $TREE/.visual-review"
     write_atomic "$SURFACE_FILE" "$(jq -n '{schemaVersion: 1, viewports: [], surfaces: []}')"
     KIND="e2e"; write_project_field '.registryPath = $sf | .e2e.enabled = true'
@@ -267,13 +265,11 @@ do_register() {
     [ "$have" = "$row" ] && { printf 'surface: %s unchanged\n' "$id"; exit 0; }
     die 3 "register: $id is already registered with different fields. Registered: $have. Given: $row. A duplicate id makes the file invalid, so edit the file or choose another id."
   fi
-  # A file this call created is the one change in a tree found clean above.
-  [ -n "$created" ] || br_require_clean_tree register "$TREE"
   doc="$(jq --argjson row "$row" '.surfaces += [$row | if .url == "" then del(.url) else . end]' "$SURFACE_FILE")" || die 3 "register: could not read $SURFACE_FILE"
   write_atomic "$SURFACE_FILE" "$doc"
   printf 'surface: %s enabled=%s kinds=%s paths=%s critical=%s\nsurface-file: %s\n' "$id" "$enabled" \
     "$(printf '%s' "$kinds" | jq -r 'join(",")')" "$(printf '%s' "$paths" | jq 'length')" "$critical" "$SURFACE_FILE"
-  recipe_commit_if_changed "$TREE" "$ACTION" "register wrote nothing new" "Register the $id surface through the surfaces skill"
+  recipe_commit_if_changed "$TREE" "$ACTION" "register wrote nothing new" "Register the $id surface through the surfaces skill" "$SURFACE_REL"
 }
 
 # ------------------------------------------------------------------ unregister
@@ -285,11 +281,10 @@ do_unregister() {
   require_surface_file
   printf '%s' "$SF_SURFACES" | jq -e --arg id "$id" 'any(.[]; .id == $id)' >/dev/null \
     || die 3 "unregister: $id is not a surface in $SURFACE_FILE"
-  br_require_clean_tree unregister "$TREE"
   doc="$(jq --arg id "$id" '.surfaces |= map(select(.id != $id))' "$SURFACE_FILE")" || die 3 "unregister: could not read $SURFACE_FILE"
   write_atomic "$SURFACE_FILE" "$doc"
   printf 'unregistered: %s\nsurface-file: %s\n' "$id" "$SURFACE_FILE"
-  recipe_commit_if_changed "$TREE" "$ACTION" "unregister wrote nothing new" "Unregister the $id surface through the surfaces skill"
+  recipe_commit_if_changed "$TREE" "$ACTION" "unregister wrote nothing new" "Unregister the $id surface through the surfaces skill" "$SURFACE_REL"
 }
 
 # -------------------------------------------------------------------- baseline

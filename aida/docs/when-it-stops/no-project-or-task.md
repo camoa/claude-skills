@@ -29,7 +29,7 @@ task is active in this conversation.
   nobody present it shows the list, says none was chosen, and goes on.
 - **`NOT FOUND: <name>`.** No task has that id. `/aida:next` offers to start a task with that
   name, or to show what is open.
-- **`REFUSED`.** The name holds a `/`, or is `.` or `..`, so it is not a safe task id. Give
+- **Exit 3.** The name holds a `/`, or is `.` or `..`, so it is not a safe task id. Give
   another.
 - **A `WARN:` line.** A task folder holds no readable `task.json`. `/aida:next` skips it and
   names it. Repair or remove that folder.

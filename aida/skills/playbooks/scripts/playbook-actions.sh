@@ -16,9 +16,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # `capture` appends one play to the project's file and commits the project folder. `list` prints
 # one line per play. Every action prints `key: value` summary lines and paths, never a play body.
 #
-# Exit codes: 0 did what was asked; 1 capture refused a duplicate slug; 3 the script could not do
-# its job, including a task folder that does not resolve; 79 load was run outside the task's
-# worktree, the shared helper's own number.
+# Exit codes: 0 did what was asked; 3 the script could not do its job, including a task folder
+# that does not resolve and a capture whose slug the file already holds; 79 load was run outside
+# the task's worktree, the shared helper's own number. A record that does not match the schema is
+# written all the same, with a warning in the task record: review's playbooks check reads it.
 #
 # Depends on, shipped by other builders and never edited here: scripts/lib/task-helpers.sh
 # (resolve_task_folder, write_atomic), scripts/lib/recipes.sh (resolve_project_folder,
@@ -120,9 +121,10 @@ do_load() {
     {schemaVersion: 1, loadedAt: $at,
      sources: ([$ps, $js] + $fd.sources + ($cat.sources // [])),
      plays: ($pp + $jp + $fd.plays + ($cat.plays // []))}')"
+  [ -n "$record" ] || die 3 "load: the record could not be built from the sources above"
   result="$(schema_check_compare "$SCHEMA" <(printf '%s\n' "$record"))" || die 3 "load: the record could not be compared with $SCHEMA"
   faults="$(printf '%s' "$result" | jq -r '(.missing + .unreadable) | map(.field) | join(" ")')"
-  [ -z "$faults" ] || die 3 "load: the record does not match $SCHEMA: $faults. This is a defect in playbook-actions.sh"
+  [ -z "$faults" ] || task_warn "$task_path" "playbooks load" "" "the record does not match $SCHEMA: $faults"
   mkdir -p "$task_path/records"
   write_atomic "$task_path/records/playbooks.json" "$record"
   printf '%s' "$record" | jq -r '
@@ -159,7 +161,7 @@ do_capture() {
   id="$(pb_slug "$title")"
   [ -n "$id" ] || die 3 "capture: the title leaves no slug: $title"
   if [ -f "$file" ] && pb_parse_file "$file" 2>/dev/null | jq -e --arg id "$id" 'any(.[]; .id == $id)' >/dev/null; then
-    die 1 "capture: $file already holds a play with the id $id"
+    die 3 "capture: $file already holds a play with the id $id"
   fi
   play="$(mktemp)" || die 3 "cannot create a temp file"
   { printf '### %s\n\n**What:** %s\n**Rationale:** %s\n**When it applies:** %s\n' "$title" "$what" "$rationale" "$when"

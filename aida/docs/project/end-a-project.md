@@ -16,9 +16,9 @@ drop it from the registry. Every change is reversible.
 Type `/aida:project state <project> <active|complete|archived>`. To reopen a project, set it to
 `active`.
 
-AIDA asks why first. Your answer becomes the reason in the commit. AIDA writes the new state into
-the project file and the registry row, and commits the change. With nobody present, AIDA uses a
-reason already given, or records "(autonomous run, no reason given)".
+A reason you gave becomes the reason in the commit; AIDA does not ask for one. With none, it
+records "(no reason given)". AIDA writes the new state into the project file and the registry
+row, and commits the change.
 
 Then AIDA prints an `OPEN TASKS:` line. It counts the tasks that are not complete and names each
 one, or says `none`. AIDA never refuses to close a project over that count. You decide. Last, the

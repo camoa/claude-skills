@@ -7,8 +7,8 @@ goes on.
 ## What you see
 
 - **Exit 70.** A person's answer was passed with nobody present: a review row, a completion
-  reason, a site action, a test confirmation, a tool install, or a project write such as the task
-  rule.
+  reason, the forgetting of an adopted site, a test confirmation, a tool install, or a project
+  write such as the task rule.
 - **Exit 68.** A person's judgement in the build: the three ways out of a stop, `go-on`, `redo`
   and `drop`, and `start --leftovers keep`. These
   refuse in every run mode until your answer is on record.
@@ -23,9 +23,9 @@ goes on.
 - **Approve the prompt.** The refusal prints the command that records your answer. Claude runs it,
   and Claude Code shows you a permission prompt with your words. This works for the build's calls,
   the run-mode switch, design's approval of command lines, review's close, completion's close and
-  the site actions. See [the person's answer](../task/person-answer.md).
+  the adopted site. See [the person's answer](../task/person-answer.md).
 - **Set the task interactive**, through that same prompt, then run the stage again and answer when
-  it asks. This works for review, completion and the site actions.
+  it asks. This works for review, completion and the adopted site.
 - **Run it yourself with a person present.** A tool install and a project write such as the task
   rule take no recorded answer.
 

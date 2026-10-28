@@ -34,16 +34,16 @@ hook's own header lists every form it catches and every form it cannot.
 
 ## Prune the worktree
 
-Run `/aida:task prune` from the main checkout, never from inside a tree it may remove. It asks a
-yes or no per tree. It refuses a tree whose site was adopted, and names the tear-down route. It
-keeps a tree another task builds in. See [the task pages](../../task/README.md).
+Run `/aida:task prune` from the main checkout, never from inside a tree it may remove. It lists the
+trees and asks once which go. It refuses a tree whose site was adopted, and names the tear-down
+route. It keeps a tree another task builds in. See [the task pages](../../task/README.md).
 
 ## A task that will not be merged
 
 Close the task anyway. A task that stays open sits in `/aida:next` forever. Say why the work ended
 in the reason, or in the summary when review passed. The pull request body stays in the folder as
-the account of what was done. Then prune: prune keeps an unmerged branch, and AIDA never deletes
-one.
+the account of what was done. Then prune: prune keeps an unmerged branch that holds a commit of its
+own, and AIDA never deletes one.
 
 ## Why it works this way
 

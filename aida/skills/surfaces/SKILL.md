@@ -13,7 +13,7 @@ that answer lives in a recipe outside this plugin. Setup takes no task folder, t
 skill does. With no task active, it runs at the code path. Run from inside a task's worktree,
 which is outside the code path, it runs there instead, so the setup ships with the task's branch. The
 review skill runs the surfaces;
-this skill only sets them up. The guards live in the script: `--enable` and `decline` refuse
+this skill only sets them up. The guards live in the script: `--confirmed` and `decline` refuse
 unattended. This skill waits for a plain yes before `install`. So a stage's offer may invoke it.
 
 Every call below runs `surfaces-actions.sh`, named in this skill's own grant, so it runs without
@@ -77,7 +77,8 @@ Only the first word says anything about the framework. Never retype a command ou
 script reads the blocks.
 
 Before `install` or `baseline`, invoke the tool skill with `require <path>` for each recipe path.
-Its section "Tools a recipe names" says what each answer means. Go on only when it exits 0.
+Its section "Tools a recipe names" says what each answer means. It always exits 0. Name each tool
+it reads absent or unknown, and go on.
 
 ## Show, then install
 
@@ -104,8 +105,8 @@ reason in the message, the way `baseline` does. It commits the project record to
 | 61 | The tree is dirty. | Say which paths. Commit or move them aside, then run install again. |
 | 72 | Two frameworks each carry a recipe. | Say which two, and stop. |
 
-`--viewport <name>=<w>x<h>` replaces the recipe's viewport list. It is a person's answer, so pass
-it only when a person gave it.
+`--viewport <name>=<w>x<h>` replaces the recipe's viewport list. Pass it only when a person gave
+it. A surface file another branch holds prints a `warning:` line, and the install goes on.
 
 ## Discover the surfaces, then a person confirms
 
@@ -121,13 +122,12 @@ way. Discovery ends with one `register` call per surface the person confirmed:
 An end to end test is added on purpose, so a surface with the `e2e` kind needs `--reason`. The
 reason is the person's words: the core journey it walks, or the behaviour no lower test can reach.
 With no reason, `register` refuses at 3 and writes nothing. The surface file keeps the reason.
-Pass `--enable` only for a surface the person confirmed. Nothing is enabled unattended. Each
+Pass `--enable` only for a surface the person confirmed. Each
 `--path` is a glob, relative to the code tree, naming files that render the surface. Review runs
 the surface only when the diff touches one of them. `--critical` makes it run on every review.
-A surface with no `--path` runs on every review too. Each `register` commits the surface file,
-the way `install` does, so `baseline` finds a clean tree.
-Exit 62 means `install` has not run. Exit 3 names an id already registered with different
-fields. Exit 61 means the tree is dirty with something else.
+A surface with no `--path` runs on every review too. Each `register` commits the surface file
+alone, so other uncommitted work in the tree neither stops it nor goes into the commit.
+Exit 3 names an id already registered with different fields, or says `install` has not run.
 
 ## Remove a surface
 
@@ -136,8 +136,8 @@ fields. Exit 61 means the tree is dirty with something else.
 ```
 Removes one surface from the surface file and commits it. Run it only when a person decided the
 surface goes, such as at test cleanup when a lower test covers it. The baselines of that surface
-stay on disk. Exit 3 means no surface has that id, exit 61 that the tree is dirty, and exit 62 that
-there is no surface file.
+stay on disk. It commits the surface file alone. Exit 3 means no surface has that id, or there is
+no surface file.
 
 ## Take the first baselines
 

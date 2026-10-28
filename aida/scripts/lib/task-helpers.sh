@@ -1202,34 +1202,6 @@ task_worktree_group() {
   printf '%s/%s.worktrees' "$base" "$(pb_slug "$(basename -- "$code")")"
 }
 
-# Whether a new tree stacks on the tree this action runs in, or starts from the trunk (gap row
-# 382). The trunk is the code path's HEAD: a branch name in no fixed list, and the base a plain
-# create always had. The tree this action runs in is stacked on only when it is another tree of
-# this repository, its branch is the recorded branch of a task that is not complete, and that
-# branch is not merged into the trunk. So a follow-up made in its parent's tree holds the parent's
-# unmerged work, and gets every later task once the parent is merged. A branch no task records
-# is not stacked on, because `--after` is the route for a chain. $1 the project folder, $2 the
-# resolved code path. Prints the reason alone for the trunk, or that tree, a tab, and the reason
-# to stack. Calls no die function.
-task_worktree_stack() {
-  local code="$2" top held owner
-  top="$(active_tree_for "$code" "$(pwd -P)")"
-  if [ "$top" = "$code" ]; then printf 'This is the trunk, the HEAD of %s' "$code"; return 0; fi
-  held="$(git -C "$top" symbolic-ref -q --short HEAD 2>/dev/null)"
-  [ -z "$held" ] || owner="$(find "$1/tasks" -name task.json -exec jq -r --arg b "$held" \
-    'select(.worktree.branch == $b) | "\(.id) \(.state)"' {} + 2>/dev/null | head -1)"
-  if [ -z "${owner:-}" ]; then
-    printf 'This is the trunk, the HEAD of %s. The tree this ran in, %s, holds %s, and no task of this project records it' \
-      "$code" "$top" "${held:-a detached HEAD}"
-  elif [ "${owner##* }" = complete ]; then
-    printf 'This is the trunk, the HEAD of %s. The tree this ran in holds %s, and its task %s is complete' "$code" "$held" "${owner% *}"
-  elif git -C "$code" merge-base --is-ancestor "$held" HEAD 2>/dev/null; then
-    printf 'This is the trunk, the HEAD of %s. The tree this ran in holds %s of task %s, which the trunk already holds' "$code" "$held" "${owner% *}"
-  else
-    printf '%s\tThe tree this ran in holds %s of task %s, which is open and not merged into the HEAD of %s' "$top" "$held" "${owner% *}" "$code"
-  fi
-}
-
 # The task's own git worktree (ideal/task.md, "A worktree per task, always"), in the group folder
 # above, named <slug of the code folder>-<id>: a tree nested under the code path is invisible to a
 # tool that registers projects by folder, and DDEV hands it to the parent project. The folder name
@@ -1244,14 +1216,15 @@ task_worktree_stack() {
 # from disk is not trusted as an address: it is computed again by the rule above, and the tree is
 # made and recorded there. That is the repair for a task carried to a second machine, and for a
 # folder named before the id was slugged. A recorded tree on disk is kept. The base is the trunk,
-# the code path's HEAD, unless task_worktree_stack says to stack on the tree this action runs in.
+# the code path's HEAD, wherever the action runs (gap row 440: a tree cut from an open task's
+# branch replays that branch's history once it is squash-merged). `--after` is the route for a chain.
 # A task whose record names `after` is cut from that task's branch instead, or with `inTree`
 # takes over that task's tree. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
 # said once, on stderr, and nothing asks. One stderr line names the base and why.
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
-  local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule group base_branch after after_branch after_base pred why tab
+  local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base said dirty id
+  local found rule group base_branch after after_branch after_base pred why
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -1353,13 +1326,10 @@ task_worktree() {
     if [ -n "$after_branch" ]; then
       base="$after_base"; base_branch="$after_branch"; why="Task $id builds on task ${after% *}"
     else
-      base_dir="$code"
-      why="$(task_worktree_stack "$project" "$code")"
-      tab="$(printf '\t')"
-      case "$why" in *"$tab"*) base_dir="${why%%"$tab"*}"; why="${why#*"$tab"}" ;; esac
-      base="$(git -C "$base_dir" rev-parse HEAD 2>/dev/null)" \
-        || { rmdir "$group" 2>/dev/null; die3 "$who: $base_dir has no commit to cut a worktree from"; }
-      base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
+      why="This is the trunk, the HEAD of $code"
+      base="$(git -C "$code" rev-parse HEAD 2>/dev/null)" \
+        || { rmdir "$group" 2>/dev/null; die3 "$who: $code has no commit to cut a worktree from"; }
+      base_branch="$(git -C "$code" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
     fi
     said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" \
       || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }

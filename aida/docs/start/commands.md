@@ -50,7 +50,7 @@ acts on the task active in this conversation.
 | `/aida:task set-budget <task-id>` | Sets a ceiling on one build, in dispatches or minutes. |
 | `/aida:task save <task-id>` | Saves a decision made mid-stage as a note. |
 | `/aida:task environment <task-id> up` | Brings up the worktree's own site. |
-| `/aida:task prune` | Removes the worktrees of complete tasks. |
+| `/aida:task prune` | Removes the worktrees of complete tasks and of tasks nobody started. |
 
 ## Tools, tests and playbooks
 

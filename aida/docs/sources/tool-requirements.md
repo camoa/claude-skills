@@ -6,7 +6,7 @@ present. The build, review and the surfaces skill run it for you, so you mostly 
 ## What you type
 
 ```
-/aida:tool require [--advisory] [--only <tool>] <recipe path>
+/aida:tool require [--only <tool>] <recipe path>
 ```
 
 It reads two lists in the recipe's frontmatter:
@@ -23,8 +23,8 @@ needed unless the task's contract says it has no automated tests. A recipe with 
 prints `REQUIRES: none`.
 
 `require` runs each tool once, as `/aida:tool run` does, and prints one `TOOLING:` line per tool.
-It installs nothing. A tool reads absent only when its command is not found. Any other result
-means the tool ran, so it reads present.
+It installs nothing, and it never stops: it exits 0 whatever the lines say. A tool reads absent
+only when its command is not found. Any other result means the tool ran, so it reads present.
 
 | Answer | What to do |
 |---|---|
@@ -33,8 +33,7 @@ means the tool ran, so it reads present.
 | A tool unknown | No recipe answered for it, or its check could not run. AIDA asks the catalog for a recipe. If none answers, it names the tool and stops. |
 
 Read every `TOOLING:` line. An unknown tool and an absent tool can appear in the same run, and the
-absent one still needs its install. `--advisory` prints the same lines and never stops.
-`--only <tool>` checks that one tool.
+absent one still needs its install. `--only <tool>` checks that one tool.
 
 ## Where a stage runs it for you
 
@@ -46,10 +45,10 @@ absent one still needs its install. `--advisory` prints the same lines and never
 - **A task that needs no test harness** records the suite as `not-needed` and runs none. That is
   a task whose orders are all proved by their records, or a task with no automated tests. The
   check tools still run.
-- **Review** runs `require --advisory` on the `review` recipe and reads the lines to you. A missing
+- **Review** runs `require` on the `review` recipe and reads the lines to you. A missing
   tool makes its own check read `unknown`.
-- **The surfaces skill** runs `require` on each recipe before an install or a baseline, and goes on
-  only when every tool is present.
+- **The surfaces skill** runs `require` on each recipe before an install or a baseline. It names an
+  absent tool and goes on.
 
 Only `install` needs you. On an autonomous run, the install refuses, so the stage halts at the
 absent tool. See [When a stage stops](../when-it-stops/README.md).

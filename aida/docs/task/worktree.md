@@ -55,14 +55,13 @@ nothing, so the offer waits for a person.
 - `down` takes the site down. An adopted site stays up.
 - `not-applicable` records your no, with your reason, so the offer does not come again.
 
-`up` and `not-applicable` are a person's answers, so an unattended run refuses them; see
-[the person's answer](person-answer.md). `down` runs unattended, because a torn-down copy loses
-nothing. When no framework has a recipe,
+`up`, `not-applicable` and `down` run in both run modes, because each one can be undone. When no
+framework has a recipe,
 AIDA records that the worktree has files and no site.
 
 When `up` changed files in the worktree for its site, completion takes the site down and puts
-those files back, so the merge does not carry them. `/aida:task prune` removes the worktrees of
-complete tasks, one yes per tree; see [completion](../stages/completion/README.md).
+those files back, so the merge does not carry them. `/aida:task prune` removes the worktrees you
+name, of complete tasks and of tasks nobody started; see [completion](../stages/completion/README.md).
 
 ## Why it works this way
 

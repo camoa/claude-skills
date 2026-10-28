@@ -40,9 +40,9 @@ A no to one kind says nothing about the other. On an autonomous run, nothing is 
 
 ## When another branch holds the surface file
 
-When this tree has no surface file but another branch has one, AIDA offers no setup, and the
-install refuses. A new file would collide with that branch's file. The file reaches this tree once
-that branch lands on the trunk. Do not merge that branch into your task: it is often another
+When this tree has no surface file but another branch has one, AIDA offers no setup. An install
+you run yourself warns and goes on, and git shows the two files as a conflict at merge. The file
+reaches this tree once that branch lands on the trunk. Do not merge that branch into your task: it is often another
 task's unfinished work. If the branch is abandoned, delete it, local and remote, and the offer
 comes back. While this lasts, a kind marked on reads as off.
 

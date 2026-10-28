@@ -27,7 +27,7 @@ or the lookup's word. Pass the `test-execution` one as `--catalog-recipe` and th
 `--catalog-check-recipe`. A project copy behind the catalog's copy becomes a catalog note, because
 the copy can fall behind after preconditions compared them.
 
-Then invoke the tool skill with `require --advisory <path>` for each `review` recipe path, from
+Then invoke the tool skill with `require <path>` for each `review` recipe path, from
 the worktree. Read its `TOOLING:` lines to the person, and go on whatever they say. A missing tool
 makes its own check row read unknown.
 

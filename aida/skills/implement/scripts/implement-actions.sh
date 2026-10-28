@@ -3171,7 +3171,7 @@ pc_tooling_check() {
       while IFS= read -r pair; do [ -z "$pair" ] || set -- "$@" --tooling "$pair"; done <<PC_TOOLING
 $tooling
 PC_TOOLING
-      set -- "$@" require --advisory --task "$task_folder"
+      set -- "$@" require --task "$task_folder"
       while IFS= read -r name; do [ -z "$name" ] || set -- "$@" --only "$name"; done <<PC_ONLY
 $only
 PC_ONLY

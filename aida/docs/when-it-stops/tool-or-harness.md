@@ -10,7 +10,7 @@ change files only with your yes.
 |---|---|---|
 | 1 | no project owns this directory | run `/aida:project` |
 | 2 | no recipe for this tool and this stack | AIDA asks the catalog next |
-| 3 | a command was refused, a file on disk matches no version of the recipe's file, or arguments were given after `--` to `install` or `show` | for a differing file, say which copy is right. To pass arguments, use `run` |
+| 3 | a command was refused, a file on disk matches no version of the recipe's file, the project records no stack, or arguments were given after `--` to `install` or `show` | for a differing file, say which copy is right. For no stack, run `/aida:project set-frameworks`. To pass arguments, use `run` |
 | 4 | a command ran and failed | read the `first:` line; see [tools](../sources/tools.md) |
 | 70 | an install needs a person, and nobody is present | no answer record passes an install. Set the task interactive, then run `/aida:tool install <tool>` |
 
@@ -27,17 +27,16 @@ A task whose contract says no automated tests gets no test runner installed. AID
 
 | Exit | What it means | What to do |
 |---|---|---|
-| 61 | the tree holds other uncommitted work | commit it, then run the step again |
-| 62 | `register` or `baseline` ran before `install` | run `install` first |
-| 3 | an id is already registered with other fields; the recipe has no accept row; no visual surface is on; or a quote or shell character is in a command | correct the call the message names |
+| 61 | the tree holds other uncommitted work at `install` or `baseline` | commit it, then run the step again. `register` and `unregister` commit the surface file alone |
+| 3 | an id is already registered with other fields; the recipe has no accept row; no visual surface is on; a quote or shell character is in a command; or `register`, `unregister` or `baseline` ran before `install` | correct the call the message names, or run `install` first |
 | 72 | two stacks each carry a recipe for one kind, or two accept rows | keep one |
-| 70 | a person's answer was passed with nobody present | answer with a person present |
+| 70 | `--confirmed` or `decline` was passed with nobody present | answer with a person present |
 
 ## The surface file is on another branch
 
-`read` prints `surface-branch:` when another branch holds the surface file. No stage offers setup,
-and `install` refuses (exit 3), because two files would collide at merge. The file reaches this
-tree once that branch lands on trunk. If the branch is abandoned, delete it, local and remote.
+`read` prints `surface-branch:` when another branch holds the surface file. No stage offers setup.
+An `install` you run yourself prints a `warning:` line and goes on: git shows the two files as a
+conflict on one file at merge. The file reaches this tree once that branch lands on trunk.
 
 ## A command as the end-to-end surface
 

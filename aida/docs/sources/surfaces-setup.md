@@ -15,7 +15,7 @@ install needs a person.
 
 The install:
 
-- refuses a dirty tree before it writes anything;
+- refuses a dirty tree before it writes anything, because its commit takes every changed file;
 - runs the recipe's commands in order;
 - writes each file the recipe names when the file is absent, and replaces a file that holds an
   earlier version of the recipe's content;
@@ -51,7 +51,8 @@ For each surface you keep, AIDA asks two things:
 - **Whether it is critical.** A critical surface runs on every review.
 
 Only a row you confirmed is written, and nothing is enabled unattended. Each registration commits
-the surface file. To add one later, run `/aida:surfaces register` with the id, URL, kinds, paths
+the surface file alone, so other uncommitted work does not stop it. To add one later, run
+`/aida:surfaces register` with the id, URL, kinds, paths
 and `--enable`. Without `--enable` the surface is written disabled, and review records it as not
 run. Registering the same id with different fields is refused, naming both. Registering before
 the install is refused.

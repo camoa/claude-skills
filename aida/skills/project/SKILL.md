@@ -103,31 +103,28 @@ guess, and no later step is blocked by having no project: the one that needs one
 
 ## `create`
 
-Creation needs three facts: the code path, the name, and the frameworks. It proposes what it
-can and confirms; only the name and, when nothing can be proposed or detected, the code path and
-the frameworks are asked outright.
+Creation needs three facts: the code path, the name, and the frameworks. It uses what was given
+or detected and names it. It asks only for a fact nothing gave and nothing could detect, or a
+name the rule refuses.
 
 **1. Code path.** Given explicitly (an argument, or already known from context): canonicalize it
-by running `cd "<path>" 2>/dev/null && pwd -P`, then confirm it in one line before moving on
-("Use `<path>` as the code path?"). Autonomous: accept it without asking, recording that this run
-made its own confirmation.
+by running `cd "<path>" 2>/dev/null && pwd -P`, and name it.
 
 Not given: run
 ```
 "${CLAUDE_PLUGIN_ROOT}"/scripts/detect-framework.sh "$(pwd -P)"
 ```
-Exit 0: the current directory looks like code. Propose it, naming what was detected, and confirm
-the same way as an explicit path. Its output is also this step's framework detection; carry the
-list forward into step 3 rather than detecting twice.
+Exit 0: the current directory looks like code. Use it, and name what was detected. Its output is
+also this step's framework detection; carry the list forward into step 3 rather than detecting
+twice.
 Exit 1 or 2: nothing to propose from here. Interactive: ask "Where does the code live?" and wait.
 Autonomous: **halt.** Report that the code path is missing and stop; this is one of the three
 facts creation cannot guess.
 
-**2. Name.** Always asked, whether or not one was already mentioned, because deriving it from the
-code folder saves one question and buys a collision problem the moment two projects share a
-folder name (ideal/project.md, "Considered and rejected"). Check against
-`^[a-z][a-z0-9_]*$`; on a mismatch, say so and ask again. Autonomous with no name given: **halt**,
-report that the name is missing, stop.
+**2. Name.** Use the name given. With none, derive it from the code folder's name: lowercase, with
+each other character turned into `_`. Name it. Check it against `^[a-z][a-z0-9_]*$`. Ask only when
+the rule refuses it, or when step 5 says another project holds it. Autonomous with a name the rule
+refuses: **halt**, report it, stop.
 
 **3. Frameworks.** Skip this step's own detection when step 1 already ran it against this exact
 code path; otherwise, and only when the code path names a directory that exists, run
@@ -150,11 +147,8 @@ Exit 1, autonomous: use the default silently; this is not one of the three facts
 
 Then the worktree base, the folder that holds this project's task worktrees. Each tree goes in
 `<worktree base>/<slug of the code folder>.worktrees/<slug of the code folder>-<task id>`.
-Interactive: ask once, "Where should task worktrees go? Default: `<parent of the code path>`."
-An empty answer passes `--worktree-base ..`, the default, which follows the code path. A typed
-absolute path passes that path. Asked here because the code path is known now, and a new project
-has no tree yet to move. Autonomous: do not ask, and pass no `--worktree-base`. Nothing is
-recorded, so the next attended project or task create asks once. Say that the default is used.
+Pass `--worktree-base` only when the person named a folder. Otherwise the default is used: the
+parent of the code path. Name it, and say `set-worktree-base` below moves later trees.
 
 **5. Write it.** Once these are known, run, with the run mode set as decided above:
 ```
@@ -164,13 +158,13 @@ recorded, so the next attended project or task create asks once. Say that the de
 ```
 It writes every file, makes the first commit, adds the registry row, records the projects-home
 base the first time only, and runs the check itself. It records the worktree base when one is
-given. A refused worktree base exits 3 before anything is written: ask again. Show the whole output.
+given. A refused worktree base exits 3 before anything is written. Show the whole output.
 
 Exit code 2 from the check here is normal, not a problem: the code path was just set from what
-was confirmed, and a brand-new project can go without code for a while. Say so and move on.
+was given, and a brand-new project can go without code for a while. Say so and move on.
 Exit code 5 means the code path named a refused location (see "Reading the check's report"); the
 script has already removed everything it wrote before reporting this, so nothing is left half
-registered. Say why it was refused and ask for a different code path.
+registered. Say why it was refused, and stop.
 
 **6. Offer the task rule, once.** A new project has a code path, so there is a repository to
 write into. Say what the task rule is: a short block added to that repository's own `CLAUDE.md`
@@ -305,9 +299,8 @@ the person rather than acting on it alone.
 Ending a project sets one of its three states. Every transition is reversible, so reopening a
 complete or archived project is just this same call with `active`.
 
-Ask for the reason first, in one line, unless it is already obvious from what was just said; it
-becomes the commit's own `Why`. Autonomous: nobody is present to answer; use the reason already
-said, if any, or record it as `(autonomous run, no reason given)`, and continue. Then run:
+Pass the reason the person gave, if any; it becomes the commit's own `Why`. Nothing is asked.
+With no reason, the script writes `(no reason given)`. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   state "<target>" <active|complete|archived> -- <reason...>
@@ -323,17 +316,14 @@ showing the check's report.
 Changing the code path detects and proposes a candidate the same way creation does, not only at
 creation.
 
-Given explicitly: canonicalize it by running `cd "<path>" 2>/dev/null && pwd -P`, then confirm it
-in one line ("Use `<path>` as the code path?"). Autonomous: accept it without asking, recording
-that this run made its own confirmation.
+Given explicitly: canonicalize it by running `cd "<path>" 2>/dev/null && pwd -P`, and name it.
 
 Not given: run
 ```
 "${CLAUDE_PLUGIN_ROOT}"/scripts/detect-framework.sh "$(pwd -P)"
 ```
-Exit 0: the current directory looks like code. Propose it, naming what was detected, and confirm
-the same way as an explicit path. Exit 1 or 2: nothing to propose from here. Interactive: ask
-"Where does the code live now?" and wait. Autonomous: **halt.** Report that no new code path was
+Exit 0: the current directory looks like code. Use it, and name what was detected. Exit 1 or 2:
+nothing to propose from here. Interactive: ask "Where does the code live now?" and wait. Autonomous: **halt.** Report that no new code path was
 given or could be proposed, and stop.
 
 Once the new path is known, run:
@@ -454,8 +444,8 @@ playbook is "a set of rules a person wants followed" (ideal/playbooks.md), and n
 chose one.
 
 Before writing, invoke the `dev-guides-navigator` skill
-through the Skill tool, in its `playbook <set-id>` mode. `not-a-playbook` or `no-topic` refuses:
-name the topic, say a playbook topic carries `playbook: true` in the catalog, and stop.
+through the Skill tool, in its `playbook <set-id>` mode. `not-a-playbook` or `no-topic` is a
+warning: name the topic, say a playbook topic carries `playbook: true` in the catalog, and go on.
 `listing-unreachable` or `fetch-failed` does not refuse. Say the catalog could not be reached,
 say the loader tries again at the next task's research, and continue. A subscription to a
 topic with no plays loads nothing, silently, every task, which is why the check runs before the
@@ -464,9 +454,9 @@ write. Then run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   subscribe-playbook "<target>" <framework> <set-id>
 ```
-Exit 1 whose report names a framework this project never declared: say so, name
-`set-frameworks`, and stop.
-It writes the id under that framework, commits the change, and runs the check.
+It writes the id under that framework, commits the change, and runs the check. A framework this
+project never declared prints a `warning:` line beside the write: say so, and name
+`set-frameworks`.
 `unsubscribe-playbook` takes the same three arguments and removes the id, with no such check.
 Show the whole output.
 
@@ -519,15 +509,15 @@ run:
 ```
 Refuses when the project has no code path. It refuses too when the code path names a directory
 that does not exist yet. Either way there is no repository to write into. Say so and stop. Do
-not ask again later in the same turn. Exit 3 names a line in `CLAUDE.md` that opens a block no
-end marker closes. Nothing was written. Show that message and stop.
+not ask again later in the same turn. A `warning:` line names a line in `CLAUDE.md` that opens a
+block no end marker closes. Nothing was written, and the call exits 0. Show that line and stop.
 
 A file that already holds a version 6 block keeps that one block, refreshed in place. Any version
 5 block in the same file is removed, so the file never holds two task rules.
 
 `--remove` takes every block of either version back out and leaves the rest of the file
-untouched. It refuses the same way on an autonomous run, and at exit 3 on a block with no end
-marker:
+untouched. It refuses the same way on an autonomous run, and warns the same way on a block with no
+end marker:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> task-rule-remove "<target>"
 ```
@@ -607,9 +597,9 @@ registered the folder and that was its job. A folder it registers has fields no 
 filled yet, so the check is never 0 there. Read the report it printed for the findings. Name each
 missing field and its producer, as the table above says.
 
-An action that writes the project file does not pass exit 6 on either, when it committed its own
-change. The uncommitted work belongs to someone else, so the action exits 0 and prints a `NOTE:`
-line. Show the uncommitted work the report lists, and say the action succeeded.
+An action that writes the project file does not pass exit 6 on. The write landed, so the action
+exits 0 and prints a `NOTE:` line naming the git state. Show the uncommitted work the report
+lists, and say the action succeeded.
 
 A retired field comes under "Retired fields", with exit 1. The report names `drop-retired` as its
 repair. Interactive: offer it once, in one line, and on yes run `drop-retired` above. Autonomous:
@@ -624,8 +614,8 @@ the same as create's step 6. Autonomous: say the offer is waiting and continue, 
 line that says a decline is recorded is not an offer. Name the fact and do not ask.
 
 A line that says no end marker follows the block is not an offer either. The text below the
-marker may be the person's own, so the rewrite and the removal both refuse at exit 3. Name the
-line the report gives, and say the person fixes it by hand. Then the offer comes back.
+marker may be the person's own, so the rewrite and the removal both write nothing and warn. Name
+the line the report gives, and say the person fixes it by hand. Then the offer comes back.
 
 A `Surfaces:` line moves no exit code and names a kind marked on with no surface file, so name its
 repair once. When the line names a branch that holds the file, say the file reaches the trunk when

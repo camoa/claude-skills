@@ -25,7 +25,7 @@ A stage's first write starts the task. When that start is refused, the stage sto
 "task start refused for `<folder>`, so nothing was written. Repair the task first." The line
 above it says why:
 
-- **"REFUSED: `<id>` builds on `<other>`, whose build is `<state>`".** The task was made with
+- **"`<id>` builds on `<other>`, whose build is `<state>`".** The task was made with
   `--after`, and the other task has not finished its build. Build that task first. See
   [a chain of tasks](../task/chain.md).
 - **The task is complete.** A complete task is not reopened. Create a new task for further work.

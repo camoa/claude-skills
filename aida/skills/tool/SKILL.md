@@ -1,7 +1,7 @@
 ---
 name: tool
 description: This skill should be used when a tool has to be installed or run in the AIDA project that owns this directory, for example PHPUnit, PHPStan, Playwright or that project's own test runner, or when a stage needs a tool before it can do its work. It follows that tool's recipe for this project's framework, and it does nothing outside a project.
-argument-hint: "<install | run | show> <tool> [-- <arguments>] | require [--advisory] <recipe path>"
+argument-hint: "<install | run | show> <tool> [-- <arguments>] | require <recipe path>"
 arguments: [action, tool, runArguments]
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/tool/scripts/tool-actions.sh *)
 ---
@@ -56,7 +56,7 @@ ended and how many lines the file now holds.
 | 0 | The tool ran. | Its output is in the file at `output:`. You are done. |
 | 1 | No project owns this directory. | Say so in one line and name the project skill. Stop. |
 | 2 | No recipe for this tool. | Go to "No recipe," below. |
-| 3 | The script could not do its job. | Show the error text and stop. |
+| 3 | The script could not do its job, or the project records no framework. | Show the error text and stop. For no framework, name the project skill's `set-frameworks`. |
 | 4 | The command ran and failed. | Go to "The command failed," below. |
 
 ## The command failed
@@ -75,9 +75,9 @@ answer, not a fault. Report what it said. Do not install anything and do not run
 
 A task can say it has no automated tests. Its contract, `alignment.json` in the task folder,
 then holds `automatedTests: false`. Read it for the active task before any install. When it is
-false and the tool runs tests, such as `phpunit`, `pytest` or `playwright`, do not install it and
-do not offer to. Say that the task has no automated tests, and name `/aida:scope` as the place to
-change that. A tool that runs no test, such as a coding standards checker, installs as below.
+false and the tool runs tests, such as `phpunit`, `pytest` or `playwright`, do not offer the
+install. Say that the task has no automated tests, and name `/aida:scope` as the place to change
+that. A person who asks for the install still gets it, as below.
 
 ## Install a tool
 
@@ -152,7 +152,7 @@ frontmatter. A stage that resolved such a recipe runs this before the recipe's l
 per recipe path:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> [--tooling <tool>=<path>]... require [--advisory] [--task <task folder>] [--only <tool>]... <recipe path>
+"${CLAUDE_PLUGIN_ROOT}"/skills/tool/scripts/tool-actions.sh --run-mode <interactive|autonomous> [--tooling <tool>=<path>]... require [--task <task folder>] [--only <tool>]... <recipe path>
 ```
 
 A recipe can also name a tool that it needs only on a task with automated tests. That tool goes
@@ -179,21 +179,21 @@ fails where a person sees it.
 A line that reads unknown with "no recipe" goes to the catalog first, as "No recipe" says. Pass
 each path it returns as `--tooling`, and run `require` again.
 
-`--advisory` prints the same lines and always exits 0. A stage passes it when a missing tool must
-not stop it. `--only <tool>` checks only that tool of the two lists, once per tool. Preconditions
-passes it for the tools that the build's own checks run.
+`--only <tool>` checks only that tool of the two lists, once per tool. Preconditions passes it for
+the tools that the build's own checks run.
+
+`require` exits 0 whatever the lines say: an absent or unknown tool is a warning the stage names,
+never a stop. Read every `TOOLING:` line. A tool that reads absent needs its install, as "Install
+a tool" says, and then `require` runs again. A tool that reads unknown goes to the catalog as
+above. Still unknown: name the tool and the reason. Never read it as present. On an autonomous run
+the install refuses at 70, so the tool stays absent and the stage names it.
 
 | Exit code | Meaning | What to do |
 |---|---|---|
-| 0 | Every named tool is present, or the recipe names none. | Go on with the stage. |
-| 4 | A tool reads absent. | Install each absent tool as "Install a tool" says, then run `require` again. |
-| 2 | A tool reads unknown: no recipe answered for it, or its check could not run. | Ask the catalog as above. Still unknown: name the tool and the reason, and stop. Never read it as present. |
+| 0 | The lines are printed. | Read each `TOOLING:` line, as above. |
 | 1 | No project owns this directory, or the task folder is missing or holds no `task.json`. | Name which in one line. For a task folder, check the path given to `--task`. Otherwise name the project skill. Stop. |
 | 3 | The path is not a readable file, or one of its two lists is not a list. | Show the error text and stop. |
 | 79 | The task builds in its worktree and this window is elsewhere, or git no longer lists the worktree the task records. | Show the error text. For the first, run the call again from that worktree. For the second, follow the repair the text names. |
-
-Exit 2 wins over exit 4, so read every `TOOLING:` line. An absent tool on the same run still
-needs its install. On an autonomous run the install refuses at 70, so the stage halts there.
 
 ## Reading a process recipe
 

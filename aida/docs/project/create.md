@@ -1,28 +1,29 @@
 # Create a project
 
-Type `/aida:project create`. AIDA asks for the code path, the name and the stack, asks where two
-folders go, then writes the project and runs the check.
+Type `/aida:project create`. AIDA uses the code path, the name and the stack you gave or it
+detected. It asks only for what it cannot find. Then it writes the project and runs the check.
 
 ## What you do
 
 Type `/aida:project create`, or `/aida:project create <path>` to name the code path. You can also
 type `/aida:project` in a folder no project owns, and say yes when AIDA offers to create one.
 
-## What AIDA asks
+## What AIDA uses and asks
 
-1. **The code path.** When the current directory looks like code, AIDA proposes it and names the
-   file that proved the stack. When you gave a path, AIDA proposes that one. Confirm with yes.
-   When AIDA has nothing to propose, it asks "Where does the code live?" The folder can be empty
-   or not exist yet.
-2. **The name.** AIDA always asks. A name starts with a lowercase letter, then holds only
-   lowercase letters, digits and underscores. AIDA asks again when a name breaks this rule.
+1. **The code path.** When you gave a path, AIDA uses it. Otherwise, when the current directory
+   looks like code, AIDA uses it and names the file that proved the stack. When AIDA finds
+   nothing, it asks "Where does the code live?" The folder can be empty or not exist yet.
+2. **The name.** AIDA uses the name you gave, or the code folder's name in lower case with other
+   characters made `_`. A name starts with a lowercase letter, then holds only lowercase letters,
+   digits and underscores. AIDA asks only when the name breaks this rule or is taken.
 3. **The stack.** AIDA reads it from the files in the code path. Frameworks you name come first.
    When AIDA detects nothing, or the code path does not exist yet, it asks "What is the stack?"
 4. **The projects folder.** Asked once on this machine, at the first project: "Where should
    project folders be stored?" The default is `~/.claude/aida/projects`. Later creates use that
    answer without asking. To change it, edit `~/.claude/aida/settings.json`.
-5. **The worktree folder.** "Where should task worktrees go?" The default is the parent of the
-   code path. [Set where task worktrees go](worktree-location.md) says what this controls.
+5. **The worktree folder.** Not asked. The default is the parent of the code path, and a folder
+   you name is used instead. [Set where task worktrees go](worktree-location.md) says what this
+   controls.
 
 ## What happens
 
@@ -42,7 +43,7 @@ Then AIDA makes two offers, once each:
 
 Create refuses, and writes nothing, when the name is already registered, when the code path is
 already registered, when the project folder already exists on disk, or when the code path and the
-project folder are the same place. A refused worktree folder is asked again.
+project folder are the same place, or when the worktree folder you named is refused.
 
 When [the check](check.md) refuses the code path as unsafe, AIDA removes the folder and the
 registry row it just wrote, then asks for another path. See [When it stops](../when-it-stops/).

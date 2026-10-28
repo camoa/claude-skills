@@ -12,8 +12,8 @@ its records each time: the first stage whose close record is absent.
 
 The state lives in `task.json`. The task folder never moves when the state changes.
 
-A complete task is not reopened. A stage that tries to start it prints
-`REFUSED: <id> is already complete`. For more work, create a new task.
+A complete task is not reopened. A stage that tries to start it is refused at exit 3. For more
+work, create a new task.
 
 There is no state after complete: no archive and no delete. A completed task stays readable in
 its folder for as long as the project does.
