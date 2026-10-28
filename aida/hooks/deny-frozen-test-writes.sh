@@ -138,12 +138,13 @@ is_test_author() {
   return 1
 }
 
-# Rule four, added for gap row 293, runs before every other rule and needs no project. Three roles
+# Rule four, added for gap row 293, runs before every other rule and needs no project. Four roles
 # each write one kind of record, and that role alone writes it, through the file tools. The Bash
-# door is not this rule's: none of the three has Bash, and a script's own write runs there.
+# door is not this rule's: none of the four has Bash, and a script's own write runs there.
 #   disposition-confirmer  records/disposition-<order>.json
 #   design-critic          records/design-critique-<lens>.md
 #   distiller              records/<stage>-distill.json
+#   test-reader            test-cleanup/<run>/reports/<group>.json
 # A confirmer keeps every value the verdict file already holds, so a disagreement it recorded is
 # never cleared by asking again. Only design-actions.sh's `dispose` removes a value.
 own_record_owner() {
@@ -151,6 +152,7 @@ own_record_owner() {
     */records/disposition-*.json) echo disposition-confirmer ;;
     */records/design-critique-*.md) echo design-critic ;;
     */records/*-distill.json) echo distiller ;;
+    */test-cleanup/*/reports/*.json) echo test-reader ;;
   esac
 }
 deny_own_record() {
@@ -350,9 +352,9 @@ if [ "$TOOL" != "Bash" ]; then
   OWN_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
   OWN_OWNER="$(own_record_owner "$OWN_TARGET")"
   case "${AGENT##*:}" in
-    disposition-confirmer|design-critic|distiller)
+    disposition-confirmer|design-critic|distiller|test-reader)
       [ "$OWN_OWNER" = "${AGENT##*:}" ] \
-        || deny_own_record "$OWN_TARGET: the ${AGENT##*:} writes only its own record under records/, and nothing else." ;;
+        || deny_own_record "$OWN_TARGET: the ${AGENT##*:} writes only its own record, and nothing else." ;;
     *)
       [ -z "$OWN_OWNER" ] \
         || deny_own_record "$OWN_TARGET: only the $OWN_OWNER writes this record, and this write's agent_type is ${AGENT:-empty, the main thread}. Dispatch it; do not write the record yourself." ;;

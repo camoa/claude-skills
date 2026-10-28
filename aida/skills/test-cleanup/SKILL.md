@@ -1,6 +1,6 @@
 ---
 name: test-cleanup
-description: This skill should be used when a project's test suite has grown too large and a person wants it analysed and cleaned up, for example "clean up the tests", "our suite is too big", "find exaggerated tests", "which tests can we delete", or "shrink the test suite". It sorts every test against one rubric, reports counts and causes, and asks the person, one group at a time, what to delete, merge or shrink. The approved cleanup becomes a light AIDA task.
+description: This skill should be used when a project's test suite has grown too large and a person wants it analysed and cleaned up, for example "clean up the tests", "our suite is too big", "find exaggerated tests", "which tests can we delete", or "shrink the test suite". It sorts every test against one rubric, reports counts and causes, and asks the person, one group at a time, what to delete, merge or shrink. The approved cleanup becomes an AIDA task, run light when the person says so.
 argument-hint: "[--max-lines <n>]"
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/test-cleanup/scripts/cleanup-actions.sh *)
 ---
@@ -51,7 +51,7 @@ framework live and how they are named, as globs. Do not guess a glob from file n
 ```
 
 Pass one `--glob` per glob from step 2, and `--max-lines` only when the person gave one. The script
-decides the groups: one per folder, split where a folder holds more lines than one reader can read.
+decides the groups: it fills each group in folder order, up to the lines one reader can read.
 It prints `run:`, `code:` and one `group:` line per group. Exit 2 means no tracked file matched the
 globs. Show the globs to the person and ask which ones are wrong.
 

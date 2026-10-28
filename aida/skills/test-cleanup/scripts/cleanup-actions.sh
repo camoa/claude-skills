@@ -16,8 +16,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #          `## Oracle files` block, the same globs `tests-freeze` takes. A framework with no recipe,
 #          no lookup, or no such row prints `no-glob: <framework> <why>`, and the person names them.
 # groups   lists the files git tracks in this window's repository that a glob matches, and splits
-#          them into groups: one per folder, and a folder past --max-lines lines (default 4000)
-#          splits, so one reader can hold its group. It writes <run folder>/groups.json, a new run
+#          them into groups, filled in folder order up to --max-lines lines (default 4000), so
+#          one reader can hold its group. It writes <run folder>/groups.json, a new run
 #          folder under <project>/test-cleanup/, and prints `run:`, `code:` and one `group:` line
 #          per group. A glob follows the catalog's rules: `**` is any run of folders, and a glob
 #          with no / matches a file name in any folder.
@@ -93,13 +93,13 @@ FRAMEWORKS_IN
         --glob) GLOBS="$GLOBS$2
 " ;;
         --max-lines)
-          case "$2" in ''|*[!0-9]*) die 3 "groups: --max-lines takes a number, got: $2" ;; esac
+          case "$2" in ''|*[!0-9]*|0*) die 3 "groups: --max-lines takes a number above 0, got: $2" ;; esac
           MAX_LINES="$2" ;;
         *) die 3 "groups: unrecognized argument: $1" ;;
       esac
       shift 2
     done
-    [ -n "$GLOBS" ] || die 3 "groups: pass at least one --glob, from the test-authoring recipe"
+    [ -n "$GLOBS" ] || die 3 "groups: pass at least one --glob, as where printed it or as the person gave it"
     CODE="$(git -C "$(pwd -P)" rev-parse --show-toplevel 2>/dev/null)" \
       || die 3 "groups: $(pwd -P) is not inside a git repository"
 
@@ -123,11 +123,10 @@ FILES_IN
     mkdir -p "$PROJECT_DIR/test-cleanup" || die 3 "groups: could not create $PROJECT_DIR/test-cleanup"
     RUN="$(mktemp -d "$PROJECT_DIR/test-cleanup/run-$(date -u +%Y%m%d-%H%M%S)-XXXX")" \
       || die 3 "groups: could not create a run folder"
-    # A new group starts at a new folder, or when the next file would take it past the limit.
+    # The files come in path order, so a group fills in folder order. A new group starts when the
+    # next file would take this one past the limit, and small folders share one reader.
     awk -F '\t' -v max="$MAX_LINES" '
-      function dir(p) { if (p !~ /\//) return "."; sub(/\/[^\/]*$/, "", p); return p }
-      { d = dir($1)
-        if (n == 0 || d != cur || (lines > 0 && lines + $2 > max)) { n++; cur = d; lines = 0 }
+      { if (n == 0 || (lines > 0 && lines + $2 > max)) { n++; lines = 0 }
         lines += $2; print n "\t" $1 "\t" $2 }' "$LIST" \
       | jq -R -s '
           split("\n") | map(select(length > 0) | split("\t"))
@@ -142,6 +141,8 @@ FILES_IN
   summary)
     RUN="${1:-}"
     [ -n "$RUN" ] && [ -r "$RUN/groups.json" ] || die 3 "summary: pass a run folder holding groups.json"
+    jq -e 'type == "array" and length > 0' "$RUN/groups.json" >/dev/null 2>&1 \
+      || die 3 "summary: $RUN/groups.json holds no group. Run groups again."
     BAD=""; REPORTS=()
     while IFS= read -r gid; do
       report="$RUN/reports/$gid.json"; REPORTS+=("$report")

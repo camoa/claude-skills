@@ -44,7 +44,7 @@ no other category fits. When two others fit, take the first in this list that fi
 A line that another program reads, such as a line the code prints for a parser, is output. A test
 of it is `keep`, not `pinning`. An end-to-end test is `keep` when it walks a core journey, or
 reaches behaviour that no lower test can reach. A light project's one demo-path script is such a
-test. An end-to-end test that a lower test already covers is `duplicate`: name the lower test, and
+test. An end-to-end test that a lower test already covers is `duplicate`. Name the lower test, and
 say in the reason that it is an end-to-end test. Test setup that performs the very step the test
 guards does not make the test `keep`: say so in a cause.
 
