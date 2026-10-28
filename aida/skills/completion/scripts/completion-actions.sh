@@ -34,7 +34,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # the body. Before the body, `close` takes out of the task branch the files `task environment up`
 # committed for the worktree's own site: the site goes down through task-actions.sh, then one
 # commit in the worktree puts each file back to its content at the fork point (gap row 262). That
-# commit is the one this script makes itself.
+# commit is the one this script makes itself. A site with no file to put back goes down too, so no
+# finished task leaves one running (gap row 446).
 #
 # The run mode is the task's own for this stage, through task_run_mode in task-helpers.sh: runMode
 # in task.json, absent meaning interactive, scoped by runModeStages when that names stages.
@@ -42,13 +43,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Exit codes, each one and only one meaning, and none is new to this plugin:
 #   0  did what was asked.
 #   1  refused, with the reason on the first line of stderr. The given path holds no task.json,
-#      which is the shared helper's own number. Or the task is already complete, or has an open
-#      child. Or a high severity follow up finding has no task and no --leave. Or the review did
-#      not pass and no --reason was given: unattended, that is the halt, naming the verdict read.
-#      Or a file `task environment up` recorded changed after it, holds an uncommitted change, or
-#      has no base to go back to.
-#      Or HEAD already holds those files at their fork point content while the record still names a
-#      site (gap row 262).
+#      which is the shared helper's own number. Or the task is already complete. Or the review did
+#      not pass, or passed with warnings, and no --reason was given: unattended, that is the halt,
+#      naming the verdict and the warnings read. Everything else completion finds, such as an open
+#      child, a high severity follow up with no task, or a file `task environment up` recorded that
+#      cannot go back, is a warning in the task record, and the unsafe step is skipped.
 #   3  the script could not do its job: a missing or unrecognized argument, jq not on PATH, the
 #      plugin root or a library that could not be resolved, a project folder that could not be
 #      resolved, a record that is present but unreadable, a record that does not match
@@ -174,7 +173,7 @@ cp_paths() {
 CP_TASK_DOC=""; CP_TASK_ID=""; CP_STATE=""; CP_RUN_MODE="interactive"
 CP_ALIGNMENT_STATE=""; CP_FINISHED_STATE=""; CP_REVIEW_STATE=""; CP_RECORD_STATE=""
 CP_ALIGNMENT_DOC="null"; CP_FINISHED_DOC="null"; CP_REVIEW_DOC="null"
-CP_REVIEW_VERDICT="none"; CP_REVIEW_WHY=""; CP_PERSON_ROUTE=""; CP_FINDING_ROUTE=""; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"
+CP_REVIEW_VERDICT="none"; CP_REVIEW_WARNINGS=""; CP_REVIEW_WHY=""; CP_PERSON_ROUTE=""; CP_FINDING_ROUTE=""; CP_FOLLOW_UPS="[]"; CP_CHILDREN="[]"
 
 # Reads one record as JSON text into the named variable, or dies when it is present and
 # unreadable. Missing is a real state every action reports in words, never a refusal. $1 the
@@ -230,7 +229,8 @@ cp_load_follow_ups() {
     if [ -f "$TASKS_DIR/$task_id/task.json" ]; then task_here="$task_id"; else task_here=""; fi
     printf '%s' "$one" | jq -c --arg task "$task_here" \
       '{finding: .id, severity: .severity, lens: .lens, file: (.file // ""), lines: (.lines // ""),
-        evidence: .evidence, task: (if $task == "" then null else $task end)}' >>"$rows_out"
+        evidence: ((if .ruling == "contract-wrong" then "The wording of criterion " + .linkedTo + " is wrong. Change it with scope update to: " + .correctedText + ". " else "" end) + .evidence),
+        task: (if $task == "" then null else $task end)}' >>"$rows_out"
   done <<CP_FINDINGS
 $(printf '%s' "$CP_REVIEW_DOC" | jq -c --argjson fin "$CP_FINISHED_DOC" '
   ((.findings // [])[] | select(.disposition == "follow-up")),
@@ -262,9 +262,10 @@ cp_load() {
   # asked for the follow-ups would be told there are none. So the code is re-raised here.
   CP_REVIEW_DOC="$(cp_record_doc "$who" "$REVIEW_FILE" "review record")" || exit $?
   # Four words, because a review that never ran, one that did not close, and one that failed are
-  # three different facts. Only `passed` closes the task with nothing asked.
+  # three different facts. Only `passed` with no warning closes the task with nothing asked.
   case "$CP_REVIEW_STATE" in
-    ok) CP_REVIEW_VERDICT="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '.verdict // "unfinished"')" ;;
+    ok) CP_REVIEW_VERDICT="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '.verdict // "unfinished"')"
+        CP_REVIEW_WARNINGS="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.warnings // [])[] | .id + " reads " + .verdict ] | join(", ")')" ;;
     *)  CP_REVIEW_VERDICT="none" ;;
   esac
   # A review of an earlier build is no review of this one (gap row 335).
@@ -285,7 +286,7 @@ cp_load() {
   lens_findings="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.disposition == "follow-up" and .severity != "low"
     and (.linkedTo // "") == "" and .lens != "frozen-tests" and (.ruling // "") == "") | .id ] | join(", ")' 2>/dev/null)"
   [ -z "$failing_findings" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
-    || CP_FINDING_ROUTE="These findings fail a criterion, so none is a follow up and none takes --leave: $failing_findings. The person rules each with review close --row <finding>=deferred, which makes it a follow up, or --row <finding>=wrong, which says the reviewer was mistaken."
+    || CP_FINDING_ROUTE="These findings fail a criterion, so none is a follow up and none takes --leave: $failing_findings. The person rules each at review close with --row <finding>=deferred, which makes it a follow up, wrong, which says the reviewer was mistaken, test-wrong, which reopen sends to the test author, or contract-wrong:<corrected text>."
   [ -z "$lens_findings" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
     || CP_FINDING_ROUTE="${CP_FINDING_ROUTE:+$CP_FINDING_ROUTE }These findings cite no criterion and fail their lens check until the person rules each at review close with --row <finding>=deferred or --row <finding>=wrong: $lens_findings."
   cp_load_children "$who"
@@ -335,10 +336,11 @@ do_read() {
   else
     next_step="close"
   fi
-  case "$CP_REVIEW_VERDICT" in
-    passed) closes="on the review verdict, with nothing asked" ;;
-    *)      closes="on a person's reason (--reason), because the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY" ;;
-  esac
+  if [ "$CP_REVIEW_VERDICT" = passed ] && [ -z "$CP_REVIEW_WARNINGS" ]; then
+    closes="on the review verdict, with nothing asked"
+  else
+    closes="on a person's reason (--reason), because the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY${CP_REVIEW_WARNINGS:+, with these warnings: $CP_REVIEW_WARNINGS}"
+  fi
   cp_print_summary "read" "$(jq -nc --arg closes "$closes" --arg next "$next_step" --arg route "$CP_PERSON_ROUTE" \
     '{closes: $closes, nextStep: $next} + (if $route == "" then {} else {personRoute: $route} end)')"
   if [ "$CP_STATE" = "complete" ]; then
@@ -576,6 +578,19 @@ CP_SCHEMA_RESULT2
   write_atomic "$RECORD_FILE" "$doc"
 }
 
+# Takes the task's own site down through task-actions.sh, which tears it down, or lets go of an
+# adopted one and prints its tear-down lines (gap row 360). A closed task needs no site, and one
+# left up keeps running after the task is done (gap row 446). $1 the action.
+cp_site_down() {
+  local said
+  said="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$TASK_SCRIPT" --run-mode "$CP_RUN_MODE" \
+      environment --project "$PROJECT_DIR" "$CP_TASK_ID" down 2>&1)" \
+    || { printf '%s\n' "$said" >&2; die 3 "$1: task environment down refused $CP_TASK_ID, so the site is still up, and nothing was written. Its own line is above."; }
+  CP_TASK_DOC="$(jq -c '.' "$TASK_PATH/task.json" 2>/dev/null)"
+  [ -n "$CP_TASK_DOC" ] || die 3 "$1: $TASK_PATH/task.json could not be read after the site went down."
+  [ "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.adopted // false')" != true ] || printf '%s\n' "$said"
+}
+
 # The files `task environment up` committed serve the worktree's own site, and trunk must not
 # receive them. Merged, the `name:` line a DDEV recipe has a person delete renames the main
 # checkout's site, which then opens an empty database (gap row 262). So the site goes down
@@ -585,11 +600,12 @@ CP_SCHEMA_RESULT2
 # content is no longer the one `up` recorded was changed by an order, and is never put back
 # silently. Paths a person already put back, under whatever subject, are kept as they are, and
 # task_env_restore_commit names the commit that did it. When one of them is a file the fork point
-# has, a site still recorded up is a refusal, since its tear-down can reach the main checkout's
-# site. Sets CP_RESTORE_COMMIT to the commits that put files back, the person's and this one's,
-# separated by a space, and CP_RESTORE_PATHS to every file back. Both stay empty when no file is
-# back. $1 the action.
-CP_RESTORE_COMMIT=""; CP_RESTORE_PATHS=""
+# has, a site still recorded up is not torn down, since its tear-down can reach the main
+# checkout's site. Each step that is not safe is skipped and named in the task record. Sets
+# CP_RESTORE_COMMIT to the commits that put files back, the person's and this one's, separated by
+# a space, and CP_RESTORE_PATHS to every file back. Both stay empty when no file is back. Sets
+# CP_SITE_UNSAFE when the site must stay up. $1 the action.
+CP_RESTORE_COMMIT=""; CP_RESTORE_PATHS=""; CP_SITE_UNSAFE=""
 # The subject of the commit this script makes. Nothing reads it back: the content decides.
 CP_RESTORE_SUBJECT="Restore the files the worktree environment recipe changed"
 cp_restore_env_files() {
@@ -600,13 +616,14 @@ cp_restore_env_files() {
   [ -n "$wt" ] && [ -n "$rows" ] || return 0
   said="$(task_env_restore_commit "$TASK_PATH" "$wt")"; fired=$?
   [ -z "$said" ] || { CP_RESTORE_COMMIT="${said%%"$tab"*}"; CP_RESTORE_PATHS="${said#*"$tab"}"; }
-  if [ "$fired" -eq 0 ]; then
-    [ -z "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.recipe // empty')" ] \
-      || die 1 "$who: $wt holds the files \`task environment up\` changed at their content where the branch started, and the record says the site of $CP_TASK_ID is up: $CP_RESTORE_PATHS. A tear-down now can reach the main checkout's site through the name that content puts back. Nothing was written. In $wt, run git revert $CP_RESTORE_COMMIT, then task environment $CP_TASK_ID down, then put the files back again, and run close again."
+  if [ "$fired" -eq 0 ] && [ -n "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.recipe // empty')" ]; then
+    CP_SITE_UNSAFE="yes"
+    task_warn "$TASK_PATH" "completion close" "" "$wt holds the files \`task environment up\` changed at their content where the branch started, and the record says the site is up: $CP_RESTORE_PATHS. A tear-down now can reach the main checkout's site, so the site stays up. In $wt, run git revert $CP_RESTORE_COMMIT, then task environment $CP_TASK_ID down, then put the files back again"
+    return 0
   fi
   fork="$(task_fork_point "$TASK_PATH" "$wt")"
-  [ -n "$fork" ] || die 1 "$who: task.json records no base for the worktree of $CP_TASK_ID, so completion cannot tell what content to put back the files \`task environment up\` changed to. Nothing was written. Set worktree.base in task.json to the branch this task merges into, then run close again."
-  message="In $wt, run task environment $CP_TASK_ID down if the site is up. Then put each file \`up\` recorded back to its content at $(git -C "$wt" rev-parse --short "$fork"), where this branch started, and commit. An order's change to one of these files cannot stay on this branch. Then run close again. The recorded files are: $(printf '%s' "$CP_TASK_DOC" | jq -r '[ .worktree.recipeChanges[].path ] | join(", ")')."
+  [ -n "$fork" ] || { task_warn "$TASK_PATH" "completion close" "" "task.json records no base for the worktree, so the files \`task environment up\` changed were not put back, and they go to trunk with the branch"; return 0; }
+  message="In $wt, put each file \`up\` recorded back to its content at $(git -C "$wt" rev-parse --short "$fork"), where this branch started, and commit, or they go to trunk with the branch. The recorded files are: $(printf '%s' "$CP_TASK_DOC" | jq -r '[ .worktree.recipeChanges[].path ] | join(", ")')."
   p=""; blob=""; head_blob=""
   while IFS="$tab" read -r p blob; do
     [ -n "$p" ] || continue
@@ -624,21 +641,13 @@ cp_restore_env_files() {
 $rows
 CP_RECIPE_ROWS
   [ -z "$changed" ] \
-    || die 1 "$who: an order changed ${changed#, } after \`task environment up\` recorded it, so completion does not put it back on its own. Nothing was written. $message"
+    || { task_warn "$TASK_PATH" "completion close" "" "an order changed ${changed#, } after \`task environment up\` recorded it, so completion put nothing back. $message"; return 0; }
   [ -z "$dirty" ] \
-    || die 1 "$who: ${dirty#, } holds an uncommitted change in $wt, and putting it back would lose that change. Nothing was written. Commit or remove the change, then run close again."
+    || { task_warn "$TASK_PATH" "completion close" "" "${dirty#, } holds an uncommitted change in $wt, so completion put nothing back. $message"; return 0; }
   [ -n "$todo" ] || return 0
 
   # Down before the commit: after it, the worktree's site would resolve by the restored name.
-  if [ -n "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.recipe // empty')" ]; then
-    said="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$TASK_SCRIPT" --run-mode "$CP_RUN_MODE" \
-        environment --project "$PROJECT_DIR" "$CP_TASK_ID" down 2>&1)" \
-      || { printf '%s\n' "$said" >&2; die 3 "$who: task environment down refused $CP_TASK_ID, so the site is still up and nothing was put back. Its own line is above."; }
-    CP_TASK_DOC="$(jq -c '.' "$TASK_PATH/task.json" 2>/dev/null)"
-    [ -n "$CP_TASK_DOC" ] || die 3 "$who: $TASK_PATH/task.json could not be read after the site went down."
-    # A let-go leaves the site up, so its lines are the person's to read (gap row 360).
-    [ "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.adopted // false')" != true ] || printf '%s\n' "$said"
-  fi
+  [ -z "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.recipe // empty')" ] || cp_site_down "$who"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     if git -C "$wt" cat-file -e "$fork:$p" 2>/dev/null; then
@@ -705,31 +714,31 @@ do_close() {
   # play, a script never does.
   [ "$CP_RUN_MODE" != "autonomous" ] || [ -n "$captures_offered" ] || captures_skipped="autonomous"
 
-  # A parent refuses to close while a child is open, and the person closes the parent.
+  # A parent with an open child closes on the person's word, and the task list still shows the child.
   local open_children
   open_children="$(printf '%s' "$CP_CHILDREN" | jq -r '[ .[] | select(.state != "complete") | .id ] | join(", ")')"
   [ -z "$open_children" ] \
-    || die 1 "close: $CP_TASK_ID has an open child: $open_children. Close every child first; a parent closes only when each child is complete."
+    || task_warn "$TASK_PATH" "completion close" "" "$CP_TASK_ID closed with an open child: $open_children"
 
-  # A review verdict of passed closes with nothing asked. Anything else closes only on a person's
-  # explicit word, with the reason recorded. Unattended, that is the halt, naming the verdict read,
-  # because a script inventing a reason would be a bypass.
-  if [ "$CP_REVIEW_VERDICT" != "passed" ] && [ -z "$reason" ]; then
-    # The lens checks review read met on low findings alone with nobody present are reported here,
-    # since the body that would carry them is not written on this halt (gap row 274). The catalog
-    # notes are too, for the same reason, such as a project recipe copy behind the catalog (row 284).
-    # The decisions an unattended build left wait for the person the same way (gap row 279).
-    local unconfirmed notes undecided
-    unconfirmed="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.checks // [])[] | select(.verdict == "met" and .answeredBy == "nobody") | (.id + ": " + .detail) ] | join(" ")' 2>/dev/null)"
+  # A passed review with no warning closes with nothing asked. Anything else closes only on a
+  # person's explicit word, with the reason recorded. Unattended, that is the one halt of the task's
+  # review, naming the verdict and the warnings, because a script inventing a reason would be a
+  # bypass.
+  if { [ "$CP_REVIEW_VERDICT" != "passed" ] || [ -n "$CP_REVIEW_WARNINGS" ]; } && [ -z "$reason" ]; then
+    # The catalog notes are reported here, since the body that would carry them is not written on
+    # this halt, such as a project recipe copy behind the catalog (row 284). The decisions an
+    # unattended build left wait for the person the same way (gap row 279).
+    local notes undecided
     notes="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.catalogNotes // [])[] | .seen + " (" + .where + ")" ] | join(" ")' 2>/dev/null)"
     undecided="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy == "nobody") | (.id + ": " + .detail) ] | join(" ")' 2>/dev/null)"
     local decide_route=""
     [ -z "$undecided" ] \
       || decide_route=" These checks wait for a decision only a person makes: $undecided A person sets the task interactive and runs review close with one --row per decision; review then writes its verdict. Or the run mode stays, and a person answers those rows through person-answer.sh, step review close. A --reason here closes the task with every one of those decisions unmade."
     decide_route="$decide_route${CP_PERSON_ROUTE:+ $CP_PERSON_ROUTE A --reason here closes the task with those criteria unanswered.}${CP_FINDING_ROUTE:+ $CP_FINDING_ROUTE}"
+    local warned="${CP_REVIEW_WARNINGS:+ The review warns: $CP_REVIEW_WARNINGS.}"
     case "$CP_RUN_MODE" in
-      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, and this run is autonomous. Only a passed review closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${unconfirmed:+ These checks read met on low findings nobody confirmed: $unconfirmed}${notes:+ Catalog notes: $notes}$decide_route" ;;
-      *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, so this task closes only on a person's word. Pass --reason with a sentence saying why it closes without a passed review; the record keeps it.$decide_route" ;;
+      autonomous) die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY, and this run is autonomous.$warned Only a passed review with no warning closes a task with nobody present, so this halts here and nothing is written. A person closes it with --reason.${notes:+ Catalog notes: $notes}$decide_route" ;;
+      *)          die 1 "close: the review verdict is $CP_REVIEW_VERDICT$CP_REVIEW_WHY.$warned So this task closes only on a person's word. Pass --reason with a sentence saying why it closes over them; the record keeps it.$decide_route" ;;
     esac
   fi
 
@@ -746,8 +755,9 @@ do_close() {
 $leaves
 CP_LEAVES
 )"
+  # A --leave for a finding with a task, or for no follow up finding, decides nothing. It is named.
   [ -z "$bad_leaves" ] \
-    || die 3 "close: --leave named $bad_leaves. A finding is left only when the review record holds it as a follow up and no task exists for it. The findings --leave takes: $(printf '%s' "$CP_FOLLOW_UPS" | jq -r '[ .[] | select(.task == null) | .finding ] | if length == 0 then "none" else join(", ") end').${CP_FINDING_ROUTE:+ $CP_FINDING_ROUTE}"
+    || task_warn "$TASK_PATH" "completion close" "" "--leave named $bad_leaves, which decided nothing. A finding is left only when the review record holds it as a follow up and no task exists for it."
   rows="$(jq -cn --argjson f "$CP_FOLLOW_UPS" --rawfile given /dev/stdin '
     ([ ($given | split("\n"))[] | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))} ] | from_entries) as $why
     | [ $f[] | {finding: .finding, severity: .severity, task: .task, reason: ($why[.finding] // "")} ]' <<CP_LEAVES2
@@ -756,10 +766,13 @@ CP_LEAVES2
 )"
   blocking="$(printf '%s' "$rows" | jq -r '[ .[] | select(.severity == "high" and .task == null and .reason == "") | .finding ] | join(", ")')"
   [ -z "$blocking" ] \
-    || die 1 "close: the high severity follow up finding $blocking has no task. Create it with follow-ups --create, or say why not with --leave $(printf '%s' "$blocking" | cut -d, -f1)=<reason>. Leaving a queued fault unnamed ships it."
+    || task_warn "$TASK_PATH" "completion close" "" "the high severity follow up finding $blocking has no task and no --leave reason, so it ships unfixed"
   CP_FOLLOW_UPS="$rows"
-  # Last of the refusals, because it takes the site down and commits.
+  # Last, because it takes the site down and commits. A site no restore took down goes down here,
+  # unless it was adopted, which stays up by design, or a tear-down could reach the main checkout.
   cp_restore_env_files "close"
+  [ -n "$CP_SITE_UNSAFE" ] || [ -z "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.recipe // empty')" ] \
+    || [ "$(printf '%s' "$CP_TASK_DOC" | jq -r '.environment.adopted // false')" = true ] || cp_site_down "close"
 
   # A person's answer record that passed a refusal is the person's word, so the person closed it.
   local closed_by record

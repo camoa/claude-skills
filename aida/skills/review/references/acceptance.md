@@ -104,8 +104,8 @@ command surface needs no look, because its exit status is the whole answer.
 verifier did not judge met, waits for the person at close. A criterion's rows are shown beside it
 at close. A row reading unmet that names the code file of a bug becomes a finding on the
 `acceptance` lens. It cites the row's criterion, so it fails that criterion. The person rules it at
-close like any finding. Unruled, the review fails, and the implement skill's `reopen` sends it to
-the order that owns the file.
+close like any finding. Unruled, its criterion reads unmet and the review fails. The implement
+skill's `reopen` sends it to the order that owns the file.
 
 The verifier may propose a surface, or an extension of the demo-path script, in a note. It never
 writes one. Read each such note to the person, who adds it with `/aida:surfaces register`.

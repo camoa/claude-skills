@@ -280,7 +280,7 @@ code does, and a test can watch it fail. A clause that merely holds the word `no
 either. "The form shows no legacy field" is a behaviour, so it takes a test. Judge the clause and
 not its wording, and route only what nothing can run. The row checker asks the same question
 before the freeze, below, and review asks it again. The reviewer says whether a test could have
-watched each routed clause fail, and a yes fails the review.
+watched each routed clause fail, and a yes is a warning at review.
 
 The freeze refuses the flag when the clause is not, verbatim, one of the order's frozen done-when
 entries (exit 3). It warns when the clause carries no negation word at all. A contraction such as

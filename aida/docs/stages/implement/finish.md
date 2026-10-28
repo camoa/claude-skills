@@ -57,6 +57,10 @@ owns that criterion, then one that serves it. A finding you ruled wrong stays wh
 own fixer repairs the file, and a fresh reviewer checks the repair. The order closes again, and
 finish runs again over the new range. Review then runs from its first step.
 
+A finding you ruled `test-wrong` names a frozen test. It goes to the order whose frozen record
+holds that test, and that order's test author corrects it. The correction freezes as a new
+record, and the first record is never edited. Nobody corrects a frozen test by hand.
+
 A finding no order can take is named, with the reason. Commit its fix on the task branch, inside
 the files the orders own, or rule it at the next review.
 

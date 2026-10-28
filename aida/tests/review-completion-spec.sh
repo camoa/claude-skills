@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# review-completion-spec.sh: the task review records warnings and fails only on a criterion, the
+# one unattended stop is completion's, and a person's ruling at close reaches its route. A wrong
+# frozen test goes back to its order's test author through reopen, and a criterion with wrong
+# wording is handed to scope as a follow-up. Each case sources the helper in a subshell, so it
+# starts from fresh records.
+set -u
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=records.bash
+source "$HERE/records.bash"
+
+# closed_with <close arguments>...: the acceptance step with c1's row met, then close.
+closed_with() {
+  evidence "$(c1_row)"
+  run "$REVIEW" acceptance "$TASK"
+  run "$REVIEW" acceptance "$TASK" --evidence
+  run "$REVIEW" close "$TASK" "$@"
+}
+
+# passed_record [<warnings JSON>]: a closed review that passed with these warnings, c1 met.
+passed_record() {
+  reviewed_record
+  edit "$TASK/review/review.json" '.verdict = "passed" | .warnings = $w
+    | .criteria = [{id: "c1", verifiedBy: "person", verdict: "met", answeredBy: "person"}]' --argjson w "${1:-[]}"
+  edit "$TASK/alignment.json" '.criteria[0].verdict = "met"'
+}
+
+echo "--- review close: warnings, and the verdict"
+verdict_case() (
+  source "$HERE/records.bash"
+  review_records
+  reviewed_record
+  edit "$TASK/review/review.json" '.checks += [{id: "security", verdict: "unmet", detail: "a finding"}]'
+  closed_with --row c1=met
+  jq -r '.verdict + "|" + ([ (.warnings // [])[].id ] | join(","))' "$TASK/review/review.json"
+)
+expect "a check reading unmet is a warning, and every criterion met passes" "$(verdict_case)" "passed|security"
+
+unasked_case() (
+  source "$HERE/records.bash"
+  review_records
+  reviewed_record
+  closed_with --row c1=met --row c9=met
+  printf '%s|%s|%s\n' "$RC" "$(jq -r '.verdict' "$TASK/review/review.json")" \
+    "$(jq '[ (.warnings // [])[] | select(.step == "review close") ] | length' "$TASK/task.json")"
+)
+expect "an answer to a row nobody asked is ignored and named in the task record" "$(unasked_case)" "0|passed|1"
+
+low_case() (
+  source "$HERE/records.bash"
+  review_records
+  reviewed_record
+  edit "$TASK/review/review.json" '.checks += [
+    {id: "serves-a-criterion", verdict: "met", detail: "x", scriptHalf: {verdict: "met", detail: "x"}},
+    {id: "test-and-mutation", verdict: "met", detail: "x", scriptHalf: {verdict: "met", detail: "x"}}]'
+  jq -n '{findings: [{id: "f1", lens: "solid", severity: "low", file: "a.php", lines: "1", linkedTo: "", evidence: "a nit"}]}' >"$ROOT/findings.json"
+  run "$REVIEW" findings "$TASK" --findings "$ROOT/findings.json"
+  jq -r '.checks[] | select(.id == "solid") | .verdict + "|" + (has("answeredBy") | tostring)' "$TASK/review/review.json"
+)
+expect "a lens with low findings only reads met, and asks the person nothing" "$(low_case)" "met|false"
+
+moved_case() (
+  source "$HERE/records.bash"
+  review_records
+  reviewed_record
+  edit "$TASK/review/review.json" '.checks += [
+    {id: "serves-a-criterion", verdict: "met", detail: "x", scriptHalf: {verdict: "met", detail: "x"}},
+    {id: "test-and-mutation", verdict: "met", detail: "x", scriptHalf: {verdict: "met", detail: "x"}}]'
+  printf 'c\n' >"$WT/a.php" && git -C "$WT" commit -qam "moved"
+  printf '{"findings": []}\n' >"$ROOT/findings.json"
+  run "$REVIEW" findings "$TASK" --findings "$ROOT/findings.json"
+  local attended
+  attended="$RC|$(jq '[ (.warnings // [])[] | select(.step == "review findings") ] | length' "$TASK/task.json")"
+  edit "$TASK/task.json" '.runMode = "autonomous"'
+  run "$REVIEW" findings "$TASK" --findings "$ROOT/findings.json"
+  printf '%s|%s\n' "$attended" "$RC"
+)
+expect "code moved since checks warns attended and stops unattended" "$(moved_case)" "0|1|51"
+
+echo "--- checks: the task's own change set (row 441)"
+merge_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records code-written
+  order_commit
+  git -C "$CODE" checkout -q main && printf 'c\n' >"$CODE/c.php" && git -C "$CODE" add c.php \
+    && git -C "$CODE" commit -qm "trunk work" && git -C "$CODE" checkout -q --detach
+  git -C "$WT" merge -q --no-edit main
+  jq -n --arg r "$(jq -r '.startedFrom' "$IMPL/ledger.json")..$(git -C "$WT" rev-parse HEAD)" \
+    '{schemaVersion: 1, commitRange: $r, criteria: [{id: "c1", verifiedBy: "machine"}], checklists: []}' >"$IMPL/finished.json"
+  suite_records ""
+  run "$REVIEW" checks "$TASK" --lookup-failed fake=no-recipe
+  printf '%s|%s\n' "$(jq -r '.checks[] | select(.id == "serves-a-criterion") | .verdict' "$TASK/review/review.json")" \
+    "$(sed -n 's/^changedFiles: //p' "$OUT")"
+)
+expect "a file trunk changed, merged into the branch, is not the task's change" "$(merge_case)" "met|1"
+
+echo "--- a criterion's wording is wrong (row 450)"
+contract_case() (
+  source "$HERE/records.bash"
+  review_records "" closed
+  reviewed_record
+  edit "$TASK/review/review.json" '.findings = [{id: "f1", lens: "solid", severity: "high", file: "a.php", lines: "1",
+    linkedTo: "c1", evidence: "c1 names a block", disposition: "criterion"}]'
+  closed_with --row c1=met --row "f1=contract-wrong:a.php says b or c"
+  printf '%s|%s|%s|' "$RC" "$(jq -r '.findings[0] | .ruling + "|" + .correctedText' "$TASK/review/review.json")" \
+    "$(jq -r '.criteria[0].verdict' "$TASK/review/review.json")"
+  run "$COMPLETION" read "$TASK"
+  grep -c '^followUp(f1): ' "$OUT"
+)
+expect "contract-wrong keeps the corrected text, clears the criterion, and is offered as a follow-up" "$(contract_case)" \
+  "0|contract-wrong|a.php says b or c|met|1"
+
+echo "--- a frozen test is wrong (row 449)"
+test_wrong_case() (
+  source "$HERE/records.bash"
+  review_records "" closed
+  tests_record
+  printf '{"findings": []}\n' >"$IMPL/review-wo1.json"
+  reviewed_record
+  edit "$TASK/review/review.json" '.findings = [{id: "f1", lens: "solid", severity: "high", file: "tests/a_test.sh", lines: "1",
+    linkedTo: "c1", evidence: "the test reads the wrong file", disposition: "criterion"}]'
+  closed_with --row c1=met --row f1=test-wrong
+  run "$IMPLEMENT" reopen "$TASK"
+  printf '%s|%s|%s\n' "$RC" "$(ledger '(.repairs[0].retires // []) | join(",")')" "$(ledger '.repairs[0].testOwed')"
+)
+expect "reopen sends a test ruled wrong to its order, which owes the corrected test" "$(test_wrong_case)" \
+  "0|tests/a_test.sh|true"
+
+# owed_records: wo1 closed and reopened for a wrong test, tests/a_test.sh frozen and retired.
+owed_records() {
+  task_records branch
+  order_records reviewed
+  tests_record
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).repairs = [{review: "r", reviewFindings: ["f1"], findings: ["f1"],
+    at: "2026-10-28", testOwed: true, retires: ["tests/a_test.sh"]}]'
+}
+author_case() (
+  source "$HERE/records.bash"
+  owed_records
+  dispatch_record test-author
+  printf '%s|%s\n' "$(write_hook "$(file "$WT/tests/a_test.sh")" aida:test-author)" \
+    "$(write_hook "$(file "$WT/tests/a_test.sh")" aida:implementer)"
+)
+expect "the repair's test author may rewrite the retired test, and the implementer may not" "$(author_case)" "allow|deny"
+
+refreeze_case() (
+  source "$HERE/records.bash"
+  owed_records
+  suite_records ""
+  printf 'exit 0\n' >"$WT/tests/a_test.sh"
+  run "$IMPLEMENT" tests-freeze "$TASK" wo1 --test-glob 'tests/*_test.sh' --test-recipe "fake=$RECIPE" \
+    --test "tests/a_test.sh::a says b=c1" --locks-in "a says b=the built a.php says b" --row "c1=confirmed::model::reads a.php"
+  printf '%s|%s|%s\n' "$RC" "$(jq -r '.rows[0].tests[0].path' "$IMPL/tests-wo1-repair-1.json" 2>/dev/null)" "$(ledger '.repairs[0] | has("testOwed")')"
+)
+expect "the corrected copy of a retired test freezes as the repair's own record" "$(refreeze_case)" "0|tests/a_test.sh|false"
+
+supersede_case() (
+  source "$HERE/records.bash"
+  owed_records
+  printf 'exit 0\n' >"$WT/tests/a_test.sh" && git -C "$WT" commit -qam "the corrected test"
+  jq --arg sha "$("${RECORDS_HASH_SHA256_CMD[@]}" "$WT/tests/a_test.sh" | cut -d' ' -f1)" --arg c "$(git -C "$WT" rev-parse HEAD)" \
+    '.commit = $c | .freezeCommits = [$c] | .rows[0].tests[0].sha256 = $sha' "$IMPL/tests-wo1.json" >"$IMPL/tests-wo1-repair-1.json"
+  jq -n --arg r "$(jq -r '.startedFrom' "$IMPL/ledger.json")..$(git -C "$WT" rev-parse HEAD)" \
+    '{schemaVersion: 1, commitRange: $r, criteria: [{id: "c1", verifiedBy: "machine"}], checklists: []}' >"$IMPL/finished.json"
+  suite_records ""
+  run "$REVIEW" checks "$TASK" --lookup-failed fake=no-recipe
+  printf '%s\n' "$RC"
+)
+expect "a repair's record holds a retired test to its new hash" "$(supersede_case)" "0"
+
+echo "--- completion: the one unattended stop"
+stop_case() (
+  source "$HERE/records.bash"
+  review_records
+  passed_record '[{"id": "security", "verdict": "unmet"}]'
+  edit "$TASK/task.json" '.runMode = "autonomous"'
+  run "$COMPLETION" close "$TASK" -- "done"
+  printf '%s|%s\n' "$RC" "$([ -f "$TASK/completion/completed.json" ] && echo written || echo none)"
+)
+expect "unattended, a passed review with warnings stops completion and writes nothing" "$(stop_case)" "1|none"
+
+child_case() (
+  source "$HERE/records.bash"
+  review_records
+  passed_record
+  mkdir -p "$PROJECT/tasks/t2" && jq -n '{schemaVersion: 1, id: "t2", state: "in_progress", parent: "t1", children: []}' >"$PROJECT/tasks/t2/task.json"
+  edit "$TASK/task.json" '.children = ["t2"]'
+  run "$COMPLETION" close "$TASK" -- "done"
+  printf '%s|%s\n' "$RC" "$(jq '[ (.warnings // [])[] | select(.step == "completion close") ] | length' "$TASK/task.json")"
+)
+expect "an open child is a warning, and the parent closes" "$(child_case)" "0|1"
+
+down_case() (
+  source "$HERE/records.bash"
+  review_records
+  passed_record
+  printf -- '---\nname: fake_environment\ncapability: environment\nframework: fake\n---\n\n## Tear down\n\n```sh\ntouch %s/down.txt\n```\n' "$ROOT" >"$ROOT/env.md"
+  edit "$TASK/task.json" '.environment = {recipe: $r, address: "http://t1.test", upAt: "2026-10-28"}' --arg r "$ROOT/env.md"
+  run "$COMPLETION" close "$TASK" -- "done"
+  printf '%s|%s|%s\n' "$RC" "$([ -f "$ROOT/down.txt" ] && echo down || echo up)" "$(jq -r '.environment.recipe // "none"' "$TASK/task.json")"
+)
+expect "completion takes the task's own site down when the task closes" "$(down_case)" "0|down|none"
+
+finish

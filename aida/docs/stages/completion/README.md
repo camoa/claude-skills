@@ -1,7 +1,8 @@
 # Completion
 
 Completion is the sixth stage. It closes a reviewed task: it offers follow up tasks, takes your
-reason when review did not pass, writes a pull request body, and marks the task complete. You run
+reason when review did not pass or passed with warnings, writes a pull request body, takes the
+worktree's site down, and marks the task complete. You run
 it with `/aida:completion <task-id>`.
 
 Completion runs no check, dispatches no model, and repairs no finding. It calls no remote: no

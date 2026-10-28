@@ -32,7 +32,7 @@ check reads `unmet` and names `/aida:surfaces e2e`. A project that declined end 
 
 ## What a surface does to the verdict
 
-A surface check that reads `unmet` or `unknown` fails the review. A kind that is off, or one the
+A surface check that reads `unmet` or `unknown` is a warning at the close. A kind that is off, or one the
 recipe declares no command for, reads `undeclared`. That passes, and the review reports it in that
 word. Visual parity has no harness today, so review records it as unavailable, never as passed.
 See [Review](../stages/review/README.md).

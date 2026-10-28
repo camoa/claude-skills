@@ -1,8 +1,9 @@
 # The task review refuses or fails
 
 `/aida:review` checks the whole task against its frozen contract and code. It refuses when what
-it would read has moved. It writes no verdict while a decision the build left is unanswered, and
-it fails while a criterion you verify is unanswered.
+it would read is missing. It warns when the code moved under it, and refuses that on an
+unattended run. It writes no verdict while a decision the build left is unanswered, and it fails
+only when a criterion reads unmet.
 
 ## It refuses
 
@@ -10,9 +11,8 @@ it fails while a criterion you verify is unanswered.
 |---|---|---|
 | 66 | implementation has not finished | run the finish step of `/aida:implement` |
 | 62 | a review step ran before the step it reads | run the step the message names |
-| 62 | a non-goal changed after the review brief was written | run the brief again, and let AIDA send the reviewer on the new brief |
 | 61 | the code repository has uncommitted work | commit it, then run the step again |
-| 51 | the code moved, or went dirty, since `checks` ran | run `checks` again |
+| 51 | on an unattended run only: the code moved or went dirty since `checks` ran, or a non-goal or the practice search changed since the brief | run `checks` again; with you present this is a warning |
 | 3 | the code is not at the commit the build ended at | see "The code moved past the build" below |
 | 3 | a criterion changed after the build froze it | put the frozen text back with `/aida:scope`, or redo the orders that serve it |
 | 73 | the check recipe changed after the baseline | see [the build cannot start](cannot-test.md) |
@@ -38,17 +38,19 @@ finding takes `wrong`, `deferred`, `load-bearing` or `test-wrong`; a departure t
 answers each one, at the same commit, with no fresh review. See
 [close the review](../stages/review/close.md).
 
-## The review fails on a question
+## The review fails, or warns, on a question
 
-- **A criterion you verify is unanswered.** It reads unanswered, and the verdict is `failed`.
-  Close names each such criterion and its route. Answer it at a later close, at the same commit,
-  and the review can pass.
-- **A medium or high finding.** It fails the criterion it cites unless you rule it `wrong` or
-  `deferred`.
-- **A changed non-goal you reject.** The review fails.
+- **A criterion you verify is unanswered.** It reads unanswered, a warning, and completion asks
+  your reason before it closes. Close names each such criterion and its route. Answer it at a later
+  close, at the same commit.
+- **A criterion you answer unmet.** The verdict is `failed`.
+- **A medium or high finding.** It fails the criterion it cites unless you rule it `wrong`,
+  `deferred` or `contract-wrong`. A finding you rule `test-wrong` still fails it, and `reopen`
+  sends it to the test author.
+- **A changed non-goal you reject.** Its check reads unmet, a warning.
 
 A wrong or missing answer is corrected by running close again at the same commit. After a fix
-commit, close refuses (exit 51) and the route is `checks`.
+commit, close warns that the code moved, and the route is `checks`.
 
 On a light or autonomous run nobody answers at close, and exit 70 means a person's answer was
 passed with nobody present. How your answer reaches it is on

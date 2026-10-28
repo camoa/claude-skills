@@ -29,8 +29,9 @@ round. AIDA records the round again at the new commit, and no round is spent.
 
 ## The verify step
 
-The reviewer returns and gives each finding one verdict, read against the fix diff alone:
-addressed or not addressed. Attempted is not addressed. New breakage inside the fix diff opens a
+The reviewer returns and gives each finding one verdict, addressed or not addressed. It reads
+the fix diff, and every file the fix depends on, such as a hook the fix calls. A verdict that rests
+on a file it could not read is not addressed. Attempted is not addressed. New breakage inside the fix diff opens a
 finding. Anything outside the fix diff is recorded and opens nothing, so a round never grows.
 
 ## Rulings

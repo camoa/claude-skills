@@ -15,9 +15,10 @@ reviewer and records what it found. One step runs the surfaces and dispatches th
 verifier, which runs the product and records evidence. The last step asks the person the checklist
 rows, with the evidence beside them, and writes the verdict.
 
-**Review starts no fixer and runs no second pass.** A failed review goes to the person, with the
-record. The implement skill's `reopen` then sends each finding that fails a criterion back to the
-order that owns its file, whose own fixer repairs it. A reviewer holding no reference outside the
+**Review starts no fixer and runs no second pass.** A review fails only on a criterion that reads
+unmet. Every other check that is not met is a warning in the record. Either way the record goes to
+the person. The implement skill's `reopen` then sends each finding that fails a criterion back to
+the order that owns its file, whose own fixer repairs it. A reviewer holding no reference outside the
 code checks the code against itself, so a second round finds new things forever. The reference here
 is the frozen contract and the frozen tests.
 
@@ -184,7 +185,7 @@ order: the id, the verdict, and one word for how the verdict came about.
 | `read` | a record field decided it, and nothing ran |
 | `off` | the project turned the thing off: a kind disabled, a row the recipe declares absent, mutation testing not opted in |
 | `could-not-look` | a recipe, a row, a file or a tool was absent, so the verdict is unknown or undeclared |
-| `awaiting-person` | a lens check holds only low findings, and the person answers it at close |
+| `awaiting-person` | the acceptance verifier read a row not met, and the person answers it at close |
 
 Then one line per surface: run, or not run with the reason, `disabled`, `unaffected` or `no harness`.
 Then one line with the counts per word. Exit 3 with no record, naming the file. Run it at any step
@@ -199,9 +200,9 @@ its own instructions are therefore the whole of the bound. The acceptance verifi
 way, and it holds Bash and Write, so nothing but its instructions keeps it out of the code path. Say
 that plainly when a person asks what a dispatch enforces, rather than describing either role as fenced.
 
-The script refuses the reviewer's findings at exit 51 when the code path moved, or its tree went
-dirty, since `checks` ran. A file the role left behind is caught there. It is a refusal, not a
-finding.
+The script names it when the code path moved, or its tree went dirty, since `checks` ran. A file
+the role left behind is caught there. With a person present it is a warning in the task record.
+On an autonomous run it refuses at exit 51. It is never a finding.
 
 The tool grants in this file's own frontmatter hold for one turn. The runtime clears them at your
 next message to the person, so a review spanning several turns asks again for the Bash rule. That is
@@ -218,7 +219,7 @@ One number never means two things, and these keep the meanings implementation ga
 | 5 | the recorded code path exists and is not a git repository |
 | 14 | the project's own `project.json` exists and is not valid JSON |
 | 15 | the recorded code path does not exist on disk |
-| 51 | the code path moved, or went dirty, since `checks` ran |
+| 51 | on an autonomous run only: the code moved since `checks`, or a text the reviewer read changed since `brief`. With a person present each is a warning |
 | 52 | the findings file could not be read as a findings file, or the evidence file as the verifier's rows |
 | 61 | the code repository's tree is dirty |
 | 62 | a step ran out of order, and what it depends on recorded nothing |

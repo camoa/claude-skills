@@ -62,6 +62,10 @@ When the brief holds `repair`, the task review found a bug in this unit after it
 file the unit owns, and write its red run. Do not change a frozen test: the freeze refuses a
 repair test in a file an earlier freeze holds. The fixer then makes your test pass.
 
+When `repair` also holds `retires`, a person ruled those frozen tests wrong at the task review.
+Correct each one in its own file. You may write those files and no other frozen test. The code
+already exists, so return each corrected test with a locks-in reason that names that code.
+
 The dispatch message can name earlier tests. An earlier author wrote them before design reopened,
 and they are not in the tree. Read them. Write into your own test file only the tests the brief
 still asks for, changed where the brief changed. Then run each test and write its red run.

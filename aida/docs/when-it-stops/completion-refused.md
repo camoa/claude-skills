@@ -1,18 +1,19 @@
 # Completion refuses to close the task
 
 `/aida:completion` closes a reviewed task. It refuses with exit 1 and gives the reason on the
-first line. A review that did not pass closes only on your word.
+first line. A review that did not pass, or passed with warnings, closes only on your word.
 
 ## What you see, and what to do
 
 | The refusal | What to do |
 |---|---|
 | The task is already complete | Nothing. Completion names its record and stops |
-| A child task is still open | Finish each child first. A split parent closes last |
-| A high-severity follow-up finding has no task | Create the follow-up task, or say why not with `--leave` |
-| The review did not pass, and no reason was given | Answer what review left open, or give your reason (below) |
-| A criterion a model looked at through a browser has no answer from you | Accept or reject each one; a no needs a reason |
-| A file `task environment up` changed is in the way | See [put back the site files](../stages/completion/restore.md) |
+| The review did not pass, or warns, and no reason was given | Answer what review left open, or give your reason (below) |
+
+These close, and each leaves a `warning:` line in the task record. A child task is still open. A
+high-severity follow-up finding has no task. A `--leave` decides nothing. A file
+`task environment up` changed cannot go back. For the last, see
+[put back the site files](../stages/completion/restore.md).
 
 ## The review verdict is not `passed`
 
@@ -22,15 +23,15 @@ first line. A review that did not pass closes only on your word.
   pass the review, so no reason is needed.
 - **`unfinished` because a decision waits.** Answer it at the review's close. See
   [the task review refuses or fails](review-refused.md).
-- **`failed` for any other cause.** Close only when you mean to, with a reason. Completion
-  records your sentence. It never invents or suggests one.
+- **`failed` for any other cause, or `passed` with warnings.** Close only when you mean to, with
+  a reason. Completion records your sentence. It never invents or suggests one.
 
 A reason closes the task with the open questions still unanswered.
 
 ## With nobody present
 
-A run with nobody present closes a task on a passed review and on nothing else. Otherwise it
-halts, and exit 70 means a person's answer was passed. How your answer reaches it is on
+A run with nobody present closes a task on a passed review with no warning and on nothing else.
+Otherwise it halts, the one place an unattended task stops on the review, and exit 70 means a person's answer was passed. How your answer reaches it is on
 [completion on an unattended run](../stages/completion/autonomous.md).
 
 ## Why it works this way

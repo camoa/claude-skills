@@ -731,15 +731,19 @@ allow_unnamed_role() {
 frozen_reason() {
   printf 'this task froze this test for unit %s. Changing it needs the design reopened. If the test is wrong, stop and report it. Do not edit it.' "$1"
 }
-# True while the dispatched unit has not left the frozen state, read from its task's ledger. The
-# test author exception holds only then. A test author sent to a reopened order writes the repair's
-# one new test file, never a test frozen before the build.
-before_build() {
-  case "$(jq -r --arg id "$UNIT" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""' \
-    "$(dirname -- "$DISPATCH_FILE")/ledger.json" 2>/dev/null)" in
+# True when the dispatched test author may write the frozen file $1, an absolute path, read from
+# its task's ledger. That holds while the unit has not left the frozen state. A test author sent to
+# a reopened order writes the repair's one new test file, never a test frozen before the build. The
+# exception is a test a person ruled wrong at the task review: the owed repair retires it, and its
+# test author writes the corrected copy (gap row 449).
+author_may_write() {
+  local ledger
+  ledger="$(dirname -- "$DISPATCH_FILE")/ledger.json"
+  case "$(jq -r --arg id "$UNIT" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""' "$ledger" 2>/dev/null)" in
     ""|tests-frozen) return 0 ;;
   esac
-  return 1
+  jq -e --arg id "$UNIT" --arg p "$1" --arg root "$CODE_CANON" '[ (.orders // [])[] | select(.id == $id) ][0].repairs // []
+    | any(.[]; .testOwed == true and any((.retires // [])[]; ($root + "/" + .) == $p))' "$ledger" >/dev/null 2>&1
 }
 # Rule three's exit, reached only when rule one found nothing, and before rule two's. $1 is a
 # suffix naming the door.
@@ -775,7 +779,7 @@ case "$TOOL" in
     TARGET_ABS="$OWNER_ABS"
     OWNER="$OWNER_UNIT"
     [ "$MAIN_SESSION" = false ] || deny_main "$TARGET_ABS" "$OWNER"
-    if is_test_author "$AGENT" && [ "$OWNER" = "$UNIT" ] && before_build; then
+    if is_test_author "$AGENT" && [ "$OWNER" = "$UNIT" ] && author_may_write "$TARGET_ABS"; then
       if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
         echo '{}'; exit 0
       fi
@@ -976,7 +980,7 @@ sed
     done < <(split_segments "$(strip_heredocs "$CMD")")
     if [ -n "$HIT" ]; then
       [ "$MAIN_SESSION" = false ] || deny_main "$HIT through Bash" "$HIT_OWNER"
-      if is_test_author "$AGENT" && [ "$HIT_OWNER" = "$UNIT" ] && before_build; then
+      if is_test_author "$AGENT" && [ "$HIT_OWNER" = "$UNIT" ] && author_may_write "$OWNER_ABS"; then
         if [ -n "$ROLE" ] && [ "${AGENT##*:}" = "${ROLE##*:}" ]; then
           echo '{}'; exit 0
         fi

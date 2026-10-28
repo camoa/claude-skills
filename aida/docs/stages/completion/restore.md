@@ -14,13 +14,13 @@ site. So, at the close, completion:
    did not exist there;
 3. commits that, in one commit.
 
-A task with no such files gets no tear-down and no commit. A file you already put back needs
+A task with no such files gets no commit, and its site still goes down at the close. A file you already put back needs
 nothing, whatever your commit says. When every file is already back, completion makes no commit.
 The pull request body names each restore commit, yours and its own, so a reviewer sees why those
 files are not in the diff.
 
-When completion cannot put a file back safely, it refuses and names the repair. See
-[completion refuses](../../when-it-stops/completion-refused.md).
+When completion cannot put a file back safely, it puts nothing back and writes a warning that
+names the repair. See [completion refuses](../../when-it-stops/completion-refused.md).
 
 ## Put the files back after review, not before
 

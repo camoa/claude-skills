@@ -28,7 +28,8 @@ When AIDA cannot work out the trunk, it says so and goes on. See
 
 ## The code moved after a record
 
-- **In the task review, exit 51.** The code changed after `checks` ran. Run `checks` again.
+- **In the task review.** The code changed after `checks` ran. With you present it is a warning;
+  an unattended run refuses at exit 51. Run `checks` again.
 - **In a work order, exit 63.** Commits landed after the order's last record, and they change a
   frozen test or a file the order does not own. No record judged them. Move the branch back to the
   commit the message names, or redo the order. See [a work order stopped](stopped.md). Commits

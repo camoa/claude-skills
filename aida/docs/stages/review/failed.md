@@ -1,7 +1,8 @@
 # After a failed review
 
-A failed review hands you the record and stops. You fix the code and review again, or you close
-the task without a passed review.
+A review fails when a criterion reads unmet. It hands you the record and stops. You fix the code
+and review again, or you close the task without a passed review. A review that passed with
+warnings is handled the same way, with your reason at completion.
 
 ## Fix the code, then review again
 
@@ -11,16 +12,18 @@ order's own fixer repairs it, a fresh verifier checks the round, and the order c
 build then finishes again, with a range that ends at the new head. Then run
 `/aida:review <task-id>`. It starts from the checks, and archives the old record first.
 
-`reopen` takes only findings that fail a criterion. It names each one it could not send, with
-the reason: the finding names no file, no order owns the file, two orders own it and neither
-serves the criterion, or the owning order is not closed. When it can send none, it refuses and
-keeps the build record.
+`reopen` takes findings that fail a criterion, and findings you ruled `test-wrong`. A test ruled
+wrong goes to the order whose frozen record holds it. That order's test author corrects it, and
+the correction freezes as a new record. You never correct a frozen test by hand. `reopen` names
+each finding it could not send, with the reason. The finding names no file, or no order owns the
+file. Or two orders own it and neither serves the criterion, or the owning order is not closed.
+When it can send none, it refuses and keeps the build record.
 
 `reopen` never takes these, and never names them:
 
 - a failed check that cites no finding;
-- a medium or high finding that cites no criterion. Rule it `wrong` or `deferred` at the
-  [close](close.md), or fix it yourself;
+- a medium or high finding that cites no criterion, unless you ruled it `test-wrong`. Rule it at
+  the [close](close.md), or fix it yourself;
 - a decision you ruled `load-bearing`, `test-wrong` or `rebuild`.
 
 For each one you fix yourself, commit the fix on the task branch, then run the build's finish
@@ -45,8 +48,8 @@ and review again.
 
 ## Close without a passed review
 
-Completion closes a task on a failed review only on your reason, one sentence that the record
-keeps. See [completion](../completion/README.md).
+Completion closes a task on a failed review, or on one with warnings, only on your reason, one
+sentence that the record keeps. See [completion](../completion/README.md).
 
 ## Why it works this way
 

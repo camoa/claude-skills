@@ -53,9 +53,10 @@ Keep `fetch-failed` in the text of a snippet. A search that found nothing is rec
 The script decides what the search proves. `brief` counts each finding with a URL that is no
 `fetch-failed` snippet and no searched and empty answer. A count of one or more makes the search
 the body both lenses judge. Each of the two checks then reads met only when the reviewer's
-`practiceJudged` names, for that lens, a counted finding. `findings` refuses at exit 62 when the
-search holds more or fewer findings than the brief the reviewer read. `findings` and `close` also
-refuse at exit 62 when a non-goal changed after `brief` ran.
+`practiceJudged` names, for that lens, a counted finding. Otherwise it reads unknown, a warning the
+person reads at close. `findings` warns when the search holds more or fewer findings than the brief
+the reviewer read. `findings` and `close` also warn when a non-goal changed after `brief` ran. An
+autonomous run refuses each at exit 51 instead.
 
 ## Dispatch the architecture reviewer
 
@@ -108,8 +109,8 @@ could have watched the clause fail. `findings` records one row per clause, and o
 check over them all. That check reads unmet when one clause reads unmet or testable yes. It reads
 unknown when one reads unknown or gave no testable answer, and met when every one reads met and
 testable no. It reads not-needed when no order routed a clause. The verdict rules then apply as they
-do to every other check. So a clause nobody could judge fails the review, and so does a clause a
-test could have proved. The summary prints one `absence(<order>)` line per clause. Name each one
+do to every other check. So a clause nobody could judge is a warning, and so is a clause a test
+could have proved. The summary prints one `absence(<order>)` line per clause. Name each one
 that reads testable yes to the person: it takes a test with a red run. Do not judge a clause
 yourself and do not send one back: the reviewer reads the diff, and this conversation does not.
 
@@ -124,9 +125,11 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh findings "<task_folder>" \
   --findings <path to the reviewer's findings file>
 ```
-It refuses at exit 51 when the code path moved, or its tree went dirty, since `checks` ran. A file
-the role left behind is caught there, rather than read as a finding. It refuses at exit 3 with no
-`--findings`, unless `brief` printed `reviewer: skip`.
+It names the code path moving, or its tree going dirty, since `checks` ran. So does a practice
+search or a non-goal that changed after `brief` ran. A file the role left behind is caught there,
+rather than read as a finding. With a person present each is a warning in the task record. An
+autonomous run refuses at exit 51. It refuses at exit 3 with no `--findings`, unless `brief` printed
+`reviewer: skip`.
 
 It records checks 2, 9 to 12 and 16, and every finding. It lowers checks 3 and 4 where their lens
 raised a finding. It records one row per routed done-when clause, and one more check for them all.
@@ -134,8 +137,7 @@ It prints one summary line per check with the counts.
 Each of those checks reads met when its lens returned nothing, unmet when that lens
 returned a finding, and unknown when the findings file is absent or unreadable. **An absent verdict is
 never a clean one**, and version 5 paid for that four times. When every finding of a lens is low,
-the script does not decide its check. Interactive, the check reads unknown until the person answers
-at close. Autonomous, it reads met, and the audit lines name the check and its findings. Check 16 has a floor before its lens,
+the check reads met, and each finding stays follow-up for completion to offer. Check 16 has a floor before its lens,
 described in `references/checks.md`: a playbook record that was never loaded reads unknown.
 
 Checks 12 and 16 have one more floor, and it is the research records. Both read them and nothing

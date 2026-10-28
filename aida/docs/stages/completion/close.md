@@ -46,9 +46,11 @@ Completion asks, in this order:
 
 ## What the close does
 
-1. It refuses while a child task is open, while a high severity follow up has no task and no
-   reason, or while a needed reason or answer is missing.
-2. It puts back the files the worktree's site needed, in one [restore commit](restore.md).
+1. It refuses while a needed reason or answer is missing. An open child task, or a high severity
+   follow up with no task and no reason, is a warning in the task record instead.
+2. It puts back the files the worktree's site needed, in one [restore commit](restore.md). It
+   takes the worktree's own site down, so no finished task leaves its site running. An adopted
+   site stays up.
 3. It writes the record, `completion/completed.json`, then the
    [pull request body](pr-body.md), `completion/pr-body.md`.
 4. It calls the task skill's `complete` last. That call commits the record, the body and the

@@ -11,13 +11,9 @@ row sits under each criterion that order owns, or serves when it owns none. Show
 summary asks a different question than the row a person signed up to answer. Show every row in one
 pass, and ask for each one only once.
 
-Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. A lens
-check names the low findings of one lens. The person confirms those findings, met, or rejects
-them, unmet. A surface check names the verifier's rows that did not read met. Show its
+Ask the same once about each check the summary prints as `unknown answeredBy=nobody`. Such a
+check names the verifier's rows that did not read met. Show its
 `evidence(<surface>@<viewport>)` lines, and the person judges the check met or unmet.
-The guides check and the practices check can wait the same way when no guide body is on disk.
-Then the review's own search found no practice, or the reviewer named none it judged against.
-Ask whether any guide covers the task. When none does, the person judges the diff, met or unmet.
 
 A check whose id begins `decision-` is a decision a build left. Ask it in the
 words of `references/review.md` under the implement skill, under Rulings for a finding and under
@@ -33,11 +29,11 @@ The answer decides what happens next:
   it offers a follow-up finding (`skills/completion/scripts/completion-actions.sh`, `cp_load_follow_ups`).
 - `keep`: the departure stands as built.
 - `accept`: the person approves the live text of a changed non-goal. The record keeps both texts.
-- `reject`: the reviewer judged a text the person did not approve, so the review fails. Put the
+- `reject`: the reviewer judged a text the person did not approve, so the check reads unmet. Put the
   frozen text back with `scope update`, then archive the review and run it again. For an added
   non-goal, use `scope remove`. A removed one cannot come back that way, because `scope remove`
   retires its id, so the route is `redo` in the implement skill, for the orders it bounds.
-- `load-bearing`, `test-wrong` or `rebuild`: the check reads unmet, so the review fails. The
+- `load-bearing`, `test-wrong` or `rebuild`: the check reads unmet, which is a warning. The
   order is closed, so the routes inside implement no longer reach it. The route is a fix
   commit on the task branch, then finish again, per "Finish runs again after a failed review"
   in `skills/implement/references/finish.md`. A load-bearing finding is fixed. A wrong
@@ -49,14 +45,23 @@ and a later `close` with the person present answers each one with no fresh pass.
 nobody answers, so the review has no verdict and completion's halt names each decision.
 
 A finding the summary prints under `disposition(criterion)` fails the criterion it cites, whatever
-that criterion's own answer says. Ask the person to rule each unruled one once, in the same words.
-The summary prints a ruled finding with its ruling beside it.
-`wrong`: the reviewer was mistaken, so the criterion reads its own answer. `deferred`: the finding
-is real and waits, so completion offers it as a follow up task, and the criterion reads its own
-answer. With no ruling, the finding still fails its criterion. The record keeps the finding and the
-person's word. A medium or high finding that cites no criterion still fails its lens check. Ask
-the person to rule it `wrong` or `deferred`. A lens check whose medium and high findings are all ruled
-then waits for the person, the way a lens check with low findings only does.
+that criterion's own answer says. Ask the person to rule each unruled one once. The summary prints
+a ruled finding with its ruling beside it. The four words:
+
+- `wrong`: the reviewer was mistaken, so the criterion reads its own answer.
+- `deferred`: the finding is real and waits. Completion offers it as a follow up task, and the
+  criterion reads its own answer.
+- `test-wrong`: the finding names a frozen test that is wrong. The criterion still fails. The
+  implement skill's `reopen` sends the finding to the test author of the order that froze that
+  test. Its corrected copy freezes as a new record. Nobody corrects it by hand.
+- `contract-wrong:<corrected text>`: the code is right, and the criterion's wording is wrong. The
+  record keeps the corrected text beside the frozen one, and the criterion reads its own answer.
+  Completion offers a follow up task that changes the criterion through scope.
+
+With no ruling, the finding still fails its criterion. The record keeps the finding and the
+person's word. A medium or high finding that cites no criterion fails its lens check, which is a
+warning. The person may rule it the same way. A lens check whose medium and high findings are all
+ruled reads met.
 
 The person answers met or unmet per criterion, from its rows and its evidence. `close` prints each
 criterion's `evidence(<criterion>)` lines under its own line: the acceptance verifier's verdict,
@@ -91,15 +96,17 @@ finding the person ruled:
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh close "<task_folder>" \
   --row <criterion>=met|unmet --row <check id>=met|unmet \
   --row <decision id>=wrong|deferred|load-bearing|test-wrong|keep|rebuild|accept|reject \
-  --row <finding id>=wrong|deferred
+  --row <finding id>=wrong|deferred|test-wrong --row "<finding id>=contract-wrong:<corrected text>"
 ```
-A close with no row, or with a row it refuses, prints every row that waits and the words each
-takes. Ask the person those rows in one go.
+A close with no row prints every row that waits and the words each takes. Ask the person those
+rows in one go. A row nobody asked, or a word its row does not take, decides nothing. `close` names
+it in the task record as a warning, and the row it meant still waits.
 
 On a record that already holds a verdict, it archives that record alone and writes the new
 verdict in its place. The brief, the findings and every check stay, because the commit has not
 moved. So a person who gave a wrong row, or left one out, runs `close` again. After a fix commit,
-`close` refuses at exit 51, and the route is `checks`.
+`close` warns that the code moved, and the route is `checks`. On an autonomous run it refuses at
+exit 51 instead.
 
 It writes check 1, one verdict per criterion, and the review's own verdict into
 `review/review.json`. The record is committed when the stage closes: `close` commits the task
@@ -110,17 +117,18 @@ the path, and say the record holds the evidence for every row, per SKILL.md.
 
 The verdict is two words, `passed` and `failed`.
 
-1. **A check reading unmet fails the review.** A failure dominates.
-2. **A check reading unknown fails the review.** A result nobody could read is never waved through.
-3. **Met, undeclared and not-needed all pass**, and each is reported in its own word. A framework
-   with no tool has answered, and blocking there blocks every project on that framework. A check no
-   order asked for has answered too.
-4. **A criterion reading unmet or unanswered means no sign off**, whatever the checks said.
+1. **A criterion reading unmet fails the review.** The contract is not met.
+2. **Every other result is a warning.** A check reading unmet or unknown, and a criterion reading
+   unanswered, never fails the review. `close` lists each one in the record's `warnings` and on its
+   `warnings:` line. Read each to the person.
+3. **Met, undeclared and not-needed all pass**, and each is reported in its own word.
 
-Name the check or the criterion that caused a fail. Then hand the record to the person. No fixer
-starts and no second pass runs, per SKILL.md. A finding that fails a criterion goes back to the
-order that owns its file through the implement skill's `reopen`. Its `next:` line names it, per
-"Finish runs again after a failed review" in `skills/implement/references/finish.md`.
+Name the criterion that caused a fail, and every warning. Then hand the record to the person. No
+fixer starts and no second pass runs, per SKILL.md. Completion closes over a fail or a warning
+only on the person's reason, and an unattended completion stops there. A finding that fails a
+criterion, or a test ruled wrong, goes back to its order through the implement skill's `reopen`.
+Its `next:` line names it, per "Finish runs again after a failed review" in
+`skills/implement/references/finish.md`.
 
 ## Say what the write did to the contract
 

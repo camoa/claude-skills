@@ -8,8 +8,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # implementation handed over, writes the diff once, runs every command the two recipes declare over
 # the changed files at the final commit, assembles the architecture reviewer's brief, records what
 # that reviewer found, runs the surfaces and records the acceptance verifier's evidence, and closes
-# the review with one verdict. It never judges whether a criterion is met by reading code, and it starts no fixer: a
-# failed review goes to the person with the record.
+# the review with one verdict and its warnings. It never judges whether a criterion is met by reading
+# code, and it starts no fixer: the record goes to the person.
 #
 # One review record, at <task folder>/review/review.json (scripts/review-schema.json). It lives in
 # its own folder beside research/, design/ and implementation/, because implementation's `redo`
@@ -74,7 +74,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   5  the recorded codePath exists and is not a git repository.
 #  14  the project's own project.json exists and is not valid JSON.
 #  15  the recorded codePath does not exist on disk.
-#  51  the code path moved, or went dirty, since `checks` ran.
+#  51  on an autonomous run only: the code path moved, or went dirty, since `checks` ran, or a text
+#      the reviewer read changed since `brief` ran. With a person present each is a warning.
 #  52  the findings file could not be read as a findings file, or it answers a done-when clause no
 #      order routed to review. Or the evidence file could not be read as the verifier's rows, or it
 #      leaves a criterion with no row.
@@ -188,9 +189,11 @@ LENS_WORDS="non-goals solid dry architecture guides practices mutation purpose"
 RW_ROW_WORDS_JQ='def row_words: if (startswith("decision-") and endswith("-departure")) then ["keep", "rebuild"]
   elif (startswith("decision-") and endswith("-non-goal")) then ["accept", "reject"]
   elif startswith("decision-") then ["wrong", "deferred", "load-bearing", "test-wrong"]
-  elif test("^f[1-9][0-9]*$") then ["wrong", "deferred"]
+  elif test("^f[1-9][0-9]*$") then ["wrong", "deferred", "test-wrong", "contract-wrong"]
   else ["met", "unmet"] end;
 def or_list: if length < 2 then join("") else (.[0:-1] | join(", ")) + " or " + .[-1] end;'
+# The words that rule a finding at close. contract-wrong carries the corrected text after a colon.
+RW_RULING_WORDS='["wrong", "deferred", "test-wrong", "contract-wrong"]'
 
 # The search review records, through research-actions.sh record, when no guide body is on disk:
 # current practice for the stack, found by the outward searcher (gap row 364). It is a research
@@ -426,13 +429,23 @@ RW_SCHEMA_RESULT2
   write_atomic "$RECORD_FILE" "$doc"
 }
 
-# Exit 51. Every action after `checks` answers about the code `checks` read. $1 the action, $2
-# whether the working tree must also still be clean (`clean` or `commit-only`).
+# Exit 51, unattended only. Every action after `checks` answers about the code `checks` read and the
+# texts `brief` gave the reviewer. When either moved, the record describes other code or other
+# words. A person present reads the warning and goes on; nobody present means nobody reads it, so
+# the step stops. One check for every such drift. $1 the action, $2 what moved.
+rw_pass_moved() {
+  [ "$RW_RUN_MODE" != "autonomous" ] \
+    || die 51 "$1: $2 This run is autonomous, so nobody reads that warning, and nothing is written. Run checks again to start a fresh pass."
+  task_warn "$TASK_PATH" "review $1" "" "$2"
+}
+
+# The moved-code half of exit 51. $1 the action, $2 whether the working tree must also still be
+# clean (`clean` or `commit-only`).
 #
 # `findings` asks for both: the reviewer holds Write for one purpose, its own findings file, so a
-# file it left in the code repository is caught here rather than read as a finding later. `acceptance`
-# and `close` ask for the commit alone, because accepting a new surface baseline writes images into
-# the code repository on purpose and the step that follows it would otherwise refuse.
+# file it left in the code repository is named here rather than read as a finding later.
+# `acceptance` and `close` ask for the commit alone, because accepting a new surface baseline
+# writes images into the code repository on purpose.
 rw_refuse_moved_code() {
   local who="$1" how="$2" recorded current dirty
   recorded="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt // ""')"
@@ -441,11 +454,11 @@ rw_refuse_moved_code() {
   [ -n "$current" ] \
     || die 3 "$who: could not capture the current commit (git rev-parse HEAD failed in $RV_CODEPATH)."
   [ "$recorded" = "$current" ] \
-    || die 51 "$who: $RV_CODEPATH is at $current, and the checks were run at $recorded. The code moved under this review, so what this step would record is about code that is no longer there. Run checks again to start a fresh pass at this commit."
+    || rw_pass_moved "$who" "$RV_CODEPATH is at $current, and the checks were run at $recorded, so what this step records is about code that is no longer there."
   [ "$how" = "clean" ] || return 0
   dirty="$(git -C "$RV_CODEPATH" status --porcelain 2>/dev/null)"
   [ -z "$dirty" ] \
-    || die 51 "$who: the working tree at $RV_CODEPATH is dirty, and the reviewer may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
+    || rw_pass_moved "$who" "the working tree at $RV_CODEPATH is dirty, and the reviewer may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
 }
 
 # Exit 70. A person's answer is accepted only when a person is present, which is the rule
@@ -617,8 +630,8 @@ rw_print_summary() {
     # could fall off it, and the person must see each clause a test could have covered.
     + [ (.absences // [])[] | line("absence(\(.order))"; "\(.verdict) testable=\(.testable // "unknown") | \(.clause | short)") ]
     + (if has("verdict") then
-         [ line("failing"; ([ ((.checks // [])[] | select(.verdict == "unmet" or .verdict == "unknown") | .id),
-                              ((.criteria // [])[] | select(.verdict == "unmet" or .verdict == "unanswered") | .id) ] | join(", "))),
+         [ line("failing"; ([ (.criteria // [])[] | select(.verdict == "unmet") | .id ] | join(", "))),
+           line("warnings"; ([ (.warnings // [])[] | .id ] | join(", "))),
            line("verdict"; .verdict) ]
        else [] end)
     + [ line("record"; $record) ]
@@ -718,7 +731,7 @@ do_read() {
 RW_LOOKUP_FLOOR=""; RW_LOOKUP_NOTE=""
 # What a block the parser could not read contributes to every check that reads it. `unparseable` is
 # the heading being there while its key never opens under it, which is nobody having looked rather
-# than a framework that declared nothing, so the word is unknown and it fails the review. A block
+# than a framework that declared nothing, so the word is unknown, a warning at close. A block
 # that is simply absent stays undeclared, because a framework with no such block has answered.
 RW_CHECK_FLOOR=""; RW_TEST_FLOOR=""; RW_BLOCK_NOTE=""
 rw_lookup_floor() {
@@ -814,9 +827,22 @@ RW_VALUES=""; RW_CATALOG_NOTES="[]"
 # checks reads it for the range it records, and acceptance reads it again for that recorded range.
 # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
 # the new path, so a deleted file no order owns would never appear in the changed list.
+#
+# Trunk merged into the branch during the build puts trunk's own files in the range, and no order
+# owns them (gap row 441). So when the trunk's merge base with $2 is not an ancestor of $1, a file
+# counts only when it also differs from that merge base, and RW_DIFF_BASE names it for the diff.
+# Otherwise RW_DIFF_BASE is $1 and the range alone decides.
+RW_DIFF_BASE=""
 rw_load_changed() {
-  RW_CHANGED_JSON="$(git -C "$RV_CODEPATH" diff --no-renames --name-only "$1" "$2" 2>/dev/null \
-    | jq -Rsc 'split("\n") | map(select(length > 0))')"
+  local trunk_base
+  RW_DIFF_BASE="$1"
+  trunk_base="$(task_fork_point "$TASK_PATH" "$RV_CODEPATH")"
+  [ -z "$trunk_base" ] || git -C "$RV_CODEPATH" merge-base --is-ancestor "$trunk_base" "$1" 2>/dev/null \
+    || RW_DIFF_BASE="$trunk_base"
+  RW_CHANGED_JSON="$( { git -C "$RV_CODEPATH" diff --no-renames --name-only "$1" "$2" 2>/dev/null
+      [ "$RW_DIFF_BASE" = "$1" ] || git -C "$RV_CODEPATH" diff --no-renames --name-only "$RW_DIFF_BASE" "$2" 2>/dev/null; } \
+    | jq -Rsc --argjson both "$([ "$RW_DIFF_BASE" = "$1" ] && echo 1 || echo 2)" \
+      'split("\n") | map(select(length > 0)) | group_by(.) | map(select(length == $both) | .[0])')"
   [ -n "$RW_CHANGED_JSON" ] || RW_CHANGED_JSON='[]'
   RW_CHANGED_COUNT="$(printf '%s' "$RW_CHANGED_JSON" | jq 'length')"
 }
@@ -1509,15 +1535,18 @@ RW_REVIEWS
   # passes a changed file an order owns, test files included. So a test edited after its order's
   # last record reached review unchecked (gap row 390). Every order's frozen files are hashed
   # again here, before anything is written. The tree is clean and holds the range's end, so the
-  # files on disk are that commit's. A retake's freeze rewrites its order's record, so a retaken
-  # test is held to the newer hash.
+  # files on disk are that commit's. A repair's record holds a test it froze again to its newer
+  # hash, so each order is read with its repairs (gap row 449).
   rw_load_test_rows "checks"
   records_hash__resolve_sha256_cmd \
     || die 3 "checks: neither sha256sum nor 'shasum -a 256' was found on PATH"
-  local tests_rec tests_doc frozen_changed=""
+  local tests_rec tests_doc frozen_changed="" tests_unit
   while IFS= read -r tests_rec; do
     [ -n "$tests_rec" ] || continue
-    tests_doc="$(jq -c '.' "$tests_rec")"
+    case "$tests_rec" in *-repair-*.json) continue ;; esac
+    tests_unit="$(basename "$tests_rec" .json)"
+    tf_with_repair_tests "checks" "${tests_unit#tests-}"
+    tests_doc="$TF_REPAIR_TESTS_DOC"
     tf_frozen_changed "$tests_doc" "$RV_CODEPATH"
     [ -z "$TF_FROZEN_CHANGED" ] || frozen_changed="$frozen_changed$(printf '%s' "$tests_doc" \
       | jq -r '"\(.unit), frozen at \(.commit)"'): ${TF_FROZEN_CHANGED%, }; "
@@ -1532,9 +1561,15 @@ RW_TESTS_RECORDS
   [ "$RW_TASK_STATE" = complete ] \
     || mark_task_in_progress "$TASK_PATH" "review started" review
   mkdir -p "$REVIEW_DIR" || die 3 "checks: could not create $REVIEW_DIR"
-  git -C "$RV_CODEPATH" diff --no-renames "$base" "$head_end" >"$DIFF_FILE" 2>/dev/null \
-    || die 3 "checks: could not write the diff for $range to $DIFF_FILE"
   rw_load_changed "$base" "$head_end"
+  if [ "$RW_DIFF_BASE" = "$base" ]; then
+    git -C "$RV_CODEPATH" diff --no-renames "$base" "$head_end" >"$DIFF_FILE" 2>/dev/null
+  elif [ "$RW_CHANGED_COUNT" -eq 0 ]; then
+    : >"$DIFF_FILE"
+  else
+    printf '%s' "$RW_CHANGED_JSON" | jq -r '.[]' | tr '\n' '\0' \
+      | xargs -0 git -C "$RV_CODEPATH" diff --no-renames "$RW_DIFF_BASE" "$head_end" -- >"$DIFF_FILE" 2>/dev/null
+  fi || die 3 "checks: could not write the diff for $range to $DIFF_FILE"
   empty_range="no"
   [ "$base" = "$head_end" ] && empty_range="yes"
   upstream="$(git -C "$RV_CODEPATH" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"
@@ -1857,23 +1892,16 @@ rw_lens_hits() {
 }
 
 # One lens's reading of its check, as one check row, or nothing when the lens raised no finding.
-# A medium or high finding reads unmet. Only low findings: a person decides the check at close, and
-# nobody present reads met (gap row 274). A finding a person ruled at close counts as low here,
-# because the person already answered it (gap row 329). The answeredBy key marks the check as the person's
-# question, and `close --row` answers it. $1 the lens, $2 the check id, $3 the findings array.
+# A medium or high finding reads unmet. Only low findings read met: they stay follow-up, and
+# completion offers each as a task. A finding a person ruled at close counts as low here, because
+# the person already answered it (gap row 329). $1 the lens, $2 the check id, $3 the findings array.
 rw_lens_row() {
-  local lens_word="$1" check_id="$2" hits low_only low_word="is low"
+  local lens_word="$1" check_id="$2" hits low_only
   hits="$(rw_lens_hits "$lens_word" "$3")"
   [ -n "$hits" ] || return 0
   low_only="$(printf '%s' "$3" | jq -r --arg l "$lens_word" '[ .[] | select(.lens == $l) | select(has("ruling") | not) | .severity ] | all(. == "low")')"
-  [ "$(printf '%s' "$3" | jq -r --arg l "$lens_word" 'any(.[]; .lens == $l and has("ruling"))')" = "false" ] \
-    || low_word="is low or ruled by the person"
-  if [ "$low_only" = "true" ] && [ "$RW_RUN_MODE" = "interactive" ]; then
-    rw_check_row "$check_id" "unknown" "every finding the $lens_word lens raised $low_word: $hits. The person confirms them at close with --row $check_id=met, which leaves them follow-up, or rejects them with --row $check_id=unmet." \
-      | jq -c '. + {answeredBy: "nobody"}'
-  elif [ "$low_only" = "true" ]; then
-    rw_check_row "$check_id" "met" "every finding the $lens_word lens raised is low: $hits. Nobody was present to confirm them, so the check reads met and the findings stay follow-up." \
-      | jq -c '. + {answeredBy: "nobody"}'
+  if [ "$low_only" = "true" ]; then
+    rw_check_row "$check_id" "met" "every finding the $lens_word lens raised is low or ruled by the person, so each stays follow-up: $hits."
   else
     rw_check_row "$check_id" "unmet" "the $lens_word lens raised these findings: $hits"
   fi
@@ -1942,14 +1970,14 @@ do_findings() {
   if [ -f "$BRIEF_FILE" ]; then
     practice_brief="$(jq -r '.practiceSearch.findings // "none"' "$BRIEF_FILE" 2>/dev/null)"
     [ "$practice_disk" = "$practice_brief" ] \
-      || die 62 "findings: $TASK_PATH/research/$PRACTICE_SEARCH.json holds $practice_disk finding(s), and the brief the reviewer read holds $practice_brief. Run brief again, and dispatch the reviewer on the new brief."
+      || rw_pass_moved "findings" "$TASK_PATH/research/$PRACTICE_SEARCH.json holds $practice_disk finding(s), and the brief the reviewer read holds $practice_brief, so the reviewer did not see them."
   fi
   # A non-goal changed after brief ran is a text the reviewer never judged (gap row 410).
   local non_goal_changes
   non_goal_changes="$(rw_non_goal_changes)"
   [ ! -f "$BRIEF_FILE" ] \
     || [ "$(jq -c '.nonGoalChanges // []' "$BRIEF_FILE" 2>/dev/null)" = "$non_goal_changes" ] \
-    || die 62 "findings: $ALIGNMENT_FILE changed a non-goal since brief ran, so the reviewer judged another text. Run brief again, and dispatch the reviewer on the new brief."
+    || rw_pass_moved "findings" "$ALIGNMENT_FILE changed a non-goal since brief ran, so the reviewer judged another text."
 
   local raw count i one lens cid linked severity disposition built findings_json alignment
   raw='[]'
@@ -2020,7 +2048,7 @@ do_findings() {
   # judged nothing, and met said it had (live-run row 154).
   #
   # Two facts, kept apart. No research record at all is nobody having looked, which is unknown and
-  # fails the review. Records that cite no source is research that looked and grounded nothing,
+  # is a warning. Records that cite no source is research that looked and grounded nothing,
   # which is undeclared and passes in its own word. Which of a cited source is a guide and which is
   # an agentic recipe is a sentence inside the finding's own text, so no script decides it and both
   # lenses read the same count (ideal/review.md, check 16).
@@ -2072,8 +2100,7 @@ RW_RESEARCH_FILES
   #
   # With no guide body, review's own practice search is the body (gap row 364). The check reads met
   # only when the reviewer's practiceJudged names, for that lens, a sourced finding of that search.
-  # Otherwise it reads unknown for close --row. Only a person can then say no guide applies,
-  # because the catalog's identify scores any shared word as a match (live-run row 363).
+  # Otherwise it reads unknown, a warning the person reads at close, never a ruling close waits for.
   local body_floor practices_body bodies_on_disk practice_refs judged
   body_floor=""; practices_body=""; judged=""
   practice_refs="$(jq -c '.practiceSearch.sourcedRefs // []' "$BRIEF_FILE" 2>/dev/null)"
@@ -2118,8 +2145,7 @@ RW_RESEARCH_FILES
       if [ -n "$judged" ]; then
         rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff of $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange'). No guide body is on disk; the reviewer's practiceJudged names judging the diff against $judged in $practice_file." >>"$rows_file"
       else
-        rw_check_row "$check_id" "unknown" "$body_floor$lens_note When no guide covers this task, the person judges the diff at close with --row $check_id=met or --row $check_id=unmet. A light or autonomous run takes that answer from the task's answer record, step review close, which person-answer.sh writes." \
-          | jq -c '. + {answeredBy: "nobody"}' >>"$rows_file"
+        rw_check_row "$check_id" "unknown" "$body_floor$lens_note" >>"$rows_file"
       fi
     else
       rw_check_row "$check_id" "met" "the $lens_word lens returned no finding over the diff of $(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedRange')." >>"$rows_file"
@@ -2157,7 +2183,7 @@ RW_RESEARCH_FILES
   # proved it. The reviewer holds the done-when and the diff, so it is the role that can ask.
   # `testable` is yes, no, or unknown when the reviewer gave neither word. A yes reads unmet: the
   # route skipped a red run the clause could have had, and the reviewer answered, so it is no
-  # unknown. A missing answer reads unknown, by the rule above. Both fail the review at close.
+  # unknown. A missing answer reads unknown, by the rule above. Both are warnings at close.
   local absence_given='' absence_rows absence_unrouted absence_twice
   [ -z "$findings_path" ] || absence_given="$(jq -c 'if ((.absenceVerdicts // []) | type) == "array"
     then [ (.absenceVerdicts // [])[]
@@ -2363,7 +2389,7 @@ rw_surface_kind() {
   fi
   if [ "$RW_SURFACE_BLOCK_STATE" = "unparseable" ]; then
     # The heading is there and the key never opens under it. Nobody looked, rather than a framework
-    # that declared nothing, so the word is unknown and it fails the review.
+    # that declared nothing, so the word is unknown, a warning at close.
     rw_check_row "$check_id" "unknown" "the surface commands block in the review recipe could not be read: the heading is there and its key never opens under it. Nothing ran, and nothing here can tell what the recipe meant to declare." >>"$checks_out"
     return 0
   fi
@@ -2934,7 +2960,7 @@ RW_SURFACE_VERDICTS
 # ------------------------------------------------------------------------------------------------
 
 do_close() {
-  local task_arg="" rows="" rows_raw="" arg cid value
+  local task_arg="" rows="" rows_raw="" corrected="" arg cid value
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --row)
@@ -2942,8 +2968,16 @@ do_close() {
         case "$2" in *=*) ;; *) die 3 "close: --row takes <criterion>=met|unmet, got: $2" ;; esac
         cid="${2%%=*}"; value="${2#*=}"
         [ -n "$cid" ] || die 3 "close: --row was given no criterion id: $2"
-        # The word is held to its own kind of row once the record is read, so the refusal can
-        # name every waiting row (live-run row 430).
+        # A criterion whose wording is wrong: the ruling keeps the corrected text beside the frozen
+        # one, and completion hands it to scope as a follow-up (gap row 450).
+        case "$value" in
+          contract-wrong:*)
+            corrected="$corrected$(printf '%s\t%s' "$cid" "${value#contract-wrong:}")
+"
+            value="contract-wrong" ;;
+        esac
+        # The word is held to its own kind of row once the record is read, and a wrong one is
+        # named and dropped (live-run row 430).
         rows="$rows$(printf '%s\t%s' "$cid" "$value")
 "
         rows_raw="$rows_raw$2
@@ -2970,31 +3004,66 @@ do_close() {
   [ "$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.checks // [])[] | select(has("frozenText"))
         | {id: (.id | ltrimstr("decision-") | rtrimstr("-non-goal")), frozen: .frozenText, live: .liveText} ]
         | sort_by(.id)')" = "$(rw_non_goal_changes | jq -c 'sort_by(.id)')" ] \
-    || die 62 "close: $ALIGNMENT_FILE changed a non-goal since brief ran, so the reviewer judged another text. Run brief again, and dispatch the reviewer on the new brief."
+    || rw_pass_moved "close" "$ALIGNMENT_FILE changed a non-goal since brief ran, so the reviewer judged another text."
   [ -z "$rows" ] || rw_require_person "close" "--row" "a person read a checklist row and judged it" "$rows_raw"
 
-  # A person rules a finding that fails a criterion, with the words a build's ruling takes (gap row
-  # 329). wrong: the reviewer was mistaken, so the criterion reads its own answer. deferred: the
-  # finding is real and waits, so it becomes follow-up and completion offers it as a task. The
-  # finding stays in the record either way, and `ruling` holds the person's word. A medium or high
-  # finding that cites no criterion still fails its lens check, so the person rules it the same way
-  # (gap row 337). A frozen-tests finding decides no check, so nothing asks for its ruling.
-  local rulable_findings ruled entry_doc="$RW_RECORD_DOC"
+  # A person rules a finding that fails a criterion (gap row 329). wrong: the reviewer was mistaken,
+  # so the criterion reads its own answer. deferred: the finding is real and waits, so it becomes
+  # follow-up and completion offers it as a task. test-wrong: a frozen test is wrong, so `reopen`
+  # sends the finding to the test author of the order that froze it (gap row 449).
+  # contract-wrong: the criterion's wording is wrong, so the finding is follow-up with the corrected
+  # text beside it, and completion hands it to scope (gap row 450). The finding stays in the record
+  # either way, and `ruling` holds the person's word. A medium or high finding that cites no
+  # criterion fails its lens check, so the person may rule it the same way (gap row 337). A
+  # frozen-tests finding decides no check.
+  local rulable_findings ruled person_owned person_checks dropped
   rulable_findings="$(printf '%s' "$RW_RECORD_DOC" | jq -c --arg lenses "$LENS_WORDS" '[ (.findings // [])[]
     | . as $f | select(.disposition == "criterion" or has("ruling")
                        or (.severity != "low" and (($lenses | split(" ") | index($f.lens)) != null))) | .id ]')"
-  RW_RECORD_DOC="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson rf "$rulable_findings" --arg given "$rows" '
-    [ ($given | split("\n"))[] | split("\t") | select(length == 2 and (.[1] == "wrong" or .[1] == "deferred")) ] as $g
+  # The criteria a person answers, personCriteria in scripts/lib/proof.sh: each person-verified
+  # one, and each one an order proved by confirm puts to the person. The person answers each with
+  # --row, from the checklist rows `finish` wrote (gap row 196).
+  person_owned="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -c "$BR_ORDER_FACTS_JQ personCriteria")"
+  person_checks="$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.checks // [])[] | select(has("answeredBy")) | .id ]')"
+  # An answer to a row nobody asked, or a word its row does not take, decides nothing. It is named
+  # in the task record and dropped, and the row it meant still waits (gap row 337).
+  dropped="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --argjson pf "$rulable_findings" \
+    --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
+    [ ($given | split("\n"))[] | split("\t") | select(length == 2) | . as [$id, $w]
+      | if ($po | index($id)) == null and ($pc | index($id)) == null and ($pf | index($id)) == null then $id + "=" + $w + " (no such row waits)"
+        elif ($id | row_words | index($w)) == null then $id + "=" + $w + " (it takes " + ($id | row_words | or_list) + ")"
+        else empty end ] | join(", ")' <<RW_ROWS
+$rows
+RW_ROWS
+)"
+  if [ -n "$dropped" ]; then
+    task_warn "$TASK_PATH" "review close" "" "these --row answers decided nothing and were dropped: $dropped"
+    rows="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --argjson pf "$rulable_findings" \
+      --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
+      [ ($given | split("\n"))[] | split("\t") | select(length == 2) | . as [$id, $w]
+        | select(($po | index($id)) != null or ($pc | index($id)) != null or ($pf | index($id)) != null)
+        | select(($id | row_words | index($w)) != null) | $id + "\t" + $w ] | join("\n")' <<RW_ROWS
+$rows
+RW_ROWS
+)"
+  fi
+  RW_RECORD_DOC="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson rf "$rulable_findings" --argjson words "$RW_RULING_WORDS" \
+    --arg given "$rows" --arg corrected "$corrected" '
+    [ ($given | split("\n"))[] | split("\t") | select(length == 2 and (.[1] as $w | $words | index($w)) != null) ] as $g
+    | ([ ($corrected | split("\n"))[] | split("\t") | select(length == 2) | {key: .[0], value: .[1]} ] | from_entries) as $text
     | .findings = [ (.findings // [])[] | . as $f | ([ $g[] | select(.[0] == $f.id) ][0]) as $r
         | if $r == null or ($rf | index($f.id)) == null then $f
-          else $f | .ruling = $r[1] | .disposition = (if $r[1] == "deferred" then "follow-up" else "criterion" end) end ]')"
+          else $f | .ruling = $r[1]
+            | .disposition = (if $r[1] == "deferred" or $r[1] == "contract-wrong" then "follow-up" else "criterion" end)
+            | if $r[1] == "contract-wrong" then .correctedText = ($text[$f.id] // "") else del(.correctedText) end end ]')"
   [ -n "$RW_RECORD_DOC" ] || die 3 "close: could not apply the person's rulings to the findings in $RECORD_FILE."
   # Each lens check a ruling in this call touched is read again, the way `findings` reads it. A
-  # check whose medium and high findings are all ruled then waits for --row <check>=met|unmet, like
-  # a check with low findings only. An unruled medium finding still fails its lens (gap row 274).
+  # check whose medium and high findings are all ruled reads met. An unruled medium finding still
+  # fails its lens (gap row 274).
   local ruled_lens lens_row
-  for ruled_lens in $(printf '%s' "$RW_RECORD_DOC" | jq -r --argjson rf "$rulable_findings" --arg given "$rows" --arg lenses "$LENS_WORDS" '
-    [ ($given | split("\n"))[] | split("\t") | select(length == 2 and (.[1] == "wrong" or .[1] == "deferred")) | .[0] ] as $ids
+  for ruled_lens in $(printf '%s' "$RW_RECORD_DOC" | jq -r --argjson rf "$rulable_findings" --arg given "$rows" --arg lenses "$LENS_WORDS" \
+    --argjson words "$RW_RULING_WORDS" '
+    [ ($given | split("\n"))[] | split("\t") | select(length == 2 and (.[1] as $w | $words | index($w)) != null) | .[0] ] as $ids
     | [ (.findings // [])[] | . as $f | select((($ids | index($f.id)) != null) and (($rf | index($f.id)) != null)) | .lens ]
     | unique | .[] | select(. as $l | $lenses | split(" ") | index($l) != null)'); do
     case "$ruled_lens" in
@@ -3007,13 +3076,9 @@ do_close() {
   [ -n "$RW_RECORD_DOC" ] || die 3 "close: could not read the ruled lens checks again in $RECORD_FILE."
 
   local alignment criteria count i one kind state verdict answered suite_verdict
-  local hit rows_out criteria_json bad_rows person_checks unanswered=0 unmet_count=0
-  local person_owned failed_by cited_by="" stale_low
+  local hit rows_out criteria_json unanswered=0 unmet_count=0
+  local failed_by cited_by="" stale_low
   alignment="$(rw_alignment)"
-  # The criteria a person answers, personCriteria in scripts/lib/proof.sh: each person-verified
-  # one, and each one an order proved by confirm puts to the person. The person answers each with
-  # --row, from the checklist rows `finish` wrote (gap row 196).
-  person_owned="$(printf '%s' "$RW_SNAPSHOT_DOC" | jq -c "$BR_ORDER_FACTS_JQ personCriteria")"
   criteria="$(printf '%s' "$alignment" | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
   suite_verdict="$(printf '%s' "$RW_RECORD_DOC" | jq -r '[ (.checks // [])[] | select(.id == "suite") ][0].verdict // "unknown"')"
@@ -3083,23 +3148,6 @@ do_close() {
   criteria_json="$(jq -s '.' "$rows_out")" || die 3 "close: could not assemble the criterion rows"
   rm -f "$rows_out"
 
-  # A --row for a criterion the contract does not hold, or one a machine verifies, is a caller
-  # answering a question nobody asked. Every id is checked in one question rather than one per row.
-  person_checks="$(printf '%s' "$RW_RECORD_DOC" | jq -c '[ (.checks // [])[] | select(has("answeredBy")) | .id ]')"
-  # A refusal writes nothing, so every row that took no answer before this call still waits.
-  local waiting_rows
-  waiting_rows="$(rw_rows_waiting "$entry_doc" "$person_owned" "$rulable_findings")"
-  waiting_rows="${waiting_rows:+ These rows wait, with the words each takes: $waiting_rows.}"
-  bad_rows="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --argjson pf "$rulable_findings" --rawfile given /dev/stdin '
-    [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
-      | . as $id | select(($po | index($id)) == null) | select(($pc | index($id)) == null) | select(($pf | index($id)) == null) ]
-    | unique | join(", ")' <<RW_ROWS
-$rows
-RW_ROWS
-)"
-  [ -z "$bad_rows" ] \
-    || die 3 "close: --row named $bad_rows, and the frozen contract holds no person-verified criterion with that id, no order proved by confirm puts it to a person, no check of that id waits for the person, and no finding of that id fails a criterion or, at medium or high, its lens check. Any other machine-verified criterion is answered by the suite join, never by a flag.$waiting_rows"
-
   # A record `findings` wrote before gap row 274 routed low findings through criteria. Close does
   # not judge severity, so it names them and sends the person back to the producer.
   stale_low="$(printf '%s' "$RW_RECORD_DOC" | jq -r \
@@ -3123,19 +3171,9 @@ RW_ROWS
     --argjson one "$(rw_check_row "$CHECK_EVERY_CRITERION" "$check_one_verdict" "$check_one_detail")" '
     .criteria = $criteria
     | .checks = ([$one] + (.checks | map(select(.id != "every-criterion"))))')"
-  # A check holding only low findings takes the person's --row (gap row 274), and so does a
-  # decision an unattended build left (gap row 279).
+  # A decision an unattended build left takes the person's --row (gap row 279), and so do rows the
+  # acceptance verifier judged not met.
   local check_rows
-  local wrong_words
-  wrong_words="$(jq -Rrn --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
-    [ ($given | split("\n"))[] | split("\t") | select(length == 2) | . as [$id, $w]
-      | select(($id | row_words | index($w)) == null)
-      | $id + "=" + $w ] | join(", ")' <<RW_ROWS
-$rows
-RW_ROWS
-)"
-  [ -z "$wrong_words" ] \
-    || die 3 "close: --row gave $wrong_words. A ruling takes wrong, deferred, load-bearing or test-wrong; a departure takes keep or rebuild; a changed non-goal takes accept or reject; a finding takes wrong or deferred; every other row takes met or unmet.$waiting_rows"
   check_rows="$(jq -Rcn --argjson pc "$person_checks" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t") | select(length == 2) | select(($pc | index(.[0])) != null)
       | .[1] as $w
@@ -3161,19 +3199,10 @@ RW_ROWS
                                       + (if $c.liveText == null then "scope remove retired the id, so redo the orders it bounds in the implement skill, then review again."
                                          elif $c.frozenText == null then "Remove the added non-goal with scope remove, then archive the review and run it again."
                                          else "Put the frozen text back with scope update, then archive the review and run it again." end))}[$g.word]))
-        elif ($c.detail | test("The acceptance verifier judged these rows not met")) then
-          $c | .verdict = $g.verdict | .answeredBy = "person"
-          | .detail = ((.detail | sub(" The person read the evidence and judged it (met|unmet)\\.$"; ""))
-                       + " The person read the evidence and judged it \($g.verdict).")
-        elif ($c.detail | startswith("no guide body is on disk")) then
-          $c | .verdict = $g.verdict | .answeredBy = "person"
-          | .detail = ((.detail | sub(" The person judged the diff (with no guide to follow|and found it does not follow the practice it should)\\.$"; ""))
-                       + (if $g.verdict == "met" then " The person judged the diff with no guide to follow."
-                          else " The person judged the diff and found it does not follow the practice it should." end))
+        # The other check a person answers: rows the acceptance verifier judged not met.
         else $c | .verdict = $g.verdict | .answeredBy = "person"
-          | .detail = ((.detail | sub(" The person (confirmed them, and they stay follow-up|rejected them, so the check reads unmet)\\.$"; ""))
-                       + (if $g.verdict == "met" then " The person confirmed them, and they stay follow-up."
-                                  else " The person rejected them, so the check reads unmet." end)) end ]')"
+          | .detail = ((.detail | sub(" The person read the evidence and judged it (met|unmet)\\.$"; ""))
+                       + " The person read the evidence and judged it \($g.verdict).") end ]')"
   [ -n "$updated" ] || die 3 "close: could not update the record with the criterion rows."
   # The absence check is read again off the rows the record holds, so a row stored before
   # `testable` existed reads unknown here rather than passing on the check `findings` wrote.
@@ -3209,7 +3238,7 @@ RW_ROWS
   # Every row that waits is named once, with the words it takes (live-run row 430). A person
   # criterion waits when this call gave it no row. Once any row waits, the later close needs every
   # person criterion again, because a close keeps no earlier answer for one.
-  local waiting person_line=""
+  local waiting waiting_rows person_line=""
   waiting_rows="$(rw_rows_waiting "$updated" \
     "$(printf '%s' "$person_owned" | jq -c --arg given "$rows" '([ ($given | split("\n"))[] | split("\t")[0] ]) as $g | map(select(. as $i | $g | index($i) | not))')" \
     "$rulable_findings")"
@@ -3225,16 +3254,15 @@ RW_ROWS
     exit 0
   fi
 
-  # The verdict rules. A check reading unmet fails, a check reading unknown fails, met and
-  # undeclared both pass, and a criterion reading unmet or unanswered means no sign off whatever the
-  # checks said.
-  failing="$(printf '%s' "$updated" | jq -r '
-    ([ (.checks // [])[] | select(.verdict == "unmet" or .verdict == "unknown") | (.id + " reads " + .verdict) ]
-     + [ (.criteria // [])[] | select(.verdict == "unmet" or .verdict == "unanswered") | (.id + " reads " + .verdict) ])
-    | join("; ")')"
+  # The verdict rules. A criterion reading unmet fails the review: the contract is not met. Every
+  # other check reading unmet or unknown, and a criterion reading unanswered, is a warning. The
+  # person reads the warnings at this close, and completion stops on them when nobody is present.
+  failing="$(printf '%s' "$updated" | jq -r '[ (.criteria // [])[] | select(.verdict == "unmet") | (.id + " reads unmet") ] | join("; ")')"
   if [ -n "$failing" ]; then verdict_word="failed"; else verdict_word="passed"; fi
-  updated="$(printf '%s' "$updated" | jq -c --arg v "$verdict_word" --arg pv "$(plugin_version)" \
-    '.verdict = $v | .pluginVersion = $pv')"
+  updated="$(printf '%s' "$updated" | jq -c --arg v "$verdict_word" --arg pv "$(plugin_version)" --arg every "$CHECK_EVERY_CRITERION" '
+    .verdict = $v | .pluginVersion = $pv
+    | .warnings = ([ (.checks // [])[] | select(.id != $every and (.verdict == "unmet" or .verdict == "unknown")) | {id, verdict} ]
+                   + [ (.criteria // [])[] | select(.verdict == "unanswered") | {id, verdict} ])')"
   rw_write_record "close" "$updated"
 
   # The one field review writes into the contract. The hash covers the whole file, but `start`
@@ -3271,7 +3299,7 @@ RW_ROWS
   unknown_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy != "nobody") | .id ] | join(", ")')"
   awaiting_list="$(printf '%s' "$updated" | jq -r '[ (.checks // [])[] | select(.verdict == "unknown" and .answeredBy == "nobody") | .id ] | join(", ")')"
   note_count="$(printf '%s' "$updated" | jq '(.catalogNotes // []) | length')"
-  echo "CLOSE: the review $verdict_word. ${failing:+What caused it: $failing.} Checks nothing declared: ${undeclared_list:-none}. Checks nobody could read: ${unknown_list:-none}. Checks awaiting the person: ${awaiting_list:-none}. Criteria reading unanswered: $unanswered. Catalog notes: $note_count." >&2
+  echo "CLOSE: the review $verdict_word. ${failing:+What caused it: $failing.} Warnings: $(printf '%s' "$updated" | jq -r '[ .warnings[] | .id + " reads " + .verdict ] | if length == 0 then "none" else join(", ") end'). Checks nothing declared: ${undeclared_list:-none}. Checks nobody could read: ${unknown_list:-none}. Checks awaiting the person: ${awaiting_list:-none}. Criteria reading unanswered: $unanswered. Catalog notes: $note_count." >&2
   [ -z "$person_line" ] || echo "$person_line" >&2
   case "$live_state" in
     ok) echo "CLOSE: review wrote one verdict per criterion into $ALIGNMENT_FILE, across $written criteria. That write moves the contract hash, but start compares the contract without verdicts, so it stops no order.${missing_ids:+ These criteria are in the frozen contract and not in the live one, so nothing was written for them: $missing_ids.}" >&2 ;;

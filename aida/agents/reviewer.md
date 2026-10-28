@@ -166,8 +166,10 @@ change. Read its file at the cited lines in the brief's worktree, and the fixer'
 it. Write `addressed` only when both show that the finding no longer holds. A finding whose
 `scopeInsufficientInRound` is this round had no change made for it, so write it `not-addressed`.
 
-**You may not read code the fix diff did not touch, except as the paragraph above says, and you may
-not raise a finding against it.**
+**Read every file a fix depends on.** A fix can depend on a file the fix diff did not touch,
+such as a hook it calls. Read that file before you write `addressed`.
+When you cannot read it, write `not-addressed`, and name the file in `evidence`. **You may not raise
+a finding against code the fix diff did not touch.**
 You may not extend the loop by adding a round of your own. You are not given the original full
 diff, the contract beyond what the findings already cite, or an earlier round's verdicts.
 

@@ -680,17 +680,18 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      from the snapshot's copy. The route is design close, then start. No attempt is spent.
 #
 #
-# 119  `reopen` found no failed task review of this finish, or no finding of it that fails a
-#      criterion in a file a closed order owns (gap row 390). Nothing is written.
+# 119  `reopen` found no closed task review of this finish, or no finding of it that fails a
+#      criterion in a file a closed order owns, or names a frozen test a person ruled wrong (gap
+#      rows 390 and 449). Nothing is written.
 #
 # 120  `build-brief` or `dispatch-open implementer` found `doneWhenGained` on the order's ledger
 #      entry. Design appended done-when rows after the freeze, and start removed the done-when
 #      judgement made on the shorter text. The next freeze with the same tests judges it again and
 #      removes the list (gap row 409). Nothing is written.
 #
-# 121  `fix-brief` found the order owes a failing test first. `reopen` sent it a failed task
-#      review's finding, and the order is proved by tests, so its test author writes one test that
-#      fails on the bug, and `tests-freeze` freezes it, before the fixer runs. Nothing is written.
+# 121  `fix-brief` found the order owes a test first. `reopen` sent it a task review's finding.
+#      Its test author writes one test that fails on the bug, or corrects a frozen test a person
+#      ruled wrong, and `tests-freeze` freezes it, before the fixer runs. Nothing is written.
 #
 # 123  retired in 6.1.0. `go-on --continue check` over commits after the record records the
 #      checks whether or not they pass. A failed check leaves the order stopped, so close refuses it.
@@ -1354,10 +1355,12 @@ im_next_step() {
     return 0
   fi
   if [ "$finished" = "true" ]; then
-    # A failed task review of this finish sends its findings back into the orders (gap row 390).
+    # A failed task review of this finish, or one holding a test ruled wrong, sends its findings
+    # back into the orders (gap rows 390 and 449).
     if [ "$(jq -r --arg r "$(jq -r '.commitRange // ""' "$impl/finished.json" 2>/dev/null)" \
-      '.verdict == "failed" and .reviewedRange == $r' "$impl/../review/review.json" 2>/dev/null)" = "true" ]; then
-      printf 'finish: reopen, the task review of this finish failed, and its findings go back to the orders that own their files'
+      '(.verdict == "failed" or any((.findings // [])[]; .ruling == "test-wrong")) and .reviewedRange == $r' \
+      "$impl/../review/review.json" 2>/dev/null)" = "true" ]; then
+      printf 'finish: reopen, the task review of this finish failed or ruled a test wrong, and its findings go back to the orders that own their files'
     else
       printf 'none: implementation is finished, the review stage is next, and a failed review takes a fix and a second finish'
     fi
@@ -1403,7 +1406,7 @@ im_next_step() {
       elif $rv != null then
         (if $rv.lastStep == "checks-passed" then "review \($rv.id): review the order"
          elif ($owed | index($rv.id)) != null then
-           "tests \($rv.id): a failing test first, for the bug the task review found, then the fix round"
+           "tests \($rv.id): the test its repair owes first, then the fix round"
          elif (($opens[$rv.id] // 0) > 0) then "review \($rv.id): fix, then verify"
          else "review \($rv.id): close the order" end)
       elif $bd != null then
@@ -4558,16 +4561,19 @@ TB_OWNED
   [ -z "$tb_lost" ] \
     || task_warn "$TASK_PATH" tests-brief "$unit_id" "checkAgain names rejected rows this brief does not carry, so the test author gets no note for them: $tb_lost"
 
-  # Another key, only while a failed task review's repair waits for its test: the findings
-  # `reopen` put on the order's review record, which name the bug.
+  # Another key, only while a task review's repair waits for its test: the findings `reopen` put on
+  # the order's review record, which name the bug, and the frozen tests a person ruled wrong.
   local repair_json=null repair_at
   repair_at="$(im_repair_owed "$ledger_doc" "$unit_id")"
   if [ -n "$repair_at" ]; then
     repair_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --argjson n "$repair_at" \
       --slurpfile review <(cat "$IMPL_DIR/review-$unit_id.json" 2>/dev/null || echo '{}') '
-      [ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1].findings as $ids
-      | {findings: [ ($review[0].findings // [])[] | select(.id as $i | $ids | index($i)) | {id, file, lines, linkedTo, evidence} ],
-         whatToDo: "The task review found a bug in this closed order. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."}')"
+      [ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1] as $r
+      | {findings: [ ($review[0].findings // [])[] | select(.id as $i | $r.findings | index($i)) | {id, file, lines, linkedTo, evidence} ],
+         whatToDo: (if ($r.retires // []) == []
+           then "The task review found a bug in this closed order. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."
+           else "A person ruled these frozen tests wrong at the task review. Correct each one in its own file, and change no other test. Return each corrected test with a locks-in reason naming the code it passes against." end)}
+      + (if ($r.retires // []) == [] then {} else {retires: $r.retires} end)')"
     [ -n "$repair_json" ] || die3 "tests-brief: the repair of $unit_id could not be read from $ledger_file and $IMPL_DIR/review-$unit_id.json."
   fi
 
@@ -5292,11 +5298,16 @@ TF_EOF
   fi
 
   # --- 27 also: a repair's test is a new file, so no earlier freeze of this order holds it ---------
+  # The one exception is a test a person ruled wrong at the task review: the repair retires it, and
+  # its corrected copy freezes here under the same path (gap row 449).
   local tf_frozen_before="" tf_refrozen=""
   if [ -n "$tf_repair" ]; then
-    im_with_repair_tests "tests-freeze" "$unit_id"
-    tf_frozen_before="$(printf '%s' "$IM_REPAIR_TESTS_DOC" \
-      | jq -r '[ (.rows // [])[] | (.tests // [])[] | .path ] + [ (.support // [])[] | .path ] | unique | .[]')"
+    tf_with_repair_tests "tests-freeze" "$unit_id"
+    tf_frozen_before="$(printf '%s' "$TF_REPAIR_TESTS_DOC" \
+      | jq -r --argjson retired "$(printf '%s' "$tf_prior_ledger" | jq -c --arg id "$unit_id" --argjson n "$tf_repair" \
+          '[ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1].retires // []')" \
+        '[ (.rows // [])[] | (.tests // [])[] | .path ] + [ (.support // [])[] | .path ] | unique | .[]
+         | select(. as $p | $retired | index($p) | not)')"
     while IFS= read -r p; do
       [ -n "$p" ] || continue
       printf '%s\n' "$tf_frozen_before" | grep -qxF -- "$p" && tf_refrozen="$tf_refrozen$p, "
@@ -6418,29 +6429,6 @@ bb_load_unit() {
   BB_UNIT_JSON="$(printf '%s' "$snapshot_doc" | jq -c --arg id "$unit_id" \
     '(.workOrders // []) | map(select(.id == $id)) | .[0] // null')"
   [ "$BB_UNIT_JSON" != "null" ] || die3 "build-brief: $unit_id is not in the frozen copy. Run read to list the orders it holds."
-}
-
-# Order $2's frozen test record, with the rows and the support files of each repair's record
-# appended. A repair's record, tests-<order>-repair-<n>.json, holds the failing test of a bug a
-# failed task review found. The fix round runs and hashes it with the order's own tests. Sets
-# IM_REPAIR_TESTS_DOC. Refuses at 3, naming the file, when a record does not parse: the files the
-# freezes hold are then unknown. $1 the action. Call it as a plain statement, never in $(...).
-IM_REPAIR_TESTS_DOC=""
-im_with_repair_tests() {
-  local f doc
-  doc="$(jq -c '.' "$IMPL_DIR/tests-$2.json" 2>/dev/null)"
-  [ -n "$doc" ] \
-    || die3 "$1: $IMPL_DIR/tests-$2.json could not be read as JSON, so the files the freezes of $2 hold are unknown. Repair or remove it by hand before running this again."
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    doc="$(printf '%s' "$doc" | jq -c --slurpfile r "$f" \
-      '.rows = ((.rows // []) + ($r[0].rows // [])) | .support = ((.support // []) + ($r[0].support // []))' 2>/dev/null)"
-    [ -n "$doc" ] \
-      || die3 "$1: $f could not be read as JSON, so the files the freezes of $2 hold are unknown. Repair or remove it by hand before running this again."
-  done <<IWR_EOF
-$(find "$IMPL_DIR" -maxdepth 1 -type f -name "tests-$2-repair-*.json" 2>/dev/null | sort)
-IWR_EOF
-  IM_REPAIR_TESTS_DOC="$doc"
 }
 
 # The frozen tests record of unit $2, which step three writes. Sets IM_TESTS_DOC. $1 names the step
@@ -8725,8 +8713,8 @@ go_on_check() {
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
     || die3 "go-on: $tests_file not found, though a build record implies tests-freeze already ran for $unit_id."
-  im_with_repair_tests "go-on" "$unit_id"
-  tests_doc="$IM_REPAIR_TESTS_DOC"
+  tf_with_repair_tests "go-on" "$unit_id"
+  tests_doc="$TF_REPAIR_TESTS_DOC"
 
   # --- the recipe flags, taken from the records that produced them (gap row 349). A flag left out
   # would make its check read unknown or undeclared over the stop the checks are meant to clear,
@@ -9157,8 +9145,8 @@ RV_FROZEN_PATHS_JSON="[]"
 rv_frozen_test_paths_json() {
   RV_FROZEN_PATHS_JSON="[]"
   [ -f "$IMPL_DIR/tests-$2.json" ] || return 0
-  im_with_repair_tests "$1" "$2"
-  RV_FROZEN_PATHS_JSON="$(printf '%s' "$IM_REPAIR_TESTS_DOC" | jq -c \
+  tf_with_repair_tests "$1" "$2"
+  RV_FROZEN_PATHS_JSON="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c \
     '[ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique')"
 }
 
@@ -9970,7 +9958,7 @@ do_fix_brief() {
   rv_load_state "fix-brief" "$unit_id"
   rv_require_step "fix-brief" "$unit_id" "reviewed fixed"
   [ -z "$(im_repair_owed "$RV_LEDGER_DOC" "$unit_id")" ] \
-    || die 121 "fix-brief: $unit_id owes a failing test first, for the bug the task review found. Run tests-brief on $unit_id, dispatch its test author, put the row to the checker, and run tests-freeze. Nothing is written."
+    || die 121 "fix-brief: $unit_id owes the test of the task review's repair first. Run tests-brief on $unit_id, dispatch its test author, put the row to the checker, and run tests-freeze. Nothing is written."
   rv_load_review_record "fix-brief" "$unit_id"
 
   local open_count rounds_used
@@ -10421,8 +10409,8 @@ RV_AC
   local tests_file="$IMPL_DIR/tests-$unit_id.json" tests_doc
   [ -f "$tests_file" ] \
     || die3 "fix-record: $tests_file not found, though a fix round implies tests-freeze already ran for $unit_id."
-  im_with_repair_tests "fix-record" "$unit_id"
-  tests_doc="$IM_REPAIR_TESTS_DOC"
+  tf_with_repair_tests "fix-record" "$unit_id"
+  tests_doc="$TF_REPAIR_TESTS_DOC"
   if [ -z "$gate_recipes" ]; then
     br_fill_gate_recipes "fix-record" "$RV_UNIT_JSON" "" "" "No check ran and no round was spent."
     gate_recipes="$RF_LIST"
@@ -11905,15 +11893,18 @@ FN_RECIPES
   exit 0
 }
 
-# reopen: a failed task review's findings go back into the orders that own their files (gap row
+# reopen: a closed task review's findings go back into the orders that own their files (gap row
 # 390). Each finding the review records as failing a criterion reopens the closed order that owns
 # its file and owns that criterion, then one that serves it, then the one order that owns the file. So the order's own
 # fixer, dispatch record, owned files and verifier bound the repair, as for a closed-order defect.
 # An order proved by tests first takes one failing test of the bug, frozen as a record of its own.
+# A finding a person ruled test-wrong names a frozen test file. It reopens the order whose record
+# froze that file, and the repair retires the file, so that order's test author writes the
+# corrected copy and freezes it as the repair's own record (gap row 449).
 # One repair entry per order, so one fix round is added however many findings it takes. A finding
 # no order takes is named and left. finished.json goes, because finish's condition no longer
-# holds and every field in it is derived. Exit 119 when the review over this finish did not fail,
-# or nothing in it can be routed.
+# holds and every field in it is derived. Exit 119 when no closed review covers this finish, or
+# nothing in it can be routed.
 do_reopen() {
   [ "$#" -eq 1 ] || die3 "reopen: one task folder is required"
   im_load_task "$1" "reopen"
@@ -11925,13 +11916,13 @@ do_reopen() {
     || die 66 "reopen: $IMPL_DIR/finished.json is absent or holds no commitRange, so no task review judged a finished build."
   verdict="$(jq -r '.verdict // "none"' "$review_file" 2>/dev/null)"
   reviewed="$(jq -r '.reviewedRange // ""' "$review_file" 2>/dev/null)"
-  [ "$verdict" = "failed" ] && [ "$reviewed" = "$finished_range" ] \
-    || die 119 "reopen: the task review over $finished_range did not fail: $review_file reads verdict ${verdict:-none} over ${reviewed:-no range}. Only a failed review of this finish reopens an order."
+  [ "$verdict" != "none" ] && [ "$reviewed" = "$finished_range" ] \
+    || die 119 "reopen: no closed task review covers $finished_range: $review_file reads verdict ${verdict:-none} over ${reviewed:-no range}. Only a closed review of this finish reopens an order."
 
   local alignment findings count i one fid file crit abs rel owners owner owner_glob entry
-  local review_doc new_id raw built routed='{}' not_routed="" reopened='[]' ledger_doc order rf
+  local review_doc new_id raw built routed='{}' not_routed="" reopened='[]' ledger_doc order rf retired
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
-  findings="$(jq -c '[ (.findings // [])[] | select(.disposition == "criterion" and (.ruling // "") != "wrong") ]' "$review_file")"
+  findings="$(jq -c '[ (.findings // [])[] | select((.disposition == "criterion" and (.ruling // "") != "wrong") or .ruling == "test-wrong") ]' "$review_file")"
   count="$(printf '%s' "$findings" | jq 'length')"
   i=0
   while [ "$i" -lt "$count" ]; do
@@ -11944,8 +11935,17 @@ do_reopen() {
     abs="$(normalize_abs "$(resolve_against "$file" "$RV_CODEPATH")")"
     rel="${abs#"$RV_CODEPATH"/}"
     owners="$(im_file_owners "$abs" "$rel" "")"
-    # The order that owns the criterion comes before one that only serves it.
-    owner=""; owner_glob=""
+    # The order that owns the criterion comes before one that only serves it. A test ruled wrong
+    # belongs to the order whose frozen record holds it, whatever its owned files say.
+    owner=""; owner_glob=""; retired=""
+    if [ "$(printf '%s' "$one" | jq -r '.ruling // ""')" = "test-wrong" ]; then
+      owner="$(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort | while IFS= read -r rf; do
+        jq -e --arg p "$rel" 'any((.rows // [])[] | (.tests // [])[]; .path == $p)' "$rf" >/dev/null 2>&1 \
+          && { rf="$(basename "$rf" .json)"; rf="${rf#tests-}"; printf '%s\n' "${rf%%-repair-*}"; }
+      done | head -1)"
+      [ -n "$owner" ] || { not_routed="$not_routed $fid (it is ruled test-wrong, and no frozen record holds $rel);"; continue; }
+      owners=""; owner_glob="$rel"; retired="$rel"
+    fi
     for rf in criteriaOwned criteriaServed; do
       while IFS='	' read -r order entry; do
         [ -n "$order" ] && [ -z "$owner" ] || continue
@@ -11982,11 +11982,12 @@ RO_ONE
     review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
     routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg rf "$fid" --arg f "$new_id" --argjson doc "$review_doc" '
       .[$o] = {doc: $doc, reviewFindings: ((.[$o].reviewFindings // []) + [$rf]), findings: ((.[$o].findings // []) + [$f])}')"
+    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg r "$retired" 'if $r == "" then . else .[$o].retires = (((.[$o].retires // []) + [$r]) | unique) end')"
     reopened="$(printf '%s' "$reopened" | jq -c --arg o "$owner" --arg f "$new_id" --arg rf "$fid" --arg c "$crit" --arg file "$rel" \
       '. + [{order: $o, finding: $f, from: ("task review " + $rf), cites: ("cites " + $c), file: $file}]')"
   done
   [ "$routed" != "{}" ] \
-    || die 119 "reopen: no finding of the failed review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns. A person fixes on the task branch, then runs finish again."
+    || die 119 "reopen: no finding of the review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns, and none names a frozen test a person ruled wrong. A person fixes on the task branch, then runs finish again."
 
   # An order proved by tests owes one failing test of the bug before its fixer runs (owner,
   # 2026-10-28). Any other proof has no logic to test, so its fix round opens at once.
@@ -11996,7 +11997,8 @@ RO_ONE
     rf="$(printf '%s' "$routed" | jq -c --arg o "$order" --arg range "$reviewed" --arg at "$(date -u +%Y-%m-%d)" \
       --argjson owed "$([ "$BR_ORDER_SLOT" = "order-tests" ] && echo true || echo false)" '
       {review: $range, reviewFindings: .[$o].reviewFindings, findings: .[$o].findings, at: $at}
-      + (if $owed then {testOwed: true} else {} end)')"
+      + (if $owed or .[$o].retires != null then {testOwed: true} else {} end)
+      + (if .[$o].retires == null then {} else {retires: .[$o].retires} end)')"
     ledger_doc="$(im_reopen_in "$ledger_doc" "$order" "$rf")"
     [ -n "$ledger_doc" ] || die3 "reopen: the repair on $order could not be written to the ledger."
   done

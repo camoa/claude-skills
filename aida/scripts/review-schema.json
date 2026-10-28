@@ -141,10 +141,24 @@
         }
       }
     },
+    "warnings": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "verdict"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "verdict": {"type": "string", "enum": ["unmet", "unknown", "unanswered"]}
+        }
+      },
+      "description": "Each check reading unmet or unknown, other than every-criterion, and each criterion reading unanswered, written by `close` with the verdict. None of them fails the review. The person reads them at close, and completion closes over them only on a person's recorded reason, so an unattended completion stops on them."
+    },
     "verdict": {
       "type": "string",
       "enum": ["passed", "failed"],
-      "description": "The review's own outcome, written by `close` and absent until then. Two words, not three: a check reading unmet fails, a check reading unknown fails, met and undeclared both pass, and a criterion reading unmet or unanswered means no sign off whatever the checks said. The rows say which check or criterion caused a fail. An absent verdict is a review that has not closed, never a review that passed. `close` also leaves it absent while a `decision-` check reads unknown, so a later close answers that check with no fresh pass (gap row 279)."
+      "description": "The review's own outcome, written by `close` and absent until then. Two words, not three: `failed` when a criterion reads unmet, because the contract is not met, and `passed` otherwise. A check reading unmet or unknown, and a criterion reading unanswered, is a warning in `warnings` and never fails the review. An absent verdict is a review that has not closed, never a review that passed. `close` also leaves it absent while a `decision-` check reads unknown, so a later close answers that check with no fresh pass (gap row 279)."
     },
     "catalogNotes": {
       "type": "array",
@@ -398,8 +412,13 @@
         },
         "ruling": {
           "type": "string",
-          "enum": ["wrong", "deferred"],
-          "description": "A person's ruling on a finding with disposition criterion, or on a medium or high finding whose lens check it fails, given at close with `--row <finding id>=wrong|deferred` (gap rows 329 and 337). Only a person writes it, because close refuses the row when nobody is present. `wrong`: the reviewer was mistaken, the disposition becomes criterion, so completion offers no task for it, and the criterion reads its own answer. `deferred`: the finding is real and waits, so the disposition becomes follow-up and completion offers it as a task. Absent when nobody ruled."
+          "enum": ["wrong", "deferred", "test-wrong", "contract-wrong"],
+          "description": "A person's ruling on a finding with disposition criterion, or on a medium or high finding whose lens check it fails, given at close with `--row <finding id>=<word>` (gap rows 329 and 337). Only a person writes it, because close refuses the row when nobody is present. `wrong`: the reviewer was mistaken, the disposition becomes criterion, so completion offers no task for it, and the criterion reads its own answer. `deferred`: the finding is real and waits, so the disposition becomes follow-up and completion offers it as a task. `test-wrong`: a frozen test is wrong, the disposition becomes criterion, and implement's `reopen` sends the finding to the test author of the order that froze the file (gap row 449). `contract-wrong`: the criterion's wording is wrong, `correctedText` holds the person's text, the disposition becomes follow-up, and completion offers a task that changes the criterion through scope (gap row 450). Absent when nobody ruled."
+        },
+        "correctedText": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The wording the person gave for the criterion the finding cites, with `--row <finding id>=contract-wrong:<text>`. Present only with the ruling `contract-wrong`. The frozen contract keeps its own text; this one waits beside it for scope."
         }
       }
     },

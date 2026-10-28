@@ -119,7 +119,7 @@ widening the `dry` lens gets.
   that, such as the dependency file the diff leaves alone.
 - `unmet`: the diff adds it. Cite the file and the lines in the note.
 - `unknown`: you could not tell. Say what you would have had to read. A clause nobody judged is
-  never a pass, so `unknown` is the honest answer and it fails the review.
+  never a pass, so `unknown` is the honest answer, and the person reads it as a warning.
 
 **Answer only the clauses the brief carries, verbatim.** A verdict on a clause no order routed is
 refused, and the whole findings file is refused with it. Never paraphrase a clause to make it fit.
@@ -132,10 +132,10 @@ else. "The form shows no legacy field" carries `no`, and a test can still watch 
 You hold the done-when and the diff, so you answer it. Write `testable` on every verdict:
 
 - `yes`: a test could have watched the clause fail. It is a claim about what the code does, such as
-  what a page shows. A `yes` fails the review, and the person sees the clause named.
+  what a page shows. A `yes` is a warning, and the person sees the clause named.
 - `no`: only the diff answers it, such as a dependency file the change leaves alone.
 
-A verdict with no `testable` is read as unknown, and that fails the review too.
+A verdict with no `testable` is read as unknown, and that is a warning too.
 
 An `unmet` clause is also a finding under the lens that fits it where one does, and the two are not
 the same record. The verdict answers the clause; the finding cites a criterion or a non-goal.

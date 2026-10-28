@@ -98,8 +98,8 @@ and the model-judged count.
 stage next, which reads `finished.json`. Review's close, not this step, confirms the criteria a
 person verifies by checklist.
 
-**Finish runs again after a failed review.** When the task review of this finish failed, `next:`
-names `reopen`. Run:
+**Finish runs again after a failed review.** When the task review of this finish failed, or a
+person ruled a frozen test wrong there, `next:` names `reopen`. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh reopen "<task_folder>"
 ```
@@ -107,6 +107,12 @@ It takes each review finding that fails a criterion, unless the person ruled it 
 goes to the closed order that owns its file and owns that criterion, else to one that serves it.
 When no such order exists, it goes to the one order that owns the file. That order gets one finding with origin `repair` per
 review finding, scoped to the file, and one more fix round. It goes back to its fix step.
+
+A finding the person ruled `test-wrong` names a frozen test. It goes to the order whose frozen
+record holds that test, and the repair retires the file. That order's test author corrects it in
+the same file, and the hook lets it write that file and no other frozen test. The corrected test
+freezes in the repair's own record with a locks-in reason, and every later check holds the file to
+that record's hash. Nobody commits a test correction by hand.
 
 An order proved by tests first takes one failing test of the bug. `next:` names the tests step for
 it. Run `tests-brief`, and its brief holds the bug under `repair`. Dispatch the order's test
@@ -128,8 +134,8 @@ for the person. The person commits the fix on the task branch before this step r
 or rules it at the next review. Keep that fix inside the files the orders own. A file no order
 owns reads unmet at review's check that every change serves a criterion.
 
-`reopen` refuses (exit 119) when the review of this finish did not fail, and when no finding can
-go to an order. It runs in either run mode: the review recorded the findings, so no one decides
+`reopen` refuses (exit 119) when no closed review covers this finish, and when no finding can go
+to an order. It runs in either run mode: the review recorded the findings, so no one decides
 here.
 
 Then hand off to `review`, as `${CLAUDE_PLUGIN_ROOT}/skills/next/references/handoff.md` says:

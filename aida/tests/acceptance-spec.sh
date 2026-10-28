@@ -8,34 +8,6 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
 source "$HERE/records.bash"
-REVIEW="$PLUGIN/skills/review/scripts/review-actions.sh"
-
-# review_records [light] [<step>]: task t1 built on its branch, every order at <step>, default
-# code-written, finish recorded over the one build commit, and c1 a person's criterion. With
-# light, the task runs light.
-review_records() {
-  task_records branch
-  jq '.criteria[0].verifiedBy = "person"' "$TASK/alignment.json" >"$ROOT/a.json" && mv "$ROOT/a.json" "$TASK/alignment.json"
-  [ "${1:-}" != light ] || { jq '.runMode = "light"' "$TASK/task.json" >"$ROOT/t.json" && mv "$ROOT/t.json" "$TASK/task.json"; }
-  order_records "${2:-code-written}"
-  order_commit
-  jq -n --arg r "$(git -C "$WT" rev-parse HEAD~1)..$(git -C "$WT" rev-parse HEAD)" \
-    '{schemaVersion: 1, commitRange: $r, criteria: [{id: "c1", verifiedBy: "person"}], checklists: []}' >"$IMPL/finished.json"
-  mkdir -p "$TASK/review/evidence" "$TASK/records"
-}
-
-# reviewed_record [<recipes JSON>]: the review record as findings leaves it, at the worktree's head.
-reviewed_record() {
-  jq -n --arg at "$(git -C "$WT" rev-parse HEAD)" --arg r "$(jq -r '.commitRange' "$IMPL/finished.json")" --argjson rc "${1:-[]}" '
-    {schemaVersion: 1, takenAt: "2026-10-28", task: "t1", reviewedRange: $r, reviewedAt: $at, hasUpstream: false,
-     runMode: "interactive", recipes: $rc, criteria: [], findings: [], surfaces: [], catalogNotes: [],
-     mutation: {verdict: "undeclared", detail: "no row", survivors: []},
-     checks: [{id: "solid", verdict: "met", detail: "none"}]}' >"$TASK/review/review.json"
-}
-
-# evidence <row JSON>...: the verifier's file with these rows.
-evidence() { jq -n '{rows: [$ARGS.positional[] | fromjson]}' --args "$@" >"$TASK/records/evidence.json"; }
-c1_row() { jq -nc --arg p "${2:-}" --arg v "${1:-met}" '{criterion: "c1", sentence: "the export holds three rows", path: $p, verdict: $v, note: "three rows came out"}'; }
 
 # close_case: the verifier's row for c1 names a file by a path relative to review/evidence. Prints
 # the line close prints after the criterion's own line, with the task folder cut from the path.
