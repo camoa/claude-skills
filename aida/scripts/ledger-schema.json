@@ -313,7 +313,7 @@
             "required": ["criterion", "verdict"],
             "properties": {
               "criterion": {"type": "string", "minLength": 1, "description": "The row's key, the same keys rowsRejected uses."},
-              "verdict": {"type": "string", "enum": ["confirmed", "rejected"], "description": "What the refused freeze's own `--row` said of it."}
+              "verdict": {"type": "string", "enum": ["rejected"], "description": "What the refused freeze's own `--row` said of it. checkAgain holds the rejected rows alone (row 464)."}
             }
           },
           "description": "The rows the next checker dispatch judges, the `checkAgain:` line of the freeze that refused, written beside rowsRejected and removed with it (gap row 447). `tests-brief` warns when a rejected row here is not in rowsRejected, so a lost rejection is named before the author runs."

@@ -76,8 +76,9 @@ no `proof` at all is proved by tests; `start` names it on its `proofAbsent:` lin
 `update --proof gate` is the way onto the gate.
 
 `record` means its deliverable is a document in the project folder, and nothing runs a document.
-It has no checkpoint. Put no row to anyone. Freeze with no `--test` and no `--row`, and a
-`--checklist` for each criterion a person verifies. The build's own check, `done-when`, reads
+It has no checkpoint. Put no row to anyone but its absence rows and its verify-line rows. Freeze
+with no `--test`, a `--row` for each of those rows, and a `--checklist` for each criterion a
+person verifies. The build's own check, `done-when`, reads
 deferred. The order's reviewer reads the document against its done-when rows, and review checks
 its criteria.
 
@@ -385,7 +386,8 @@ confirmed row to the person. The author edits only the rejected test, so a confi
 judged. The record says a model judged every confirmed row, so a person can list those rows later
 and read any of them again.
 
-**Interactive, a rejected row goes to the person, one question per row.** Open with: "The checker
+**Interactive, a rejected row goes to the person, one question per row.** Ask it in these words.
+Open with: "The checker
 doubts that the new tests for one requirement prove what it asks. A model may not settle that
 alone. Confirm and the tests are kept as written. Reject and the test author rewrites them before
 anything is built." Then name the requirement in its own words, the tests, the checker's note,
@@ -404,7 +406,7 @@ author fresh, with the same message as before. Do not resume the earlier author 
 brief is the one carrier. A role that stopped with no report is a different case, in SKILL.md.
 The refusal ends with a `checkAgain:` line, which names each row the next checker dispatch covers.
 Those are the rejected rows alone. A confirmed row is not read again, even when the repair edits
-its file, because a second reading buys a drifting verdict and no new judgement. The refusal
+its file. A second reading buys a drifting verdict and no new judgement. The refusal
 records each confirmed row on the order's ledger entry as `rowsConfirmed`. A checker's row keeps
 the note from the verdict file, so the note is the checker's own. The next checker writes the same
 verdict file, and that file holds only the rows put to it. So the next freeze takes a `--row` for

@@ -454,9 +454,7 @@ A person moves the branch back, and that work goes to a follow-up task, or redoe
 success it writes `lastStep = "closed"` and the commit range the
 order produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
-order the tree, HEAD and the range are the project folder's, from the last attempt. The
-machine criteria it owns are written as judged by whoever judged its done-when row, person or
-model, never `gate`.
+order the tree, HEAD and the range are the project folder's, from the last attempt.
 
 **Close also decides the criteria this order serves or owns.** A machine-verified criterion reads
 confirmed once every order serving it is closed and every judgement on it reads confirmed.

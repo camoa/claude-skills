@@ -21,9 +21,9 @@ skills/implement/SKILL.md 295
 skills/implement/references/build.md 501
 skills/implement/references/finish.md 262
 skills/implement/references/preconditions.md 317
-skills/implement/references/review.md 473
+skills/implement/references/review.md 471
 skills/implement/references/start.md 151
-skills/implement/references/tests.md 581
+skills/implement/references/tests.md 583
 skills/implement/references/what-a-test-is.md 76
 skills/next/SKILL.md 201
 skills/playbooks/SKILL.md 97

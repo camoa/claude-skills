@@ -123,7 +123,7 @@ erroring where the harness enables it is the expected red. The freeze records it
 scaffold to get another.
 
 **Each test fails at its own assertion.** When two tests stop at the same line of the same file,
-neither has a red, and the freeze refuses both. A guard that asserts the class or service exists
+neither has a red. The freeze refuses both. A guard that asserts the class or service exists
 is such a line when the tests share it. So do not open a test with an assertion that the unit
 exists, not even one written again in each test. When the class may be absent, write a guard that
 asserts nothing. For example, a lookup gives the empty value when the service is absent, and the

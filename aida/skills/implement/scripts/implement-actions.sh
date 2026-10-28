@@ -4579,7 +4579,7 @@ TB_OWNED
   tb_lost="$(printf '%s' "$ledger_doc" | jq -r --arg id "$unit_id" '
     [ (.orders // [])[] | select(.id == $id) ][0] as $o
     | [ ($o.rowsRejected // [])[] | .criterion ] as $have
-    | [ ($o.checkAgain // [])[] | select(.verdict == "rejected") | .criterion | select(. as $k | $have | index($k) | not) ]
+    | [ ($o.checkAgain // [])[] | .criterion | select(. as $k | $have | index($k) | not) ]
     | join(", ")')"
   [ -z "$tb_lost" ] \
     || task_warn "$TASK_PATH" tests-brief "$unit_id" "checkAgain names rejected rows this brief does not carry, so the test author gets no note for them: $tb_lost"
@@ -5469,7 +5469,7 @@ TF_EOF
   tf_rec_src="$tf_ledger_doc"
   [ -n "$tf_rec_src" ] || tf_rec_src='{}'
   tf_repair_files="$(printf '%s' "$tf_rec_src" | jq -c --arg id "$unit_id" --argjson entries "$tf_red_entries" '
-      [ ([ (.orders // [])[] | select(.id == $id) ][0].checkAgain // [])[] | select(.verdict == "rejected") | .criterion ] as $sent
+      [ ([ (.orders // [])[] | select(.id == $id) ][0].checkAgain // [])[] | .criterion ] as $sent
       | [ $entries[] | select(.key as $k | $sent | index($k)) | .path ] | unique')"
   [ -n "$tf_repair_files" ] || die3 "tests-freeze: could not list the test files the last repair of $unit_id edits."
   while IFS= read -r tf_recorded; do

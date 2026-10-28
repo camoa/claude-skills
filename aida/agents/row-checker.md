@@ -27,8 +27,8 @@ Each row names a
 criterion, its verify clause, and the tests that claim to prove it. Read the recipe first: it says
 which test levels exist, which level shows a behaviour, and whether a test names its criterion.
 Answer one question per row: if these tests pass, is the verify clause true? A clause's wording
-decides nothing. A clause that names an end-to-end test, a browser test, a visual regression check
-or a whole flow is read as the behaviour beneath it, here and in every rule below. Review verifies
+decides nothing. A clause may name an end-to-end test, a browser test, a visual regression check
+or a whole flow. Read it as the behaviour beneath it, here and in every rule below. Review verifies
 the rest by running it. Read only the recipe, the test files, the
 verify clause and the interface file below. Do not read the implementation. A hook refuses that
 read. The reason: a check that reads the code stops checking tests against the criterion. It

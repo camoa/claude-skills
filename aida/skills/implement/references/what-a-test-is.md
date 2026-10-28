@@ -15,7 +15,7 @@ never decides it.
 
 So "test that the export works", "check" or "make sure" in a criterion means that review runs the
 thing. It never asks for an automated test. "The suite still passes" or "a demo check proves it"
-gets a test of the code's behaviour, or no test when the order has no logic.
+gets a test of the code's behaviour. When the order has no logic, it gets no test.
 
 ## A test
 
@@ -38,8 +38,8 @@ that, so the code cannot bend the test to pass.
 - An end-to-end test, a browser test or a visual baseline.
 - A script that runs a whole flow, or the whole tool, where one call shows the behaviour.
 - The project's full suite.
-- A case added for its own sake: a list of variants, an extra input, or a case a recipe lists
-  that is no behaviour the criterion states.
+- A case added for its own sake: a list of variants or an extra input. A case a recipe lists is
+  one too, when the criterion states no such behaviour.
 
 End to end and visual regression are the surfaces. Only the surfaces skill adds one, with a
 person. The test author never writes one and never makes a check into one. Review runs them.
