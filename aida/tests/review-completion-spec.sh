@@ -115,12 +115,15 @@ nocriterion_case() (
 )
 expect "a finding that cites no criterion warns, and completion offers it as a task (row 470)" "$(nocriterion_case)" "passed|1"
 
+# rebuild_case <listed|hand>: wo1's departure waits, and a later commit changes a.php. With listed,
+# wo1's own fix record lists that commit; with hand, no record of wo1 does.
 rebuild_case() (
   source "$HERE/records.bash"
   review_records "" closed
   jq -n --arg c "$(git -C "$WT" rev-parse HEAD)" '{schemaVersion: 1, unit: "wo1", reviewedAt: $c, findings: [], rounds: [],
     deviationPending: {departure: "a.php reads the old file", file: "report.md"}}' >"$IMPL/review-wo1.json"
   printf 'rebuilt\n' >"$WT/a.php" && git -C "$WT" commit -qam "rebuild wo1 to the design"
+  [ "$1" != listed ] || jq -n --arg c "$(git -C "$WT" rev-parse HEAD)" '{unit: "wo1", commits: [$c]}' >"$IMPL/fix-wo1-1.json"
   edit "$IMPL/finished.json" '.commitRange = $r' --arg r "$(git -C "$WT" rev-parse HEAD~2)..$(git -C "$WT" rev-parse HEAD)"
   reviewed_record
   edit "$TASK/review/review.json" '.checks += [{id: "decision-wo1-departure", verdict: "unknown", answeredBy: "nobody",
@@ -128,7 +131,8 @@ rebuild_case() (
   closed_with --row c1=met --row decision-wo1-departure=rebuild
   jq -r '.checks[] | select(.id == "decision-wo1-departure") | .verdict' "$TASK/review/review.json"
 )
-expect "a rebuild already on the reviewed branch reads met (row 471)" "$(rebuild_case)" "met"
+expect "a rebuild the order's own records list on the reviewed branch reads met (row 471)" "$(rebuild_case listed)" "met"
+expect "a later commit no record of the order lists is no rebuild (row 471)" "$(rebuild_case hand)" "unmet"
 
 stale_case() (
   source "$HERE/records.bash"
@@ -138,6 +142,26 @@ stale_case() (
   printf '%s|%s\n' "$RC" "$(jq -r '.verdict' "$TASK/review/review.json")"
 )
 expect "a decision row from an earlier pass is named and dropped, and close goes on (row 472)" "$(stale_case)" "0|passed"
+
+# ids_case: an earlier pass, archived, recorded the god-class finding as f2. The reviewer of this
+# pass numbers it f1 and a new finding f2. Prints the id the god-class finding keeps, and the id
+# the new one gets.
+ids_case() (
+  source "$HERE/records.bash"
+  review_records
+  halves_record
+  jq '.verdict = "failed" | .findings = [
+    {id: "f1", lens: "dry", severity: "medium", file: "b.php", lines: "2", linkedTo: "", evidence: "a copy", disposition: "follow-up"},
+    {id: "f2", lens: "solid", severity: "high", file: "a.php", lines: "1", linkedTo: "", evidence: "a god class", disposition: "follow-up"}]' \
+    "$TASK/review/review.json" >"$TASK/review/review-2026-10-27-abc1234.json"
+  jq -n '{findings: [{id: "f1", lens: "solid", severity: "high", file: "a.php", lines: "1", linkedTo: "", evidence: "a god class"},
+    {id: "f2", lens: "solid", severity: "low", file: "a.php", lines: "9", linkedTo: "", evidence: "a long name"}]}' >"$ROOT/findings.json"
+  run "$REVIEW" findings "$TASK" --findings "$ROOT/findings.json"
+  jq -r '[ (.findings[] | select(.evidence == "a god class") | .id), (.findings[] | select(.evidence == "a long name") | .id) ] | join("|")' \
+    "$TASK/review/review.json"
+)
+expect "a finding keeps its id across passes while its content is the same, and a new one takes a fresh id (row 472)" \
+  "$(ids_case)" "f2|f3"
 
 echo "--- checks: the task's own change set (row 441)"
 merge_case() (

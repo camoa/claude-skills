@@ -32,7 +32,7 @@ skills/project/SKILL.md 640
 skills/research/SKILL.md 591
 skills/review/SKILL.md 251
 skills/review/references/checks.md 156
-skills/review/references/close.md 158
+skills/review/references/close.md 160
 skills/review/references/reviewer.md 181
 skills/review/references/acceptance.md 124
 skills/scope/SKILL.md 489

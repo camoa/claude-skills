@@ -2034,6 +2034,26 @@ do_findings() {
     i=$((i + 1))
   done
 
+  # A finding keeps its id across passes while its content is the same (gap row 472). The reviewer
+  # numbers each pass from f1, so a row a person prepared from an earlier pass could rule another
+  # finding. A finding whose lens, file, lines and evidence match one an archived pass recorded
+  # takes that id. Every other finding takes a fresh id above every id any pass used, so a stale
+  # row names no finding, and close drops it with a warning.
+  local archived_findings
+  archived_findings="$(find "$REVIEW_DIR" -maxdepth 1 -type f -name 'review-*.json' -exec cat {} + 2>/dev/null \
+    | jq -cs '[ .[] | (.findings // [])[] | select(.lens != "frozen-tests") | {id, k: [.lens, .file, .lines, .evidence]} ]' 2>/dev/null)"
+  [ -n "$archived_findings" ] || archived_findings='[]'
+  findings_json="$(printf '%s' "$findings_json" | jq -c --argjson old "$archived_findings" '
+    ([ $old[] | .id[1:] | tonumber ] | max // 0) as $top
+    | reduce .[] as $f ({out: [], used: [], next: ($top + 1)};
+        . as $s
+        | ([ $old[] | select(.k == [$f.lens, $f.file, $f.lines, $f.evidence]) | .id ]
+           | map(select(. as $i | $s.used | index($i) | not)) | .[0]) as $same
+        | if $same != null then .out += [$f + {id: $same}] | .used += [$same]
+          elif $top == 0 then .out += [$f]
+          else .out += [$f + {id: ("f" + (.next | tostring))}] | .next += 1 end)
+    | .out')"
+
   # A purpose finding on a file `task environment up` wrote judges no order's work: no order owns
   # the file, and check 3 sets it aside (gap row 469). It is named and not recorded.
   local env_aside env_dropped
@@ -3214,13 +3234,20 @@ $rows
 RW_ROWS
 )"
   # A rebuild the reviewed branch already holds is done, so the departure reads met (gap row 471).
-  # The branch holds it when a commit after the order's own review record changes a file the order
-  # owns. Each such order maps to those commits.
-  local rebuilt='{}' rb_unit rb_from rb_files rb_one rb_glob rb_hit
+  # The rebuild is the order's own work after its review record held the departure: a commit its
+  # build or fix records list, later than that record and inside the reviewed range, that changes a
+  # file the order owns. A person's commit or another order's never counts.
+  local rebuilt='{}' rb_unit rb_from rb_files rb_one rb_glob rb_hit rb_head rb_c
+  rb_head="$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')"
   for rb_unit in $(printf '%s' "$check_rows" | jq -r '.[] | select(.word == "rebuild" and (.id | endswith("-departure"))) | .id | ltrimstr("decision-") | rtrimstr("-departure")'); do
     rb_from="$(jq -r '.reviewedAt // empty' "$IMPL_DIR/review-$rb_unit.json" 2>/dev/null)"
     [ -n "$rb_from" ] || continue
-    rb_files="$(git -C "$RV_CODEPATH" diff --no-renames --name-only "$rb_from" "$(printf '%s' "$RW_RECORD_DOC" | jq -r '.reviewedAt')" 2>/dev/null)"
+    rb_files="$(for rb_c in $(cat "$IMPL_DIR/build-$rb_unit.json" "$IMPL_DIR"/fix-"$rb_unit"-*.json 2>/dev/null | jq -r '(.commits // [])[]' 2>/dev/null); do
+        [ "$rb_c" != "$(git -C "$RV_CODEPATH" rev-parse "$rb_from" 2>/dev/null)" ] \
+          && git -C "$RV_CODEPATH" merge-base --is-ancestor "$rb_from" "$rb_c" 2>/dev/null \
+          && git -C "$RV_CODEPATH" merge-base --is-ancestor "$rb_c" "$rb_head" 2>/dev/null \
+          && git -C "$RV_CODEPATH" show --no-renames --name-only --format= "$rb_c" 2>/dev/null
+      done | sort -u)"
     rb_hit=""
     while IFS= read -r rb_one; do
       [ -n "$rb_one" ] && [ -z "$rb_hit" ] || continue
@@ -3230,7 +3257,7 @@ RW_ROWS
     done <<RW_REBUILT
 $rb_files
 RW_REBUILT
-    [ -z "$rb_hit" ] || rebuilt="$(printf '%s' "$rebuilt" | jq -c --arg u "$rb_unit" --arg from "${rb_from:0:12}" --arg f "$rb_hit" '.[$u] = "the reviewed branch changes \($f) after the order'"'"'s own record at \($from)"')"
+    [ -z "$rb_hit" ] || rebuilt="$(printf '%s' "$rebuilt" | jq -c --arg u "$rb_unit" --arg from "${rb_from:0:12}" --arg f "$rb_hit" '.[$u] = "a commit the order'"'"'s own records list changes \($f) after its record at \($from)"')"
   done
   updated="$(printf '%s' "$updated" | jq -c --argjson given "$check_rows" --argjson rebuilt "$rebuilt" '
     .checks = [ .checks[] | . as $c | ([ $given[] | select(.id == $c.id) ][0]) as $g

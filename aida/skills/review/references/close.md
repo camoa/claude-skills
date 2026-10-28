@@ -42,8 +42,8 @@ The answer decides what happens next:
   in `skills/implement/references/finish.md`. A load-bearing finding is fixed. A departure is
   rebuilt to the design. That finish carries no decision the person already answered, so the
   next review asks it no more.
-  A `rebuild` reads met when the reviewed branch already holds it: a commit after the order's own
-  review record changes a file the order owns.
+  A `rebuild` reads met when the reviewed branch already holds it: a commit the order's own build
+  or fix records list, after its review record, changes a file the order owns.
 
 `close` writes no verdict while a `decision-` check is unanswered. The record keeps every row,
 and a later `close` with the person present answers each one with no fresh pass. Autonomous,
@@ -63,7 +63,9 @@ a ruled finding with its ruling beside it. The four words:
   record keeps the corrected text beside the frozen one, and the criterion reads its own answer.
   Completion offers a follow up task that changes the criterion through scope.
 
-With no ruling, the finding still fails its criterion. The record keeps the finding and the
+A finding keeps its id from one review pass to the next while its lens, file, lines and evidence
+stay the same. A new finding takes an id no earlier pass used, so a row prepared from an earlier
+pass never rules another finding. With no ruling, the finding still fails its criterion. The record keeps the finding and the
 person's word. A medium or high finding that cites no criterion fails its lens check, which is a
 warning. The person may rule it the same way. A lens check whose medium and high findings are all
 ruled reads met.

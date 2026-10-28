@@ -37,7 +37,9 @@ says. You rule each one once:
   record keeps your text beside the frozen one, and the criterion reads its own answer. Completion
   offers a follow up task that changes the criterion through `/aida:scope`.
 
-With no ruling, the finding still fails its criterion. A medium or high finding that cites no
+A finding keeps its id across review passes while its content is the same, and a new finding
+takes a new id. So an answer you prepared from an earlier pass never rules another finding. With
+no ruling, the finding still fails its criterion. A medium or high finding that cites no
 criterion fails its lens check, a warning, and you may rule it the same way. An answer to a row
 nobody asked decides nothing: the close names it as a warning and asks the row it meant again.
 
@@ -48,8 +50,8 @@ departure from the design. For a finding, answer `wrong`, `deferred`, `load-bear
 `test-wrong`. For a departure, answer `keep` or `rebuild`. The words mean what they mean at the
 build; see [implement](../implement/README.md).
 
-`load-bearing`, `test-wrong` and `rebuild` read unmet, a warning. A `rebuild` that the reviewed
-branch already holds reads met. While one decision is
+`load-bearing`, `test-wrong` and `rebuild` read unmet, a warning. A `rebuild` that the order's own
+records already put on the reviewed branch reads met. While one decision is
 unanswered, review writes no verdict and prints "no verdict yet". Run the close again when you can
 answer.
 
