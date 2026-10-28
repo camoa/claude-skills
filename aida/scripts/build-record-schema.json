@@ -104,7 +104,7 @@
       "properties": {
         "commitBefore": { "type": "string", "pattern": "^[0-9a-f]{7,40}$", "description": "The record's commit before this run moved it to HEAD." }
       },
-      "description": "Present only after `go-on --continue check` ran the checks over the fix a person committed after a finding ruled load-bearing stopped the order (live-run row 426). The checks ran from `startedAt` to the new `commit`, and every one passed, so close reads a record at HEAD. The person's words are in the ledger's stopsCleared entry for that go-on."
+      "description": "Present only after `go-on --continue check` ran the checks over commits of this order made after the record, such as the fix a person committed after a finding ruled load-bearing stopped the order (live-run row 426). The checks ran from `startedAt` to the new `commit`, so close reads a record at HEAD. A check that failed leaves the order stopped. The person's words are in the ledger's stopsCleared entry for that go-on, and the task record holds the warning."
     },
     "recheckedAt": {
       "type": "string",

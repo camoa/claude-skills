@@ -60,11 +60,15 @@ A first run has no earlier snapshot to compare against. The `drift:` line then r
 never that nothing changed; those are different facts and only that line tells them apart. Say the
 same to the person: nothing was compared yet, not that a check found nothing.
 
-A resumed run that stops one or more work orders for drift is not a failure. Say plainly which
-orders stopped and why. This run removes one kind of stop reason by itself. That is a
-`design drift` reason about an order's own design file, once no drift is found for that order.
-Every other reason stays until a person takes one of the three ways out, and nothing here decides
-whether the drift is acceptable.
+A resumed run that finds the design changed mid-build is not a failure. Attended, each order the
+change touches goes on with its frozen copy, and the `changed:` line names it. A warning goes into
+the task record, naming the change, and naming any criterion no order serves now. Put each one to
+the person: go on with the frozen copy, keep the change with go-on `keep`, or redo the order.
+Unattended, the change stops each order it touches, and the stop allows go-on `keep` and redo. In
+both modes, an order the design removed stops, and a person drops it. Say plainly which orders
+changed or stopped and why. This run removes a `design drift` reason about an order's own design
+file, or a criterion, once no drift is found for it. Every other reason stays until a person takes
+one of the three ways out, and nothing here decides whether the change is acceptable.
 
 The `driftCleared:` line names each order whose own design file no longer differs, and whose
 drift reason this run removed. It prints only when one was removed. An order left with no other
@@ -105,12 +109,12 @@ A started order whose done-when only gained rows after its frozen rows is taken 
 Tests are frozen against criteria, and only the done-when row reads the done-when text. When that
 row was judged, the order keeps its tests only at `tests-frozen`. The judgement leaves its ledger
 entry, and `doneWhenGained` lists the new rows. Its next step judges the row again and freezes
-the same tests. Past `tests-frozen` it stops, because a build already rests on the old text.
-An order with no done-when row keeps its tests until review. From `reviewed` on it stops,
-because nothing would read the new row.
-A removed owned file the code holds or held, or any other change, stops it as before. A reasoning
-whose earlier text changed stops it too. So does a changed or removed done-when row. A person
-redoes such an order once design closes on the change, or puts the design back.
+the same tests. Past `tests-frozen` it is a change mid-build, because a build already rests on
+the old text. An order with no done-when row keeps its tests until review. From `reviewed` on it
+is a change mid-build, because nothing would read the new row.
+A removed owned file the code holds or held, or any other change, is a change mid-build, as above.
+So is a reasoning whose earlier text changed, and a changed or removed done-when row. A person
+keeps the change, redoes such an order once design closes on the change, or puts the design back.
 An order the live design no longer holds, because design merged or removed it, has no live copy
 to take. When it has not started, it is dropped from the snapshot and the ledger, and the
 `removed:` line names it. That line prints only when an order was dropped. When it has started,
@@ -119,8 +123,8 @@ take no part in the build order, so the survivor that absorbed them is ready. Dr
 survivor's tests are written, because the removed order's frozen record still guards its test
 files. The `next:` line names the drop first for that reason. Taking a live copy needs design
 closed on the live files; otherwise the run refuses with exit 13 and says to close design again.
-The `stoppedDependents:` line names only orders the ledger stops, each of which depends on a
-started drifted order, directly or through another order.
+An order that depends on a changed order is not stopped. Unbuilt, `build-brief` refuses it until
+the changed order closes again (exit 40). Built, review reads it.
 An order the live design holds and the snapshot does not was added after the snapshot was taken.
 It enters the snapshot and the ledger as not started, and the `added:` line names it. That needs
 design closed on the live files too. It is ready when every order it depends on is closed.

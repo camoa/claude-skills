@@ -141,7 +141,10 @@ Run:
 ```
 The answer's step is `implement go-on <choice>`, so a yes to one choice passes no other. It refuses
 a choice a reason does not allow (exit 67), and names the choices every reason allows. A reason that
-allows none, such as a design change, leaves only redo and drop. `--owns` names a file the order now
+allows none, such as a wrong test, leaves only redo and drop. An order that is not stopped has
+nothing to leave, so go-on says so and exits 0. The one exception is an attended change mid-build,
+which leaves the order going on with a `changed` list: go-on `keep` and redo answer it the way
+they answer the same change as a stop. `--owns` names a file the order now
 owns, such as the file the owned-files check refused, or one a fixer reported out of its scope. The
 person's words name each such file. It refuses a file another order owns, or a frozen test. The
 build brief, the dispatch record, the fix scope and the owned-files check then read it as owned.
@@ -150,19 +153,18 @@ Which choices a reason allows:
 
 | The reason | The choices |
 |---|---|
-| `attempts spent`, at `build-record` | `build`; and `check` when only the tool rows, owned-files or the interface record stopped the attempt |
+| `attempts spent`, at `build-record` | `build` or `check` |
 | a builder's stop, or commits by a stopped builder | `build` |
 | a builder's deviation | `build` or `keep` |
 | uncommitted changes, unattended | `build`, or `fix` after a fix round; commit the tree first |
 | a rejected row, unattended, at `tests-freeze` | `build`, once the person judged the row at a second freeze |
 | `budget spent`, at `dispatch-open` | `build`, or `fix` in review; raise the budget first |
-| `turn cap`, at `dispatch-close` | `build`, or `fix` in review; `start` then keeps or sets aside the role's files |
 | a finding on a non-goal, or a disputed already-correct claim, unattended | `fix` or `close` |
 | a fixer short of scope | `fix`, often with `--owns` |
 | the fix round cap with findings open, unattended | `fix` or `close`; and `check` when every open finding is a check finding |
 | a finding ruled load-bearing | `check`, over the fix the person committed, or `close` |
-| a departure, or `design drift` naming the order's own design file | `keep` |
-| `test wrong`, or any other `design drift` | none: redo or drop |
+| a departure, or `design drift` naming the order's own design file or a criterion it serves | `keep` |
+| `test wrong`, or `design drift` saying the design removed the order | none: redo or drop |
 
 **Budget spent.** The spend is recomputed at every dispatch, so going on alone brings the stop
 straight back. Put the numbers to the person, opening with: "The build reached the limit you set on
@@ -175,10 +177,10 @@ ceiling first, with the task skill:
 
 **A finding ruled load-bearing** leaves no fix round, so the person commits the fix on the task
 branch, in the order's own files. Then go on with `check`. It runs the checks over the last
-record's range, extended to HEAD. Every check must pass. Then it moves the record's commit to HEAD,
-under `personFix`, so `close` takes the commits. A failed check records nothing (exit 123), the
-order stays stopped, and `close` still refuses (exit 63). Repair the fix, and go on with `check`
-again, with a new answer.
+record's range, extended to HEAD, and writes a warning for the later commits. It moves the
+record's commit to HEAD, under `personFix`, so `close` takes the commits. A failed check leaves the
+order stopped. Repair the fix, and go on with `check` again, with a new answer. A commit that
+changes a frozen test or a file the order does not own refuses (exit 63).
 
 **A dirty tree.** An unattended start may have moved the files a role left into a `setAside`
 folder. Copy them back from the folder the ledger names, and commit them first.
@@ -203,7 +205,7 @@ must have closed on the live files (exit 13). Then run `start`, which refreshes 
 and takes in an order design added, as before. The tests brief carries the person's words under
 `redo`.
 
-It takes any order that is not closed, and a closed order only while it is stopped. It refuses an
+It takes any order that is not closed, and a closed order only while it is stopped or changed. It refuses an
 order the live design no longer holds: drop it instead (exit 67). It refuses a dirty tree (exit 61).
 It refuses when the records list a commit HEAD does not hold, as after a rebase, and on a merge
 commit (exit 113). Then a person reverts that work by hand. A revert that stops on a conflict is
@@ -228,9 +230,9 @@ guarding the files a surviving order took over.
 
 A stop about an order's own design file, or the live text of a criterion, clears when the drift
 does. Put the design or the criterion text back to what the snapshot holds, then run `start` again.
-It compares, finds no drift for that order, and removes those reasons. A reason that names another
-order that drifted clears in the same run, once no order it names holds a drift of its own. Each
-clearing is recorded under `stopsCleared`, with the reasons as they stood.
+It compares, finds no drift for that order, and removes those reasons. Each clearing is recorded
+under `stopsCleared`, with the reasons as they stood. A reason a person answered with go-on `keep`
+is not raised again.
 
 ## A person's answer
 

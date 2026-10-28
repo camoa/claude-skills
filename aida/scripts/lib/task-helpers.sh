@@ -620,6 +620,21 @@ task_is_light() {
   [ "$(jq -r '.runMode // ""' "$1/task.json" 2>/dev/null)" = "light" ]
 }
 
+# Writes one warning into the task record, task.json `warnings`, and prints it as a summary line.
+# A warning is a check that found something and let the step go on. Every stage writes its
+# warnings here, so review lists them from one place. The same step, order and words are written
+# once, so a step run again adds nothing. $1 the task folder, $2 the step, $3 the order or empty,
+# $4 the words, one line.
+task_warn() {
+  local doc
+  doc="$(jq --arg s "$2" --arg o "$3" --arg w "$4" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+    if any((.warnings // [])[]; .step == $s and .order == $o and .words == $w) then .
+    else .warnings = ((.warnings // []) + [{step: $s, order: $o, words: $w, at: $at}]) end' "$1/task.json")" \
+    || die3 "could not read $1/task.json to write the warning: $4"
+  write_atomic "$1/task.json" "$doc"
+  printf 'warning: %s%s: %s\n' "$2" "${3:+ $3}" "$4"
+}
+
 # The one overlap rule for owned files, read by check-design.sh and by implementation's `start`.
 # Input: the work orders as a JSON array. Output: one {ids, path} per entry two orders both
 # declare, compared as declared strings. An entry both orders list in sharedFiles is not an

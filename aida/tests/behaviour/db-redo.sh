@@ -252,11 +252,16 @@ freeze_and_build_wo1() {
     --started-at "$FREEZE" --test-recipe "$TEST_RECIPE_FLAG" --check-recipe "fake=$RECIPES/checks.md"
 }
 
-# stop_wo1: wo1's interface changes, design closes again, and the resumed start stops wo1.
+# stop_wo1: wo1's interface changes, design closes again, and the resumed start stops wo1. Since
+# 6.1.0 batch 3b a change mid-build stops an order only unattended, so that start runs autonomous.
 stop_wo1() {
   must "$DESIGN" update "$TASK" --id wo1 --interface "a new one"
   close_design
+  pa "$TASK" "task set-run-mode" "" "autonomous"
+  must "$PLUGIN/skills/task/scripts/task-actions.sh" set-run-mode --project "$PROJECT" "${TASK##*/}" autonomous
   must "$IMPLEMENT" start "$TASK"
+  pa "$TASK" "task set-run-mode" "" "interactive"
+  must "$PLUGIN/skills/task/scripts/task-actions.sh" set-run-mode --project "$PROJECT" "${TASK##*/}" interactive
   [ "$(ledger_stop wo1)" = "design drift: the design file for wo1 has changed since the snapshot was taken" ] \
     || { printf 'setup failed: wo1 did not stop for drift\n'; exit 1; }
 }

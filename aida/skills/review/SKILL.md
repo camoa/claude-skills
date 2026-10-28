@@ -43,6 +43,9 @@ This reports whether `implementation/finished.json` exists, and the commit range
 it records. It reports how many criteria a machine verifies and how many a person does, the task's
 run mode for this stage, and the project's frameworks. It reports whether end to end and visual
 regression are on, and whether a registry is recorded. It says how far an existing review record got.
+It lists the warnings the earlier stages wrote into the task record, each with its step, its order
+and its words. A warning is a check that found something and let the work go on. Read each one to
+the person before the review closes.
 Last, it prints the checklist rows whole, because a person has to read those words to answer them.
 
 No `finished.json`: say so in one line, name the implementation skill's finish step, and stop. Exit

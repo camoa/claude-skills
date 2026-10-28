@@ -34,8 +34,9 @@ same retake. Neither refusal spends an attempt.
 
 Each task has at most one open dispatch. When a role never returned, the next dispatch refuses and
 names the role, the order, and the record's age. A role stopped at its turn limit is resumed once,
-or twice for an order with a large diff budget. One more stop stops the order. Go on with your
-answer, run `start` to keep or set aside the role's files, and the role is sent again.
+or twice for an order with a large diff budget. One more stop writes a turn-cap warning into the
+task record, and the order does not stop. The role's commits stay on the order's list, and the
+role is sent again.
 
 ## Your answer to a person's call
 

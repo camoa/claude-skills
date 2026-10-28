@@ -36,7 +36,7 @@ When you say the test stands, the next attempt builds against it as it is.
 |---|---|
 | it needs a file the order does not own | Add the file to the order in design, close design, then run `/aida:implement`. Until `start` takes it in, the record step refuses (exit 117) |
 | the interface does not fit, or the order is too big | Change the order in design, close design, then redo the order. See [a work order stopped](stopped.md) |
-| `Stop: row-wrong` | Rule on the done-when row it quotes. A wrong row is reworded in design, the order stops for design drift, and a redo answers it. A row that stands goes back to the builder |
+| `Stop: row-wrong` | Rule on the done-when row it quotes. A wrong row is reworded in design, AIDA names the change on the order, and a redo answers it. A row that stands goes back to the builder |
 | `Stop: closed-order-defect` | Nothing, unless asked. AIDA reopens the finished order that owns the file for one fix round. The stopped order waits until that order closes (exit 40) |
 | a `Deviation:` line | Keep the departure with go-on `keep` and your reason, or go on with `build` to repair it. The order stops with nobody present too |
 
@@ -46,8 +46,8 @@ When you say the test stands, the next attempt builds against it as it is.
   limit writes none. build-record refuses a stop line with no cause and reason, such as
   `Stop: pending`, the same way. It stops nothing, so the corrected report records.
 - **A role stopped at its turn limit.** AIDA sends the same agent one message to finish. When it
-  returns with no report again, the order stops (exit 110). AIDA goes on with your answer, then
-  runs `start` to keep or set aside its files.
+  returns with no report again, AIDA writes a turn-cap warning into the task record, and the order
+  does not stop. Its commits stay on the order's list, and the next dispatch reads what it left.
 - **Exit 37.** Another dispatch for this task is still open. See
   [come back to a build](../stages/implement/resume.md).
 

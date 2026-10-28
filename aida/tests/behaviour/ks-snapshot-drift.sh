@@ -8,8 +8,8 @@
 #   approve  a person adds c4 as owner and runs approve, which promotes c1 to c3; design adds
 #            wo4 for c4 and closes: start exits 0, halts nothing, wo1 and wo2 stay closed, wo4
 #            is taken in, and the snapshot takes the owner labels.
-#   text     the same relabel with c1's text changed too: wo1 still halts for c1, and wo2 as its
-#            dependent.
+#   text     the same relabel with c1's text changed too: attended, wo1 names the change to c1
+#            and stops nothing, and wo2 is not touched (6.1.0 batch 3b).
 # Runs under bash, which CI runs on Linux, from $HOME, with CLAUDE_PLUGIN_ROOT unset. Setup is copied from
 # run-jj-fixture.sh.
 PLUGIN="${PLUGIN:-$(cd "$(dirname "$0")/../.." && pwd)}"
@@ -35,7 +35,6 @@ RESEARCH="$PLUGIN/skills/research/scripts/research-actions.sh"
 DESIGN="$PLUGIN/skills/design/scripts/design-actions.sh"
 IMPLEMENT="$PLUGIN/skills/implement/scripts/implement-actions.sh"
 LOG="$ROOT/log.txt"
-DEP2="design drift: wo2 depends on wo1, directly or through another order, and that order drifted since the snapshot was taken"
 TASK=""
 WT=""
 
@@ -108,6 +107,8 @@ resumed_start() {
 }
 line() { grep "^$2:" "$1" | head -1; }
 ledger_halt() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | (.stopped // []) | if length == 0 then "none" else map(.reason) | join("; ") end' "$TASK/implementation/ledger.json"; }
+# ledger_changed <unit>: the reasons of an attended change mid-build, which stop nothing (6.1.0 batch 3b).
+ledger_changed() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | (.changed // []) | if length == 0 then "none" else map(.reason) | join("; ") end' "$TASK/implementation/ledger.json"; }
 ledger_step() { jq -r --arg id "$1" '.orders[] | select(.id == $id) | .lastStep // "null"' "$TASK/implementation/ledger.json"; }
 # set_ledger <jq args>: edits the ledger by hand, the way a fixture stands in for an earlier run.
 set_ledger() {
@@ -162,9 +163,9 @@ must "$SCOPE" update "$TASK" --id c1 --text "a.php changes twice"
 add_and_approve
 rc="$(resumed_start "$ROOT/start-2.txt")"
 expect "start exits 0" "$rc" "0"
-expect "a changed criterion text still halts wo1" "$(ledger_halt wo1)" \
+expect "a changed criterion text is still named on wo1, attended" "$(ledger_changed wo1)" \
   "design drift: the live text of criterion c1, which wo1 serves, differs from the frozen copy the snapshot keeps"
-expect "wo2 halts as wo1's dependent" "$(ledger_halt wo2)" "$DEP2"
+expect "wo2 is neither stopped nor changed" "$(ledger_halt wo2) $(ledger_changed wo2)" "none none"
 
 printf 'passed %s of %s\n' "$PASS" "$TOTAL"
 [ "$PASS" -eq "$TOTAL" ]

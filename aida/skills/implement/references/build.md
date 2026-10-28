@@ -201,8 +201,8 @@ order.
 **A done-when row that cannot hold is no defect, so it never reopens an order.** The stop line
 reads `Stop: row-wrong: <row number>: <the evidence>`. `build-record` stops as at any stop
 (exit 105), and its message quotes that row from the snapshot. The person rules on the row. A
-wrong row is reworded in design, and design closes again. Then `start` stops the order for
-design drift, and a redo answers that stop. A row that stands goes back to the builder.
+wrong row is reworded in design, and design closes again. Then `start` names the change on the
+order, and a redo answers it. A row that stands goes back to the builder.
 The order stops in both run modes, and the stop reason quotes the row. Each way out refuses without the
 person's answer on record (exit 68), as "A person's answer" in `references/finish.md` says.
 
@@ -316,16 +316,17 @@ recorded on any of these.
 
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
-Equal to the code repository's own current commit (exit 71), or not an ancestor of it (exit 3):
-either makes the range this attempt claims false. From that range the script lists the
+Not an ancestor of the code repository's current commit (exit 3), it makes the range this attempt
+claims false. Equal to the current commit, the range is empty, and the attempt is recorded: the
+order's tests still run on the tree. From that range the script lists the
 implementer's commits in the build record. It leaves out each commit another order's records
 name, in a build or fix list or as a freeze. The owned-files check reads the files those commits
 change, and no range. The earlier attempts' lists move to `commitsBefore`, which review reads, so a
 second attempt that changes one line is reviewed with the code the first attempt wrote. Commits a
 person kept after a builder's stop go there too. The check also reads each path those commits
 change that still differs, so a stray change nobody reverted still stops the attempt.
-One equal commit is not refused. When it is this order's own freeze commit and every frozen test
-locks in, the freeze commit holds the order's work. A tests order whose deliverable is its test
+When an equal commit is this order's own freeze commit and every frozen test locks in, the
+freeze commit holds the order's work. A tests order whose deliverable is its test
 file is this case. So is a code order whose tests all pass on the code that is there already, and
 its range then holds its test files alone. The range then starts at the parent of the freeze commit, so the
 freeze commit is on the order's list.
@@ -340,8 +341,7 @@ the files git lists. Unattended stops the order with that reason, and a person g
 tree is committed, under "Leave a stop" in `references/finish.md`.
 
 **On an order whose proof is `record`, every one of those reads the project folder instead.**
-The range, the empty-range refusal (exit 71), the unchanged refusal (exit 45) and the clean-tree
-refusal (exit 61) all read the project folder's history. That is where the deliverable
+The range and the clean-tree refusal (exit 61) both read the project folder's history. That is where the deliverable
 landed, and the code repository may hold no commit at all for it. The tree read is the owned
 files alone, since this stage keeps the rest of that folder uncommitted until it finishes. A
 project folder with no history refuses (exit 3).
@@ -436,20 +436,20 @@ that marker and this flag is not read.
 
 ## Run the checks again with no new build
 
-An attempt can fail on rows the same code can answer differently: the three tool rows, owned-files
-and interface-record. A tool refusing a path it was handed is the plugin's fault, not the
-implementer's. An interface record missing an element is a record file, amended without moving
-the code. A file the owned-files check refused may be one the order should own. While attempts
-remain, the next attempt answers such a failure. When the last attempt fails on those rows alone,
-the order stops, and its reason allows `go-on --continue check`, under "Go on" in
+Some rows the same code can answer differently. A tool refusing a path it was handed is the
+plugin's fault, not the implementer's. An interface record missing an element is a record file,
+amended without moving the code. A file the owned-files check refused may be one the order should
+own. While attempts remain, the next attempt answers a failure. When the last attempt fails, the
+order stops, and its reason allows `go-on --continue check` for any failed row, under "Go on" in
 `references/finish.md`. Amend the interface record first, or give the order the file with
 `--owns`. The check runs over the recorded range, dispatches no implementer and spends no attempt.
 It takes `build-record`'s recipe flags and `--interface`. A flag left out is taken from its record,
 and the `filledFromRecords:` line names each one. It rewrites the record with the new checks. The
 replaced checks stay under `checksBefore`, beside `recheckedAt`. When the interface record's text
-changed, the attempt's own text stays under `interfaceRecordBefore`. It refuses (exit 88) when no
-build record exists, or when the code moved since the record. It also refuses when a path the
-interface check named does not exist at the recorded commit. After a fix round it runs that round's seven checks
+changed, the attempt's own text stays under `interfaceRecordBefore`. When the code moved since the
+record, it runs over the range extended to HEAD and writes a warning. It refuses (exit 63) when
+those commits change a frozen test or a file the order does not own. It refuses (exit 88) when a
+path the interface check named does not exist at the recorded commit. After a fix round it runs that round's seven checks
 again over the fix record's range, and a pass addresses the round's check finding.
 
 ## Read the eight checks to the person
@@ -526,12 +526,10 @@ one in another file reads as old. A second copy of an old finding on another lin
 
 A failed check is not a failed order. It is this attempt's result, and the order has as many
 attempts as its own allowed count says, two unless a person's go-on granted more. The summary prints
-one line per check with its verdict and a one-line reason. Interactive, open with: "This attempt
-at the work failed one of the checks, and another attempt is allowed. Spending it is your
-call, because each attempt costs a dispatch. Say yes and the builder tries again from this
-code. Say no and the work stays where it is until you return." Then say which check failed,
-in plain words, and name the record path that holds what the tool printed. Do not read the
-record here.
+one line per check with its verdict and a one-line reason. Say which check failed, in plain words,
+and name the record path that holds what the tool printed. Do not read the record here. Then
+brief the next attempt, in both run modes. Do not ask whether to spend it: the attempt cap and the
+run budget bound the attempts, and a person can stop the run at any time.
 
 An unknown on interface-record does not fail the attempt. The declaration named no backticked
 element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every

@@ -76,9 +76,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh verify-brief  <task_folder> <unit_id>
 #   implement-actions.sh verify-record <task_folder> <unit_id> [--verdicts <path>]
 #                            [--ruling <finding id>=<wrong|deferred|load-bearing|test-wrong>::<reason>]...
-#                            (--verdicts is required until the round is on the record; after that,
-#                            --ruling alone rules on the round's open findings, or at reviewed on
-#                            findings whose fix scope is empty)
+#                            (--verdicts records a round; --ruling alone rules on open findings,
+#                            at reviewed or at any round)
 #   implement-actions.sh close <task_folder> <unit_id>
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
 #                            [--accept-warnings <the person's reason>]
@@ -129,9 +128,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # A role whose file passes the close's test closes as finished, even with --no-report (gap rows 309
 # and 322). Otherwise, the
 # first time, the record stays open and takes `resumedAt`, and the role is resumed once by message.
-# The second time, the order stops and the record is removed (exit 110, gap row 228). An
-# implementer whose order's diff budget starts with `large` carries `resumesAllowed` 2, so it is
-# resumed twice and the third time stops the order (gap row 301). For a
+# The second time, the record is removed, and a turn-cap warning goes into the task record; the
+# order does not stop (gap row 228). An implementer whose order's diff budget starts with `large`
+# carries `resumesAllowed` 2, so it is resumed twice and the third time warns (gap row 301). For a
 # reviewer or a row-checker, a plain close also refuses when its file is missing (111).
 # `dispatch-open --resume` reopens a record already closed for that one resume. It skips the
 # leftover check `dispatch-open` otherwise runs (exit 104) and writes `resumedAt` at once.
@@ -212,7 +211,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                                        never reads the proof kind itself.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/builder-lines.sh  sourced. The builder's stop and deviation
 #                                                        lines, which build-record and
-#                                                        hooks/require-stop-lines.sh both read.
+#                                                        dispatch-close both read.
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/baseline-schema.json   the shape `preconditions` writes to
 #                                                        baseline.json, which `start` compares a
 #                                                        resumed run's copy against (exit 3)
@@ -243,8 +242,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that nothing has run yet.
-#      For `start`, this includes a resumed run that stopped one or more drifted orders (that is
-#      the run continuing correctly, not a failure) and a trunk check that could not look.
+#      For `start`, this includes a resumed run that found the design changed mid-build: attended,
+#      a warning in the task record; unattended, a stop on each order the change touches. Both are
+#      the run continuing correctly, not a failure. It includes a trunk check that could not look.
+#      A step with nothing to act on, such as fix-brief with no open finding, says so, names the
+#      next step and exits 0. A warning is written to task.json `warnings` (task_warn in
+#      scripts/lib/task-helpers.sh), printed as a `warning:` line, and the step goes on.
 #   3  an error: the action has nothing valid to act on, so no work can go on. It is never a
 #      judgement on the work. Every error exits 3 through die3, and the message names the action
 #      first. A message that does not explain itself also says what to do.
@@ -377,15 +380,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the skill sends a stopped order's caller to the repair it waits on (references/build.md).
 #  41  `build-brief` or `dispatch-open implementer` found the given unit's attempt counter
 #      already at its allowed limit. Nothing is handed over; the order is exhausted.
-#  45  a record for this attempt or this round already exists, so the call would write it twice.
-#      `build-record` found build-<unit_id>.json already recorded at the same commit and the same
-#      attempt number; `fix-record` found fix-<unit_id>-<round>.json already recorded at the same
-#      commit; `verify-brief` found the round already verified in review-<unit_id>.json, so there is
-#      nothing left to hand a verifier. The message names both values, because a caller who calls
-#      this twice for one attempt or one round is not shown a stale success silently.
-#      `verify-record` on a round already verified reports the verification on record instead.
-#      With --ruling it applies the rulings to that round's open findings, and writes no second
-#      round entry (live-run row 111).
+#  45  retired in 6.1.0. A record for the same attempt or round at the same commit no longer
+#      refuses. build-record and fix-record record again, and the attempt cap and the round cap
+#      bound the repeats. fix-record on a round already recorded at this commit reports that record.
+#      verify-brief on a round already verified exits 0.
 #
 #  46  `dispatch-open` was given a role that names no agent under ${CLAUDE_PLUGIN_ROOT}/agents, or
 #      found that folder empty. A role nothing checks opens a record no agent's own `agent_type`
@@ -410,20 +408,19 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  50  a review record already exists for this order, and an order gets one review, ever
 #      (ideal/implementation.md, 'One review per order'). `review-brief` refuses to hand over a
 #      second brief and `review-record` refuses to write a second record.
-#  51  `review-record` found the code repository is not where the build record left it: HEAD moved,
-#      or the working tree is dirty. The reviewer holds Write for one purpose, its own findings
-#      file under the task folder, and this is the check that enforces it. A probe test left inside
-#      the reviewed code is a refusal here, never a finding later.
+#  51  `review-record` found the working tree dirty. The reviewer holds Write for one purpose, its
+#      own findings file under the task folder, and this is the check that enforces it. A probe
+#      test left inside the reviewed code is a refusal here, never a finding later. Code that moved
+#      while the review ran is a warning, or exit 63 where it breaks a frozen test or owned files.
 #  52  a findings or verdict file named on the command line is missing, is empty, or does not hold
 #      the shape the action reads. The message names the entry and what was wrong with it. A file
 #      this script half understands is worse than no file at all. `review-record` also refuses a
 #      finding that cites a file the order owns, or one its diff changes, with an empty or missing
 #      fixScope: an empty fix scope skips the fix rounds (gap row 265).
-#  53  `fix-brief` or `fix-record` found no open actionable finding for this order, so there is
-#      nothing for a fixer to do. `verify-brief` shares it: nothing open means nothing to verify.
-#      `fix-brief` also refuses when every open finding has an empty fix scope, and names the
-#      ruling route (gap row 265). Unattended, it marks each such finding pending instead, and
-#      exits 0: the person rules it at the task review (gap row 279).
+#  53  `fix-brief` found that every open finding has an empty fix scope, and names the ruling
+#      route (gap row 265). Unattended, it marks each such finding pending instead, and exits 0:
+#      the person rules it at the task review (gap row 279). No open finding at all is nothing to
+#      do, so fix-brief, fix-record and verify-brief exit 0 and name the next step.
 #  54  `fix-brief` or `fix-record` found this order's fix rounds already spent (roundsUsed at
 #      FIX_ROUNDS_ALLOWED). Every open finding needs a ruling now, not another round. The mirror of
 #      exit 41 for the build attempts. The one exception is the order's one repair round, which
@@ -437,11 +434,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      instead, and the person rules it at the task review (gap row 296). A finding the repair round
 #      may take neither stops the order here nor needs a ruling at exit 57 (gap row 314).
 #  57  `verify-record` reached the round cap with an open finding no --ruling names. Each one needs
-#      a ruling and a reason before the order may close. Before the cap a ruling is taken only on a
-#      finding a fixer reported out of its scope (`scopeInsufficientInRound`), or on one whose fix
-#      scope is empty (gap row 265), or on any finding once a person kept the departure with
-#      `go-on --continue keep` (gap row 318); any other is exit 3 with the findings that
-#      may be ruled now named (live-run row 110).
+#      a ruling and a reason before the order may close. A person may rule a finding before the cap
+#      too, at any round.
 #  59  `close` found open actionable findings on this order. An order closes with nothing open.
 #  60  `close` found the last fix round unverified: the ledger counts more rounds than the review
 #      record holds verifications. A round whose findings only the fixer called addressed is not a
@@ -465,10 +459,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      the same gap at `close`, by which point both rounds are already spent. `fix-record` on that
 #      last round, before `verify-brief` ran for it, records the round again at the current commit
 #      and spends no round (gap row 339).
-#  63  `close` found the code repository at a commit other than the one the last record for this
-#      order was written at: the build record when no fix round ran, the last fix record otherwise.
-#      The range this would write would name work nothing in this stage judged. `verify-brief`
-#      refuses on the same fact for the last fix record, so a verifier never reads a stale range.
+#  63  commits of this order after its last record change a frozen test, or a file the order does
+#      not own, or the record's commit is not in the history of HEAD. `close`, `review-record`,
+#      `verify-brief` and `go-on --continue check` refuse on it (im_code_moved). No record judged
+#      those commits, and they break the frozen-test or the owned-files guarantee. Commits inside
+#      the order's own files are a warning instead: they join the order's unrecordedCommits, and
+#      the step goes on.
 #
 # The exit codes the checkpoint, the finish and the ways out of a stop add.
 #  64  `tests-freeze`'s own `--row` flags and this order's tests do not correspond: a
@@ -503,11 +499,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      nor dropped, an order that is stopped whether or not it closed, or a machine-verified
 #      criterion whose row state is not confirmed and that no dropped order serves. The message
 #      names every one of them.
-#  67  a way out was asked for an order it cannot answer. `go-on`, `redo` or `drop` found the order
-#      closed or dropped, so there is nothing to leave. `go-on` found the order not stopped, or
-#      stopped for a reason that does not allow the choice it was given: the message names the
-#      choices every reason allows. `redo` found no live copy of the order in the design, so drop is
-#      the route. Nothing is written.
+#  67  a way out was asked for an order it cannot answer. `go-on` found the order stopped, or
+#      changed mid-build, for a reason that does not allow the choice it was given: the message
+#      names the choices every reason allows. `redo` found no live copy of the order in the design,
+#      so drop is the route. Nothing is written. An order that is not stopped, or is closed or
+#      dropped, has nothing to leave, so the way out exits 0 and names the next step.
 #  68  `go-on`, `redo`, `drop`, `start --leftovers keep` or `finish --accept-warnings` was called
 #      with no matching answer in the task's answer record. Each is a person's judgement, in every
 #      run mode. The step of a go-on names its choice, `implement go-on <choice>`, so a yes to one
@@ -520,15 +516,12 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and a person answers only a row it rejected (live-run row 70).
 #
 # The codes the paper test added. Each one is a fact nothing refused before.
-#  71  `build-record` or `fix-record` was given a `--started-at` that cannot be the commit the work
-#      began from: it is the commit HEAD is at now, so the diff would be empty and every check would
-#      answer about nothing. A value that is not a commit, or not an ancestor of HEAD, is an error,
-#      exit 3, because the range between the two is not this order's own work.
-#      `build-record` takes HEAD when it is the order's own freeze commit and every frozen test
-#      locks in: the range starts at that commit's parent (live-run row 371).
-#      `fix-record` records a round with no commit when its fix brief exists and every open finding
-#      is named by --scope-insufficient or by an `Outcome: <id>: already-correct` line in the report
-#      (gap row 341). The message names the findings that are neither.
+#  71  retired in 6.1.0. A `--started-at` that is HEAD is an empty range, and build-record and
+#      fix-record record it: the order's tests run on the tree, and owned files are met over no
+#      change. A fixer that did nothing gets not-addressed verdicts, and close then refuses. A value
+#      that is not a commit, or not an ancestor of HEAD, is an error, exit 3. `build-record` starts
+#      the range at the freeze commit's parent when HEAD is the order's own freeze commit and every
+#      frozen test locks in (live-run row 371).
 #  72  two frameworks each declare a command for one check row, and nothing here may choose between
 #      two answers to one question. The message names both frameworks and the row.
 #  73  the check recipe resolved for a framework moved after this task's baseline was taken: its
@@ -595,14 +588,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The code the record proof added (nyc defect 17).
 #
 # The code go-on's check added (live-run row 87).
-#  88  `go-on --continue check` cannot run the checks again over the recorded range, for one of
-#      three facts, each named in its own message. No build record exists for the order, so there
-#      is no range. The repository's HEAD is not the record's own `commit`, so the code moved and
-#      what goes on is a build or a fix round. Or a path the interface check named does not exist
-#      at the recorded commit, so no amended record can answer it (gap row 253). After a fix round
-#      the same facts are read from that round's record (gap row 310). One exception passes the
-#      moved HEAD: the order stopped for a finding ruled load-bearing, so the commits are a
-#      person's fix, and the checks run over them once (live-run row 426).
+#  88  `go-on --continue check` found that a path the interface check named does not exist at the
+#      recorded commit, so no amended record can answer it (gap row 253). After a fix round the
+#      fact is read from that round's record (gap row 310). Code that moved after the record is no
+#      refusal: the checks run over the record's range extended to HEAD, as for a person's fix
+#      after a load-bearing ruling (live-run row 426), unless exit 63 applies.
 #
 # The code the support files added (live-run row 90).
 #
@@ -668,7 +658,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      so this is not an attempt, whatever it committed. The message quotes the line and names each
 #      commit after --started-at. No attempt is recorded or spent. In both run modes the order
 #      stops first, the stop reason names the commits, and the ledger entry keeps them under
-#      stoppedCommits (gap row 411). A deviation line other than `Deviation: none`, or a heading
+#      unrecordedCommits (gap row 411). A deviation line other than `Deviation: none`, or a heading
 #      that starts with "Deviation", in the report or the interface record, is a stop too (gap row
 #      221). A person keeps a deviation with `go-on --continue keep`, and the next build-record
 #      records the attempt with it. A stop line other than `Stop: none` has no such route (gap row
@@ -706,12 +696,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      earlier tests, such as those a redo set aside. The message names each file and both
 #      times, and a last line `redAgain: [<test name>, ...]` names each test to run again, as
 #      JSON (gap row 258). Nothing is frozen.
-# The codes the turn cap added (gap row 228).
-# 110  `dispatch-close --no-report` found the open record's resumes already at its
-#      `resumesAllowed`, 1 when absent: the role was resumed that many times and returned with no
-#      report again. The order stops with a reason naming the role and its `maxTurns`, and the
-#      record is removed. A person takes the order out of its stop with go-on, then runs start,
-#      then dispatches again.
+# 110  retired in 6.1.0. `dispatch-close --no-report` with the resumes spent is a warning: the
+#      order does not stop, the record is removed, a capped builder's or fixer's commits join the
+#      order's unrecordedCommits, and the next step reads what the role left (gap row 228).
 # 111  a plain `dispatch-close` on a reviewer's, a row-checker's or an implementer's record found its
 #      file missing, or written before the record's `openedAt`: `findingsPath` in review mode,
 #      `verdictsPath` in verify mode after the ledger's `fixed`, `row-check-<order>.json` for the
@@ -726,7 +713,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      that is the order's owned files in the project folder (gap row 312). A test author commits nothing, so its report
 #      is read by the line alone (gap row 307). The role stopped before its last act, so
 #      the close runs as `--no-report` does: the record stays open and takes `resumedAt`. A second
-#      such close stops the order at exit 110, and the stop reason names the cause. `dispatch-open`
+#      such close is the turn-cap warning, which names the cause. `dispatch-open`
 #      without --resume removes the role's earlier report, so an old complete one cannot pass,
 #      and no time is read (gap row 309). A `--no-report` close of a fixer or a test author whose
 #      report passes these tests closes the record as finished. A fixer's report also gives each
@@ -781,10 +768,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      files and the first lines of the output. Nothing is frozen. A row that reads unknown or
 #      undeclared judged nothing; its detail goes to standard error and the freeze goes on.
 #
-# The code a person's fix after a load-bearing ruling added (live-run row 426).
-# 123  `go-on --continue check` ran the checks over the commits a person made after a finding
-#      ruled load-bearing, and a check did not pass. Nothing is recorded, the order stays stopped,
-#      and close still refuses those commits (exit 63). The message names each check's verdict.
+# 123  retired in 6.1.0. `go-on --continue check` over commits after the record records the
+#      checks whether or not they pass. A failed check leaves the order stopped, so close refuses it.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk, no
 # regular-expression interval quantifier anywhere (foundations.md, Honesty). sha256sum exists on
@@ -895,8 +880,7 @@ source "$SURFACES_LIB" || die3 "the surfaces library failed to load: $SURFACES_L
 [ -f "$PATHS_LIB" ] || die3 "cannot find the paths library at $PATHS_LIB"
 # shellcheck source=/dev/null
 source "$PATHS_LIB" || die3 "the paths library failed to load: $PATHS_LIB"
-# The builder's stop and deviation lines, read the same way by build-record and by the hook that
-# sends the implementer back to its answers file before it returns (gap row 304).
+# The builder's stop and deviation lines, read the same way by build-record and dispatch-close.
 [ -f "$BUILDER_LINES_LIB" ] || die3 "cannot find the builder-lines library at $BUILDER_LINES_LIB"
 # shellcheck source=/dev/null
 source "$BUILDER_LINES_LIB" || die3 "the builder-lines library failed to load: $BUILDER_LINES_LIB"
@@ -1052,12 +1036,52 @@ stop_text() {
 }
 
 # Prints ledger document $1 with the commits the role on order $2 made in repository $3 after
-# commit $4 up to $5 added to the order's stoppedCommits. No record lists them, because a stop
-# records no attempt; redo and drop read them from here, and no other order counts them as its own.
-im_stopped_commits_in() {
+# commit $4 up to $5 added to the order's unrecordedCommits. No record lists them: a stop or a turn
+# cap records no attempt, and a step that goes on past code moved after a record writes none.
+# Redo and drop read them from here, and no other order counts them as its own.
+im_unrecorded_commits_in() {
   printf '%s' "$1" | jq -c --arg id "$2" --argjson c "$(im_role_commits "$3" "$4" "$5" "$2")" '
     .orders = (.orders | map(if .id == $id and ($c | length) > 0
-      then .stoppedCommits = ((.stoppedCommits // []) + $c | unique) else . end))'
+      then .unrecordedCommits = ((.unrecordedCommits // []) + $c | unique) else . end))'
+}
+
+# Code moved after the last record of order $2: the commits after $4 up to $5 in the repository $3
+# that no other order's records list. A commit there that changes a frozen test, or a file the
+# order does not own, stops the step (exit 63), because those are the frozen-test and owned-files
+# guarantees and no record judged the commit. Otherwise the step goes on with a warning, and the
+# commits join the order's unrecordedCommits, so its commit range, redo and drop still hold them.
+# Call after rv_load_state and rv_load_range_repo. $1 the action.
+im_code_moved() {
+  local who="$1" unit_id="$2" repo="$3" from="$4" to="$5" moved paths p fp f frozen="" hits="" owned outside count
+  git -C "$repo" merge-base --is-ancestor "$from" "$to" 2>/dev/null \
+    || die 63 "$who: $repo is at $to, and the last record for $unit_id was written at $from, which that history does not hold. A person moves the branch back to it, or redoes the order."
+  moved="$(im_role_commits "$repo" "$from" "$to" "$unit_id")"
+  [ "$moved" != "[]" ] || return 0
+  paths="$(im_commits_paths "$repo" "$moved" "$RV_RANGE_SCOPE")"
+  for f in "$IMPL_DIR"/tests-*.json; do
+    [ -e "$f" ] || continue
+    frozen="$frozen$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$f" 2>/dev/null | while IFS= read -r fp; do
+        [ -z "$fp" ] || normalize_abs "$(resolve_against "$fp" "$RV_CODEPATH")"; done)
+"
+  done
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    ! printf '%s\n' "$frozen" | grep -Fqx -- "$(normalize_abs "$(resolve_against "$p" "$repo")")" || hits="$hits$p, "
+  done <<ICM_PATHS
+$paths
+ICM_PATHS
+  [ -z "$hits" ] \
+    || die 63 "$who: the commits after the record of $unit_id at $from change frozen tests: ${hits%, }. Nobody changes a frozen test. A person moves the branch back to $from, or redoes the order."
+  owned="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson o "$(im_owns_of "$unit_id")" '(.ownedFiles // []) + $o')"
+  outside="$(rv_scope_outside "$(printf '%s\n' "$paths" | jq -Rsc 'split("\n") | map(select(. != ""))')" "$owned" "$repo" "$TASK_PATH" \
+    | while IFS= read -r p; do task_env_recipe_change "$TASK_PATH" "$p" "$repo" "$to" || printf '%s, ' "$p"; done)"
+  [ -z "$outside" ] \
+    || die 63 "$who: the commits after the record of $unit_id at $from change files it does not own: ${outside%, }. An order's own commits change only its own files. A person moves the branch back to $from, or redoes the order."
+  RV_LEDGER_DOC="$(im_unrecorded_commits_in "$RV_LEDGER_DOC" "$unit_id" "$repo" "$from" "$to")"
+  [ -n "$RV_LEDGER_DOC" ] || die3 "$who: the commits after the record of $unit_id could not be written."
+  write_atomic "$RV_LEDGER_FILE" "$RV_LEDGER_DOC"
+  count="$(printf '%s' "$moved" | jq 'length')"
+  task_warn "$TASK_PATH" "$who" "$unit_id" "the code moved after the record at ${from:0:12}: $count commits no record judged, inside the order's own files, joined its commit list"
 }
 
 # Exit 49: a stopped order refuses every step after the stop, until a person takes one of the
@@ -1072,19 +1096,25 @@ im_refuse_stopped() {
 
 # The drift reasons a later `start` can re-derive: each compares the snapshot's own copy of one
 # order or one criterion against the live record, and the snapshot keeps that copy while the order
-# is stopped. A reason naming another order is not here; the comment in `start` says why.
+# is stopped.
 DRIFT_OWN_COPY_PREFIXES='["design drift: the design file for ","design drift: the design removed ","design drift: the live text of criterion "]'
 
-# The drift reasons `start` found for one ledger entry, added to its stop list as step "start".
-# $drifted is [{id, reasons}]. A changed design file of the order allows go-on keep, which builds on
-# the new design without a revert. A removed order, a changed criterion and a drifted dependency
-# allow no go-on: a criterion's frozen text is shared by every order that serves it, so one order's
-# answer cannot change it, and a dependent reason clears at start once its dependency is answered.
-START_STOP_JQ='def start_stops($drifted): . as $o
-  | ([ $drifted[] | select(.id == $o.id) | .reasons[] ] | unique) as $r
+# A change mid-build: the drift reasons `start` found for one ledger entry, $drifted as
+# [{id, reasons}], each written as {step: "start", reason, allows}. A changed design file or a
+# changed criterion allows go-on keep, which keeps the change, and redo is open as always. A removed
+# order allows no go-on, because no design is left to go on with, so drop answers it.
+# start_stops adds the reasons to the order's stop list, the unattended form. start_changes sets
+# them as the order's `changed` list, the attended form: a warning the order keeps building past,
+# and which go-on keep and redo answer the same way. A reason the design removed stops the order in
+# both modes, so it reaches start_stops alone.
+START_STOP_JQ='def start_reasons($drifted): . as $o
+  | [ ([ $drifted[] | select(.id == $o.id) | .reasons[] ] | unique)[]
+      | {step: "start", reason: ., allows: (if startswith("design drift: the design removed ") then [] else ["keep"] end)} ];
+  def start_stops($drifted): . as $o | start_reasons($drifted) as $r
   | if $r == [] then . else .stopped = ((.stopped // []) + [ $r[] | . as $x
-      | select(any(($o.stopped // [])[]; .step == "start" and .reason == $x) | not)
-      | {step: "start", reason: $x, allows: (if ($x | startswith("design drift: the design file for ")) then ["keep"] else [] end)} ]) end;'
+      | select(any(($o.stopped // [])[]; .step == "start" and .reason == $x.reason) | not) ]) end;
+  def start_changes($drifted): start_reasons($drifted) as $r
+  | if $r == [] then del(.changed) else .changed = $r end;'
 
 # The go-on choice that carries on the step an order is at when a dispatch stops it: one more fix
 # round once it is in review, one more build before that. $1 the ledger document, $2 the order.
@@ -1859,7 +1889,7 @@ do_start() {
 
   local run_kind snapshot_hash_on_disk snapshot_alignment_json snapshot_workorders_json
   local drifted_orders_json='[]' contract_changed=false added_ids_json='[]'
-  local changed_criteria_json='[]' dependent_halts_json='[]' drift_halts_json='[]'
+  local changed_criteria_json='[]' drift_halts_json='[]'
   local drift_checked=false
   local resnapshot_ids_json='[]' resnapshot_doc='' resnapshot_hash='' removed_ids_json='[]' halted_removed_ids_json='[]'
   # A dropped order ended without code. A design change no longer reaches it, and its owned files
@@ -2190,36 +2220,14 @@ REMOVED_PATHS
       halted_removed_ids_json="$(jq_files -cn --argjson drifted "$drifted_orders_json" --argjson live "$live_workorders_json" '
           ($live | map(.id)) as $liveIds
           | [ $drifted[] | .id | . as $d | select(($liveIds | index($d)) == null) ]')"
-      # An order that depends on a drifted one, directly or through another order, stops too. It
-      # would otherwise build against an interface that moved, which is the same unbounded work the
-      # drifted order itself stops for (ideal/implementation.md, the unattended-answers
-      # table: "Halt every order the change touches", which stops it here). The reason names the drifted orders it
-      # reaches, so a person reads what to look at without walking the graph themselves. An order
-      # that drifted itself keeps its own reason and never takes this one.
-      dependent_halts_json="$(jq_files -n --argjson orders "$snapshot_workorders_json" --argjson drifted "$drifted_orders_json" '
-          def reach($adj; $start):
-            def go($frontier; $visited):
-              if ($frontier | length) == 0 then $visited
-              else
-                ($frontier[0]) as $node
-                | ($frontier[1:]) as $rest
-                | (($adj[$node] // []) - $visited) as $new
-                | go($rest + $new; ($visited + $new))
-              end;
-            go(($adj[$start] // []); ($adj[$start] // []));
-          ($drifted | map(.id)) as $bad
-          | ($orders | map({id: .id, dependsOn: (.dependsOn // [])})) as $trimmed
-          | (reduce $trimmed[] as $o ({}; .[$o.id] = $o.dependsOn)) as $adj
-          | [ $trimmed[] | .id as $x
-              | select(($bad | index($x)) == null)
-              | (reach($adj; $x)) as $r
-              # Bound first: after the pipe `.` would be $bad, and an array always finds itself.
-              | ([ $r[] | . as $d | select(($bad | index($d)) != null) ]) as $hits
-              | select(($hits | length) > 0)
-              | {id: $x, reasons: ["design drift: " + $x + " depends on " + ($hits | join(", ")) + ", directly or through another order, and that order drifted since the snapshot was taken"]}
-            ]
-        ')"
-      drift_halts_json="$(jq -cn --argjson a "$drifted_orders_json" --argjson b "$dependent_halts_json" '$a + $b')"
+      # An order that depends on a changed one is not stopped. Unbuilt, build-brief refuses it until
+      # the changed order closes again (exit 40); built, review reads it.
+      # A reason a person answered with go-on keep is not raised again: that answer kept the change.
+      drift_halts_json="$(jq_files -cn --argjson d "$drifted_orders_json" \
+          --argjson c "$(jq -c '.stopsCleared // []' "$LEDGER_FILE" 2>/dev/null || printf '[]')" '
+          [ $d[] | .id as $id
+            | .reasons = (.reasons - [ $c[] | select(.id == $id and .choice == "keep") | .reasons[] | .reason ])
+            | select(.reasons != []) ]')"
     fi
   fi
 
@@ -2291,7 +2299,7 @@ REMOVED_PATHS
   fi
 
   local final_orders_json final_criteria_json ledger_started_from ledger_run_mode ledger_started_at
-  local stops_cleared_json='[]' drift_cleared_ids_json='[]'
+  local stops_cleared_json='[]' drift_cleared_ids_json='[]' start_stop_json='[]' start_change_json='[]'
   local started_from_before_json='[]' rewritten_from=""
   if [ "$ledger_present" = "true" ]; then
     opened_as="reopened"
@@ -2379,11 +2387,23 @@ REMOVED_PATHS
     # An order whose done-when gained rows loses the judgement made on the shorter text, and lists
     # the rows its next freeze is judged on (gap row 409). The time is what that freeze reads: the
     # checker's verdict file must be newer, so an old verdict on the shorter text clears nothing.
-    final_orders_json="$(printf '%s' "$ledger_doc" | jq -c --argjson drifted "$drift_halts_json" --argjson gone "$removed_ids_json" \
+    # Unattended, a change stops every order it touches. Attended, it is a warning, and each order
+    # goes on with its frozen copy until a person takes go-on keep or redo. A removed order stops in
+    # both modes.
+    start_change_json='[]'
+    start_stop_json="$drift_halts_json"
+    if [ "$run_mode" != "autonomous" ]; then
+      start_change_json="$(printf '%s' "$drift_halts_json" | jq -c \
+        '[ .[] | .reasons = [ .reasons[] | select(startswith("design drift: the design removed ") | not) ] | select(.reasons != []) ]')"
+      start_stop_json="$(printf '%s' "$drift_halts_json" | jq -c \
+        '[ .[] | .reasons = [ .reasons[] | select(startswith("design drift: the design removed ")) ] | select(.reasons != []) ]')"
+    fi
+    final_orders_json="$(printf '%s' "$ledger_doc" | jq -c --argjson drifted "$start_stop_json" --argjson changes "$start_change_json" \
+        --argjson gone "$removed_ids_json" \
         --argjson added "$added_ids_json" --argjson widened "$widened_json" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$START_STOP_JQ"'
         (.orders + [ $added[] | {id: ., lastStep: null, attemptsUsed: 0, roundsUsed: 0} ])
         | map(. as $o | select(($gone | index($o.id)) == null)) | map(
-          . as $o | start_stops($drifted)
+          . as $o | start_stops($drifted) | start_changes($changes)
           | (([ $widened[] | select(.id == $o.id) | .gained // empty ])[0]) as $g
           | if $g == null then . else (del(.doneWhenJudgement) | .doneWhenGained = ((.doneWhenGained // []) + $g) | .doneWhenGainedAt = $now) end
         )
@@ -2400,13 +2420,8 @@ REMOVED_PATHS
     # A criterion reason clears the same way, because the snapshot keeps the frozen copy of a
     # held criterion (gap row 428). An order this run stops again loses only the reasons this run
     # did not write again. So when one reopen changed the file and a criterion, and only the file
-    # goes back, the criterion reason alone holds the order.
-    #
-    # The second pass (gap row 319). When the design goes back, the first pass clears the order
-    # that drifted, but a closed order that depends on it keeps the reason naming it. So a
-    # dependent reason this run did not write again clears when no order it names still holds a
-    # drift reason other than a dependent one. The names are read from the reason's own text,
-    # which the dependent stop above writes.
+    # goes back, the criterion reason alone holds the order. The attended `changed` list needs no
+    # clearing: start_changes writes it again on every run.
     stops_cleared_json="$(printf '%s' "$ledger_doc" | jq -c '.stopsCleared // []')"
     if [ "$drift_checked" = "true" ]; then
       local cleared_doc
@@ -2414,27 +2429,15 @@ REMOVED_PATHS
           --argjson p "$DRIFT_OWN_COPY_PREFIXES" --arg today "$(date -u +%Y-%m-%d)" '
           def mine($id): [ $now[] | select(.id == $id) | .reasons[] ];
           def without($gone): .stopped = ((.stopped // []) - $gone) | if .stopped == [] then del(.stopped) else . end;
-          def cleared($o; $gone; $why): {id: $o.id, by: "start", reasons: $gone, clearedAt: $today,
-            because: ($why + (if (($o.stopped // []) - $gone) == [] then "" else "; the order stays stopped for what is left" end))};
           [ $orders[] | . as $o
-            | ([ ($o.stopped // [])[] | select(.step == "start") | .reason as $r
-                 | select(any($p[]; . as $x | $r | startswith($x))) | select((mine($o.id) | index($r)) == null) ]) as $gone
+            | ([ ($o.stopped // [])[] | select(.step == "start") | . as $s
+                 | select(any($p[]; . as $x | $s.reason | startswith($x))) | select((mine($o.id) | index($s.reason)) == null) ]) as $gone
             | {o: ($o | without($gone)),
-               c: (if $gone == [] then [] else [cleared($o; $gone;
-                     if mine($o.id) != [] then "start: this resumed run no longer found the drift some reasons named for " + $o.id + ", so they cleared"
-                     else "start: this resumed run compared the live design to the snapshot and found no drift for " + $o.id + ", so the design drift reason naming its own design copy cleared" end)] end)} ] as $one
-          | ($one | map(.o)) as $after
-          | ($now | map(.id)) as $bad
-          | def own_drift($n): any(($after[] | select(.id == $n) | (.stopped // []))[];
-              .step == "start" and (.reason | startswith("design drift: ")) and (.reason | startswith("design drift: " + $n + " depends on ") | not));
-          [ $after[] | . as $o
-            | ("design drift: " + $o.id + " depends on ") as $front
-            | ([ ($o.stopped // [])[] | select(($bad | index($o.id)) == null and .step == "start" and (.reason | startswith($front)))
-                 | select((.reason | ltrimstr($front) | split(", directly or through another order")[0] | split(", ")) | any(own_drift(.)) | not) ]) as $gone
-            | {o: ($o | without($gone)),
-               c: (if $gone == [] then [] else [cleared($o; $gone; "start: this resumed run found no drift for " + $o.id
-                     + ", and no order the dependent reason names holds a drift of its own, so that reason cleared")] end)} ] as $two
-          | {orders: ($two | map(.o)), cleared: (($one + $two) | map(.c[])), ids: (($one + $two) | map(select(.c != []) | .o.id) | reduce .[] as $i ([]; if index($i) then . else . + [$i] end))}')"
+               c: (if $gone == [] then [] else [{id: $o.id, by: "start", reasons: $gone, clearedAt: $today,
+                     because: ((if mine($o.id) != [] then "start: this resumed run no longer found the drift some reasons named for " + $o.id + ", so they cleared"
+                       else "start: this resumed run compared the live design to the snapshot and found no drift for " + $o.id + ", so the design drift reason naming its own design copy cleared" end)
+                       + (if (($o.stopped // []) - $gone) == [] then "" else "; the order stays stopped for what is left" end))}] end)} ]
+          | {orders: map(.o), cleared: map(.c[]), ids: map(select(.c != []) | .o.id)}')"
       [ -n "$cleared_doc" ] || die3 "start: could not work out which drift stops this run no longer finds."
       final_orders_json="$(printf '%s' "$cleared_doc" | jq -c '.orders')"
       stops_cleared_json="$(jq -cn --argjson a "$stops_cleared_json" --argjson b "$(printf '%s' "$cleared_doc" | jq -c '.cleared')" '$a + $b')"
@@ -2544,6 +2547,24 @@ LO_MOVE
     fi
   fi
 
+  # A change mid-build that an attended run goes on past is a warning in the task record, one per
+  # order it touches. Either mode names a criterion no order serves now, because review would find
+  # it unmet with no order to answer it.
+  local st_change st_unserved
+  while IFS= read -r st_change; do
+    [ -n "$st_change" ] || continue
+    task_warn "$TASK_PATH" start "${st_change%%	*}" "${st_change#*	}; the order goes on with its frozen copy until a person takes go-on keep or redo"
+  done <<ST_CHANGES
+$(printf '%s' "$start_change_json" | jq -r '.[] | .id + "\t" + (.reasons | join("; "))')
+ST_CHANGES
+  if [ "$drift_checked" = "true" ]; then
+    st_unserved="$(jq_files -rn --argjson a "$live_alignment_json" --argjson w "$live_workorders_json" --argjson gone "$dropped_ids_json" '
+        [ $w[] | select(.id as $i | $gone | index($i) | not) | (.criteriaServed // []) + (.criteriaOwned // []) | .[] ] as $served
+        | [ ($a.criteria // [])[] | .id | select(. as $c | $served | index($c) | not) ] | join(", ")')"
+    [ -z "$st_unserved" ] \
+      || task_warn "$TASK_PATH" start "" "no order that is not dropped serves criterion $st_unserved, so no build answers it"
+  fi
+
   # --- step 13: the report --------------------------------------------------------------------------
   local ready_ids_json halted_json in_flight_json
   ready_ids_json="$(jq_files -n --argjson orders "$snapshot_workorders_json" --argjson ledgerOrders "$final_orders_json" '
@@ -2630,7 +2651,7 @@ LO_MOVE
     --arg proofAbsent "$proof_absent" \
     --arg drift "$(if [ "$drift_checked" = "true" ]; then printf 'checked | contractChanged=%s' "$contract_changed_json"; else printf 'not checked: a first run has no earlier snapshot to compare against'; fi)" \
     --argjson drifted "$(printf '%s' "$drifted_orders_json" | jq -c '[ .[] | .id ]')" \
-    --argjson stoppedDependents "$(printf '%s' "$dependent_halts_json" | jq -c '[ .[] | .id ]')" \
+    --argjson changed "$(printf '%s' "$start_change_json" | jq -c '[ .[] | .id ]')" \
     --argjson resnapshotted "$resnapshot_ids_json" \
     --argjson driftCleared "$drift_cleared_ids_json" \
     --arg clauseSpared "$st_clause_spared" \
@@ -2645,13 +2666,14 @@ LO_MOVE
     --arg state "$run_state" --arg next "$st_next" '
     {task: $task, codePath: $codePath, run: $run, runMode: $runMode, branch: $branch, trunk: $trunk,
      snapshot: $snapshot, snapshotHash: $snapshotHash, ledger: $ledger, startedFrom: $startedFrom, proofAbsent: $proofAbsent,
-     drift: $drift, drifted: $drifted, stoppedDependents: $stoppedDependents, resnapshotted: ($resnapshotted - $added),
+     drift: $drift, drifted: $drifted, changed: $changed, resnapshotted: ($resnapshotted - $added),
      driftCleared: $driftCleared, clauseSpared: $clauseSpared, removed: $removed, added: $added, finished: $finished,
      leftovers: $leftovers, setAside: $setAside,
      stopped: $stopped, inFlight: $inFlight, ready: $ready, state: $state, next: $next}
     | if ($leftovers | length) == 0 then del(.leftovers) else . end
     | if $setAside == "" then del(.setAside) else . end
     | if ($removed | length) == 0 then del(.removed) else . end
+    | if ($changed | length) == 0 then del(.changed) else . end
     | if ($added | length) == 0 then del(.added) else . end
     | if $finished == "" then del(.finished) else . end
     | if ($driftCleared | length) == 0 then del(.driftCleared) else . end
@@ -6694,15 +6716,12 @@ do_build_brief() {
 }
 
 
-# Exit 71. A base commit that is HEAD itself makes the diff empty, so the owned-files check answers
-# met over nothing, the round writes an empty patch, and a reviewer reads no findings on it. A base
-# commit that is not an ancestor of HEAD names a range that is not this order own work at all.
-# Exit 43 stays the separate fact that the value is not a commit in this repository.
+# A base commit that is not an ancestor of HEAD names a range that is not this order own work at
+# all. A base commit that is HEAD itself is an empty range, and the step goes on: the order's tests
+# still run on the tree, and the owned-files check is met over no change.
 # $1 the action, $2 the code repository, $3 the value as given, $4 it peeled to a commit, $5 HEAD.
 br_require_real_base() {
   local who="$1" repo="$2" given="$3" full="$4" head_now="$5"
-  [ "$full" != "$head_now" ] \
-    || die 71 "$who: --started-at ($given) is the commit $repo is at now. The range between them is empty, so every check would answer about no change at all. Pass the commit the work began from."
   git -C "$repo" merge-base --is-ancestor "$full" "$head_now" >/dev/null 2>&1 \
     || die3 "$who: --started-at ($given, $full) is not an ancestor of HEAD ($head_now) in $repo, so the range between the two is not this order own work. Pass the commit the work began from."
 }
@@ -8056,21 +8075,13 @@ br_first_stopper() {
 
 # The checks that stopped a build attempt, as a jq function two readers prepend to their own
 # program: the selection br_first_stopper makes, with interface-record's unknown exempt, over a
-# record's own `checks`. `stoppers` is their ids; `outside_recheck` is those ids minus the three
-# tool rows, owned-files and interface-record. The checks run again with no new build only on an
-# attempt or a fix round those rows alone stopped (live-run row 87): a tool refusing a path is the
-# plugin's fault, and an interface record is a record file the builder amends without moving the
-# code (gap row 253). Owned-files on unchanged code passes only when go-on --owns gave the order
-# the file, or a person allowed it for a fix round, so a second run is never a free retry (gap rows
-# 310 and 315). A test or
-# a suite failing is the implementer's work. A fix round has no interface record.
+# record's own `checks`. `stoppers` is their ids.
 BR_STOPPERS_JQ='def stoppers:
   [ .[] | select(.verdict == "unmet"
                  or (.verdict == "unknown" and .id != "interface-record")
                  or ((.id == "order-tests" or .id == "configuration-gate" or .id == "done-when" or .id == "observed") and .verdict != "met")
                  or (.id == "confirm-at-review" and .verdict != "deferred"))
     | .id ];
-def outside_recheck: stoppers | map(select(. != "coding-standards" and . != "static-analysis" and . != "security" and . != "owned-files" and . != "interface-record"));
 '
 
 # The interface record's path, for `build-record` and go-on's check. $1 the action, $2 the unit
@@ -8717,7 +8728,7 @@ do_build_record() {
   # stopped. The commits the builder made are written on the order's ledger entry, in no record
   # otherwise, so redo and drop revert them and no other order counts them as its own.
   if [ -n "$stop_lines" ]; then
-    ledger_doc="$(im_stopped_commits_in "$ledger_doc" "$unit_id" "$codepath" "$started_at_full" "$current_commit")"
+    ledger_doc="$(im_unrecorded_commits_in "$ledger_doc" "$unit_id" "$codepath" "$started_at_full" "$current_commit")"
     [ -n "$ledger_doc" ] || die3 "build-record: the builder's commits on $unit_id could not be written."
     $is_deviation \
       || br_open_repair "$unit_id" "$stop_value" "$report_path" "$attempt_number" "$ledger_file" "$ledger_doc" "$stop_commits"
@@ -8734,7 +8745,7 @@ do_build_record() {
           # The text too, because design rewords a row by removing it and adding it last, so the
           # number alone stops naming the row the builder meant.
           halt_front="$BR_STOP_PREFIX a Stop: line says done-when row $row_n is wrong, which reads \"$row_text\""
-          row_note=" Done-when row $row_n of $unit_id reads: $row_text A person rules on the row. A wrong row is reworded in design, design closes again, and start stops $unit_id for design drift, which redo answers. A row that stands goes back to the builder."
+          row_note=" Done-when row $row_n of $unit_id reads: $row_text A person rules on the row. A wrong row is reworded in design, design closes again, start names the change on $unit_id, and redo answers it. A row that stands goes back to the builder."
         else
           row_note=" The line must read '$BR_ROW_KIND: <done-when row number>: <the evidence>', and $unit_id has no done-when row '$row_n'."
         fi ;;
@@ -8759,25 +8770,15 @@ do_build_record() {
   fi
   br_require_real_base "build-record" "$codepath" "$started_at" "$started_at_full" "$current_commit"
 
-  # --- exit 45: refuse a duplicate of an attempt already recorded, before anything else runs -------
+  # The earlier attempt's record, whose list moves to commitsBefore below. An attempt recorded again
+  # on unmoved code spends an attempt and runs the checks again; the attempt cap bounds it.
   local record_file="$IMPL_DIR/build-$unit_id.json"
   if [ -f "$record_file" ]; then
-    local existing_doc existing_commit existing_attempt
+    local existing_doc existing_commit
     existing_doc="$(jq -c '.' "$record_file" 2>/dev/null)"
     [ -n "$existing_doc" ] \
       || die3 "build-record: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
     existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
-    existing_attempt="$(printf '%s' "$existing_doc" | jq -r '.attempt // empty')"
-    if [ "$existing_commit" = "$current_commit" ] && [ "$existing_attempt" = "$attempt_number" ]; then
-      die 45 "build-record: $record_file already holds attempt $attempt_number at commit $current_commit. Nothing has changed since that record was written."
-    fi
-    # The guard above keys on the commit and the attempt number together, so a repeat call after a
-    # failed attempt computed a new attempt number, passed it, re-ran every check against unchanged
-    # code and spent the last attempt on work nobody did. The previous attempt's own commit is the
-    # fact that decides it, which is the rule fix-record already applies to its previous round.
-    if [ -n "$existing_commit" ] && [ "$existing_commit" = "$current_commit" ]; then
-      die 45 "build-record: $record_file already holds attempt $existing_attempt at commit $current_commit, so the code has not moved since that attempt. An attempt spent on unchanged code is an attempt nobody worked."
-    fi
   fi
 
   # --- the interface record is required only when the unit declares a non-empty interface ---------
@@ -8821,7 +8822,7 @@ do_build_record() {
 
   # The ledger an unattended stop here writes carries the builder's commits, as any stop does.
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" \
-    "$(im_stopped_commits_in "$ledger_doc" "$unit_id" "$codepath" "$started_at_full" HEAD)" "$RV_RANGE_PATHS"
+    "$(im_unrecorded_commits_in "$ledger_doc" "$unit_id" "$codepath" "$started_at_full" HEAD)" "$RV_RANGE_PATHS"
 
   # --- the eight deciding checks ---------------------------------------------------------------------
   # Seven of them are computable by the same function a fix round calls, so the two steps can never
@@ -8925,19 +8926,17 @@ do_build_record() {
   first_stopper="$(br_first_stopper "$checks_json" "interface-record")"
   # The counter and the step move in one update; the stop, when there is one, goes through the one
   # helper that writes every stop, so this reason never erases a reason the order already carried.
-  # A person may go on with one more build. The checks run again with no new build only when the
-  # rows that stopped the attempt are ones the same code can answer differently (BR_STOPPERS_JQ).
-  local step_expr halt_why halt_allows='["build"]'
+  # A person may go on with one more build, or with the checks run again over the same code,
+  # whichever check stopped the attempt. On unmoved code a second run is no free retry: the code is
+  # what was judged, and the attempt cap still bounds new code.
+  local step_expr halt_why
   halt_why=""
   if [ "$all_met" = "true" ]; then
     step_expr='.attemptsUsed = (.attemptsUsed + 1) | .lastStep = "checks-passed"'
   else
     step_expr='.attemptsUsed = (.attemptsUsed + 1) | .lastStep = "code-written"'
-    if [ "$attempt_number" -ge "$attempts_allowed" ]; then
-      halt_why="attempts spent: $attempt_number of $attempts_allowed, and the last was stopped by $first_stopper"
-      [ -n "$(printf '%s' "$checks_json" | jq -r "$BR_STOPPERS_JQ"'outside_recheck | join(", ")')" ] \
-        || halt_allows='["build","check"]'
-    fi
+    [ "$attempt_number" -lt "$attempts_allowed" ] \
+      || halt_why="attempts spent: $attempt_number of $attempts_allowed, and the last was stopped by $first_stopper"
   fi
   local new_ledger_doc
   new_ledger_doc="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" \
@@ -8947,7 +8946,7 @@ do_build_record() {
   [ -z "$accepted_json" ] || new_ledger_doc="$(printf '%s' "$new_ledger_doc" | jq -c --arg id "$unit_id" \
     '.orders = (.orders | map(if .id == $id then del(.deviationKept) else . end))')"
   if [ -n "$halt_why" ]; then
-    new_ledger_doc="$(stop_order_in "$new_ledger_doc" "$unit_id" build-record "$halt_why" "$halt_allows")"
+    new_ledger_doc="$(stop_order_in "$new_ledger_doc" "$unit_id" build-record "$halt_why" '["build","check"]')"
     [ -n "$new_ledger_doc" ] || die3 "build-record: the stop on $unit_id could not be written."
   fi
   write_atomic "$ledger_file" "$new_ledger_doc"
@@ -8998,8 +8997,9 @@ go_on_check() {
   local unit_id="$1" interface_path="$2" test_recipes="$3" check_recipes="$4" gate_recipes="$5" values="$6"
   local nothing_ran="$7" have_nothing_ran="$8"
 
-  # --- exit 88, one: no attempt was recorded, so there is nothing to run the checks over again ----
-  # After a fix round, the record is that round's own (gap row 310).
+  # --- no attempt was recorded, so there is nothing to run the checks over again -----------------
+  # After a fix round, the record is that round's own (gap row 310). A stop allows check only on an
+  # order with a record, so a missing one is an error.
   local record_file="$IMPL_DIR/build-$unit_id.json" record_doc fix_round=0 record_name
   if [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')" = "fixed" ]; then
     fix_round="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
@@ -9009,7 +9009,7 @@ go_on_check() {
       || die3 "go-on: $record_file is missing or not JSON, though the ledger records round $fix_round of $unit_id. Run fix-record on it again."
   else
     [ -f "$record_file" ] \
-      || die 88 "go-on: $record_file does not exist, so no attempt at $unit_id was recorded and there is no range to run the checks over. Go on with build instead."
+      || die3 "go-on: $record_file does not exist, so no attempt at $unit_id was recorded and there is no range to run the checks over. Go on with build instead."
     rv_load_build_record "go-on" "$unit_id"
     record_doc="$RV_BUILD_DOC"
   fi
@@ -9022,7 +9022,10 @@ go_on_check() {
   [ -n "$record_started_at" ] && [ -n "$record_commit" ] \
     || die3 "go-on: $record_file holds no startedAt or no commit, so its range cannot be read. Repair or remove it by hand before running this again."
 
-  # --- exit 88, two: the code moved since the record, so what goes on is a build or a fix round ---
+  # --- the code moved since the record: the checks run over the record's range extended to HEAD ---
+  # A person's fix after a load-bearing ruling is that case (live-run row 426), and so is any other
+  # commit of this order after the record. Each is a warning, unless it changes a frozen test or a
+  # file the order does not own.
   local codepath current_commit
   rv_load_codepath "go-on"
   rv_load_range_repo "go-on" "$RV_UNIT_JSON"
@@ -9031,12 +9034,10 @@ go_on_check() {
   [ -n "$current_commit" ] \
     || die3 "go-on: could not capture the current commit (git rev-parse HEAD failed in $codepath)."
   local person_fix=""
-  if [ "$current_commit" != "$record_commit" ] \
-     && printf '%s' "$RV_ORDER_ENTRY" | jq -e --arg mark "$LOAD_BEARING_MARK" 'any((.stopped // [])[]; .reason | contains($mark))' >/dev/null; then
+  if [ "$current_commit" != "$record_commit" ] && ! im_moved_for_others "$codepath" "$record_commit" "$current_commit" "$unit_id"; then
+    im_code_moved "go-on" "$unit_id" "$codepath" "$record_commit" "$current_commit"
     person_fix=yes
   fi
-  [ "$current_commit" = "$record_commit" ] || [ -n "$person_fix" ] \
-    || die 88 "go-on: $RV_RANGE_NAME is at $current_commit and the record holds $record_name at $record_commit, so the code has moved since then. The checks run again over the recorded range alone; go on with build or fix instead."
 
   # --- exit 88, three: a path the interface check named is not in the code at the recorded commit.
   # An amended record can name a path the code never had, and the check would pass on words
@@ -9095,7 +9096,7 @@ EOF_PATHS
   BRC_WHO="go-on"
   BRC_CODEPATH="$codepath"
   BRC_SCOPE="$RV_RANGE_SCOPE"
-  # The record's own list. A person's fix adds the commits after the record.
+  # The record's own list, and the commits after the record when the code moved.
   BRC_COMMITS="$(im_record_commits "$record_file" "$codepath" "$unit_id")"
   BRC_COMMITS_BEFORE="$(printf '%s' "$record_doc" | jq -c '.commitsBefore // []')"
   BRC_CURRENT="$record_commit"
@@ -9116,11 +9117,6 @@ EOF_PATHS
   # The observed record the build step accepted, at the path it names (live-run row 104).
   BRC_OBSERVED="$IMPL_DIR/observed-$unit_id.json"
   br_eight_checks "$unit_interface_declared" "$BR_INTERFACE_TEXT" "$checks_total"
-  # A person's fix that fails a check is not recorded: close would read a record at HEAD and take it.
-  if [ -n "$person_fix" ] && [ "$(br_checks_pass "$BR_CHECKS_JSON" "interface-record")" != "true" ]; then
-    rm -f "$BR_CHECKS_FILE"
-    die 123 "go-on: the commits after $record_commit, the fix a person committed after a load-bearing ruling, fail $(br_first_stopper "$BR_CHECKS_JSON" "interface-record"). Checks: $(printf '%s' "$BR_CHECKS_JSON" | jq -r 'map("\(.id) \(.verdict)") | join(", ")'). Nothing is recorded, and the order stays stopped. Repair the fix on the branch, then go on with check again, with a new answer."
-  fi
 
   # The record keeps the attempt, its range and its date, and takes the new checks and the interface
   # record's text as read now. When that text changed, the attempt's own text stays under
@@ -9158,9 +9154,7 @@ EOF_PATHS
   GO_CHECK_PASS="$(br_checks_pass "$BR_CHECKS_JSON" "interface-record")"
   first_stopper="$(br_first_stopper "$BR_CHECKS_JSON" "interface-record")"
   GO_CHECK_LEDGER="$RV_LEDGER_DOC"
-  if [ -n "$person_fix" ]; then
-    :
-  elif [ "$fix_round" != 0 ]; then
+  if [ "$fix_round" != 0 ]; then
     if [ "$GO_CHECK_PASS" = "true" ]; then
       rv_load_review_record "go-on" "$unit_id"
       addressed="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.origin == "check" and (.status == "open" or .status == "pending")) | .id ] | join(", ")')"
@@ -9170,7 +9164,7 @@ EOF_PATHS
           then del(.pendingBecause) + {status: "addressed", addressedInRound: $r, addressedEvidence: ("every check passed in " + $f + ", run again by go-on")}
           else . end))')"
     fi
-  elif [ "$GO_CHECK_PASS" = "true" ]; then
+  elif [ "$GO_CHECK_PASS" = "true" ] && [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')" = "code-written" ]; then
     GO_CHECK_LEDGER="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
       '.orders = (.orders | map(if .id == $id then .lastStep = "checks-passed" else . end))')"
     [ -n "$GO_CHECK_LEDGER" ] || die3 "go-on: the ledger update for $unit_id failed."
@@ -9182,7 +9176,9 @@ EOF_PATHS
     if [ "$GO_CHECK_PASS" = "true" ]; then state="fixed, every check met${addressed:+, addressed $addressed}"
     else state="fixed, stopped by $first_stopper"; fi
   fi
-  [ -z "$person_fix" ] || state="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep'), the person's fix recorded, every check met"
+  [ -z "$person_fix" ] || [ "$GO_CHECK_PASS" != "true" ] || [ "$fix_round" != 0 ] \
+    || [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep')" = "code-written" ] \
+    || state="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep'), the commits after the record recorded, every check met"
   GO_CHECK_SUMMARY="$(printf '%s' "$record_json" | jq -c --arg state "$state" --arg name "$record_name" \
     --arg record "$record_file" --argjson total "$checks_total" --arg filled "$filled" '
     (if $filled == "" then {} else {filledFromRecords: $filled} end)
@@ -9332,7 +9328,7 @@ im_others_listed() {
       done
   jq -r --arg id "$1" '(.orders // [])[]
     | (((.redos // []) + [ .dropped // empty ])[] | ((.reverted // [])[] | .commit, .revert), ((.skipped // [])[] | .revert // empty)),
-      (select(.id != $id) | (.stoppedCommits // [])[])' "$IMPL_DIR/ledger.json" 2>/dev/null
+      (select(.id != $id) | (.unrecordedCommits // [])[])' "$IMPL_DIR/ledger.json" 2>/dev/null
 }
 
 # The commits order $1's own records in the implementation folder list, one per line, sorted: its
@@ -9347,7 +9343,7 @@ im_own_listed() {
       im_record_commits "$f" "$2" "$1" | jq -r '.[]'
       jq -r '(.commitsBefore // [])[]' "$f" 2>/dev/null
     done
-    jq -r --arg id "$1" '(.orders // [])[] | select(.id == $id) | (.stoppedCommits // [])[]' "$IMPL_DIR/ledger.json" 2>/dev/null
+    jq -r --arg id "$1" '(.orders // [])[] | select(.id == $id) | (.unrecordedCommits // [])[]' "$IMPL_DIR/ledger.json" 2>/dev/null
   } | LC_ALL=C sort -u | grep -v '^$'
 }
 
@@ -9530,6 +9526,15 @@ rv_scope_outside() {
     done
     [ "$matched" = "true" ] || printf '%s\n' "$p"
   done
+}
+
+# A step with nothing to act on says so, names the next step and exits 0, because a refusal here
+# guards nothing. $1 the action, $2 the unit id, $3 what there is nothing of.
+rv_exit_nothing() {
+  im_print_summary "$1" "$(jq -cn --arg id "$2" --arg state "nothing to do: $3" \
+    --arg next "$(im_next_step "$RV_LEDGER_DOC" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" \
+    '{order: $id, state: $state, next: $next}')"
+  exit 0
 }
 
 # How many findings in review record $1 are open and actionable. A finding recorded with
@@ -10019,10 +10024,10 @@ do_review_record() {
   [ -n "$current_commit" ] \
     || die3 "review-record: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
   # Commits another order's records list are that order's, so the reviewed code is still there, and
-  # the record names the commit the review read (gap row 340).
+  # the record names the commit the review read (gap row 340). Code of this order that moved while
+  # the review ran is a warning, unless it changes a frozen test or a file the order does not own.
   if [ "$recorded_commit" != "$current_commit" ]; then
-    im_moved_for_others "$RV_RANGE_REPO" "$recorded_commit" "$current_commit" "$unit_id" \
-      || die 51 "review-record: $RV_RANGE_REPO is at $current_commit, and the build record for $unit_id was taken at $recorded_commit. The code moved while the review ran, so these findings are about code that is no longer there."
+    im_code_moved "review-record" "$unit_id" "$RV_RANGE_REPO" "$recorded_commit" "$current_commit"
     current_commit="$recorded_commit"
   fi
   dirty="$(git_status_of "$RV_RANGE_REPO" "$RV_RANGE_PATHS")"
@@ -10309,7 +10314,7 @@ do_fix_brief() {
   local open_count rounds_used
   open_count="$(rv_open_actionable_count "$RV_REVIEW_DOC")"
   [ "$open_count" -gt 0 ] 2>/dev/null \
-    || die 53 "fix-brief: $unit_id has no open actionable finding, so there is nothing to hand a fixer."
+    || rv_exit_nothing "fix-brief" "$unit_id" "no open actionable finding, so there is nothing to hand a fixer"
   rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
   case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
   # Gap row 314. At the cap, the order's one repair round opens when it can take every open
@@ -10415,11 +10420,9 @@ FB_FROZEN
     # Gap row 342. An owned path outside every fix scope joins the scope and needs no grant, in any
     # round: a repair finding's scope is the one file the stopped build named, and its fixer may
     # report that the cure needs more of the order's own files. An owned path a fix scope names
-    # already reaches the fixer.
+    # already reaches the fixer, so naming it changes nothing.
     ap_owned=""
     [ -n "$(rv_scope_outside "$(jq -nc --arg p "$ap" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] || ap_owned=yes
-    [ -z "$ap_owned" ] || [ "$named" = "0" ] || [ -n "$repair_ids" ] \
-      || die3 "fix-brief: --allow names $ap, which $unit_id already owns and an open finding's fixScope names, so the fixer has it. An owned path no fix scope names joins the scope."
     # A file the order shares with another order is still its own (gap row 287).
     if [ -n "$repair_ids" ] && [ -z "$ap_owned" ]; then
       while IFS= read -r other; do
@@ -10612,7 +10615,7 @@ do_fix_record() {
   local open_count rounds_used round_number
   open_count="$(rv_open_actionable_count "$RV_REVIEW_DOC")"
   [ "$open_count" -gt 0 ] 2>/dev/null \
-    || die 53 "fix-record: $unit_id has no open actionable finding, so there was nothing for a fixer to do."
+    || rv_exit_nothing "fix-record" "$unit_id" "no open actionable finding, so there was nothing for a fixer to do"
   rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
   case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
   # Gap row 339. A last round that no verifier has read is recorded again at the current commit,
@@ -10712,32 +10715,15 @@ RV_SCOPE
   done <<RV_AC
 $(printf '%s' "$ac_json" | jq -r '.[]')
 RV_AC
-  # Gap row 341. A round that committed nothing is recorded when the report answers every open
-  # finding without code: scope-insufficient, or already correct at HEAD. The checks then run at
-  # HEAD over an empty range. Any other empty round is a fixer that did nothing, exit 71 as before.
-  local empty_round=false uncovered
-  if [ "$started_at_full" = "$current_commit" ]; then
-    # With no commit, only the fix brief shows that a fixer was handed the round.
-    [ -f "$IMPL_DIR/brief-$unit_id-fix-$round_number.json" ] \
-      || die 71 "fix-record: --started-at ($started_at) is the commit $RV_RANGE_REPO is at now, and no fix brief hands round $round_number of $unit_id to a fixer. A round with no commit is recorded only on the report of a fixer that fix-brief dispatched."
-    uncovered="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --argjson s "$scope_json" --argjson a "$ac_json" '
-      ([ $s[].id ] + $a) as $ok
-      | [ (.findings // [])[] | select(.actionable == true and .status == "open" and (.id as $i | $ok | index($i) | not)) | .id ]
-      | join(", ")')"
-    [ -z "$uncovered" ] \
-      || die 71 "fix-record: --started-at ($started_at) is the commit $RV_RANGE_REPO is at now, so this round committed nothing. A round with no commit is recorded only when every open finding is named by --scope-insufficient or by a line 'Outcome: <id>: already-correct' in $report_path. These are neither: $uncovered."
-    empty_round=true
-  else
-    br_require_real_base "fix-record" "$RV_RANGE_REPO" "$started_at" "$started_at_full" "$current_commit"
-  fi
+  # A round that committed nothing is recorded too, and the checks run at HEAD over an empty range
+  # (gap row 341). A fixer that did nothing gets not-addressed verdicts, and close then refuses.
+  br_require_real_base "fix-record" "$RV_RANGE_REPO" "$started_at" "$started_at_full" "$current_commit"
 
-  # Exit 45, twice over. One round per commit: a second call at the commit a record already names
-  # would spend a round on code nobody changed. The round number moves with the ledger, so the
-  # duplicate is not always the same file: a caller who runs this twice writes round 1 and then
-  # round 2, both at one commit. So this looks at the round it is about to write and at the round
-  # before it, and refuses on either.
+  # A record of this round at this commit is the round already recorded. When the ledger did not
+  # move, a crash came between the two writes, so the write that did not land is finished. Either
+  # way the record stands, and nothing is spent twice.
   local record_file="$IMPL_DIR/fix-$unit_id-$round_number.json"
-  local prev_file existing_doc existing_commit
+  local existing_doc existing_commit
   # The ledger step a recorded round writes, in the crash repair and after the checks. On a light
   # task it also marks the order, so its cap stays one round in any later mode (gap row 296).
   local step_expr='.roundsUsed = (.roundsUsed + 1) | .lastStep = "fixed"'
@@ -10749,41 +10735,23 @@ RV_AC
       || die3 "fix-record: $record_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
     existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
     if [ "$existing_commit" = "$current_commit" ]; then
-      # A crash between this record and the ledger write leaves the round recorded and the counter
-      # where it was, and the routing table has no row for that state. The record is this round own
-      # at this commit, so the repair is to finish the write that did not land.
-      local fr_step fr_ledger
+      local fr_step fr_ledger="$RV_LEDGER_DOC" fr_said="the record was already written at this commit, so no round was spent twice"
       fr_step="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')"
       if [ "$fr_step" != "fixed" ]; then
         fr_ledger="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" \
           ".orders = (.orders | map(if .id == \$id then ($step_expr) else . end))")"
         [ -n "$fr_ledger" ] || die3 "fix-record: the ledger update for $unit_id failed."
         write_atomic "$RV_LEDGER_FILE" "$fr_ledger"
-        im_print_summary "fix-record" "$(printf '%s' "$existing_doc" | jq -c --arg record "$record_file" \
-          --arg rounds "$round_number of $FIX_ROUNDS_ALLOWED" \
-          --arg next "$(im_next_step "$fr_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
-          {order: .unit, round: $rounds, range: "\(.startedAt)..\(.commit)",
-           check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
-           executed: "\(.executed) of 7 ran a command, a diff or a hash",
-           state: "fixed: the record was already written and the ledger had not moved, so no round was spent twice",
-           stopped: "none", record: $record, diff: .diffPath, next: $next}')"
-        echo "FIX-RECORD: $record_file was already written at $current_commit and the ledger had not moved. The ledger now counts round $round_number; no round was spent twice." >&2
-        exit 0
+        fr_said="$fr_said; the ledger had not moved, and now counts round $round_number"
       fi
-      die 45 "fix-record: $record_file already holds round $round_number at commit $current_commit. Nothing has changed since that record was written."
-    fi
-  fi
-  # An empty round is the report's answer, not code, so the commit the round before it named is no
-  # duplicate.
-  if [ "$round_number" -gt 1 ] && [ "$empty_round" = false ]; then
-    prev_file="$IMPL_DIR/fix-$unit_id-$((round_number - 1)).json"
-    if [ -f "$prev_file" ]; then
-      existing_doc="$(jq -c '.' "$prev_file" 2>/dev/null)"
-      if [ -n "$existing_doc" ]; then
-        existing_commit="$(printf '%s' "$existing_doc" | jq -r '.commit // empty')"
-        [ "$existing_commit" = "$current_commit" ] \
-          && die 45 "fix-record: $prev_file already holds round $((round_number - 1)) at commit $current_commit, so the code has not moved since that round. A round spent on unchanged code is a round nobody worked."
-      fi
+      im_print_summary "fix-record" "$(printf '%s' "$existing_doc" | jq -c --arg record "$record_file" \
+        --arg rounds "$round_number of $FIX_ROUNDS_ALLOWED" --arg said "fixed: $fr_said" \
+        --arg next "$(im_next_step "$fr_ledger" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+        {order: .unit, round: $rounds, range: "\(.startedAt)..\(.commit)",
+         check: ([ .checks[] | {id, verdict, detail: (.detail // "")} ]),
+         executed: "\(.executed) of 7 ran a command, a diff or a hash",
+         state: $said, stopped: "none", record: $record, diff: .diffPath, next: $next}')"
+      exit 0
     fi
   fi
 
@@ -10811,7 +10779,7 @@ RV_AC
   fi
 
   br_require_clean_tree "fix-record" "$RV_RANGE_REPO" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" \
-    "$(im_stopped_commits_in "$RV_LEDGER_DOC" "$unit_id" "$RV_RANGE_REPO" "$started_at_full" HEAD)" "$RV_RANGE_PATHS"
+    "$(im_unrecorded_commits_in "$RV_LEDGER_DOC" "$unit_id" "$RV_RANGE_REPO" "$started_at_full" HEAD)" "$RV_RANGE_PATHS"
 
   BRC_WHO="fix-record"
   BRC_CODEPATH="$RV_RANGE_REPO"
@@ -10942,7 +10910,7 @@ RV_AC
   local fr_state
   if [ "$all_met" = "true" ]; then fr_state="fixed"; else fr_state="fixed, every finding left open: stopped by $first_stopper"; fi
   [ "$rerecord" = false ] || fr_state="$fr_state, round $round_number recorded again at the current commit, no round spent"
-  [ "$empty_round" = false ] || fr_state="$fr_state, with no commit: the report answers every open finding without code"
+  [ "$started_at_full" != "$current_commit" ] || fr_state="$fr_state, with no commit"
   im_print_summary "fix-record" "$(printf '%s' "$record_json" | jq -c --arg record "$record_file" \
     --arg rounds "$round_number of $FIX_ROUNDS_ALLOWED" --arg state "$fr_state" \
     --arg scope "${scope_list:-none}" --arg halt "${halt_why:-none}" --argjson ac "$ac_json" \
@@ -11001,12 +10969,11 @@ do_verify_brief() {
   case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
   [ "$rounds_used" -gt 0 ] 2>/dev/null \
     || die3 "verify-brief: $unit_id records no fix round, though the ledger records it as fixed."
-  # Exit 45: a round is verified once, so a brief for a round already verified would hand the
-  # reviewer findings the first verification already closed.
+  # A round is verified once, so a round already verified leaves nothing to hand a verifier.
   already="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --argjson r "$rounds_used" \
     '[ (.rounds // [])[] | select(.round == $r) ] | length')"
   [ "$already" = "0" ] \
-    || die 45 "verify-brief: round $rounds_used of $unit_id is already verified in $RV_REVIEW_FILE. There is nothing left to hand a verifier."
+    || rv_exit_nothing "verify-brief" "$unit_id" "round $rounds_used is already verified in $RV_REVIEW_FILE"
 
   local fix_file fix_doc
   fix_file="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
@@ -11015,18 +10982,14 @@ do_verify_brief() {
   fix_doc="$(jq -c '.' "$fix_file" 2>/dev/null)"
   [ -n "$fix_doc" ] \
     || die3 "verify-brief: $fix_file exists but could not be read as JSON. Repair or remove it by hand before running this again."
-  # Exit 63. The verifier reads the recorded range, so a commit after the record would go unread,
-  # and close would then refuse it (gap row 339). fix-record records the round again, unless an
-  # earlier brief already handed the round to a verifier.
-  local vb_head vb_commit vb_route
+  # The verifier reads the recorded range, so a commit after the record goes unread by it. That is
+  # a warning, unless the commit changes a frozen test or a file the order does not own (gap row
+  # 339). fix-record with the same --started-at records the round again at the current commit.
+  local vb_head vb_commit
   rv_load_range_repo "verify-brief" "$RV_UNIT_JSON"
   vb_head="$(git -C "$RV_RANGE_REPO" rev-parse HEAD 2>/dev/null)"
   vb_commit="$(printf '%s' "$fix_doc" | jq -r '.commit // ""')"
-  vb_route="Run fix-record again with the same --started-at. It records round $rounds_used again at the current commit, and no round is spent."
-  [ ! -f "$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json" ] \
-    || vb_route="An earlier verify-brief handed round $rounds_used to a verifier, so the later commits are not that round. Run verify-record with that verifier's reading first. $LATE_ROUTE"
-  [ "$vb_head" = "$vb_commit" ] \
-    || die 63 "verify-brief: $RV_RANGE_REPO is at $vb_head, and round $rounds_used of $unit_id was recorded at $vb_commit. $vb_route"
+  [ "$vb_head" = "$vb_commit" ] || im_code_moved "verify-brief" "$unit_id" "$RV_RANGE_REPO" "$vb_commit" "$vb_head"
 
   # The open findings are the ones the fixer received: nothing has closed one since, because this
   # round's verification is what closes findings and it has not run. A scope report the fixer made
@@ -11042,7 +11005,7 @@ do_verify_brief() {
           + (if .origin == "repair" then {question: ("Does the cited failure arise in " + .file + "? Answer defectInFile yes or no.")} else {} end)
           + (if has("departureFrom") then {departureFrom, question: ("Is the departure from " + .departureFrom + " gone? Answer departureCured yes or no.")} else {} end))')"
   [ "$(rv_open_actionable_count "$RV_REVIEW_DOC")" -gt 0 ] 2>/dev/null \
-    || die 53 "verify-brief: $unit_id has no open actionable finding, so there is nothing to verify."
+    || rv_exit_nothing "verify-brief" "$unit_id" "no open actionable finding, so there is nothing to verify"
   brief_file="$IMPL_DIR/brief-$unit_id-verify-$rounds_used.json"
   # Gap row 342. The scope the fixer was given, which --allow may have widened past the findings'
   # own fix scopes, so a verifier does not read a widened file as out of scope.
@@ -11109,7 +11072,7 @@ do_verify_record() {
   [ -n "$task_arg" ]      || die3 "verify-record: a task folder is required"
   [ -n "$unit_id" ]       || die3 "verify-record: a unit id is required"
   [ -n "$verdicts_path" ] || [ -n "$rulings_raw" ] \
-    || die3 "verify-record: --verdicts is required to record a round. On a round already on the record, --ruling alone rules on its open findings."
+    || die3 "verify-record: --verdicts is required to record a round, or --ruling to rule on open findings."
 
   im_load_task "$task_arg" "verify-record"
 
@@ -11119,9 +11082,7 @@ do_verify_record() {
   local rule_answers="$RV_SCOPE_STOP"
   [ -z "$rulings_raw" ] || rule_answers="$(jq -cn --argjson a "$RV_RULE_ANSWERS" --argjson b "$RV_SCOPE_STOP" '$a + $b')"
   rv_load_state "verify-record" "$unit_id" "$rule_answers"
-  # Rulings alone also follow `reviewed`, before any round, for a finding with an empty fix scope
-  # (gap row 265), or any finding once a person kept the departure (gap row 318).
-  # rv_apply_rulings refuses any other finding there.
+  # Rulings alone also follow `reviewed`, before any round (gap rows 265 and 318).
   if [ -n "$rulings_raw" ] && [ -z "$verdicts_path" ]; then
     rv_require_step "verify-record" "$unit_id" "reviewed fixed"
   else
@@ -11155,12 +11116,13 @@ do_verify_record() {
     echo "VERIFY-RECORD: round $rounds_used of $unit_id is already verified in $RV_REVIEW_FILE. Nothing was verified twice." >&2
     exit 0
   fi
-  if [ "$already" != "0" ] || [ "$rounds_used" = "0" ]; then
-    # A ruling after the round is on the record (live-run row 111). The round's verdicts stand,
-    # and the rulings land on its open findings through the gates the first-call path uses. No
-    # second round entry is written, so roundsUsed and lastStep do not move. A --verdicts file
-    # given here is not read. The person who re-ran the whole command with the rulings added is
-    # told so below, not sent back. Round 0 is a ruling at `reviewed`, before any round.
+  if [ "$already" != "0" ] || [ "$rounds_used" = "0" ] || [ -z "$verdicts_path" ]; then
+    # Rulings alone land on the open findings through the gates the first-call path uses (live-run
+    # row 111). No round entry is written, so roundsUsed and lastStep do not move. After the round
+    # is on the record its verdicts stand, and a --verdicts file given here is not read; the person
+    # who re-ran the whole command with the rulings added is told so below, not sent back. Round 0
+    # is a ruling at `reviewed`, before any round. A round not yet verified keeps its verification
+    # for the verifier's file, which a later call records.
     rv_apply_rulings "$unit_id" "$(printf '%s' "$RV_REVIEW_DOC" | jq -c '.findings // []')" "$rounds_used" "$rulings_raw"
     ruled_doc="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --argjson f "$RV_RULED_FINDINGS" '.findings = $f')"
     [ -n "$ruled_doc" ] || die3 "verify-record: the review record update for $unit_id failed."
@@ -11188,6 +11150,8 @@ do_verify_record() {
     fi
     if [ "$rounds_used" = "0" ]; then
       rv_print_verification 0 "ruled before any fix round" "${RV_RULING_HALT:-none}"
+    elif [ "$already" = "0" ]; then
+      rv_print_verification "$rounds_used" "ruled: round $rounds_used is not verified yet, so the rulings were applied and its verification waits for the verifier's file" "${RV_RULING_HALT:-none}"
     else
       rv_print_verification "$rounds_used" "verified: round $rounds_used was already on the record, so its verdicts stand and the rulings were applied" "${RV_RULING_HALT:-none}"
     fi
@@ -11195,9 +11159,6 @@ do_verify_record() {
     [ -z "$RV_RULING_HALT" ] || echo "VERIFY-RECORD: $unit_id is stopped. $RV_RULING_HALT" >&2
     exit 0
   fi
-  [ -n "$verdicts_path" ] \
-    || die3 "verify-record: --verdicts is required. Round $rounds_used of $unit_id is not on the record yet, and --ruling alone rules only on a round already verified."
-
   local fix_file
   fix_file="$IMPL_DIR/fix-$unit_id-$rounds_used.json"
   [ -f "$fix_file" ] \
@@ -11442,7 +11403,7 @@ rv_apply_rulings() {
   local unit_id="$1" updated_findings="$2" rounds_used="$3" rulings_raw="$4"
   local open_now ruling_halt="" rulings_json="[]"
   open_now="$(printf '%s' "$updated_findings" | jq '[ .[] | select(.actionable == true and .status == "open") ] | length')"
-  local rline rid rrest rverdict rreason rulable_now early_ok early_ids rcount ri is_open
+  local rline rid rrest rverdict rreason rcount ri is_open
   while IFS= read -r rline; do
     [ -n "$rline" ] || continue
     case "$rline" in
@@ -11466,33 +11427,8 @@ rv_apply_rulings() {
 $rulings_raw
 RV_RULINGS
 
-  # Before the cap, a ruling is taken on these findings alone. One a fixer reported out of
-  # its scope, which fix-record marked scopeInsufficientInRound: the fixer's own report is the
-  # evidence that no round can reach it, so a second dispatch bought to hear it again is spent on
-  # nothing (live-run row 110). And one whose fix scope is empty: it asks for no code change, so
-  # no round can reach it either (gap row 265). Any other finding waits for the cap, as before.
-  # Gap row 318: once a person kept the departure (deviationAccepted), every open finding may be
-  # ruled now, because a finding the reviewer did not mark may be that departure, and a fixer
-  # would undo what the person kept. A finding on a non-goal is ruled now too: whether the
-  # non-goal holds is a person's call, and its stop waits on that ruling, not on a round. The
-  # caller refuses an unattended ruling (exit 55).
-  local kept ng rulable
-  kept="$(printf '%s' "$RV_REVIEW_DOC" | jq 'has("deviationAccepted")')"
-  ng="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '[ (.alignment.nonGoals // [])[] | .id ]')"
-  rulable='($kept or has("scopeInsufficientInRound") or ((.fixScope // []) | length == 0) or (.linkedTo as $l | $ng | index($l) != null))'
-  rulable_now="$(printf '%s' "$updated_findings" | jq -r --argjson kept "${kept:-false}" --argjson ng "${ng:-[]}" \
-    "[ .[] | select(.actionable == true and .status == \"open\" and $rulable) | .id ] | join(\", \")")"
-  if [ -n "$rulings_raw" ] && [ "$rounds_used" -lt "$FIX_ROUNDS_ALLOWED" ]; then
-    early_ids="$(printf '%s' "$rulings_json" | jq -r '[ .[].id ] | join(", ")')"
-    early_ok="$(printf '%s' "$updated_findings" | jq -r --argjson r "$rulings_json" --argjson kept "${kept:-false}" --argjson ng "${ng:-[]}" \
-      "[ \$r[].id ] as \$ids | [ .[] | select($rulable and (.id as \$i | \$ids | index(\$i))) | .id ] | length == (\$ids | length)")"
-    if [ "$early_ok" != "true" ]; then
-      if [ -n "$rulable_now" ]; then
-        die3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. These findings may be ruled now, because a fixer reported them out of its scope, their fix scope is empty, they cite a non-goal, or a person kept the departure: $rulable_now. The ruling named: $early_ids."
-      fi
-      die3 "verify-record: a ruling is taken only after the last allowed round. $unit_id has used $rounds_used of $FIX_ROUNDS_ALLOWED, so another round is still available. No finding may be ruled now: no fixer has reported one out of its scope, none has an empty fix scope, none cites a non-goal, and no person kept a departure with go-on --continue keep."
-    fi
-  fi
+  # A person may rule a finding at any round. An unattended ruling still needs the person's answer,
+  # which the caller requires (exit 55), so no model rules in a person's place.
   # A ruling with nothing left to rule on is refused rather than dropped. A caller who wrote one
   # believes a finding is still open, and silence would let that belief stand.
   if [ -n "$rulings_raw" ] && [ "$open_now" = "0" ]; then
@@ -11657,11 +11593,14 @@ do_close() {
   [ -n "$last_commit" ] \
     || die3 "close: $last_record holds no commit, though the step that wrote it records one."
   # Commits another order's records list are that order's, so the range ends at the record's
-  # commit (gap row 340).
+  # commit (gap row 340). This order's own code that moved after the record is a warning, unless it
+  # changes a frozen test or a file the order does not own, and the range then ends at HEAD.
   if [ "$last_commit" != "$head_now" ]; then
-    im_moved_for_others "$RV_RANGE_REPO" "$last_commit" "$head_now" "$unit_id" \
-      || die 63 "close: $RV_RANGE_REPO is at $head_now, and the last record for $unit_id ($last_record) was written at $last_commit. The code moved after the record, so the range this would write names work nothing here judged. Nothing is open, so no fix round or repair round can take the commits after $last_commit. A person moves the branch back to it, and that later work goes to a follow-up task, or redoes the order. A person's fix after a finding ruled load-bearing is the exception: go-on --continue check runs the checks over the commits and records them."
-    head_now="$last_commit"
+    if im_moved_for_others "$RV_RANGE_REPO" "$last_commit" "$head_now" "$unit_id"; then
+      head_now="$last_commit"
+    else
+      im_code_moved "close" "$unit_id" "$RV_RANGE_REPO" "$last_commit" "$head_now"
+    fi
   fi
 
   # A range holds every commit between its ends. When a commit this order's records do not list
@@ -11974,10 +11913,7 @@ FN_RECIPES
   [ -n "$suite_json" ] || die3 "finish: could not assemble the suite result."
   suite_verdict="$(printf '%s' "$suite_json" | jq -r '.verdict')"
   case "$suite_verdict" in
-    met|undeclared|not-needed)
-      [ -z "$accept_warnings" ] \
-        || die3 "finish: --accept-warnings was given, and the suite reads $suite_verdict at $head_now, not warned. There are no runner warnings to accept. Nothing was recorded."
-      ;;
+    met|undeclared|not-needed) ;;
     unmet)
       # The new lines go to standard error as their own block, the way the clean-tree refusal
       # lists its paths, so the message stays one line a reader can act on.
@@ -12368,13 +12304,14 @@ im_way_load() {
   # Every reason this order stops for is the one this step answers, so the empty front lets all
   # of them through.
   rv_load_state "$WAY_WHO" "$WAY_UNIT" '[""]'
-  # A closed order takes a way out only while it is stopped, as when start found the design
-  # changed under it.
+  # A closed order takes a way out only while it is stopped, or while start names a change under
+  # it. A defect found later in its files reaches it through another order's builder, or through
+  # reopen after a failed task review. A dropped order ended without code.
   case "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep // ""')" in
     closed)
-      [ -n "$(stop_text "$RV_ORDER_ENTRY")" ] \
-        || die 67 "$WAY_WHO: $WAY_UNIT is closed and not stopped, so there is nothing to leave. A defect found later in its files reaches it through another order's builder, or through reopen after a failed task review. Nothing is written." ;;
-    dropped) die 67 "$WAY_WHO: $WAY_UNIT is dropped, so it ended without code. Nothing is written." ;;
+      printf '%s' "$RV_ORDER_ENTRY" | jq -e '(.stopped // []) + (.changed // []) != []' >/dev/null \
+        || rv_exit_nothing "$WAY_WHO" "$WAY_UNIT" "$WAY_UNIT is closed and not stopped, so there is nothing to leave" ;;
+    dropped) rv_exit_nothing "$WAY_WHO" "$WAY_UNIT" "$WAY_UNIT is dropped, so it ended without code" ;;
   esac
 }
 
@@ -12399,14 +12336,15 @@ im_way_plain_args() {
   im_way_load "$who" "$task_arg" "$unit_id" "$because"
 }
 
-# The ledger entry of the order with its stop cleared, and one stopsCleared entry for it: the
-# reasons it stopped for, the way out, and the person's words. $1 the ledger document, $2 the
-# order, $3 the way, $4 a JSON object of more fields for the entry. Prints the document.
+# The ledger entry of the order with its stop and its changed list cleared, and one stopsCleared
+# entry for it: the reasons it stopped for or was warned of, the way out, and the person's words.
+# $1 the ledger document, $2 the order, $3 the way, $4 a JSON object of more fields for the entry.
+# Prints the document.
 im_clear_stop_in() {
   printf '%s' "$1" | jq -c --arg id "$2" --arg way "$3" --argjson more "$4" \
     --arg today "$(date -u +%Y-%m-%d)" --arg because "$WAY_BECAUSE" '
-    ([ .orders[] | select(.id == $id) | (.stopped // [])[] ]) as $reasons
-    | .orders = (.orders | map(if .id == $id then del(.stopped) else . end))
+    ([ .orders[] | select(.id == $id) | (.stopped // [])[], (.changed // [])[] ]) as $reasons
+    | .orders = (.orders | map(if .id == $id then del(.stopped, .changed) else . end))
     | .stopsCleared = ((.stopsCleared // []) + [{id: $id, by: $way, reasons: $reasons, clearedAt: $today, because: $because} + $more])'
 }
 
@@ -12456,13 +12394,16 @@ do_go_on() {
   esac
   fn_require_answer "go-on $choice" "going on with $choice on one order" "$WAY_UNIT" "$WAY_BECAUSE"
 
-  # --- exit 67: the order is stopped, and every reason allows this choice -------------------------
-  local allowed why
-  why="$(stop_text "$RV_ORDER_ENTRY")"
+  # --- exit 67: every reason the order is stopped for, or warned of, allows this choice -----------
+  # An attended change mid-build leaves the order going on with a `changed` list, which go-on keep
+  # and redo answer the way they answer the same change as a stop.
+  local allowed why view
+  view="$(printf '%s' "$RV_ORDER_ENTRY" | jq -c '.stopped = ((.stopped // []) + (.changed // []))')"
+  why="$(stop_text "$view")"
   [ -n "$why" ] \
-    || die 67 "go-on: $WAY_UNIT is not stopped, so there is nothing to go on from. Nothing is written."
-  allowed="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r "$STOP_JQ"' stop_choices | join(", ")')"
-  printf '%s' "$RV_ORDER_ENTRY" | jq -e --arg c "$choice" "$STOP_JQ"' stop_choices | index($c) != null' >/dev/null \
+    || rv_exit_nothing "go-on" "$WAY_UNIT" "$WAY_UNIT is not stopped, so there is nothing to go on from"
+  allowed="$(printf '%s' "$view" | jq -r "$STOP_JQ"' stop_choices | join(", ")')"
+  printf '%s' "$view" | jq -e --arg c "$choice" "$STOP_JQ"' stop_choices | index($c) != null' >/dev/null \
     || die 67 "go-on: $WAY_UNIT is stopped for: $why. Those reasons allow $(if [ -n "$allowed" ]; then printf 'go-on with %s' "$allowed"; else printf 'no go-on'; fi), and not $choice. Redo and drop are open too. Nothing is written."
 
   # --- the files the order now owns ----------------------------------------------------------------
@@ -12542,7 +12483,9 @@ GO_OWNS
         .orders = (.orders | map(if .id != $id then . else
           (if any((.stopped // [])[]; .step == "build-record") then .deviationKept = {because: $why, at: $at} else . end)
           | (if any((.stopped // [])[]; .step == "review-record") then .departureKept = {because: $why, at: $at} else . end) end))')"
-      if printf '%s' "$entry" | jq -e 'any((.stopped // [])[]; .step == "start")' >/dev/null; then
+      # A kept criterion change takes nothing: the snapshot keeps the frozen text the tests prove,
+      # and start reads the stopsCleared entry so as not to raise it again.
+      if printf '%s' "$view" | jq -e 'any(.stopped[]; .step == "start" and (.reason | startswith("design drift: the design file for ")))' >/dev/null; then
         ALIGNMENT_FILE="$TASK_PATH/alignment.json"
         DESIGN_DIR="$TASK_PATH/design"
         CLOSED_FILE="$TASK_PATH/design-closed.json"
@@ -13732,37 +13675,38 @@ do_dispatch_close() {
       echo "next: resume the same $nr_role agent by message: finish the work and write the report. Then run dispatch-close again, with --no-report if it returns none."
       exit 0
     fi
+    # The turn cap is a warning: the order does not stop, and the next step reads what the role
+    # left, as it reads any role's work. A capped builder or fixer writes no record, and the next
+    # brief prints a new headNow. So its commits since its own brief's headNow go on the ledger
+    # here, as build-record does on a stop, and its order's commit list, redo and drop read them.
     nr_cap="$(sed -n 's/^maxTurns: *//p' "$PLUGIN_ROOT/agents/${nr_role##*:}.md" 2>/dev/null | head -1)"
-    nr_ledger="$(jq -c '.' "$TASK_PATH/implementation/ledger.json" 2>/dev/null)"
-    [ -n "$nr_ledger" ] || die3 "dispatch-close: $TASK_PATH/implementation/ledger.json could not be read as JSON, so the stop on $nr_unit could not be written."
-    local nr_times="twice" nr_last="second" nr_what
+    local nr_times="twice" nr_last="second" nr_what nr_code nr_head nr_brief=""
     [ "$nr_allowed" -eq 1 ] || { nr_times="$((nr_allowed + 1)) times"; nr_last="last"; }
     nr_what="returned no report $nr_times"
     [ -z "$cut_off" ] || nr_what="stopped before it finished $nr_times, the $nr_last time because $cut_off"
-    nr_ledger="$(stop_order_in "$nr_ledger" "$nr_unit" dispatch-close \
-      "turn cap: ${nr_role##*:} $nr_what, $nr_after; its cap is ${nr_cap:-unknown} turns" "$(im_dispatch_allows "$nr_ledger" "$nr_unit")")"
-    [ -n "$nr_ledger" ] || die3 "dispatch-close: the stop on $nr_unit could not be written."
-    # A capped builder or fixer writes no record, and the next brief prints a new headNow. So its
-    # commits since its own brief's headNow go on the ledger here, as build-record does on a stop.
-    local nr_code nr_head nr_brief=""
     nr_code="$(jq -r '.codePath // ""' "$dispatch_file")"
     case "${nr_role##*:}" in
       implementer) nr_brief="$IMPL_DIR/brief-$nr_unit-build.json" ;;
-      fixer) nr_brief="$IMPL_DIR/brief-$nr_unit-fix-$(( $(printf '%s' "$nr_ledger" | jq -r --arg id "$nr_unit" \
-        '[ .orders[] | select(.id == $id) | .roundsUsed // 0 ][0] // 0') + 1 )).json" ;;
+      fixer) nr_brief="$IMPL_DIR/brief-$nr_unit-fix-$(( $(jq -r --arg id "$nr_unit" \
+        '[ .orders[] | select(.id == $id) | .roundsUsed // 0 ][0] // 0' "$IMPL_DIR/ledger.json" 2>/dev/null) + 1 )).json" ;;
     esac
     nr_head="$(jq -r '.headNow // ""' "$nr_brief" 2>/dev/null)"
     if [ -n "$nr_brief" ] && git -C "$nr_code" rev-parse --verify --quiet "$nr_head^{commit}" >/dev/null 2>&1; then
-      nr_ledger="$(im_stopped_commits_in "$nr_ledger" "$nr_unit" "$nr_code" "$nr_head" HEAD)"
+      nr_ledger="$(jq -c '.' "$IMPL_DIR/ledger.json" 2>/dev/null)"
+      [ -n "$nr_ledger" ] || die3 "dispatch-close: $IMPL_DIR/ledger.json could not be read as JSON, so the capped ${nr_role##*:}'s commits on $nr_unit could not be written."
+      nr_ledger="$(im_unrecorded_commits_in "$nr_ledger" "$nr_unit" "$nr_code" "$nr_head" HEAD)"
       [ -n "$nr_ledger" ] || die3 "dispatch-close: the capped ${nr_role##*:}'s commits on $nr_unit could not be written."
+      write_atomic "$IMPL_DIR/ledger.json" "$nr_ledger"
     fi
-    write_atomic "$TASK_PATH/implementation/ledger.json" "$nr_ledger"
     rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
+    task_warn "$TASK_PATH" dispatch-close "$nr_unit" "turn cap: ${nr_role##*:} $nr_what, $nr_after; its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty"
     # A fixer's complete report stops a fresh dispatch-open until fix-record reads it (gap row 343).
-    local nr_next="dispatches again"
+    local nr_next="dispatch the $nr_role again with a fresh brief, which reads what it left"
     [ "${nr_role##*:}" != "fixer" ] || [ ! -f "$rp_path" ] || [ -n "$(im_report_line_fault "$rp_path" "$IM_REPORT_DONE")" ] \
-      || nr_next="runs fix-record on $rp_path, which is complete. A fresh dispatch-open refuses until fix-record reads it, or until fix-brief writes the round again"
-    die 110 "dispatch-close: $nr_unit is stopped. $nr_role $nr_what, $nr_after. Its cap is ${nr_cap:-unknown} turns, in agents/${nr_role##*:}.md.$nr_dirty A person reads what it left and takes the order out of its stop with go-on, then runs start to keep or set aside its files, then $nr_next."
+      || nr_next="run fix-record on $rp_path, which is complete. A fresh dispatch-open refuses until fix-record reads it, or until fix-brief writes the round again"
+    echo "DISPATCH-CLOSE: removed $dispatch_file"
+    echo "next: $nr_next"
+    exit 0
   fi
   if [ -f "$dispatch_file" ]; then
     [ "$(jq -r '.role // "" | split(":") | last' "$dispatch_file")" != "row-checker" ] || [ ! -f "$rp_path" ] \

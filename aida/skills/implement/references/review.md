@@ -73,8 +73,9 @@ against it, the same way the freeze protects it against everyone else.
 **Dispatch `reviewer`**, on opus, with the message SKILL.md names: the role, the run mode, and the
 brief's path. The brief's own `mode` field says review. Its read is wide by design, one named
 file outside the diff for one named risk. Close the dispatch record as soon as it returns, per
-SKILL.md. Its write is refused by the script, not by a hook, when the code moved or the tree is
-dirty. Leaving a probe file behind is a refusal, not a finding.
+SKILL.md. Its write is refused by the script, not by a hook, when the tree is dirty. Leaving a
+probe file behind is a refusal, not a finding. Code that moved while it ran is a warning in the
+task record, unless it changes a frozen test or a file the order does not own (exit 63).
 
 Run:
 ```
@@ -141,9 +142,9 @@ actionable finding: the order is reviewed and clean, so go to Close.
 
 Interactive, the script also prints one `unrouted:` line per finding of medium or higher
 severity that cites no id, then a count line. Nothing prints when there are none. Such a finding
-has no route inside this task. `fix-brief` hands a fixer open actionable findings only, and
-refuses (exit 53) when there are none. A commit after the review record moves HEAD, and `close`
-refuses (exit 63), so nobody fixes it by hand before the close. A new order needs a criterion to
+has no route inside this task. `fix-brief` hands a fixer open actionable findings only, and has
+nothing to do when there are none. A hand fix after the review record is a warning at `close`,
+and review never reads it, so nobody fixes it by hand before the close. A new order needs a criterion to
 serve, and this finding cites none. `finish` carries only findings ruled deferred into
 `finished.json`, so the review stage sees this one only if its own reviewer finds it again. When an
 `unrouted:` line prints, put it to the person, opening with: "The reviewer found a problem this task
@@ -284,11 +285,10 @@ it asked for. The order stops in both run modes, naming the finding. The person 
 `go-on --owns` gives the order the file the fixer needed, under "Leave a stop" in
 `references/finish.md`.
 
-The commit the round began from is `fix-brief`'s own `headNow`. Equal to the current commit
-refuses (exit 71), and not an ancestor of it (exit 3), the rule `build-record` applies. One case is
-recorded with no commit: `fix-brief` handed the round to a fixer, and every open finding is named
-by `--scope-insufficient` or by a line `Outcome: <id>: already-correct` in the report. The round is spent, and the checks run at HEAD.
-The message for exit 71 names the findings that are neither. `fix-record` marks each
+The commit the round began from is `fix-brief`'s own `headNow`. Not an ancestor of the current
+commit refuses (exit 3), the rule `build-record` applies. Equal to it, the round is recorded with
+no commit. The round is spent, and the checks run at HEAD. A fixer that did nothing gets
+not-addressed verdicts, so the finding stays open. `fix-record` marks each
 already-correct finding with `alreadyCorrectInRound`. Its `alreadyCorrect:` line names them.
 The cited file must exist at HEAD. When it changed since the review, the verifier reads its
 cited code at HEAD and the report's run for it, and addressed closes the finding. So no ruling is
@@ -330,18 +330,18 @@ runs the round's checks again over the unchanged range, as references/build.md s
 addresses the check finding, open or pending, and clears the stop. A check that fails again
 leaves both in place.
 
-A repeat call at a commit this round already recorded finishes the write when the ledger never
-moved past it, a crash between the two, rather than spending a round twice; otherwise it refuses
-(exit 45). A commit unchanged since the round before it always refuses (exit 45): a round spent on
-unchanged code is a round nobody worked.
+A repeat call at a commit this round already recorded reports that record, and finishes the
+write when the ledger never moved past it, a crash between the two. No round is spent twice. A
+call at the commit the round before it named records a new round: the round cap bounds it.
 
 Every commit of a round lands before `verify-brief`. A commit after `fix-record` and before
 `verify-brief` is the same round's work. Run `fix-record` again with the same `--started-at`. It
-records that round again at the current commit, and no round is spent. `verify-brief` refuses
-while HEAD is past the fix record (exit 63) and names this route. After `verify-brief`, a verifier
-reads the round, so later code is not that round. Run `verify-record` with the reading. With a
-person present, the repair round above begins at the last record and holds the later code.
-Unattended, the cap holds, and `close` refuses that code (exit 63).
+records that round again at the current commit, and no round is spent. `verify-brief` with HEAD
+past the fix record writes a warning and goes on, and the verifier does not read the later
+commits. After `verify-brief`, a verifier reads the round, so later code is not that round. Run
+`verify-record` with the reading. With a person present, the repair round above begins at the
+last record and holds the later code. Otherwise `close` writes a warning for that code. A commit
+that changes a frozen test or a file the order does not own refuses at either step (exit 63).
 
 **When `fix-record` stopped the order, stop here.** Do not dispatch the reviewer in verify
 mode: `verify-record` refuses on a stopped order. Report the stop instead, the same way a stop
@@ -360,8 +360,9 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh verify-brief "<task_folder>" <order id>
 ```
-It refuses when the order is not at `fixed`, when it is stopped, when nothing is open, or when this
-round is already verified. It refuses when HEAD is not where the fix record left it (exit 63). It writes `implementation/brief-<order id>-verify-<round>.json`. The
+It refuses when the order is not at `fixed`, or when it is stopped. When nothing is open, or this
+round is already verified, it has nothing to do: it says so and names the next step. HEAD past the
+fix record is a warning, or exit 63 under the rule above. It writes `implementation/brief-<order id>-verify-<round>.json`. The
 brief holds the open findings the fixer received, the scope the fixer was given, the fix diff as a
 path, and the fixer's report as a path. It names the path the verdicts go to, `implementation/verify-<order id>-<round>.json`.
 Nothing else: not the original diff, not an earlier round's verdicts. It prints the brief's path, the three paths it
@@ -387,23 +388,19 @@ open findings instead, under Rulings below.
 
 ## Rulings
 
-A ruling is a person's answer on an open finding, and there are three cases. At the cap: once the
+A ruling is a person's answer on an open finding. A person may rule a finding at any round, and
+at `reviewed` before any round. Rulings with no verdicts file land on the open findings and record
+no round; a round not yet verified still needs its verdicts file. At the cap: once the
 rounds are spent, `verify-record` above refuses when a finding is still open and no ruling names
 it. Nothing is written yet, so this is a retry of that same call, not a new one, and each open
 finding needs a ruling. Once that round is on the record, the ruling is the same call with the
 rulings and no verdicts file. A finding the repair round above may take needs no ruling yet, and
 never stops the order. `verify-record` records the round and prints a line that names it. Put
-it to the person: run the repair round, or rule the finding. Before the cap: a finding the last fixer reported under
-`--scope-insufficient` may be ruled at that round's `verify-record`. The fixer's own report is
-the evidence that no round can reach it. When the round was verified first, the ruling is the
-same call with the rulings and no verdicts file, and the round's verdicts stand. With no round:
-a finding whose fix scope is empty may be ruled at `reviewed`, with the rulings and no verdicts
-file. It asks for no code change, so no round can reach it. No round is recorded. Unattended,
-`fix-brief` marks each such finding pending and exits 0, and its `next:` line names the close.
-A finding that cites a non-goal may be ruled before the cap too, because only the person says
-whether the non-goal holds.
-Any other finding before the cap refuses (exit 3), and the message names the findings that may be
-ruled now. Every ruling refuses without the person's answer on record (exit 55).
+it to the person: run the repair round, or rule the finding. Before the cap, a ruling fits a
+finding no round can reach: one the last fixer reported under `--scope-insufficient`, one whose
+fix scope is empty, or one that cites a non-goal, since only the person says whether it holds.
+Unattended, `fix-brief` marks each finding with an empty fix scope pending and exits 0, and its
+`next:` line names the close. Every ruling refuses without the person's answer on record (exit 55).
 
 The words are `wrong`, `deferred`, `load-bearing` or `test-wrong`, with a reason. Put the
 findings to the person and ask, opening the same way in every case: "The reviewer found problems

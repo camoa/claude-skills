@@ -28,15 +28,12 @@ When AIDA cannot work out the trunk, it says so and goes on. See
 
 ## The code moved after a record
 
-- **In review, exit 51.** The code changed after `checks` ran. Run `checks` again.
-- **Before a fix round is checked, exit 63.** Commits landed after the fix record. When no
-  verifier has read the round yet, AIDA records the round again at the new commit, and no round
-  is spent.
-- **At an order's close, exit 63.** Commits landed after the order's last record, and nothing is
-  open to take them. When they are your fix after a finding you ruled load-bearing, AIDA goes on
-  with the checks over them. See [the review of one work order](order-review.md). Otherwise move
-  the branch back to the commit the message names, and put that later work in a follow-up task.
-  Or redo the order. See [a work order stopped](stopped.md).
+- **In the task review, exit 51.** The code changed after `checks` ran. Run `checks` again.
+- **In a work order, exit 63.** Commits landed after the order's last record, and they change a
+  frozen test or a file the order does not own. No record judged them. Move the branch back to the
+  commit the message names, or redo the order. See [a work order stopped](stopped.md). Commits
+  inside the order's own files do not stop the build: AIDA writes a warning into the task record,
+  keeps them on the order's commit list, and goes on. Review lists the warning.
 
 ## The branch was rewritten
 

@@ -40,8 +40,8 @@ the order moving on, and the reviewer compares the two texts instead.
 ## A failed attempt
 
 A failed check is this attempt's result, not the order's. AIDA says which check failed and names
-the record that holds the tool's output. Interactive, it asks whether to spend the next attempt.
-When the last allowed attempt fails, the order stops at once. See [When a work order
+the record that holds the tool's output, and briefs the next attempt without asking. When the last
+allowed attempt fails, the order stops at once. See [When a work order
 stops](stopped.md).
 
 ## Run the checks again, with no new build
@@ -52,12 +52,12 @@ Some failures need no second build:
 - an interface record that missed an element, which you amend in the record file;
 - an owned-files failure that design answers by adding the file.
 
-While attempts remain, the next attempt answers these. When the last attempt failed on them
-alone, the order stops, and AIDA can go on with the checks. They run again over the range the
-attempt recorded. No implementer is sent and no attempt is spent. Amend the record first, or give
-the order the file as part of going on. A failed test or suite is the implementer's work, so going
-on with the checks is not offered for it. It refuses too when the code moved since the attempt.
-See [When a work order stops](stopped.md).
+While attempts remain, the next attempt answers these. When the last attempt failed, the order
+stops, and AIDA can go on with the checks, whichever check failed. They run again over the range
+the attempt recorded. No implementer is sent and no attempt is spent. On unmoved code that is no
+free retry: the code is what was judged. Amend the record first, or give the order the file as
+part of going on. Commits after the record are checked too, with a warning. See
+[When a work order stops](stopped.md).
 
 After a fix round, at the cap, the same run takes that round's checks again when only check
 findings are open. Repair a cause outside the fix, such as a broken environment, first. A pass

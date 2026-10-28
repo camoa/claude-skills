@@ -26,10 +26,9 @@ reason. What each word does next:
 - **`test-wrong`.** The order stops with `test wrong`. AIDA offers a redo: its commits are
   reverted, its tests are written again and frozen, and the order is built again.
 - **`load-bearing`.** The order stops. No fix round is left, so you commit the fix yourself, in
-  the order's own files. Then say so, and AIDA goes on with the checks over your commits. When
-  every check passes, it records them, and the order closes. When one fails, nothing is recorded
-  (exit 123), the order stays stopped, and the close refuses (exit 63) until you repair the fix.
-  Or go on with close, and the finding stays listed.
+  the order's own files. Then say so, and AIDA goes on with the checks over your commits, and
+  writes a warning for them. When every check passes, the order closes. When one fails, the order
+  stays stopped until you repair the fix. Or go on with close, and the finding stays listed.
 
 With nobody present, a ruling (exit 55) or an `--allow` for one more file (exit 100) is refused.
 See [a run with nobody present](person-must-answer.md).
@@ -42,8 +41,8 @@ See [a run with nobody present](person-must-answer.md).
   the task review.
 - **Exit 59, 60, 62.** An order closes with nothing open and every round checked. AIDA runs the
   missing step first.
-- **Exit 63.** Commits landed after the last record. See
-  [the code repository is not ready](repository.md).
+- **Exit 63.** Commits landed after the last record, and they change a frozen test or a file the
+  order does not own. See [the code repository is not ready](repository.md).
 - **A fix round fails a check.** That opens one finding of its own. The next round's checks
   decide it. At the cap, when only check findings are open, AIDA can go on with the checks again
   without spending a round.

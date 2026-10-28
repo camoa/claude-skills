@@ -241,9 +241,9 @@ write the report. Do not
 dispatch a fresh role. The brief is unchanged and the work is unfinished, and a fresh role meets
 the half-written files. This differs from a row a person rejects, where the brief changes and the
 role is dispatched fresh. When the resumed role returns, close again, with `--no-report` if it
-stopped again. The `--no-report` after the last resume stops the order (exit 110) with a reason
-that names the role and its turn cap. Report the stop. A person goes on with `go-on`, then `start`
-keeps or sets aside the role's files, then the role is dispatched again.
+stopped again. The `--no-report` after the last resume removes the record and writes a turn-cap
+warning into the task record. The order does not stop. Report the warning. The role's commits stay
+on the order's list, and the next dispatch reads what the role left.
 
 A record already closed takes the same route. Run `dispatch-open` with the same role and unit and
 `--resume`, then resume the same agent by message. When that agent cannot be reached, as from

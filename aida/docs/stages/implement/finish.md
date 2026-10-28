@@ -5,10 +5,10 @@ runs the whole suite once and records the stage as done, for the review stage to
 
 ## Close one order
 
-Close refuses when a finding is still open, when the last fix round was never verified, when the
-tree is dirty, or when the code moved past the last record. Later commits on the branch have no
-round to take them. Move the branch back and send that work to a follow-up task, or redo the
-order.
+Close refuses when a finding is still open, when the last fix round was never verified, or when
+the tree is dirty. Commits after the last record in the order's own files are a warning: they join
+the order's range, and review lists the warning. Commits that change a frozen test or a file the
+order does not own refuse (exit 63). Move the branch back, or redo the order.
 
 Close records the commit range the order produced. It also decides each criterion the order serves
 or owns. A criterion a machine verifies reads `confirmed` once every order serving it has closed

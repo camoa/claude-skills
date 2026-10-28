@@ -51,7 +51,8 @@ These changes are taken in place, and the order keeps its tests and attempts:
   with no done-when row takes them until its review;
 - a changed verify clause on a criterion whose frozen tests and records never named it.
 
-Any other change stops a started order for design drift. See
+Any other change to a started order is a change mid-build: a warning with you present, a stop with
+nobody present. See
 [change the design mid-build](../stages/implement/drift.md) and [a work order stopped](stopped.md).
 
 ## Why it works this way

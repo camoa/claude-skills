@@ -670,6 +670,7 @@ do_read() {
     --arg e2e "$e2e_enabled" --arg vr "$vr_enabled" --arg registry "$registry_path" \
     --arg codePath "$code_state" \
     --arg recordState "$record_state" --arg step "$(rw_step_now)" \
+    --argjson warnings "$(jq -c '.warnings // []' "$TASK_PATH/task.json" 2>/dev/null || printf '[]')" \
     --slurpfile record "$([ -n "$RW_RECORD_DOC" ] && printf '%s' "$RECORD_FILE" || printf '/dev/null')" '
     $record[0] as $record
     | {task: $task,
@@ -683,6 +684,7 @@ do_read() {
      frameworks: $frameworks,
      codePath: $codePath,
      surfaces: {e2e: $e2e, visualRegression: $vr, registryPath: $registry},
+     warnings: $warnings,
      record: ({state: $recordState} + (($record // {}) | {checks: ((.checks // []) | length),
               findings: ((.findings // []) | length), surfaces: ((.surfaces // []) | length),
               verdict: (.verdict // "")})),

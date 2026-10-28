@@ -10,7 +10,8 @@
 #   reopen    --not-sent on a record reopened with --resume removes it and keeps the report.
 #   finished  a fresh open refuses (3) while a finished report is newer than its brief, and keeps
 #             it; after fix-brief writes the brief again, the open succeeds and removes it.
-#   halt      a fixer halted (110) with a complete report is sent to fix-record.
+#   halt      a fixer cut off at its turn cap with a complete report is sent to fix-record (a
+#             halt, 110, until 6.1.0 batch 3b; a warning now).
 #   commit    --not-sent after a commit in the code path refuses (3).
 #   record    --not-sent after a commit to a record order's owned file in the project folder
 #             refuses (3).
@@ -378,11 +379,9 @@ printf 'half\n' >"$WT/a.php"
 rc="$(try "$ROOT/dc-halt1.txt" "$IMPLEMENT" dispatch-close "$TASK")"
 expect "the first close with the fix uncommitted: exit 112" "$rc" "112"
 rc="$(try "$ROOT/dc-halt2.txt" "$IMPLEMENT" dispatch-close "$TASK")"
-expect "the second close halts: exit 110" "$rc" "110"
-expect "the halt names fix-record" "$(grep -c "then runs fix-record on .*answers-wo1-fix1.md, which is complete" "$ROOT/dc-halt2.txt")" "1"
+expect "the second close is a turn-cap warning: exit 0" "$rc" "0"
+expect "the next line names fix-record" "$(grep -c "^next: run fix-record on .*answers-wo1-fix1.md, which is complete" "$ROOT/dc-halt2.txt")" "1"
 (cd "$WT" && git add a.php && git commit -qm "the rest of the fix")
-pa "$TASK" "implement go-on fix" wo1 "the turn cap row"
-in_wt "$IMPLEMENT" go-on "$TASK" wo1 --continue fix --because "the turn cap row"
 rm -f "$(pinned_report)"
 
 reset

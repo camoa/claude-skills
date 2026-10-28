@@ -159,6 +159,14 @@
           },
           "description": "Why this order stopped, one entry per reason, present only while it is stopped. Absent means the order is not stopped; it is never an empty list, because absent and empty would be one value for two facts. A stopped order refuses every later step (exit 49) until a person takes one of three ways out, `go-on`, `redo` or `drop`, and `finish` refuses while any order is stopped."
         },
+        "changed": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/stopReason"
+          },
+          "description": "A change mid-build an attended `start` found for this order, one entry per reason, in the shape of a stop reason with step `start`. The order is not stopped and goes on with its frozen copy; the task record holds the warning. `go-on --continue keep` and `redo` answer it the way they answer the same reason as a stop, and clear it. Every resumed `start` writes the list again, so it is absent once the change is gone. Unattended, the same reasons go to `stopped` instead."
+        },
         "attemptsUsed": {
           "type": "integer",
           "minimum": 0,
@@ -207,13 +215,13 @@
           },
           "description": "The files a person's `go-on --owns` gave this order, beside the ownedFiles the snapshot holds. Present only when one was given. The build brief, the dispatch record, the fix scope and the owned-files check read them as owned. The snapshot keeps design's own list, so `start` compares design with it alone. No other order owns one of these, and none is a frozen test."
         },
-        "stoppedCommits": {
+        "unrecordedCommits": {
           "type": "array",
           "items": {
             "type": "string",
             "pattern": "^[0-9a-f]{40}$"
           },
-          "description": "The commits this order's builder made before it stopped, written by `build-record` on every builder's stop, in both run modes. A stop records no attempt, so no record lists them. `redo` and `drop` revert them, and no other order counts them as its own. Present only when one was made."
+          "description": "The commits this order's role made that no record lists. `build-record` writes them on every builder's stop, in both run modes, because a stop records no attempt. `dispatch-close` writes a capped builder's or fixer's commits at the turn-cap warning. A step that goes on past code moved after a record writes those commits (im_code_moved). `redo` and `drop` revert them, `close` counts them in the order's range, and no other order counts them as its own. Present only when one was made."
         },
         "deviationKept": {
           "type": "object",

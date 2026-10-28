@@ -139,6 +139,22 @@
       "uniqueItems": true,
       "items": { "type": "string", "enum": ["e2e", "visual-regression"] },
       "description": "The surface kinds a person answered `not this task` to at a surface setup offer, at scope, design or review, written by `task defer-surface`, one kind per answer. Present only after the first such answer. Scope's and design's `read` print it as `surfaces-deferred:`, review's `surfaces` reads it, and none of the three offers that kind again in this task. The answer is per task, and the next task may ask again (gap row 278)."
+    },
+    "warnings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "order", "words", "at"],
+        "properties": {
+          "step": { "type": "string", "minLength": 1, "description": "The step that found it, such as `start` or `close`." },
+          "order": { "type": "string", "description": "The work order it is about, or empty when it is about the whole task." },
+          "words": { "type": "string", "minLength": 1, "description": "What the step found, and what it did next." },
+          "at": { "type": "string", "minLength": 1, "description": "When it was written, as a UTC timestamp." }
+        }
+      },
+      "description": "The warnings the stages wrote while they went on, one entry per step, order and words, written by task_warn in scripts/lib/task-helpers.sh and by nothing else. Present only after the first warning. Review's `read` lists them, so a person reads each one before review closes."
     }
   },
   "$defs": {

@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # Fixture kv: the guard hooks hold when the session runs outside every code path
 # (gap row 358). The owner starts sessions from a notes folder, so the payload's cwd is under no
-# registered codePath. Before this build no project resolved, and deny-prior-source.sh,
-# deny-frozen-test-writes.sh and require-stop-lines.sh allowed every call in silence. The rows:
+# registered codePath. Before this build no project resolved, and deny-prior-source.sh and
+# deny-frozen-test-writes.sh allowed every call in silence. The rows:
 #   replay   an implementer record in the shape of periplus rutter-passes' record at commit
 #            680d6e29, written here. The live builder's command, `cd <task>; cat
 #            deliverables/probe-record.md`, from a notes folder: denied. Read of it: denied.
 #   others   the person (no agent_type) and a non-AIDA agent type: {} each, no message.
 #   frozen   the implementer writes a frozen test of an earlier unit, and a file in the main
 #            checkout, from the notes folder: both denied.
-#   stop     the implementer returns with no stop line in its answers file: blocked.
 #   role     another plugin's implementer type is not bound to the record.
 #   two      a second project holds an open implementer record: not enforced, named.
 #   session  a record stamped with the payload's session_id wins, across projects and inside one.
@@ -42,7 +41,6 @@ LOG="$ROOT/log.txt"
 SH=bash; [ -n "${ZSH_VERSION:-}" ] && SH=zsh
 READ_HOOK="$PLUGIN/hooks/deny-prior-source.sh"
 WRITE_HOOK="$PLUGIN/hooks/deny-frozen-test-writes.sh"
-STOP_HOOK="$PLUGIN/hooks/require-stop-lines.sh"
 
 CODE="$ROOT/periplus"
 WT="$ROOT/periplus.worktrees/periplus-rutter-passes"
@@ -133,10 +131,6 @@ expect "frozen: the implementer's Write in the main checkout from the notes fold
 expect "frozen: the implementer's Write of an owned file in the worktree is allowed" \
   "$(answer "$WRITE_HOOK" "$(jq -nc --arg c "$NOTES" --arg f "$WT/src/periplus/engine/rules.py" \
       '{tool_name: "Write", agent_type: "aida:implementer", cwd: $c, tool_input: {file_path: $f, content: "x"}}')")" "allow"
-
-# ---- stop -------------------------------------------------------------------------------------
-expect "stop: the implementer returning with no stop line is blocked" \
-  "$(answer "$STOP_HOOK" "$(jq -nc --arg c "$NOTES" '{hook_event_name: "SubagentStop", agent_type: "aida:implementer", cwd: $c, stop_hook_active: false}')")" "block"
 
 # ---- role: only this plugin's roles reach the search ---------------------------------------
 expect "role: another plugin's implementer is not bound to the record" \
