@@ -7,7 +7,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # The skill body holds the conversation. This script holds the deterministic half: it freezes the
 # contract and the work orders into a snapshot, opens the ledger, establishes whether the code
 # repository can run a test at all, briefs and freezes one order's tests, briefs and records one
-# order's build against eight deciding checks, briefs and records its review, its fix rounds and
+# order's build against three deciding checks, briefs and records its review, its fix rounds and
 # their verification, closes the order, and finishes the task once every order is closed. It never
 # asks a question and never judges whether a criterion is met. What each step is for, and why, is
 # ideal/implementation.md; this header says only what a caller needs.
@@ -518,8 +518,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      budget, go-on answers it.
 #  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #  80  `tests-freeze` ran the order-tests command build-record runs over the files it freezes, and
-#      the run passed though the order has tests with a red run: those tests do not fail when it
-#      runs them. Or the run failed and printed no line of any red file: it runs something other
+#      the run passed though the order has tests with no locks-in reason: those tests do not fail
+#      when it runs them, whether they came with a red, a green-on-arrival or neither. Or the run failed and printed no line of any red file: it runs something other
 #      than the reds, and a correct build would fail (gap row 436). A red file the recipe's markers do not read as
 #      a failed assertion is a warning, recorded with `redSignal: unread`.
 #
@@ -3097,27 +3097,18 @@ br_deleted_note() {
 # build-record subtracts it line by line and the 4000-character tail is not enough to subtract from.
 bl_tool_result() {
   local check_id="$1" label="$2" codepath="$3" paths_json="$4" outfile="$5/$BL_OUTPUT_DIR/$1.txt"
-  local row argv_json signal exts_json absent_declared missing_why
+  local row argv_json signal exts_json
   local verdict reason exit_json output truncated rc raw_len kept_file
-  local has_paths scoped_json scoped_count errfile stdout_len result kind payload
+  local has_paths scoped_json scoped_count stdout_len kind payload
   verdict=""; reason=""; exit_json="null"; output=""; truncated=false; kept_file=""
 
-  row="$(printf '%s' "$CR_DOC" | jq -c --arg id "$check_id" '[ (.tools // [])[] | select(.id == $id) ][0] // null')"
-  absent_declared=""; missing_why=""
-  if [ "$row" = "null" ]; then
-    missing_why="no check recipe was resolved for this task, so $label was not checked"
-  else
-    absent_declared="$(printf '%s' "$row" | jq -r 'if (.absent // false) then (.absentReason // "the recipe declares this row absent") else "" end')"
-    missing_why="$(printf '%s' "$row" | jq -r '.missing // ""')"
-  fi
-  if [ -n "$absent_declared" ]; then
-    jq -n --arg reason "$absent_declared" '{verdict: "undeclared", reason: $reason, absent: true}'
+  tr_find_tool_row "$CR_DOC" "$check_id" "$label"
+  if [ -n "$TR_SKIP" ]; then
+    jq -n --arg reason "$TR_SKIP" --argjson absent "$TR_ABSENT" \
+      '{verdict: "undeclared", reason: $reason} + (if $absent then {absent: true} else {} end)'
     return 0
   fi
-  if [ -n "$missing_why" ]; then
-    jq -n --arg reason "$missing_why" '{verdict: "undeclared", reason: $reason}'
-    return 0
-  fi
+  row="$TR_ROW"
 
   argv_json="$(printf '%s' "$row" | jq -c '.argv // []')"
   signal="$(printf '%s' "$row" | jq -r '.signal // ""')"
@@ -3149,17 +3140,9 @@ bl_tool_result() {
       reason="the $label command reads only $(printf '%s' "$exts_json" | jq -r 'join(", ")'), and the scope holds no file with one of those extensions, so the row does not apply"
     fi
   else
-    stdout_len=0
-    errfile=""
     mkdir -p "$(dirname -- "$outfile")" || die3 "preconditions: could not create $(dirname -- "$outfile")"
-    if [ -n "$signal" ]; then
-      errfile="$outfile.err"
-      result="$(br_run_resolved "$argv_json" "$codepath" "$outfile" "$scoped_json" "$PC_VALUES" "$errfile")"
-    else
-      result="$(br_run_resolved "$argv_json" "$codepath" "$outfile" "$scoped_json" "$PC_VALUES")"
-    fi
-    kind="$(printf '%s' "$result" | cut -f1)"
-    payload="$(printf '%s' "$result" | cut -f2-)"
+    tr_run_tool_row "$row" "$codepath" "$scoped_json" "$PC_VALUES" "$outfile"
+    kind="$TR_KIND"; payload="$TR_PAYLOAD"; stdout_len="$TR_STDOUT_LEN"
     if [ "$kind" = "UNRESOLVED" ]; then
       verdict="unknown"
       reason="the token {$payload} in the $label command has no supplied value; pass --value $payload=<value>"
@@ -3169,12 +3152,6 @@ bl_tool_result() {
     else
       rc="$payload"
       kept_file="$BL_OUTPUT_DIR/$check_id.txt"
-      if [ -n "$signal" ]; then
-        stdout_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
-        case "$stdout_len" in ''|*[!0-9]*) stdout_len=0 ;; esac
-        cat "$errfile" >>"$outfile" 2>/dev/null
-      fi
-      [ -z "$errfile" ] || rm -f "$errfile"
       exit_json="$rc"
       if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$stdout_len" -gt 0 ]; then
         verdict="unmet"
@@ -5816,7 +5793,7 @@ TF_RED_TESTS
   # because the recipe serves nothing else here.
   local tf_pre_file
   tf_pre_file="$IMPL_DIR/preconditions.json"
-  if [ "$red_count" -gt 0 ] && [ -f "$tf_pre_file" ]; then
+  if [ "$(printf '%s' "$tests_json" | jq 'length')" -gt 0 ] && [ -f "$tf_pre_file" ]; then
     rf_fill_from_record "tests-freeze" "--test-recipe" "$test_recipes" "$(pre_test_recipes "$tf_pre_file")" "$tf_pre_file" \
       "The reds would be read against one recipe and build-record would read the other, so the two records of one order would stand on two recipes. Nothing is frozen." "--recipe"
     test_recipes="$RF_LIST"
@@ -6197,8 +6174,12 @@ TF_CS_EOF
   # shows only that red. A run that printed nothing or read unknown is left to the build. A line
   # that differs only in a random name, such as a temporary path, does not match; that is the limit.
   local tf_ot_paths tf_ot_json tf_ot_out tf_ot_keys tf_ot_red_keys tf_ot_names tf_ot_started tf_ot_argv
+  # A test with no locks-in reason must fail, whether it came with a red, a green-on-arrival or
+  # neither: a test seen passing before the code proves nothing (references/what-a-test-is.md).
   tf_ot_paths="$(br_frozen_test_paths "$rows_json")"
-  if [ "$red_count" -gt 0 ] && [ "$BR_ORDER_SLOT" = "order-tests" ] && [ "$tf_ot_paths" != "[]" ]; then
+  tf_ot_names="$(jq -nr --argjson tests "$tests_json" --argjson locks "$locks_json" \
+    '($locks | map(.name)) as $l | [ $tests[] | .name | select(($l | index(.)) == null) ] | unique | join(", ")')"
+  if [ -n "$tf_ot_names" ] && [ "$BR_ORDER_SLOT" = "order-tests" ] && [ "$tf_ot_paths" != "[]" ]; then
     CR_WHO="tests-freeze"; CR_TEST_RECIPES="$test_recipes"; CR_CHECK_RECIPES=""
     cr_resolve
     BRC_WHO="tests-freeze"; BRC_CODEPATH="$codepath"; BRC_RECIPES="$CR_DOC"; BRC_VALUES=""
@@ -6207,10 +6188,9 @@ TF_CS_EOF
     tf_ot_json="$(br_test_check "order-tests" "orderTests" "order-tests")" || exit "$?"
     # The same run, timed, is the record a test's weight is read from (gap row 454).
     test_weight_warn "$TASK_PATH" tests-freeze "$unit_id" "$(($(date +%s) - tf_ot_started))"
-    tf_ot_names="$(printf '%s' "$reds_json" | jq -r 'map(.name) | unique | join(", ")')"
     tf_ot_argv="$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | (.orderTests.argv // []) | join(" ") ] | join("; ")')"
     [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" != "met" ] \
-      || die 80 "tests-freeze: the order-tests command build-record runs, $tf_ot_argv, over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), passes, so these tests with a red run do not fail when it runs them: $tf_ot_names. A frozen test fails before the build (references/what-a-test-is.md). The test author repairs the tests, or returns a locks-in reason for a test that passes against existing code, and this freeze runs again. Nothing is frozen."
+      || die 80 "tests-freeze: the order-tests command build-record runs, $tf_ot_argv, over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), passes, so these tests with no locks-in reason do not fail when it runs them: $tf_ot_names. A frozen test fails before the build (references/what-a-test-is.md). The test author repairs the tests, or returns a locks-in reason for a test that passes against existing code, and this freeze runs again. Nothing is frozen."
     tf_ot_out="$(mktemp)" || die3 "tests-freeze: could not create a temporary file"
     tf_ot_keys="$(mktemp)" || { rm -f "$tf_ot_out"; die3 "tests-freeze: could not create a temporary file"; }
     tf_ot_red_keys="$(mktemp)" || { rm -f "$tf_ot_out" "$tf_ot_keys"; die3 "tests-freeze: could not create a temporary file"; }
@@ -6219,7 +6199,7 @@ TF_CS_EOF
     printf '%s' "$reds_json" | jq -r '.[].path' | while IFS= read -r red_path; do
       br_line_keys "$red_path"
     done | grep -v '^$' | sort -u >"$tf_ot_red_keys"
-    if [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" = "unmet" ] && [ -s "$tf_ot_keys" ] \
+    if [ "$red_count" -gt 0 ] && [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" = "unmet" ] && [ -s "$tf_ot_keys" ] \
       && ! grep -a -F -x -q -f "$tf_ot_red_keys" "$tf_ot_keys"; then
       cp "$tf_ot_out" "$IMPL_DIR/order-tests-$unit_id-freeze.txt"
       rm -f "$tf_ot_out" "$tf_ot_keys" "$tf_ot_red_keys"
@@ -6845,38 +6825,25 @@ BRC_OBSERVED=""
 # order introduced, and which of the two ways the tool used to say so changes nothing about that.
 br_tool_check() {
   local check_id="$1" field="$2" label="$3"
-  local row argv_json signal exts_json absent_declared missing_why
-  local verdict detail exit_json out_src outfile errfile rc has_paths
+  local row argv_json signal exts_json
+  local verdict detail exit_json out_src outfile rc has_paths
   local owned_json owned_count scoped_json scoped_count stdout_len failed how
-  local baseline_doc baseline_verdict baseline_output result kind payload new_json new_count
+  local baseline_doc baseline_verdict baseline_output kind payload new_json new_count
   local left_out_json paths_json expanded_json oi entry
   verdict=""; detail=""; exit_json="null"; out_src="/dev/null"; outfile=""; new_json="[]"; new_count=0
   left_out_json="[]"; paths_json="null"
 
-  row="$(printf '%s' "$BRC_RECIPES" | jq -c --arg id "$check_id" '[ (.tools // [])[] | select(.id == $id) ][0] // null')"
-  absent_declared=""
-  missing_why=""
-  if [ "$row" = "null" ]; then
-    missing_why="no check recipe was resolved for this task, so $label was not checked."
-  else
-    absent_declared="$(printf '%s' "$row" | jq -r 'if (.absent // false) then (.absentReason // "the recipe declares this row absent") else "" end')"
-    missing_why="$(printf '%s' "$row" | jq -r '.missing // ""')"
-  fi
-
-  if [ -n "$absent_declared" ]; then
+  tr_find_tool_row "$BRC_RECIPES" "$check_id" "$label"
+  if [ -n "$TR_SKIP" ]; then
     # A recipe that declares this framework has no such tool answered the question, and its own
     # reason text is what a person reads when they ask why the check never ran. A row nobody
     # resolved answered nothing. Both are undeclared, because undeclared is never satisfied either
     # way, and `absent` is what tells the two apart.
-    jq -n --arg id "$check_id" --arg detail "$absent_declared" \
-      '{id: $id, verdict: "undeclared", detail: $detail, absent: true}'
+    jq -n --arg id "$check_id" --arg detail "$TR_SKIP" --argjson absent "$TR_ABSENT" \
+      '{id: $id, verdict: "undeclared", detail: $detail} + (if $absent then {absent: true} else {} end)'
     return 0
   fi
-  if [ -n "$missing_why" ]; then
-    jq -n --arg id "$check_id" --arg detail "$missing_why" \
-      '{id: $id, verdict: "undeclared", detail: $detail}'
-    return 0
-  fi
+  row="$TR_ROW"
 
   argv_json="$(printf '%s' "$row" | jq -c '.argv // []')"
   signal="$(printf '%s' "$row" | jq -r '.signal // ""')"
@@ -6940,16 +6907,8 @@ br_tool_check() {
   else
     [ "$has_paths" = "false" ] || paths_json="$scoped_json"
     outfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
-    errfile=""
-    stdout_len=0
-    if [ -n "$signal" ]; then
-      errfile="$(mktemp)" || die3 "$BRC_WHO: could not create a temporary file"
-      result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$outfile" "$scoped_json" "$BRC_VALUES" "$errfile")"
-    else
-      result="$(br_run_resolved "$argv_json" "$BRC_CODEPATH" "$outfile" "$scoped_json" "$BRC_VALUES")"
-    fi
-    kind="$(printf '%s' "$result" | cut -f1)"
-    payload="$(printf '%s' "$result" | cut -f2-)"
+    tr_run_tool_row "$row" "$BRC_CODEPATH" "$scoped_json" "$BRC_VALUES" "$outfile"
+    kind="$TR_KIND"; payload="$TR_PAYLOAD"; stdout_len="$TR_STDOUT_LEN"
     if [ "$kind" = "UNRESOLVED" ]; then
       verdict="unknown"
       detail="the token {$payload} in the $label command $BR_NO_VALUE; pass --value $payload=<value>."
@@ -6958,12 +6917,6 @@ br_tool_check() {
       detail="the $label command came out with no token at all, so nothing ran and nothing was decided."
     else
       rc="$payload"
-      if [ -n "$signal" ]; then
-        stdout_len="$(wc -c <"$outfile" 2>/dev/null | tr -d '[:space:]')"
-        case "$stdout_len" in ''|*[!0-9]*) stdout_len=0 ;; esac
-        # The baseline joined the two streams the same way, standard output first.
-        cat "$errfile" >>"$outfile" 2>/dev/null
-      fi
       out_src="$outfile"
       exit_json="$rc"
       failed=false; how=""
@@ -7019,7 +6972,6 @@ br_tool_check() {
         fi
       fi
     fi
-    [ -z "$errfile" ] || rm -f "$errfile"
     [ "$has_paths" = "false" ] || detail="$detail$(br_outside_note)$(br_deleted_note)"
   fi
   # The output is read from its file, never passed as an argument (nyc defect 9).
@@ -8719,12 +8671,6 @@ do_build_record() {
     [ -n "$test_recipes" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
       || die3 "build-record: $unit_id is proved by its own tests, no --test-recipe was passed, and $IMPL_DIR/preconditions.json records no resolved test-execution recipe. No check ran and no attempt was spent. Pass --test-recipe <framework>=<path>."
   fi
-  # A left-out --check-recipe read every tool row undeclared (gap row 399). With none on record,
-  # undeclared is the true reading, so nothing refuses.
-  if [ -z "$check_recipes" ]; then
-    rf_fill_from_record "build-record" "--check-recipe" "" "$(base_check_recipes "$IMPL_DIR/baseline.json")" "$IMPL_DIR/baseline.json" "" "--check-recipe"
-    check_recipes="$RF_LIST"
-  fi
 
   # The ledger an unattended stop here writes carries the builder's commits, as any stop does.
   br_require_clean_tree "build-record" "$codepath" "$unit_id" "$ledger_run_mode" "$ledger_file" \
@@ -8767,7 +8713,7 @@ do_build_record() {
   BRC_UNIT_JSON="$UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
   CR_TEST_RECIPES="$test_recipes"
-  CR_CHECK_RECIPES="$check_recipes"
+  CR_CHECK_RECIPES=""
   BRC_VALUES="$values"
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
@@ -8951,13 +8897,10 @@ go_on_check() {
   # would make its check read unknown or undeclared over the stop the checks are meant to clear,
   # and an unknown configuration gate then refuses the next run. A flag naming another path than
   # its record refuses. A gate order's implement recipe comes from br_fill_gate_recipes -----------
-  local pre_file="$IMPL_DIR/preconditions.json" base_file="$IMPL_DIR/baseline.json" filled=""
+  local pre_file="$IMPL_DIR/preconditions.json" filled=""
   local rf_cost="The checks would read one recipe and the task's records the other. Nothing ran, and $record_file is unchanged."
   rf_fill_from_record "go-on" "--test-recipe" "$test_recipes" "$(pre_test_recipes "$pre_file")" "$pre_file" "$rf_cost" "--recipe"
   test_recipes="$RF_LIST"; filled="$RF_FILLED"
-  rf_fill_from_record "go-on" "--check-recipe" "$check_recipes" "$(base_check_recipes "$base_file")" \
-    "$base_file" "$rf_cost" "--check-recipe"
-  check_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
   br_fill_gate_recipes "go-on" "$RV_UNIT_JSON" "$gate_recipes" "$rf_cost" "Nothing ran, and $record_file is unchanged."
   gate_recipes="$RF_LIST"; filled="$filled${filled:+${RF_FILLED:+, }}$RF_FILLED"
 
@@ -8988,7 +8931,7 @@ go_on_check() {
   BRC_UNIT_JSON="$RV_UNIT_JSON"
   BRC_TESTS_DOC="$tests_doc"
   CR_TEST_RECIPES="$test_recipes"
-  CR_CHECK_RECIPES="$check_recipes"
+  CR_CHECK_RECIPES=""
   BRC_VALUES="$values"
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"
@@ -9742,7 +9685,7 @@ RB_RECORDS
     "$IMPL_DIR/tests-$unit_id.json" 2>/dev/null)"
 
   # The brief is a file the dispatch names, never text printed through this conversation. It
-  # carries the contract, the order, the eight check results with what each tool printed, and both
+  # carries the contract, the order, the three check results with what each one printed, and both
   # interface texts; the reviewer reads it from the path.
   local brief_file brief_json
   brief_file="$IMPL_DIR/brief-$unit_id-review.json"
@@ -10438,7 +10381,7 @@ FB_ALLOW
 }
 
 # ------------------------------------------------------------------------------------------------
-# fix-record: one fix round, and the seven computable checks again. A fix is code, and code that
+# fix-record: one fix round, and the three checks again. A fix is code, and code that
 # breaks a passing test is not a fix (ideal/implementation.md, "The fix rounds re-run the first two
 # checks"). The interface check is never re-run here: a fix round does not rewrite that record.
 # ------------------------------------------------------------------------------------------------
@@ -10649,10 +10592,6 @@ RV_AC
     [ -n "$test_recipes" ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
       || die3 "fix-record: $unit_id is proved by its own tests, no --test-recipe was passed, and $IMPL_DIR/preconditions.json records no resolved test-execution recipe. No check ran and no round was spent. Pass --test-recipe <framework>=<path>."
   fi
-  if [ -z "$check_recipes" ]; then
-    rf_fill_from_record "fix-record" "--check-recipe" "" "$(base_check_recipes "$IMPL_DIR/baseline.json")" "$IMPL_DIR/baseline.json" "" "--check-recipe"
-    check_recipes="$RF_LIST"
-  fi
 
   br_require_clean_tree "fix-record" "$RV_RANGE_REPO" "$unit_id" "$RV_RUN_MODE" "$RV_LEDGER_FILE" \
     "$(im_unrecorded_commits_in "$RV_LEDGER_DOC" "$unit_id" "$RV_RANGE_REPO" "$started_at_full" HEAD)" "$RV_RANGE_PATHS"
@@ -10669,7 +10608,7 @@ RV_AC
   # allowed change passes (live-run row 116).
   br_round_allowed "$unit_id" "$round_number"
   CR_TEST_RECIPES="$test_recipes"
-  CR_CHECK_RECIPES="$check_recipes"
+  CR_CHECK_RECIPES=""
   BRC_VALUES="$values"
   BRC_NOTHING_RAN="$nothing_ran"
   BRC_HAVE_NOTHING_RAN="$have_nothing_ran"

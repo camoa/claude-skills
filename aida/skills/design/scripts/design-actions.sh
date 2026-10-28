@@ -213,11 +213,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   8  an unattended `close` found a disposition made unattended, or one only a paragraph records,
 #      that records/disposition-<order>.json does not confirm: no value for the candidate, or
 #      another value (gap row 293). One line per such disposition says which, and what to do.
-#   9  `check` or `close` found two names in backticks that an order's interface joins with `or`,
-#      and that `update --keep-choices` did not keep (gap row 345). Such a pair is often a choice
-#      the builder makes, and the build's interface check wants both names in its record. Each
-#      order prints as `<wo> <a> or <b>`. Rewrite a choice as plain text with `update --interface`,
-#      or keep the order's pairs. `check` reports it only when the design check itself is clean.
+#   9  retired in 6.1.0. Two names in backticks joined with `or` are a notice, `interfaceChoice:`,
+#      since the build's interface check went (batch 3c).
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
@@ -269,7 +266,6 @@ die5() { printf 'design-actions: %s\n' "$1" >&2; exit 5; }
 die6() { printf 'design-actions: %s\n' "$1" >&2; exit 6; }
 die7() { printf 'design-actions: %s\n' "$1" >&2; exit 7; }
 die8() { printf 'design-actions: %s\n' "$1" >&2; exit 8; }
-die9() { printf 'design-actions: %s\n' "$1" >&2; exit 9; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
 die79() { printf 'design-actions: %s\n' "$1" >&2; exit 79; }
 
@@ -1952,7 +1948,6 @@ do_check() {
   [ -z "$unaccounted" ] || [ "$verdict" -ne 0 ] || verdict=7
   local choices
   choices="$(open_choices)"
-  [ -z "$choices" ] || [ "$verdict" -ne 0 ] || verdict=9
   lines="$(wc -l <"$CHECK_FILE" | tr -d '[:space:]')"
   echo "action: check"
   echo "status: $verdict"
@@ -1998,14 +1993,14 @@ do_check() {
         | select(.interface | test("`[^`]+`") | not) | .id' "$f" 2>/dev/null; done \
     | paste -s -d ',' - | sed 's/,/, /g')"
   if [ -n "$unquoted" ]; then
-    echo "interfaceUnquoted: $unquoted | the build's interface check counts only backtick-quoted names. Quote each exposed element with update --interface"
+    echo "interfaceUnquoted: $unquoted | the build brief lists only backtick-quoted names for the builder's record. Quote each exposed element with update --interface"
   else
     echo "interfaceUnquoted: none"
   fi
   # The paths an order's interface names in backticks that it does not own, that no reuse of it
-  # declares and that no order it depends on owns (gap row 253). The build's interface check wants
-  # each backticked name repeated in the builder's record, and a builder leaves out a path it never
-  # touched. `ifacePath` decides what a token is as a path. It is known when it is one of those
+  # declares and that no order it depends on owns (gap row 253). The build brief lists
+  # each backticked name for the builder's record, and a builder leaves out a path it never
+  # touched, so the reviewer finds the two texts apart. `ifacePath` decides what a token is as a path. It is known when it is one of those
   # paths, or lies under one. A script cannot tell a path from prose, so the line never blocks the
   # close.
   local unowned
@@ -2038,12 +2033,12 @@ do_check() {
         | $wo.id + " " + join(", ")' "$f" 2>/dev/null; done \
     | paste -s -d ';' - | sed 's/;/; /g')"
   if [ -n "$shaped" ]; then
-    echo "interfaceShaped: $shaped | best effort: each name in backticks holds < or {, so it may be a shape. The build's interface check matches a shape only by its repeated text. Name each real element, or write the shape as plain text with update --interface"
+    echo "interfaceShaped: $shaped | best effort: each name in backticks holds < or {, so it may be a shape. The build brief lists it for the builder's record as written, and the reviewer compares the two. Name each real element, or write the shape as plain text with update --interface"
   else
     echo "interfaceShaped: none"
   fi
   if [ -n "$choices" ]; then
-    echo "interfaceChoice: $(printf '%s\n' "$choices" | paste -s -d ';' - | sed 's/;/; /g') | each pair of names in backticks is joined by or, so it may be a choice the builder makes. The build's interface check wants both names in the builder's record. Write a choice as plain text with update --interface. When each name must exist, keep the order's pairs with update --keep-choices"
+    echo "interfaceChoice: $(printf '%s\n' "$choices" | paste -s -d ';' - | sed 's/;/; /g') | each pair of names in backticks is joined by or, so it may be a choice the builder makes. A builder that takes one option leaves the other out of its record, and the reviewer compares the two. Write a choice as plain text with update --interface. When each name must exist, keep the order's pairs with update --keep-choices"
   else
     echo "interfaceChoice: none"
   fi
@@ -2237,11 +2232,6 @@ $wo_id, $cand, $disp: the confirmer answered $got. Dispose it again with --verdi
     || die7 "close: a research finding is in no work order's findings. Account for each one with account, cited or set aside with a reason:
 $unaccounted"
 
-  local choices
-  choices="$(open_choices)"
-  [ -z "$choices" ] \
-    || die9 "close: an order's interface joins two names in backticks with or, and the build's interface check wants both in the builder's record. Write a choice as plain text with update --interface, or keep the order's pairs with update --keep-choices:
-$choices"
 
   # A run line that is not binding was written by a model from research, and only a person stands
   # between it and the worktree. The person approves such lines at this close, the design's

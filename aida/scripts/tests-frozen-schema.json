@@ -152,7 +152,7 @@
         },
         "red": {
           "type": "string",
-          "description": "What running this test printed before the code existed, copied verbatim from the file the `--red` flag pointed at. Checked to hold one of the assertion markers the test-execution recipe declares under `failure_signal`, or a line its suite row's `failure_line` names (exit 80); `redSignal` says which. A run that never reached a test, a harness error included, is refused before this file is written, except for the order that creates the unit, whose first run can only stop there (`redSignal: harness-new-unit`). Never empty and never synthesised: a test with neither a red run nor a `locksIn` reason is refused before this file is written (exit 33), and a `--green-on-arrival` report stops the whole step rather than being recorded here (exit 34), because a test proving nothing before the code exists proves nothing after it either. Absent only when `locksIn` is present."
+          "description": "What running this test printed before the code existed, copied verbatim from the file the `--red` flag pointed at. Read against the assertion markers the test-execution recipe declares under `failure_signal`, and the lines its suite row's `failure_line` names; `redSignal` says how it read, and a file it could not read is recorded `unread` with a warning in the task record. Never synthesised. The freeze also runs the tests itself and refuses when a test with no locks-in reason passes (exit 80)."
         },
         "redSignal": {
           "type": "string",

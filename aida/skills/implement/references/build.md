@@ -292,7 +292,6 @@ Run:
   --report <path to the builder's report> \
   --started-at <the commit the attempt began from> \
   --test-recipe <framework>=<path to the test-execution recipe> \
-  --check-recipe <framework>=<path to the review recipe> \
   [--implement-recipe <framework>=<path to the implement recipe>]... \
   [--observed <path to the observed record>] \
   [--value <name>=<value>]... \
@@ -360,9 +359,9 @@ The check's detail says how many were set aside. A person's places are `inputs/`
 aside even when a person wrote it. A file in a person's place is never set aside, so a second
 document there that the order does not own still reads unmet.
 
-`--test-recipe` and `--check-recipe` are paths only, one pair per framework, the same two files
-`references/preconditions.md` already resolved for the baseline. Left out, `--test-recipe` is taken
-from `preconditions.json` and `--check-recipe` from `baseline.json`, here and at `fix-record`. An
+`--test-recipe` is a path only, one per framework, the file `references/preconditions.md` already
+resolved. Left out, it is taken from `preconditions.json`, here and at `fix-record`. No check
+recipe is read here, because no tool row runs. An
 order proved by its own tests with no test recipe on record refuses (exit 3), and no attempt or
 round is spent. The script parses `## Test commands` itself: the command that runs this order's
 own frozen tests, with its argv and its `{paths}` placeholder. Nothing here retypes a command. A

@@ -3,7 +3,7 @@
 #
 # A work order carries one proof kind: `tests`, `gate`, `record`, `observe` or `confirm`. No check wants the
 # kind itself. Every site that reads `.proof` turns it into one of three questions about the
-# order (gap row 170). The first asks which of the eight deciding checks takes its first slot.
+# order (gap row 170). The first asks which of the three deciding checks takes its first slot.
 # The second asks which repository holds its range. The third asks whether it owns a file in the
 # code path. Each site turned the kind into its question on its own, in its own words. So a fifth
 # kind meant finding twenty-three of them.
@@ -39,7 +39,7 @@
 # use. They are named globals that share one prefix. They are declared here, so a caller under
 # `set -u` never reads one unset, and reset at the top of the function.
 #
-# BR_ORDER_SLOT is the check that takes the first of the eight deciding checks: `order-tests`,
+# BR_ORDER_SLOT is the check that takes the first of the three deciding checks: `order-tests`,
 # `configuration-gate`, `done-when`, `observed` or `confirm-at-review`. An order freezes and runs
 # a test exactly when its slot is `order-tests`, so that question needs no field of its own.
 # BR_ORDER_RANGE is `code` or `project`, the repository the order's range lives in.

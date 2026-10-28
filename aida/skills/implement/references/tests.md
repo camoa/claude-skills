@@ -320,9 +320,9 @@ Then nothing checks those files: say so to the person when you report this step.
 This is the one place the tests' own standards are judged. Review leaves the frozen tests out of
 its tool rows, because no role after the freeze may write them.
 
-**The freeze runs the build's order-tests command when a test has a red.** It is the command
-build-record runs over the frozen files whole, with no argument. The tests must fail. A run that
-passes refuses the freeze (exit 80): a test that does not fail now proves nothing a build could
+**The freeze runs the build's order-tests command when a test has no locks-in reason.** It is the command
+build-record runs over the frozen files whole, with no argument. Every test with no locks-in reason
+must fail. A run that passes refuses the freeze (exit 80): a test that does not fail now proves nothing a build could
 change. When the run fails and prints something, at least one red file must share a line with
 what it printed. Numbers in a line are not compared. Otherwise the freeze refuses (exit 80): the
 build would run something other than what the reds show, and read a correct build unmet. The
@@ -585,9 +585,9 @@ A person is not a role, and is not refused. A freeze is not a lock: it exists so
 noticed, and the hash is what notices one. The hook allows the write and says which file changed and
 which order froze it.
 
-Report a test that passed on arrival with `--green-on-arrival <test name>=<reason>`. The script
-writes a warning and goes on: a test nobody watched fail is not a reference, and the person decides
-whether to redo the order.
+Report a test that passed on arrival with `--green-on-arrival <test name>=<reason>`. The freeze
+runs it with the others and refuses while it passes (exit 80): a test nobody watched fail is not a
+reference. A test that passes against existing code takes a `--locks-in` reason instead.
 
 A record is taken once. A second run with the same tests leaves it alone, whatever commit the
 tree is at now, because every freeze moves the tree. Different tests at a different commit

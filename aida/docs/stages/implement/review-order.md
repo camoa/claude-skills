@@ -5,7 +5,7 @@ against the contract and writes findings. Each finding must cite one criterion o
 
 ## What the reviewer reads
 
-The reviewer gets the criteria and non-goals, the order, the diff, the frozen tests and the eight
+The reviewer gets the criteria and non-goals, the order, the diff, the frozen tests and the three
 check results. It gets the declared interface and the builder's record of it, and compares them.
 It gets the builder's report as claims, never as proof. It answers each of the framework's
 implement recipes: followed, departed, or not applicable. It also judges each check in the

@@ -274,7 +274,7 @@
         "fixRecord": {
           "type": "string",
           "minLength": 1,
-          "description": "Where that round's own fix record lives, which holds the seven checks the round re-ran and the path to its diff."
+          "description": "Where that round's own fix record lives, which holds the three checks the round re-ran and the path to its diff."
         },
         "addressed": {
           "type": "array",

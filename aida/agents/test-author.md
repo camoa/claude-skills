@@ -141,7 +141,7 @@ implementer may write only the files it owns. So nobody after you can change tha
 change the done-when asks for in it yourself, for example a repair of its existing fixtures. Run
 each test until it passes. A red run is not the goal here, because no build can turn it green.
 Return each test with a `locks-in` reason that names the existing code it passes against. The
-freeze refuses a red test when every owned file is a test file or a support file you pass to it.
+freeze warns on a red test when every owned file is a test file or a support file you pass to it.
 
 Write what you return to the report file the brief names under `reportPath`, and name that path
 in your reply. Return one row per test: the path, the test's name, and the criterion its name

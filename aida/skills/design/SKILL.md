@@ -509,9 +509,9 @@ this conversation; the id space is shared and minted in order, so naming it ahea
 `create` call is safe as long as it is created before design finishes.
 
 Write `--interface` so that it names each exposed element in backticks. That is the service id,
-the class, the interface, the method, the route, the hook and the config key. The build's
-interface check counts only the backtick-quoted names, and wants each one in the builder's record.
-So write a choice the builder makes, such as two calls it may pick from, as plain text. An order
+the class, the interface, the method, the route, the hook and the config key. The build brief
+lists only the backtick-quoted names, and the builder names each one in its record, which the
+reviewer compares. So write a choice the builder makes, such as two calls it may pick from, as plain text. An order
 that exposes nothing takes no `--interface`.
 
 Start `--diff-budget` with `small`, `medium` or `large`. The build reads the first word. An order
@@ -750,22 +750,22 @@ element it exposes.
 
 `check` also prints `interfaceUnowned:`, at every exit code. It names each path an order's
 interface holds in backticks that the order does not own, no reuse of it declares, and no order
-in its `dependsOn` owns. A `./` prefix and a `:line` or `::member` suffix are ignored. The
-build's interface check wants every backticked name repeated in the builder's record. A builder
-leaves out a path it did not touch, and the build stops. It is best effort, and it never blocks
+in its `dependsOn` owns. A `./` prefix and a `:line` or `::member` suffix are ignored. The build
+brief lists every backticked name for the builder's record. A builder leaves out a path it did not
+touch, and the reviewer finds the two texts apart. It is best effort, and it never blocks
 the close. Answer each one: write the path as plain text with `update --interface`, or add the
 reuse with `dispose --path --interface`.
 
 `check` also prints `interfaceShaped:`, at every exit code. It names each name in backticks in an
 order's interface that holds `<` or `{`. Such a name is often a shape, such as `type.<id>`. The
-build's interface check matches a shape only when the builder's record repeats its text. A generic
+builder's record can name a shape only by repeating its text, which the reviewer reads. A generic
 type holds `<` too, so the line never blocks the close. Name each real element instead, or write
 the shape as plain text with `update --interface`.
 
 `check` also prints `interfaceChoice:`, at every exit code. It names each pair of names in
 backticks that an order's interface joins with `or`. Such a pair is often a choice the builder
-makes, and a builder that takes one option leaves the other out of its record. `check` and
-`close` refuse, exit 9, while a pair is open, in both run modes. Answer each pair. Write a
+makes, and a builder that takes one option leaves the other out of its record. The line never
+blocks the close. Answer each pair. Write a
 choice as plain text with `update --interface`. When each name must exist, such as two exit
 codes, keep the order's pairs:
 ```

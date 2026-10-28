@@ -44,6 +44,8 @@
 #   tf_sha256_of <file>                       the sha256 of that file, lowercase hex
 #   tf_path_matches_glob <path> <glob>        one segment against one glob segment
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob, or its file name when the glob has no /
+#   tr_find_tool_row <recipes> <id> <label>   one tool row of the resolved recipes, or why it runs nothing
+#   tr_run_tool_row <row> <dir> <paths> <values> <out>   runs one tool row, its streams joined
 #   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>] [<log>]   runs one resolved command,
 #                                             within BR_RUN_LIMIT seconds when that is set
 #   br_token_value <values> <name>            a run line's value for that name, from every source
@@ -1038,8 +1040,9 @@ tf_path_matches_catalog_glob() {
 # reader can tell the tokens apart.
 #
 # BR_RUN_LIMIT, when it holds a number of seconds, stops a command that runs longer: the command
-# gets TERM and the exit status reads 124, the status GNU timeout uses. `timeout` is not on a stock
-# macOS, so a watchdog in the shell does it. A child the command started itself may outlive it.
+# and every process under it get TERM, and the exit status reads 124, the status GNU timeout uses.
+# `timeout` is not on a stock macOS, and zsh cannot start a process group from a script, so a
+# watchdog in the shell walks the tree with pgrep, which both systems carry.
 #
 # Prints one of three tab-separated results and never dies:
 #   UNRESOLVED<TAB><name>  a placeholder token nothing supplied a value for, naming it
@@ -1047,6 +1050,66 @@ tf_path_matches_catalog_glob() {
 #                          without replacing the shell, so this is a refusal and never a run
 #   RAN<TAB><exit status>  once the command actually ran, whatever it exited with
 BR_RUN_LIMIT=""
+
+# The tool row of id $2 in the resolved recipe document $1, read once for the baseline and the
+# freeze. Sets TR_ROW, the row or empty, and TR_SKIP, a reason the row runs nothing: the recipe
+# declares it absent (TR_ABSENT is then true), or it is missing, or no recipe was resolved. $3 a word
+# for the reason.
+# shellcheck disable=SC2034 # read by the sourcing script
+TR_ROW=""; TR_SKIP=""; TR_ABSENT=false
+tr_find_tool_row() {
+  TR_ROW="$(printf '%s' "$1" | jq -c --arg id "$2" '[ (.tools // [])[] | select(.id == $id) ][0] // empty')"
+  TR_SKIP=""; TR_ABSENT=false
+  if [ -z "$TR_ROW" ]; then
+    TR_SKIP="no check recipe was resolved for this task, so $3 was not checked"
+    return 0
+  fi
+  # shellcheck disable=SC2034 # read by the sourcing script
+  TR_SKIP="$(printf '%s' "$TR_ROW" | jq -r 'if (.absent // false) then (.absentReason // "the recipe declares this row absent") else (.missing // "") end')"
+  # shellcheck disable=SC2034 # read by the sourcing script
+  [ "$(printf '%s' "$TR_ROW" | jq -r '.absent // false')" != "true" ] || TR_ABSENT=true
+}
+
+# Runs the tool row $1 from inside $2 over the paths $3, with the --value list $4, writing its output
+# to $5: standard output first, then standard error when the row declares a signal. Sets TR_KIND
+# and TR_PAYLOAD from br_run_resolved, TR_SIGNAL, and TR_STDOUT_LEN, the bytes it printed on
+# standard output before the join.
+# shellcheck disable=SC2034 # read by the sourcing script
+TR_KIND=""; TR_PAYLOAD=""; TR_SIGNAL=""; TR_STDOUT_LEN=0
+tr_run_tool_row() {
+  local argv_json result errfile=""
+  argv_json="$(printf '%s' "$1" | jq -c '.argv // []')"
+  TR_SIGNAL="$(printf '%s' "$1" | jq -r '.signal // ""')"
+  TR_STDOUT_LEN=0
+  if [ -n "$TR_SIGNAL" ]; then
+    errfile="$5.err"
+    result="$(br_run_resolved "$argv_json" "$2" "$5" "$3" "$4" "$errfile")"
+  else
+    result="$(br_run_resolved "$argv_json" "$2" "$5" "$3" "$4")"
+  fi
+  TR_KIND="$(printf '%s' "$result" | cut -f1)"
+  # shellcheck disable=SC2034 # read by the sourcing script
+  TR_PAYLOAD="$(printf '%s' "$result" | cut -f2-)"
+  if [ -n "$errfile" ]; then
+    if [ "$TR_KIND" = "RAN" ]; then
+      TR_STDOUT_LEN="$(wc -c <"$5" 2>/dev/null | tr -d '[:space:]')"
+      case "$TR_STDOUT_LEN" in ''|*[!0-9]*) TR_STDOUT_LEN=0 ;; esac
+      cat "$errfile" >>"$5" 2>/dev/null
+    fi
+    rm -f "$errfile"
+  fi
+}
+
+# Sends TERM to the process $1 and to every process under it, children first, so none is left.
+br_kill_tree() {
+  local child
+  while IFS= read -r child; do
+    [ -z "$child" ] || br_kill_tree "$child"
+  done <<BR_KIDS
+$(pgrep -P "$1" 2>/dev/null)
+BR_KIDS
+  kill -TERM "$1" 2>/dev/null
+}
 br_run_resolved() {
   local argv_json="$1" dir="$2" outfile="$3" paths_json="$4" values="$5" errfile="${6:-}" logfile="${7:-}"
   local count i tok list_json pcount pi rc
@@ -1129,7 +1192,7 @@ br_run_resolved() {
       ( trap 'kill "$sleep_pid" 2>/dev/null; exit 0' TERM
         sleep "$BR_RUN_LIMIT" & sleep_pid=$!
         wait "$sleep_pid"
-        : >"$mark"; kill -TERM "$cmd_pid" 2>/dev/null ) >/dev/null 2>&1 &
+        : >"$mark"; br_kill_tree "$cmd_pid" ) >/dev/null 2>&1 &
       dog_pid=$!
       wait "$cmd_pid"; rc=$?
       kill -TERM "$dog_pid" 2>/dev/null; wait "$dog_pid" 2>/dev/null
@@ -1419,7 +1482,7 @@ cr_require_baseline_recipes() {
     was_sha="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].sha256 // ""')"
     was_path="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].path // ""')"
     if [ -n "$now_sha" ] && [ -n "$was_sha" ] && [ "$now_sha" != "$was_sha" ]; then
-      die 73 "$who: the check recipe resolved for $fw moved after this task's baseline was taken. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline. The baseline is not retaken mid-task: it reads the tree before the task, and the tree now holds this task's own code. Run this again with the recipe body the baseline read, the one at sha256 $was_sha. Or adopt the new body: implement-actions.sh recipe-refresh --check-recipe $fw=<path> adopts it only when every tool row of it reads met or undeclared on the current tree. Otherwise the one way on is to abandon the baseline by hand. The review skill's page and references/preconditions.md describe that and what it costs. Nothing was recorded."
+      die 73 "$who: the check recipe resolved for $fw moved after this task's baseline was taken. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline. The baseline is not retaken mid-task: it reads the tree before the task, and the tree now holds this task's own code. Run this again with the recipe body the baseline read, the one at sha256 $was_sha. Or adopt the new body with implement-actions.sh recipe-refresh --check-recipe $fw=<path>, which writes a warning for each tool row of it that does not read met or undeclared on the current tree. Nothing was recorded."
     fi
     idx=$((idx + 1))
   done

@@ -10,7 +10,7 @@ instead of asking the navigator again. `implementation/preconditions.json` holds
 test-execution recipe at `frameworks[].recipePath`, and `implementation/baseline.json` holds the
 review recipe at `checkRecipes[].path`, one per framework. A framework absent from a list had no
 recipe at the baseline; pass no flag for it. These are the same paths `references/build.md` read
-for this order. Pass them straight through to `fix-record` below, in the fix section; the script
+for this order. Pass the test recipe straight through to `fix-record` below, in the fix section; the script
 reads their command blocks itself, per SKILL.md. A fresh lookup could only agree with the record
 or fail.
 
@@ -33,7 +33,7 @@ It writes `implementation/brief-<order id>-review.json`:
 - the frozen tests, and the builder's report path; on an order whose proof
   is `record` the diff is the project folder's whole, and `deliverables` names
   each owned file by path. The reviewer reads the document whole rather than a patch;
-- the eight check results;
+- the three check results;
 - both interface texts, and `recordBefore` when go-on's check read an amended record;
 - the path the reviewer's findings go to;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null;
@@ -254,14 +254,13 @@ Run:
   --report <path to the fixer's report> \
   --started-at <the commit the round began from> \
   --test-recipe <framework>=<path to the test-execution recipe> \
-  --check-recipe <framework>=<path to the review recipe> \
   [--implement-recipe <framework>=<path to the implement recipe>]... \
   [--value <name>=<value>]... \
   [--nothing-ran <literal substring>] \
   [--scope-insufficient <finding id>=<reason>]...
 ```
-`--test-recipe` and `--check-recipe` are the two paths resolved above, one pair per framework. The
-script parses both itself, the same way `build-record` does. `--implement-recipe` is the path
+`--test-recipe` is the path resolved above, one per framework. The script parses it itself, the
+same way `build-record` does. `--implement-recipe` is the path
 build.md names, and an order whose proof is `gate` reads it here for the same reason. Left out, it is
 taken from `preconditions.json`, the same as at the build step. It refuses (exit 72) when two
 frameworks command one row. `--value` and `--nothing-ran` work the same way they do at the build step.
