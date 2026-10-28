@@ -55,8 +55,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # shell or runs a file. The unreadable-verb rule does not read a shell comment (live-run row 321).
 # Nor does it read the body of a heredoc with a quoted delimiter, such as `python3 - <<'EOF'`, on a
 # command that starts no shell: no shell expands that body (gap row 460). Nor does it read a quoted
-# argument after `-c` or `<<<` on such a command, as in `python3 -c '...'`. So a substitution in a
-# git verb that `su -c` or another unlisted shell runner runs is not refused. Two rules find a
+# argument after `-c` or `<<<` on such a command, as in `python3 -c '...'`. `su` and `sudo -s` start
+# a shell. A substitution in a git verb that another runner passes to a shell is not refused. Two rules find a
 # command word: a command word from a variable, and a recursive delete. They read a quoted string
 # that opens and closes on one line as part of one word. So the message in `detail="$d $fw: ..."`
 # is not a command (live-run row 254). The push rules and the unreadable-verb rule read such a
@@ -356,19 +356,29 @@ skip_wrappers() {
 # Reads normalised text $1 one command segment at a time. Sets RUNS to the files the segments
 # run, one per line. A file run as a command word must be executable, so it carries an `x:`
 # prefix. Sets SHELLISH to true when a segment starts a shell, `eval`, or a command word with a
-# slash. Sets SHELL_WORD to true when a segment starts a shell or `eval` only. Each loop in this file first drops, with one grep, the segments that cannot hit its rule.
+# slash. Sets SHELL_WORD to true when a segment starts a shell or `eval` only. `su`, and `sudo`
+# with `-s` or `-i`, start a shell. Each loop in this file first drops, with one grep, the segments that cannot hit its rule.
 # A bash loop over every segment of a 256 KiB file took most of a minute (live-run row 255).
 scan_runs() {
-  local seg j n c
+  local seg j n c k sudo
   RUNS=""; SHELLISH=false; SHELL_WORD=false
   while IFS= read -r seg; do
     set -f; read_words "$seg"; set +f
     # shellcheck disable=SC2154 # w is filled by read_words, scripts/lib/command-text.sh
     n=${#w[@]}
     skip_wrappers
+    sudo=false; k=0
+    while [ "$k" -lt "$I" ]; do
+      case "${w[$k]}" in
+        sudo) sudo=true ;;
+        --shell|--login|-[si]*|-[!-]*[si]*) [ "$sudo" = false ] || { SHELLISH=true; SHELL_WORD=true; } ;;
+      esac
+      k=$((k + 1))
+    done
     [ "$I" -lt "$n" ] || continue
     c="${w[$I]}"
     case "$c" in
+      su) SHELLISH=true; SHELL_WORD=true ;;
       bash|sh|zsh|dash|ksh|source|.|eval)
         SHELLISH=true; SHELL_WORD=true
         [ "$c" != eval ] || continue
@@ -390,7 +400,7 @@ scan_runs() {
 " ;;
     esac
   done <<SEGMENTS
-$(printf '%s\n' "$1" | tr ';&|(){}`' '\n\n\n\n\n\n\n\n' | grep -E -e '/|sh|source|eval|(^| )\.( |$)')
+$(printf '%s\n' "$1" | tr ';&|(){}`' '\n\n\n\n\n\n\n\n' | grep -E -e '/|sh|su|source|eval|(^| )\.( |$)')
 SEGMENTS
 }
 
