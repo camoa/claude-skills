@@ -947,6 +947,7 @@ tf_with_repair_tests() {
   done <<TWR_EOF
 $(find "$IMPL_DIR" -maxdepth 1 -type f -name "tests-$2-repair-*.json" 2>/dev/null | sort)
 TWR_EOF
+  # shellcheck disable=SC2034 # read by the sourcing script
   TF_REPAIR_TESTS_DOC="$doc"
 }
 
