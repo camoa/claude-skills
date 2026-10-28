@@ -35,8 +35,6 @@
 #      unregister does not find, or `register --url`, `unregister` or `baseline` before `install`
 #      wrote the surface file
 #   4  a recipe command ran and failed; its own output, in the file, is the answer
-#  61  the tree is dirty, so an install or baseline commit would sweep other work in. A register or
-#      unregister commits the surface file alone, so a dirty tree does not refuse it
 #  70  `--confirmed` or `decline` was passed with nobody present
 #  72  two frameworks each carry a recipe for one kind, or two accept rows for one baseline
 #
@@ -112,6 +110,31 @@ warn_surface_file_elsewhere() {
   [ -z "$branch" ] || printf 'warning: %s: branch %s holds %s too, so the two files meet when both branches reach the trunk\n' "$ACTION" "$branch" "$SURFACE_REL"
 }
 
+# The paths git lists as changed in the tree, an untracked file one by one, one per line.
+tree_changes() { git -C "$TREE" status --porcelain --untracked-files=all | cut -c4-; }
+
+# Other uncommitted work in the tree is a warning, never a refusal. install and baseline run
+# commands whose files nobody names in advance, so the list taken here is what their commit leaves
+# out. A file already changed before the step stays out, even when the step changed it again.
+OTHER_WORK=""
+note_other_work() {
+  OTHER_WORK="$(tree_changes)"
+  [ -z "$OTHER_WORK" ] \
+    || printf 'warning: %s: the tree holds other uncommitted work, which this commit leaves out: %s\n' "$ACTION" "$(printf '%s' "$OTHER_WORK" | tr '\n' ' ')"
+}
+
+# Commits the paths this step changed, the ones git lists now and did not list at note_other_work.
+# $1 the line when it changed none, $2 the commit message.
+commit_own_changes() {
+  local before own
+  before="$(mktemp)" || die 3 "$ACTION: could not create a temporary file"
+  printf '%s\n' "$OTHER_WORK" >"$before"
+  own="$(tree_changes | grep -vxF -f "$before")"
+  rm -f "$before"
+  if [ -z "$own" ]; then printf 'committed: none, %s\n' "$1"; return 0; fi
+  recipe_commit_if_changed "$TREE" "$ACTION" "$1" "$2" "$own"
+}
+
 # Loads the surface file and refuses every state but ok: missing is a step out of order.
 require_surface_file() {
   sf_load_surfaces "$SURFACE_FILE"
@@ -180,7 +203,7 @@ do_show_or_install() {
   fi
   recipe_files_refuse_differing install "$RECIPE" "$list" "$TREE" "$files_dir"
   warn_surface_file_elsewhere
-  br_require_clean_tree install "$TREE"
+  note_other_work
   load_viewports
   [ "$RUN_MODE" = "interactive" ] && { printf 'ABOUT TO RUN, from %s:\n' "$RECIPE"; printf '%s\n' "$steps" | sed 's/^/  /'; }
   mkdir -p "$RECORDS_DIR" "$TREE/.visual-review" || die 3 "install: could not create the records folder"
@@ -199,7 +222,7 @@ do_show_or_install() {
   write_project_field '.registryPath = $sf | .'"$KEY"'.enabled = true'
   printf 'INSTALLED: %s per %s\nfiles: %s written, %s replaced, %s kept\nsurface-file: %s\nproject-file: %s\n' \
     "$KIND" "$RECIPE" "$RF_WRITTEN" "$RF_REPLACED" "$RF_KEPT" "$SURFACE_FILE" "$PROJECT_FILE"
-  recipe_commit_if_changed "$TREE" "$ACTION" "install wrote nothing new" "New $KIND surfaces setup, installed through the surfaces skill"
+  commit_own_changes "install wrote nothing new" "New $KIND surfaces setup, installed through the surfaces skill"
   recipe_output_summary 0 "$OUTFILE" 1
 }
 
@@ -326,7 +349,7 @@ $(printf '%s' "$ids" | tr ' ' '\n')
 SA_IDS
   if [ "$confirmed" = false ]; then printf 'confirm: run again with --confirmed to write these baselines\n'; exit 0; fi
   [ "$RUN_MODE" = "interactive" ] || { printf 'baselines: none\n'; cr_require_person "--confirmed" "a person confirmed the baselines"; }
-  br_require_clean_tree baseline "$TREE"
+  note_other_work
   VALUES="surfaces$TAB$(printf '%s' "$ids" | tr ' ' '|')
 $VALUES"
   [ -z "$(cr_lookup "$VALUES" base-url)" ] || { PLAYWRIGHT_BASE_URL="$(cr_lookup "$VALUES" base-url)"; export PLAYWRIGHT_BASE_URL; }
@@ -340,7 +363,7 @@ $VALUES"
   esac
   [ "$rc" = "0" ] || { recipe_output_summary 4 "$OUTFILE" 1; exit 4; }
   # Review refuses a dirty tree, and the message is the record of why these baselines changed.
-  recipe_commit_if_changed "$TREE" "$ACTION" "the accept row wrote nothing" "New visual regression baselines for $ids, confirmed by a person through the surfaces skill"
+  commit_own_changes "the accept row wrote nothing" "New visual regression baselines for $ids, confirmed by a person through the surfaces skill"
   printf 'baselines: %s\n' "$ids"
   recipe_output_summary 0 "$OUTFILE" 1
 }

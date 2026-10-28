@@ -15,7 +15,7 @@ install needs a person.
 
 The install:
 
-- refuses a dirty tree before it writes anything, because its commit takes every changed file;
+- warns when the tree holds other uncommitted work, and leaves that work out of its commit;
 - runs the recipe's commands in order;
 - writes each file the recipe names when the file is absent, and replaces a file that holds an
   earlier version of the recipe's content;
@@ -26,7 +26,6 @@ Running it again is safe. It keeps your surface file and every file that matches
 
 | What you see | What to do |
 |---|---|
-| The tree is dirty | Commit or move the named paths aside, then run it again. |
 | A step failed, with its first line of output | Do not install by hand. The fix belongs in the recipe or on the machine. |
 | A file is present with content no version of the recipe holds | The install stops before anything runs and names the file. Decide which version is right. |
 | Two frameworks each carry a recipe | AIDA names both and stops. It cannot pick one. |
@@ -73,7 +72,8 @@ frameworks that each carry one, stops the step.
 
 ## Why it works this way
 
-- A dirty tree is refused, so your uncommitted work is never swept into the setup's commit.
+- The commit takes only the files the setup changed, so your uncommitted work is never swept
+  into it and never stops it.
 - Declaring paths is what lets review skip a surface a change cannot reach, which keeps review
   affordable on a large project.
 

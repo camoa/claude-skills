@@ -274,6 +274,48 @@ name_clash_case() (
 )
 expect "the registry writer refuses a name another project holds, and writes nothing" "$(name_clash_case)" 'refused|1'
 
+# install_dirty_case: install in a tree that holds an untracked file of the person's. The exit,
+# whether the surface file is committed, and whether the person's file is still untracked.
+install_dirty_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  printf '# fake setup\n\n## Install\n\n```sh\ntrue\n```\n' >"$ROOT/setup.md"
+  printf 'mine\n' >"$WT/notes.txt"
+  run "$SURFACES" install visual-regression --recipe "fake=$ROOT/setup.md"
+  printf '%s|%s|%s\n' "$RC" "$(git -C "$WT" ls-files --error-unmatch .visual-review/surfaces.json >/dev/null 2>&1 && echo committed || echo uncommitted)" \
+    "$(git -C "$WT" status --porcelain -- notes.txt | cut -c1-2)"
+)
+expect "install warns on other work and commits only what it wrote" "$(install_dirty_case)" '0|committed|??'
+
+# baseline_dirty_case: a confirmed baseline in a tree that holds an untracked file of the
+# person's. The exit, whether the file the accept row wrote is committed, and whether the
+# person's file is still untracked.
+baseline_dirty_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  mkdir -p "$WT/.visual-review"
+  jq -n '{schemaVersion: 1, viewports: [{name: "wide", width: 1200, height: 800}],
+      surfaces: [{id: "home", url: "/", kinds: ["visual-regression"], enabled: true, masks: [], paths: [], critical: false}]}' \
+    >"$WT/.visual-review/surfaces.json"
+  git -C "$WT" add .visual-review && git -C "$WT" commit -qm "surface file"
+  cat >"$ROOT/check.md" <<'EOR'
+# fake review
+
+## Surface commands
+
+```yaml
+surface_commands:
+  - id: visual-regression-accept
+    argv: ["touch", "home.png"]
+```
+EOR
+  printf 'mine\n' >"$WT/notes.txt"
+  run "$SURFACES" baseline --check-recipe "fake=$ROOT/check.md" --confirmed
+  printf '%s|%s|%s\n' "$RC" "$(git -C "$WT" ls-files --error-unmatch home.png >/dev/null 2>&1 && echo committed || echo uncommitted)" \
+    "$(git -C "$WT" status --porcelain -- notes.txt | cut -c1-2)"
+)
+expect "baseline warns on other work and commits only what it wrote" "$(baseline_dirty_case)" '0|committed|??'
+
 # --- tool ---
 
 # absent_case: require over a process recipe naming a tool whose check command is not installed.

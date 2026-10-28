@@ -94,15 +94,15 @@ person, because an install changes the project and nobody is there to approve it
 
 `install` runs every command in order and writes each file only when absent. It writes the
 surface file when absent, and turns the kind on in the project record. It runs again safely.
-It refuses a dirty tree at 61 before writing anything. It commits what it wrote, with the
-reason in the message, the way `baseline` does. It commits the project record too.
+Other uncommitted work in the tree prints a `warning:` line naming it. The commit takes only the
+files this install changed, with the reason in the message, the way `baseline` does. A file
+already changed before the install stays out. It commits the project record too.
 
 | Exit code | Meaning | What to do |
 |---|---|---|
 | 0 | Every step ran, or `not-applicable`: no framework has a recipe. | Nothing more for this kind. Name `templates/process-recipe-setup.md` in this plugin as the shape a catalog recipe follows. |
 | 3 | A recipe with no install block, a refused command, a file present with content no version of the recipe declares, or `unknown`: nobody looked. | Show the text and stop. It names the recipe or the file, which is where the fix belongs. |
 | 4 | A step failed. | The `first:` line quotes its first line of output. Show it; do not install by hand. |
-| 61 | The tree is dirty. | Say which paths. Commit or move them aside, then run install again. |
 | 72 | Two frameworks each carry a recipe. | Say which two, and stop. |
 
 `--viewport <name>=<w>x<h>` replaces the recipe's viewport list. Pass it only when a person gave
@@ -151,7 +151,8 @@ baselines with the reason in the message. Never write a baseline unattended, and
 
 Ask for the base URL once, interactive, and pass it as `--value base-url=<address>`. Nothing stores
 it. When the task record has `environment.address`, pass that as `--value base-url=` and do not ask.
-Exit 3 means the recipe carries no accept row, exit 61 that the tree is dirty.
+Exit 3 means the recipe carries no accept row. Other uncommitted work prints a `warning:` line,
+and the commit takes only the files the accept row wrote.
 
 ## Decline
 
