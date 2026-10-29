@@ -59,8 +59,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   - on a light task, every work order but wo1, the walking skeleton, reaches wo1 through its
 #     dependsOn chain, so the skeleton is built first (gap row 197);
 #   - on a light task, no work order owns a file of the registered script that walks the demo path,
-#     wo1 included, and none adds a file under a folder that script's command names: review runs
-#     that script, and a light order never extends it (audit/24, gap row 458);
+#     wo1 included: review runs that script, and a light order never extends it (audit/24);
 #   - no confirm, observe or record order spares a machine criterion on a research run line that
 #     never runs: one not binding, with no person's stamp, and not a check command (gap row 458).
 #     An unattended close stops on it, and a person who closes reads it;
@@ -101,10 +100,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <project folder>/test-cleanup/run-*/groups.json: the tests of the cleanup run the goal names
 #   <project folder>/tasks/*/implementation*/baseline.json: the check recipes each baseline read,
 #     whose check_commands argv lines run with no person's stamp
-#   <plugin root>/scripts/lib/recipes.sh: tf_path_matches_catalog_glob, cc_check_argv and
-#     path_script_state's library, sourced in a subshell
-#   the task's worktree, or the code path: the surface file, and on a light task the git objects
-#     at the task's base
+#   <plugin root>/scripts/lib/recipes.sh: tf_path_matches_catalog_glob and cc_check_argv, sourced
+#     in a subshell
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
 # folder otherwise, so a person can run it directly.
@@ -130,8 +127,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      other or that does not come after every tests order, such an order or a tests order of
 #      test files only that owns a test another open task froze, a machine criterion an observe
 #      or record order owns with no run line proving it, or a light order that owns the
-#      registered script that walks the demo path or adds a file under a folder it names.
-#      Implementation's `start` refuses on this code.
+#      registered script that walks the demo path. Implementation's `start` refuses on this code.
 #
 # `open` sorts every finding by what it does, one line each. Both callers print these lines, so
 # they are written once, here. `stop` raises exit 4. `unattended` stops an autonomous close and
@@ -204,8 +200,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #              dependencyCycles: [ id, ... ],
 #              orphanSupportOrders: [ id, ... ],
 #              ordersNotAfterSkeleton: [ id, ... ],   a light task only
-#              lightOrdersOwningPathScript: [ {id, path, folder} ],   a light task only; folder
-#                                                when the order adds path under it
+#              lightOrdersOwningPathScript: [ {id, path} ],   a light task only
 #              overlappingOwnedFiles: [ {ids: [id, id], path} ],
 #              ordersPastHandfulOfRows: [ {id, path, count, owned} ],   a warning
 #              globbedOwnedFiles: [ {id, path} ],
@@ -994,46 +989,24 @@ else
   ORDERS_NOT_AFTER_SKELETON_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.notAfterSkeleton')"
 
   # A light task never extends the registered script that walks the demo path, wo1 included (audit/24,
-  # "Light mode"). path_script_state names its files and folders the way review reads them. An owned
-  # entry is listed when it is such a file or holds one, or when it lies under such a folder and the
-  # task's base lacks it: an order may edit a file the path runs, never add one (gap row 458). The
-  # base is the task's fork point, or HEAD when task.json records none. recipes.sh empties TASK_PATH
-  # when it loads, so it loads only inside this subshell. It prints the state, then one
-  # `file`, `dir` or `added` line per finding, tab separated.
+  # "Light mode"). path_script_state names its files the way review reads them. recipes.sh empties
+  # TASK_PATH when it loads, so it loads only inside this subshell.
   if [ "$LIGHT_TASK" = true ]; then
     PATH_SCRIPT="$(
       PS_TASK="$TASK_PATH"
       # shellcheck source=/dev/null
       source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
       path_script_state "$PS_TASK"
-      printf '%s\n' "$PS_STATE"
-      [ "$PS_STATE" = registered ] || exit 0
-      printf '%s' "$PS_FILES" | sed "s/^/file$TAB/"
-      [ -n "$PS_DIRS" ] || exit 0
-      printf '%s' "$PS_DIRS" | sed "s/^/dir$TAB/"
-      PS_BASE="$(task_fork_point "$PS_TASK" "$PS_TREE")"
-      printf '%s' "$WORK_ORDERS_JSON" | jq -r '.[] | .id as $id | .ownedFiles[] | [$id, (ltrimstr("./") | rtrimstr("/"))] | @tsv' \
-        | while IFS="$TAB" read -r PS_ID PS_PATH; do
-            while IFS= read -r PS_DIR; do
-              case "$PS_PATH" in "$PS_DIR"|"$PS_DIR"/*) ;; *) continue ;; esac
-              git -C "$PS_TREE" cat-file -e "${PS_BASE:-HEAD}:$PS_PATH" 2>/dev/null \
-                || printf 'added\t%s\t%s\t%s\n' "$PS_ID" "$PS_PATH" "$PS_DIR"
-              break
-            done <<PS_FOLDERS
-$PS_DIRS
-PS_FOLDERS
-          done
+      printf '%s\n%s' "$PS_STATE" "$PS_FILES"
     )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"
     if [ "${PATH_SCRIPT%%$'\n'*}" = registered ]; then
       LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON="$(printf '%s' "$PATH_SCRIPT" | sed 1d | jq -R -s -c --argjson orders "$WORK_ORDERS_JSON" '
-        [ split("\n")[] | select(length > 0) | split("\t") ] as $rows
-        | [ $rows[] | select(.[0] == "file") | .[1] ] as $files
+        (split("\n") | map(select(length > 0))) as $files
         | [ $orders[] | .id as $id | (.ownedFiles // [])[]
             | (ltrimstr("./") | rtrimstr("/")) as $p
             | select(any($files[]; . == $p or startswith($p + "/")))
-            | {id: $id, path: $p} ]
-          + [ $rows[] | select(.[0] == "added") | {id: .[1], path: .[2], folder: .[3]} ]')"
-      printf '%s' "$PATH_SCRIPT" | sed 1d | grep -q . || PATH_SCRIPT_UNREAD=true
+            | {id: $id, path: $p} ]')"
+      [ -n "$(printf '%s' "$PATH_SCRIPT" | sed 1d)" ] || PATH_SCRIPT_UNREAD=true
     fi
   fi
 
@@ -1122,7 +1095,7 @@ if [ "$CONTRACT_READABLE" = "true" ] && [ -z "$CONFIRM_TEST_GLOBS" ] \
   NOT_CHECKED_ITEMS+=("whether a confirm order owns a test file: no freeze in this project recorded a test glob, so nothing here says which path is a test.")
 fi
 if [ "$PATH_SCRIPT_UNREAD" = true ]; then
-  NOT_CHECKED_ITEMS+=("whether a light order owns the registered script that walks the demo path: that surface names no file or folder of the tree, such as a page surface, so nothing is known to compare.")
+  NOT_CHECKED_ITEMS+=("whether a light order owns the registered script that walks the demo path: that surface names no file of the tree, such as a page surface, so no file is known to compare.")
 fi
 if [ "$DESIGN_STARTED" != "true" ]; then
   NOT_CHECKED_ITEMS+=("the graph checks between work orders: $GRAPH_NOTE")
@@ -1168,9 +1141,7 @@ def open: {
     ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
     ((.graph.unknownDependsOnIds // [])[] | "file " + .path + " depends on an unknown work order id " + .id),
     ((.graph.globbedOwnedFiles // [])[] | "order " + .id + " owns " + .path + ", which is not one literal path"),
-    ((.graph.lightOrdersOwningPathScript // [])[] | if has("folder")
-      then "order " + .id + " adds " + .path + " under " + .folder + ", which the registered demo-path command runs, and a light order never extends it: remove-owned-file, or register a change through /aida:surfaces"
-      else "order " + .id + " owns " + .path + ", the registered script that walks the demo path, and on a light task no order extends it: remove-owned-file" end),
+    ((.graph.lightOrdersOwningPathScript // [])[] | "order " + .id + " owns " + .path + ", the registered script that walks the demo path, and on a light task no order extends it: remove-owned-file"),
     ((.coverage.testsOnlyRowsUnmatched // [])[] | "order " + .id + " deletes the tests of a cleanup run, and "
       + (if .problem == "owned file named in no done-when row" then "no done-when row names its file " + .item + ": add-done-when"
          else "its done-when row \"" + .item + "\" names no file it owns: remove-done-when, or name the file in it" end)),

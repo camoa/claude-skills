@@ -36,9 +36,8 @@
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
-#   path_script_state <folder>            sets PS_STATE, PS_FILES, PS_DIRS and PS_TREE: what a light
-#                                         task does about the script that walks the demo path, its
-#                                         files and folders, and the tree they were read in
+#   path_script_state <folder>            sets PS_STATE and PS_FILES: what a light task does about
+#                                         the script that walks the demo path, and its files
 #   path_script_line <folder>             prints the `path-script:` line from path_script_state
 #   log_compromise <folder> <stage> <skipped> <normal>
 #                                         adds one row to COMPROMISES.md in the task folder
@@ -623,19 +622,17 @@ task_is_light() {
   [ "$(jq -r '.runMode // ""' "$1/task.json" 2>/dev/null)" = "light" ]
 }
 
-# What a light task does about the one script that walks the demo path (gap row 458). Sets PS_STATE,
-# PS_FILES, PS_DIRS and PS_TREE. PS_STATE is `registered`: the surface file holds an enabled critical
-# end to end surface, which is that script, so no order writes or extends it. `create`: end to end is
-# on and none is registered, so wo1 writes it. `declined` and `off`: no order writes one. PS_FILES
-# holds the registered command's own files, one per line: each argv token that names a file in the
-# tree. PS_DIRS holds each argv token that names a folder in the tree, such as a test runner's test/,
-# without its last slash. A file's own folder is not added, so a new file beside a shared script is
-# not refused. A page surface records no file, so both are empty for it.
-# The surface file is read in PS_TREE: the task's worktree, or the code path when the task has none,
-# the tree review reads. The caller sources recipes.sh. $1 the task folder.
+# What a light task does about the one script that walks the demo path (gap row 458). Sets PS_STATE
+# and PS_FILES. PS_STATE is `registered`: the surface file holds an enabled critical end to end
+# surface, which is that script, so no order writes or extends it. `create`: end to end is on and
+# none is registered, so wo1 writes it. `declined` and `off`: no order writes one. PS_FILES holds the
+# registered command's own files, one per line: each argv token that names a file in the tree. A
+# folder the command names, such as a test runner's test/, is not the script. A page surface records no file, so PS_FILES is empty for it.
+# The surface file is read in the task's worktree, or the code path when the task has none, the
+# tree review reads. The caller sources recipes.sh. $1 the task folder.
 path_script_state() {
   local project tree tok
-  PS_STATE=""; PS_FILES=""; PS_DIRS=""; PS_TREE=""
+  PS_STATE=""; PS_FILES=""
   project="$(dirname -- "$(dirname -- "$1")")"
   if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project/project.json" 2>/dev/null)" != "true" ]; then
     if [ "$(jq -r '.surfaces.e2e.declined // false' "$project/project.json" 2>/dev/null)" = "true" ]; then
@@ -647,7 +644,6 @@ path_script_state() {
   fi
   tree="$(jq -r '.worktree.path // empty' "$1/task.json" 2>/dev/null)"
   [ -n "$tree" ] && [ -d "$tree" ] || tree="$(project_code_path_value "$project")"
-  PS_TREE="$tree"
   # shellcheck source=/dev/null
   command -v sf_load_surfaces >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/surfaces.sh" \
     || die3 "the library failed to load: surfaces.sh"
@@ -660,8 +656,6 @@ path_script_state() {
     for tok in $(printf '%s' "$SF_SURFACES" | jq -r '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ][0].command // [] | .[]'); do
       case "$tok" in -*|/*|*..*) continue ;; esac
       [ ! -f "$tree/$tok" ] || PS_FILES="$PS_FILES$tok
-"
-      [ ! -d "$tree/$tok" ] || PS_DIRS="$PS_DIRS${tok%/}
 "
     done
   else
