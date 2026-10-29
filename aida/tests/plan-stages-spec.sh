@@ -221,4 +221,17 @@ expect "an unattended close stops on a confirm order that rests c1 on an unstamp
 expect "an unattended close takes the same order when the line is binding" \
   "$(unstamped_case '{"run": "true", "pass": "exit 0", "cites": "a recipe", "binding": true, "criterion": "c1"}')" "0|closed|0"
 
+# An attended close that stamps that line leaves no warning that the line needs a stamp.
+stamped_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  rm -f "$TASK/design-closed.json"
+  jq '.proof = "confirm" | .tests = [] | .verify = [{run: "true", pass: "exit 0", cites: "research/s1.json", binding: false, criterion: "c1"}]' \
+    "$TASK/design/wo1.json" >"$ROOT/w" && mv "$ROOT/w" "$TASK/design/wo1.json"
+  answer "design close" "" "true"
+  run "$DESIGN" --run-mode interactive close "$TASK" --no-recipe --approve-runs
+  printf '%s|%s|%s\n' "$RC" "$(closed)" "$(jq '[ .warnings[]? | select(.words | test("rests criterion c1")) ] | length' "$TASK/task.json")"
+)
+expect "an attended close that stamps the line records no warning about it" "$(stamped_case)" "0|closed|0"
+
 finish

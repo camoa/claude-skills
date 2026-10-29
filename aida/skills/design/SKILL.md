@@ -750,8 +750,8 @@ every run mode. The approval is the person's answer, recorded with the task skil
 `person-answer.sh`, step `design close`, with the lines as the words. Then pass `--approve-runs` to
 the close, and the close stamps each such entry. Without the answer, `--approve-runs` refuses with
 exit 70 and prints the command. Autonomous: the line and the rendered order carry it to a person
-later. When a `confirm`, `observe` or `record` order rests a machine-verified criterion on such a
-line, the autonomous close stops instead, because nothing would prove that criterion.
+later. A `confirm`, `observe` or `record` order can rest a machine-verified criterion on such a
+line. Then the autonomous close stops instead, because nothing would prove that criterion.
 
 `check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
 proof is `tests` that owns criteria of which none is machine-verified. The design still closes with

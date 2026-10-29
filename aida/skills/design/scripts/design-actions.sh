@@ -2104,6 +2104,10 @@ $(printf '%s\n' "$unaccounted" | sed 's/^/a research finding is in no work order
     done < <(find "$DESIGN_DIR" -mindepth 1 -maxdepth 1 -type f -name 'wo*.json' 2>/dev/null | sort)
     echo "approvedRuns: $approved_count"
     task_answer_consume
+    # The check ran before the stamp, so its lines on an unstamped run line no longer hold.
+    unattended_lines="$(printf '%s' "$check_report_json" | jq -r '
+      [ .coverage.unstampedRunProofs[]? | "order " + .id + " rests criterion " + .criterionId + " " ] as $stamped
+      | (.open.unattended // [])[] | . as $l | select(any($stamped[]; . as $p | $l | startswith($p)) | not)')"
   fi
 
   local hash
