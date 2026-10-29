@@ -7,7 +7,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   tool-actions.sh [--run-mode <interactive|autonomous>] show    <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] install <tool>
 #   tool-actions.sh [--run-mode <interactive|autonomous>] run     <tool> [-- <arguments>]
-#   tool-actions.sh [--run-mode <interactive|autonomous>] require [--advisory] [--task <task folder>] [--only <tool>]... <process recipe path>
+#   tool-actions.sh [--run-mode <interactive|autonomous>] require [--task <task folder>] [--only <tool>]... <process recipe path>
 #
 # Every form also takes `--tooling <tool>=<path>` before the action, once per tool: a catalog
 # recipe catalog-identifier found. A folder source ranked before the catalog still wins.
@@ -21,10 +21,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #          they take their commands from the recipe and would otherwise drop what a caller typed.
 # require  runs `run` for each tool a process recipe names under requires_tooling, and prints one
 #          `TOOLING: <tool> present|absent|unknown` line each, or `REQUIRES: none`. Absent means the
-#          check exited 127, command not found; any other exit means the tool ran. It exits 0 when
-#          every tool is present, 4 when one is absent, and 2 when one is unknown, over an absent one.
-#          --advisory prints the same lines and exits 0. It installs nothing: install stays the one
-#          action that needs a person. A tool under requires_tooling_with_tests is named too, except
+#          check exited 127, command not found; any other exit means the tool ran. It exits 0
+#          whatever the lines say, because an absent tool is a warning the stage records. It
+#          installs nothing: install stays the one action that needs a person. A tool under
+#          requires_tooling_with_tests is named too, except
 #          when the task says it has no automated tests. The task is the one whose worktree is this
 #          window's top-level folder, or the one --task names. --only checks only the named tools
 #          of the recipe's lists, for a caller that knows which of them its own commands run.
@@ -39,8 +39,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Exit codes:
 #   0  did what was asked
 #   1  no project owns this directory, or require's --task names no task folder
-#   2  no recipe for this tool and this project's frameworks
-#   3  the script could not do its job (bad arguments, unreadable file, refused command)
+#   2  no recipe for this tool and this project's frameworks: ask the catalog, then run again
+#   3  the script could not do its job (bad arguments, a project with no framework, an unreadable
+#      file, a refused command)
 #   4  a command from the recipe ran and failed; its own output, in the file, is the answer
 #  70  the action needs a person and this run is autonomous
 #  79  require's --task names a task that builds in its worktree, and this window is elsewhere
@@ -95,15 +96,13 @@ TOOL="${2:-}"
 # holds goes to run, because the catalog makes a tooling recipe's Run command its presence check.
 # run resolves the tooling recipe, so a name nothing answers reads unknown with run's own reason.
 if [ "$ACTION" = "require" ]; then
-  # --advisory prints the same lines and always exits 0, for a caller that goes on either way.
   # The task decides a tool under requires_tooling_with_tests: it is left out when the task has no
   # automated tests. The task is the one whose worktree is this window's top-level folder, and
   # --task overrides that. With no task, nothing says the tests are off, so the tool is named.
-  ADVISORY=no; TASK_ARG=""; ONLY=""
+  TASK_ARG=""; ONLY=""
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
-      --advisory) ADVISORY=yes; shift ;;
       --only) [ $# -ge 2 ] || { printf 'tool-actions: --only needs a tool name\n' >&2; exit 3; }
               ONLY="$ONLY$2
 "; shift 2 ;;
@@ -147,7 +146,6 @@ if [ "$ACTION" = "require" ]; then
   [ -z "$ONLY" ] || NAMES="$(printf '%s\n' "$NAMES" | while IFS= read -r NAME; do
     printf '%s' "$ONLY" | grep -qxF -e "$(pc_unquote "$NAME")" && printf '%s\n' "$NAME"; done)"
   if [ -z "$NAMES" ]; then printf 'REQUIRES: none\n'; exit 0; fi
-  WORST=0
   while IFS= read -r NAME; do
     NAME="$(pc_unquote "$NAME")"
     SUBARGS=(--run-mode "$RUN_MODE")
@@ -162,17 +160,14 @@ if [ "$ACTION" = "require" ]; then
       0) if [ "$STATUS" = "0" ]; then printf 'TOOLING: %s present\n' "$NAME"
          else printf 'TOOLING: %s present: its check ran and exited %s\n' "$NAME" "$STATUS"; fi ;;
       1) printf '%s\n' "$SAID" >&2; exit 1 ;;
-      4) printf 'TOOLING: %s absent: %s\n' "$NAME" "$(printf '%s\n' "$SAID" | sed -n 's/^first: //p')"
-         [ "$WORST" -ne 0 ] || WORST=4 ;;
+      4) printf 'TOOLING: %s absent: %s\n' "$NAME" "$(printf '%s\n' "$SAID" | sed -n 's/^first: //p')" ;;
       *) printf 'TOOLING: %s unknown: %s\n' "$NAME" \
-           "$(printf '%s\n' "$SAID" | sed -n 's/^tool-actions: //p' | awk '{ printf "%s%s", (NR > 1 ? "; " : ""), $0 }')"
-         WORST=2 ;;
+           "$(printf '%s\n' "$SAID" | sed -n 's/^tool-actions: //p' | awk '{ printf "%s%s", (NR > 1 ? "; " : ""), $0 }')" ;;
     esac
   done <<TOOL_NAMES
 $NAMES
 TOOL_NAMES
-  [ "$ADVISORY" = "no" ] || exit 0
-  exit "$WORST"
+  exit 0
 fi
 
 [ -n "$TOOL" ]   || { printf 'tool-actions: needs a tool name\n' >&2; exit 3; }
@@ -214,8 +209,8 @@ fi
 
 FRAMEWORKS="$(jq -r '.frameworks // [] | .[]' "$PROJECT_FILE" 2>/dev/null)"
 if [ -z "$FRAMEWORKS" ]; then
-  printf 'tool-actions: the project records no framework, so no recipe can be chosen\n' >&2
-  exit 2
+  printf 'tool-actions: the project records no framework, so no recipe can be chosen. Run the project set-frameworks action\n' >&2
+  exit 3
 fi
 
 # ----------------------------------------------------------------- the recipe
@@ -414,6 +409,11 @@ TOOL_STEPS
     if [ "$RC" -eq 0 ]; then
       recipe_output_summary 0 "$OUTFILE" 1
       exit 0
+    fi
+    # A line with a shell character was not run, so its result is unknown, never 0.
+    if [ "$RL_UNKNOWN" = true ]; then
+      recipe_output_summary unknown "$OUTFILE" 1
+      exit "$RL_UNKNOWN_STATUS"
     fi
     # Line 2: the record opens with the command as it ran, and `first:` quotes its output.
     recipe_output_summary "$RC" "$OUTFILE" 2

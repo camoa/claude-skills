@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA implementation build record",
-  "description": "What `build-record` verified for one attempt at one unit, at <task folder>/implementation/build-<unit_id>.json (docs/stages/implement/checks.md). One file per unit, holding only the latest attempt: a later attempt overwrites it, and `build-record` refuses to write it again for an attempt already recorded at the same commit (exit 45). This record runs all eight deciding checks: every test of this order passes, no test outside the baseline fails, the coding-standards tool is clean, static analysis is clean, the security tool is clean, the realized diff touches only files this order owns, every frozen test file is unchanged, and the interface record names every element the order's own declared interface names in backticks. A review only ever sees code that passed all eight, which is why none of them waits for a later step. The model writes the code; this file is the script's own half, verifying what came back rather than judging whether a criterion is met. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "description": "What `build-record` verified for one attempt at one unit, at <task folder>/implementation/build-<unit_id>.json (docs/stages/implement/checks.md). One file per unit, holding only the latest attempt: a later attempt overwrites it. This record runs the three deciding checks: the order's own proof passes, the order's commits touch only files this order owns, and every frozen test file is unchanged. The tools run once at preconditions and again at review, so a tool row never spends an attempt. The model writes the code; this file is the script's own half, verifying what came back rather than judging whether a criterion is met. Plain JSON, no fences, no markdown. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -37,12 +37,22 @@
     "startedAt": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The commit this attempt began from, the full form of the `--started-at` value `build-record` was given, resolved and confirmed to name a real commit in the code repository (exit 43 otherwise). Check three's own diff runs from here to `commit`."
+      "description": "The commit this attempt began from, the full form of the `--started-at` value `build-record` was given, resolved and confirmed to name a real commit in the code repository (exit 43 otherwise). The list in `commits` is read from here to `commit`."
     },
     "commit": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "The code repository's HEAD at the moment `build-record` ran, read fresh with `git rev-parse HEAD`, never assumed. Together with `attempt`, this is what exit 45 compares a new call against to refuse recording the same attempt twice."
+      "description": "The code repository's HEAD at the moment `build-record` ran, read fresh with `git rev-parse HEAD`, never assumed."
+    },
+    "commits": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+      "description": "The commits the implementer made, full form, oldest first. `build-record` derives it: every commit from `startedAt` to `commit`, less each commit another order's records name, in a build or fix list or as a freeze. The owned-files check reads the files these commits change, and no range. `review-brief` builds the order's diff from this list, `commitsBefore` and the fix records' lists. A record without it was written before the lists, and each step that reads it reads its list from `startedAt` to `commit` the same way."
+    },
+    "commitsBefore": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+      "description": "Present after a second attempt, or after a person kept a stopped builder's commits: the commits the earlier attempts listed, which this file no longer holds, since it keeps the last attempt alone, and the commits from the last record, or the freeze, up to `startedAt` that no other order lists. The owned-files check reads the paths these change that still differ from the parent of the order's oldest commit to `commit`, so a stray change nobody reverted still stops the attempt, and one a later commit reverted does not. `review-brief` reads them, so every attempt is in the order's diff."
     },
     "attempt": {
       "type": "integer",
@@ -51,7 +61,7 @@
     },
     "interfaceRecord": {
       "type": "string",
-      "description": "The text at the path `--interface` named, copied verbatim. Check eight compares the countable half of it against the unit's own declared interface: every backtick-quoted token in the declaration must appear verbatim here. The rest of both texts is prose a person wrote, and the reviewer reads that. Required to be present and non-empty only when the unit's own frozen interface is non-empty (exit 44); otherwise this may be empty, including when no file was there to read."
+      "description": "The text at the path `--interface` named, copied verbatim. The reviewer compares it with the unit's own declared interface, and the next orders' test briefs carry it. Required to be present and non-empty only when the unit's own frozen interface is non-empty (exit 44); otherwise this may be empty, including when no file was there to read."
     },
     "interfaceRecordBefore": {
       "type": "string",
@@ -71,42 +81,40 @@
         "file": { "type": "string", "minLength": 1 },
         "because": { "type": "string", "minLength": 1 }
       },
-      "description": "A deviation the builder declared that a person kept (gap row 266). A deviation line is a stop (exit 105). Interactive, `--accept-deviation` records the attempt instead: `departure` is the first deviation line, `file` the report or interface record that holds it, and `because` the person's reason. `haltsCleared` in the ledger records the same reason, and `review-record` carries this object to the review record instead of halting on the same line. Present only when a person kept one."
+      "description": "A deviation the builder declared that a person kept (gap row 266). A deviation line is a stop (exit 105). A person keeps it with `go-on --continue keep`, and `build-record` runs again and records the attempt: `departure` is the first deviation line, `file` the report or interface record that holds it, and `because` the person's words, read from deviationKept in the ledger. `stopsCleared` in the ledger records the same words, and `review-record` carries this object to the review record instead of stopping on the same line. Present only when a person kept one."
     },
     "checks": {
       "type": "array",
-      "minItems": 8,
-      "maxItems": 8,
+      "minItems": 3,
+      "maxItems": 3,
       "items": {
         "$ref": "#/$defs/check"
       },
-      "description": "The eight deciding checks this step runs, in a fixed order: order-tests, suite-regression, coding-standards, static-analysis, security, owned-files, frozen-tests, interface-record. Each carries its own verdict, so nothing downstream has to re-derive one from an exit code this file does not store on its own."
+      "description": "The three deciding checks this step runs, in a fixed order: the order's own proof, owned-files, frozen-tests. Each carries its own verdict, so nothing downstream has to re-derive one from an exit code this file does not store on its own. No tool row runs here: preconditions runs each tool once, and review runs them over the whole task."
     },
     "executed": {
       "type": "integer",
       "minimum": 0,
-      "description": "How many of the checks in `checks` actually executed: they ran a command, which is every check carrying an exitCode, or they computed a diff or a hash, which is owned-files and frozen-tests. A frozen-tests row reading undeclared hashed no file, so it is not counted either: counting it would do the thing this field exists to stop. interface-record compares two texts the caller handed over and runs nothing, so it is never counted. The field exists because a record saying every check answered, without saying how many of them ran, reads the same whether the code was tested or nothing was."
+      "description": "How many of the checks in `checks` actually executed: they ran a command, which is every check carrying an exitCode, or they computed a diff or a hash, which is owned-files and frozen-tests. A frozen-tests row reading undeclared hashed no file, so it is not counted either: counting it would do the thing this field exists to stop. The field exists because a record saying every check answered, without saying how many of them ran, reads the same whether the code was tested or nothing was."
     },
     "personFix": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cleared", "because", "commitBefore"],
+      "required": ["commitBefore"],
       "properties": {
-        "cleared": { "type": "integer", "description": "The index in the ledger's haltsCleared of the clearing this fix answers. One clearing takes one such run." },
-        "because": { "type": "string", "minLength": 1, "description": "The person's words that clear-halt recorded with the clearing." },
         "commitBefore": { "type": "string", "pattern": "^[0-9a-f]{7,40}$", "description": "The record's commit before this run moved it to HEAD." }
       },
-      "description": "Present only after `build-recheck` ran the checks over the fix a person committed after a finding ruled load-bearing, once clear-halt cleared that halt (live-run row 426). The checks ran from `startedAt` to the new `commit`, and every one passed, so close reads a record at HEAD."
+      "description": "Present only after `go-on --continue check` ran the checks over commits of this order made after the record, such as the fix a person committed after a finding ruled load-bearing stopped the order (live-run row 426). The checks ran from `startedAt` to the new `commit`, so close reads a record at HEAD. A check that failed leaves the order stopped. The person's words are in the ledger's stopsCleared entry for that go-on, and the task record holds the warning."
     },
     "recheckedAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-      "description": "Present only after `build-recheck` ran the eight checks again over this record's own range, with no implementer dispatched and no attempt spent (live-run row 87): the UTC date of that run, YYYY-MM-DD. `checks`, `executed` and `decidingChecks` then hold the re-check's answers; `attempt`, `startedAt`, `commit` and `takenAt` stay the attempt's own."
+      "description": "Present only after `go-on --continue check` ran the checks again over this record's own range, with no implementer dispatched and no attempt spent (live-run row 87): the UTC date of that run, YYYY-MM-DD. `checks`, `executed` and `decidingChecks` then hold that run's answers; `attempt`, `startedAt`, `commit` and `takenAt` stay the attempt's own."
     },
     "checksBefore": {
       "type": "array",
-      "minItems": 8,
-      "maxItems": 8,
+      "minItems": 3,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -116,7 +124,7 @@
           "verdict": { "type": "string" }
         }
       },
-      "description": "Present with `recheckedAt`: the checks the re-check replaced, id and verdict only, so a reader can see what the re-check answered differently. The replaced outputs are not kept; the tool that refused a path printed nothing worth reading back."
+      "description": "Present with `recheckedAt`: the checks the second run replaced, id and verdict only, so a reader can see what it answered differently. The replaced outputs are not kept; the tool that refused a path printed nothing worth reading back."
     },
     "decidingChecks": {
       "type": "object",
@@ -125,17 +133,17 @@
         "total",
         "ranHere"
       ],
-      "description": "States plainly which of the deciding checks docs/stages/implement/checks.md names this step ran. All eight of them, since 2026-09-11; the field stays because a reader must never have to count `checks` to learn what a pass here covered.",
+      "description": "States plainly which of the deciding checks docs/stages/implement/checks.md names this step ran. All three of them; the field stays because a reader must never have to count `checks` to learn what a pass here covered.",
       "properties": {
         "total": {
           "type": "integer",
-          "const": 8,
-          "description": "The number of deciding checks docs/stages/implement/checks.md names in total. Always 8; a constant rather than a count of `checks`, so a step that ever ran fewer than all of them could not hide it."
+          "const": 3,
+          "description": "The number of deciding checks docs/stages/implement/checks.md names in total. Always 3; a constant rather than a count of `checks`, so a step that ever ran fewer than all of them could not hide it."
         },
         "ranHere": {
           "type": "array",
-          "minItems": 8,
-          "maxItems": 8,
+          "minItems": 3,
+          "maxItems": 3,
           "items": {
             "type": "string"
           },
@@ -154,6 +162,12 @@
         "detail"
       ],
       "properties": {
+        "provedByRun": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^c[1-9][0-9]*$" },
+          "description": "The criteria the order's run lines proved, present only when every run line passed and one names a criterion. `close` judges them, by `run`, on an order whose proof is record or observe."
+        },
         "id": {
           "type": "string",
           "enum": [
@@ -162,15 +176,10 @@
             "done-when",
             "observed",
             "confirm-at-review",
-            "suite-regression",
-            "coding-standards",
-            "static-analysis",
-            "security",
             "owned-files",
-            "frozen-tests",
-            "interface-record"
+            "frozen-tests"
           ],
-          "description": "Which of the eight checks this is. The ids are in the same order docs/stages/implement/checks.md names the checks in: order-tests and suite-regression are 'Every test of this order passes' and 'No test outside the baseline fails'; configuration-gate takes the order-tests slot on an order whose proof is gate: the `## Configuration gate` lines of the implement recipe, run in the worktree, met when every line exits 0, unmet naming the first line that did not, unknown when the task records no environment, no implement recipe was passed, or the recipe carries no such block (live-run row 65). It is the floor for such an order the way order-tests is for every other; done-when takes the same slot on an order whose proof is record: the judgement the checkpoint left on the order's ledger entry from its `--row <unit_id>=...`, met when confirmed, carrying `judgedBy` (person or model) so close can copy the judge, and on such an order suite-regression and the three tool checks read undeclared with a detail naming the proof, because a document in the task folder is nothing a suite or a tool reads (nyc defect 17); observed takes the same slot on an order whose proof is observe: the record the orchestrator wrote after a model looked at each of the order's surfaces at each viewport through a browser, passed as `--observed`, met when every row is met, unmet naming the first row that is not, unknown when the record cannot be read, carrying `judgedBy: model` so close copies the judge, and on such an order the suite and the tool rows run as they do for a code order (live-run row 104); confirm-at-review takes the same slot on an order whose proof is confirm: it reads deferred, because a person confirms the order's done-when rows at review, and on such an order the suite row reads undeclared while the tool rows run as they do for a code order (gap row 196); coding-standards, static-analysis and security are the three tool checks; owned-files and frozen-tests are 'The realized diff touches only files this order owns' and 'Every frozen test file is unchanged'; interface-record is 'The interface record matches what the order declared'."
+          "description": "Which of the three checks this is. The first is the order's own proof, and its id names the proof kind. order-tests is 'Every test of this order passes'. configuration-gate takes that slot on an order whose proof is gate: the `## Configuration gate` lines of the implement recipe, run in the worktree, met when every line exits 0, unmet naming the first line that did not, unknown when the task records no environment, no implement recipe was passed, or the recipe carries no such block (live-run row 65). done-when takes it on an order whose proof is record: it reads deferred, because the order's reviewer reads the document against its done-when rows and review checks its criteria (nyc defect 17, row 464). observed takes it on an order whose proof is observe: the record the orchestrator wrote after a model looked at the page the order builds at one size, met when every row is met, carrying `judgedBy: model` (live-run row 104). confirm-at-review takes it on an order whose proof is confirm: it reads deferred, because a person confirms the order's done-when rows at review (gap row 196). owned-files and frozen-tests are 'The order's commits touch only files this order owns' and 'Every frozen test file is unchanged'."
         },
         "verdict": {
           "type": "string",
@@ -181,21 +190,12 @@
             "undeclared",
             "deferred"
           ],
-          "description": "The four words every verdict in this stage uses, and one more that only suite-regression and confirm-at-review carry. deferred means the recipe costs its suite row end-of-task, so this attempt did not run it; finish runs the row once at the final commit and records the answer under finished.json's suite key (nyc defect 18). deferred passes the way undeclared does, because order-tests already ran this order's own frozen tests. confirm-at-review carries deferred too, on an order whose proof is confirm: the task has no automated tests, and the person answers at review. undeclared means no resolved recipe carried a command for this check, or the recipe declared that row absent, or a tool row's own extensions list matched no file this order owns, or this order froze no test file so frozen-tests had nothing to hash, so the row did not apply here; undeclared is never satisfied and never a pass. order-tests carries a floor the others do not: it must have run and answered met, so undeclared or unknown there stops the attempt whatever the rest said, because an order nothing executed never reaches checks-passed. unknown means the check ran but nothing here can decide from it: its output held the --nothing-ran marker, so a selected-nothing exit 0 proved nothing; or the suite or a tool failed while the baseline already recorded that same framework or tool unknown or undeclared, or unmet with no output kept to subtract, so nothing here can tell that old finding from a new one this order introduced; or the command holds {paths} while this order declares no ownedFiles; or, for interface-record, the declaration names no element in backticks. Neither reads as met. unknown on interface-record is the one unknown that does not spend the attempt: it is a question for the reviewer, not a fault in the code. Every other unmet or unknown does."
-        },
-        "absent": {
-          "type": "boolean",
-          "description": "True when the recipe row for this tool was declared absent, and the reason in `detail` is the recipe's own. Absent from the entry otherwise. It exists because undeclared covers two facts that must not read alike: a framework that says it has no such tool answered the question, and a caller who passed no flag answered nothing. Both stay undeclared, because undeclared is never satisfied either way, and this field is what tells a reader which happened."
+          "description": "The four words every verdict in this stage uses, and one more that only confirm-at-review and done-when carry. deferred means no test proves the order: on confirm-at-review the person answers at review, and on done-when the order's reviewer reads the document and review checks its criteria. It passes the floor. undeclared means no resolved recipe carried a command for this check, or the recipe declared that row absent, or this order froze no test file so frozen-tests had nothing to hash, so the row did not apply here; undeclared is never satisfied and never a pass. The order's own proof carries a floor the others do not: it must have run and answered met, so undeclared or unknown there stops the attempt whatever the rest said, because an order nothing executed never reaches checks-passed. unknown means the check ran but nothing here can decide from it: its output held the --nothing-ran marker, so a selected-nothing exit 0 proved nothing; or the command holds {paths} while this order declares no ownedFiles. Neither reads as met, and every unmet or unknown spends the attempt."
         },
         "detail": {
           "type": "string",
           "minLength": 1,
           "description": "Why this verdict, in plain words naming what was compared: an exit code, a set of file paths that did not match, or which marker or file could not be read."
-        },
-        "framework": {
-          "type": "string",
-          "minLength": 1,
-          "description": "The framework whose resolved check recipe carried this tool row, present only on a tool check that had a command to run. One tool row may carry a command from one framework only: two frameworks each declaring one is refused before any check runs, because nothing here may choose between two answers to one question."
         },
         "runs": {
           "type": "array",
@@ -223,75 +223,23 @@
                   "deferred"
                 ],
                 "description": "What this framework alone answered, before the verdicts were folded into the one above. deferred ranks above met in that fold: a suite one framework left to finish has not answered yet."
-              },
-              "failureLine": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Present only on suite-regression, and only when this framework's test-execution recipe declared failure_line on its suite row: the regular expression, as read from the recipe with its quotes stripped. The suite subtraction compared only the lines matching it, on both sides, so a reader can see which lines the verdict rests on."
               }
             }
           },
-          "description": "One entry per framework, present only on order-tests and suite-regression, which run once per framework the task resolved a test recipe for, because the build runs in one repository that is all of them at once. The check's own verdict is the worst of these, with undeclared ranking lowest so a framework that declared nothing never drags down one that ran and passed."
+          "description": "One entry per framework, present only on order-tests, which runs once per framework the task resolved a test recipe for, because the build runs in one repository that is all of them at once. The check's own verdict is the worst of these, with undeclared ranking lowest so a framework that declared nothing never drags down one that ran and passed."
         },
         "exitCode": {
           "type": "integer",
-          "description": "What the check's own command exited with, present only for order-tests, suite-regression, coding-standards, static-analysis and security, and only when a command was actually supplied and run. Absent for owned-files, frozen-tests and interface-record, which compare files or text rather than run a command, and absent for a check left undeclared."
-        },
-        "signal": {
-          "type": "string",
-          "enum": [
-            "empty-stdout"
-          ],
-          "description": "Present only on a tool check whose recipe row declares it (dev-guides, process-recipes, '## Check commands' is parsed). empty-stdout marks a tool that cannot fail by exit status, gofmt -l being the case it was written for: a zero exit with anything on standard output counts as a failure, and a caller that ignores the key has a green light wired to nothing. That failure then goes through the same baseline comparison a non-zero exit does, because a finding the tool already reported at the commit the build started from is not one this order introduced."
-        },
-        "extensions": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": "Present only on a tool check whose recipe row declares it. The file extensions this tool reads; {paths} expanded to only the order's own owned files ending in one of them, because a tool handed a file type it does not read either skips it in silence or parses it as its own language and fails on it. An expansion that came out empty makes the verdict undeclared, never met: the row did not apply to this order."
-        },
-        "paths": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": "Present only on a tool check whose command held {paths} or {file}: the paths that token expanded to, relative to codePath, whether or not the command then ran. This order's owned files, a directory entry expanded to the files the repository tracks under it, minus its own frozen test files, minus any file the row's extensions exclude. The frozen tests come out because the implementer may not write them, a hook refuses it, so a finding in one is not this order's to fix; a reader compares this against the order's ownedFiles to see exactly what the tool judged."
-        },
-        "frozenTestsLeftOut": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": "Present only on a tool check whose command held {paths} or {file}, and only when at least one of this order's owned files is one of its own frozen tests: those paths, relative to codePath, which the tool was not handed. They are judged once, by the tests step before the freeze, and never here."
+          "description": "What the check's own command exited with, present only on the order's own proof, and only when a command was actually supplied and run: the order's tests, its gate lines or its verify lines. Absent for owned-files and frozen-tests, which compare files rather than run a command, and absent for a check left undeclared."
         },
         "output": {
           "type": "string",
-          "description": "What the command printed, standard output and standard error together, verbatim, present under the same condition as exitCode. Kept whole and unmodified so a person or a later step can see exactly what the --nothing-ran marker check itself saw. A tool row carrying the signal empty-stdout has the two streams read apart and then joined, standard output first, so their interleaving is not preserved for that row."
-        },
-        "newLines": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 20,
-          "items": {
-            "type": "string"
-          },
-          "description": "Present only on suite-regression, coding-standards, static-analysis and security, and only when the baseline recorded that framework or tool unmet and the run now printed lines the baseline's own output did not hold: the first 20 of them, in the command's own words. Two lines are compared with every run of digits removed, runs of dots and whitespace squeezed and the ends trimmed, so a shifted line number, a count or a duration does not read as new. That is enough for a tool, whose output is one line per finding. It is not enough for a suite whose harness prints a progress line or a summary line that changes whenever a test is added or fixed, PHPUnit and pytest among them: on the whole output those read as new. A suite row that declares failure_line narrows the comparison to the lines that name a failed test, and runs[].failureLine records the selector used. These lines are what made the verdict unmet; a person reads them to see what this order introduced."
-        },
-        "newLineCount": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "How many lines were new in all, present with newLines. newLines is capped at 20 and this is not."
+          "description": "What the command printed, standard output and standard error together, verbatim, present under the same condition as exitCode. Kept whole and unmodified so a person or a later step can see exactly what the --nothing-ran marker check itself saw."
         },
         "judgedBy": {
           "type": "string",
-          "enum": ["person", "model"],
-          "description": "Present only on done-when and observed. On done-when, who judged the order's done-when row at the checkpoint, copied from the ledger's own doneWhenJudgement so `close` writes the same judge on the criteria the order owns (nyc defect 17). On observed, always model: a model looked at the page, and the record says so (live-run row 104)."
+          "enum": ["model"],
+          "description": "Present only on observed, and always model: a model looked at the page, and the record says so (live-run row 104)."
         }
       }
     }

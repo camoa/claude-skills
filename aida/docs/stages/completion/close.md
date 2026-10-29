@@ -39,16 +39,20 @@ A reason given instead closes the task with those criteria unanswered.
 Completion asks, in this order:
 
 1. one question per [follow up finding](follow-ups.md) that has no task;
-2. your reason, when the verdict is not `passed`;
-3. one question per [criterion a model observed](observed.md);
-4. a summary of what was done, in one or two lines, unless the conversation already says it;
-5. one question per [saved note](plays.md).
+2. your reason, when the verdict is not `passed`, or passed with warnings;
+3. a summary of what was done, in one or two lines, unless the conversation already says it;
+4. one question per [saved note](plays.md).
+
+A criterion a model looked at is not asked here. You answered it at the review's close, from the
+acceptance verifier's evidence.
 
 ## What the close does
 
-1. It refuses while a child task is open, while a high severity follow up has no task and no
-   reason, or while a needed reason or answer is missing.
-2. It puts back the files the worktree's site needed, in one [restore commit](restore.md).
+1. It refuses while a needed reason or answer is missing. An open child task, or a high severity
+   follow up with no task and no reason, is a warning in the task record instead.
+2. It puts back the files the worktree's site needed, in one [restore commit](restore.md). It
+   takes the worktree's own site down, so no finished task leaves its site running. An adopted
+   site stays up.
 3. It writes the record, `completion/completed.json`, then the
    [pull request body](pr-body.md), `completion/pr-body.md`.
 4. It calls the task skill's `complete` last. That call commits the record, the body and the

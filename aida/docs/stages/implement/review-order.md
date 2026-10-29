@@ -5,7 +5,7 @@ against the contract and writes findings. Each finding must cite one criterion o
 
 ## What the reviewer reads
 
-The reviewer gets the criteria and non-goals, the order, the diff, the frozen tests and the eight
+The reviewer gets the criteria and non-goals, the order, the diff, the frozen tests and the three
 check results. It gets the declared interface and the builder's record of it, and compares them.
 It gets the builder's report as claims, never as proof. It answers each of the framework's
 implement recipes: followed, departed, or not applicable. It also judges each check in the
@@ -16,7 +16,7 @@ refusal.
 
 - **A finding that cites a criterion or a non-goal** goes to the fix rounds. See [Fix and
   verify](fix.md).
-- **A finding that hits a non-goal**, unattended, halts the order and names the non-goal.
+- **A finding that hits a non-goal**, unattended, stops the order and names the non-goal.
   Interactive, it goes to the fixer like any other finding.
 - **A finding that cites neither** is recorded and never reaches a fixer. With you present, each
   one of medium or higher severity is put to you before the order closes. Close as recorded, and
@@ -32,20 +32,18 @@ A departure never closes clean. The builder declares one with a `Deviation:` lin
 reports one by answering a recipe `departed`. A departure that one finding's fix can cure goes to
 the fix round like a finding.
 
-Any other departure halts the order. What is wrong is the design, or a recipe it relies on, so no
+Any other departure stops the order. What is wrong is the design, or a recipe it relies on, so no
 fixer can repair it. AIDA asks you which one stands:
 
-- **Change the design.** Amend the order in design, close design, and take the restart. See
+- **Change the design.** Amend the order in design, close design, and redo the order. See
   [Change the design mid-build](drift.md).
-- **Keep the departure.** AIDA records your reason, and the review goes on. Each finding the
-  reviewer marked as part of that departure is ruled `wrong` with your reason.
+- **Keep the departure.** AIDA records your reason with go-on `keep`, and the review goes on.
+  Each finding the reviewer marked as part of that departure is ruled `wrong` with your reason.
 
-Unattended, nothing halts. The departure waits as pending, and the order goes on to close. The
-task review asks you before its verdict. You can keep it sooner: set the task interactive and give
-your reason before finish. After finish, the task review takes the answer.
+The order stops in both run modes, and waits for your answer.
 
 The reviewer can also note a departure as an information item. That is a note, not a finding. It
-never halts the build, and it waits for you at the task review.
+never stops the build, and it waits for you at the task review.
 
 Other refusals here, such as a findings file that misses a recipe answer, are in [When it
 stops](../../when-it-stops/).

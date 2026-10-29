@@ -33,7 +33,8 @@ fact without the offer.
 - The project has no code path, or the code path does not exist yet. There is no repository to
   write into.
 - A line in `CLAUDE.md` opens a block that no end marker closes. The text below may be yours, so
-  AIDA neither rewrites nor removes it. Fix the line the report names by hand.
+  AIDA neither rewrites nor removes it. It prints a warning, writes nothing, and exits 0. Fix the
+  line the warning names by hand.
 - With nobody present, AIDA refuses to install, decline or remove the rule, and writes nothing.
 
 See [When it stops](../when-it-stops/).

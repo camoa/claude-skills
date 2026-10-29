@@ -96,20 +96,20 @@ takes the cheap route above. Once implementation has a snapshot, an order `creat
 the build at the next `start`, after this close. A defect that a review found is fixed on the
 task branch, and implementation's `finish` runs again.
 
-Four changes do not halt an order that implementation already started: an added owned file, an
+Four changes do not stop an order that implementation already started: an added owned file, an
 `account` call, a reason added with `update --append-reasoning`, and a row marked with
 `update --absence-reviewed`. Once design closes again,
 the next `start` takes that order's live copy in place, even when the order closed. Any other
-change to a started order halts it for design drift at the next `start`. Two routes lead back.
-Restore the design and `start` clears the halt. Or take the restart in the implement skill's
+change to a started order stops it for design drift at the next `start`. Two routes lead back.
+Restore the design and `start` clears the stop. Or take the redo in the implement skill's
 `references/finish.md`, which rebuilds the order against the new design. The cheap reopen stays cheap for an order that has not started.
 
 Then start design:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh start "<task_folder>"
 ```
-Exit 6: research has not closed on this task. Research is required and is never skipped, so name
-the research skill and stop. A `NOTE:` line names a stated mechanism edited after research
+Research is optional. When it has not closed, `start` goes on and writes a warning to the task
+record; say so to the person. A `NOTE:` line names a stated mechanism edited after research
 grounded it; read that claim as ungrounded.
 
 Then account for each research finding. Each `<task_folder>/research/<search>.md` holds the
@@ -125,9 +125,10 @@ every one of them:
 ```
 Without `--set-aside`, the order uses the finding, and the build brief carries its text. A
 second call for the same finding on the same order replaces the entry. `--remove` in place of
-`--set-aside` deletes it. `check` and `close` refuse, exit 7, while a finding is in no order's
-list. They refuse too when research changed a finding's text after it was recorded, or an entry
-names a finding research no longer holds. Both modes account the same way.
+`--set-aside` deletes it. `check` prints an `unaccounted:` line for each of three cases. A finding
+is in no order's list. Research changed a finding's text after it was recorded. An entry names a
+finding research no longer holds. A person's `close` writes each one to the task record as a
+warning. An unattended `close` refuses, exit 7. Both modes account the same way.
 
 Then read `<task_folder>/records/playbooks.md`. It holds the plays research loaded,
 the rules this project and this person want followed. Name a play that decides an order's shape
@@ -206,17 +207,15 @@ AIDA cannot know on its own:
   the project folder. Never `records/`, which the project ignores. It states no test.
   Its proof is its done-when rows, so it is created with `--proof record`. `add-owned-file`
   sets that value itself once every owned file lies under the project folder, on an order
-  created with no `--proof`. Such a file must live in a folder the project commits:
-  `add-owned-file` refuses an ignored path on a record order.
+  created with no `--proof`. Such a file must live in a folder the project commits: the design
+  check refuses a record order that owns an ignored path.
 - What is proved by what a page shows rather than by a test. A layout, a rendered block, a
-  page at each viewport. Such an order is created with `--proof observe`. It names at least one
+  page as it renders. Such an order is created with `--proof observe`. It names at least one
   `--surface` and declares no test. Each done-when row is the sentence a model judges. After
-  the build, the orchestrator opens each surface at each viewport in a browser. It judges the
-  row against what renders, with a screenshot as the evidence. The look also judges the
-  verification clause of each machine criterion the order owns, as a row of its own. So the
-  rows describe the page, and the clause is still judged. Write each row as one thing
-  the page must show. The judge is a model, and completion puts each such criterion to the
-  person to accept.
+  the build, the orchestrator opens the page the order builds at one size in a browser. It
+  judges the row against what renders, with a screenshot as the evidence. Write each row as one thing
+  the page must show. The judge is a model. At review's close, the person answers each such
+  criterion from the acceptance verifier's evidence.
 - What has to exist beside a class for it to work: a services entry, a route, a permission, a
   schema. Name these in the order, or whoever builds it invents them.
 - What one unit exposes to another, which is what the `interface` field holds.
@@ -234,19 +233,30 @@ and pick the kind from that answer:
   configuration export: `gate`. Nothing new exists for a test to pin, and a test written for it
   only restates a file.
 - A document or an analysis, such as a report or a review: `record`.
+- A document, a recipe, a skill or agent file, or hand-written configuration in the code
+  repository: `confirm`. It holds no logic for a test to prove. The reviewer reads it, and the
+  person confirms each done-when row at review. `add-owned-file` sets this value itself when
+  every owned file is a document or configuration. A `gate` order is never this case.
 - Something only a person or a browser can see: `observe`.
 - Code, on a task whose contract says it has no automated tests: `confirm`. Nothing runs a
   test. The implementer builds it, one reviewer reads the diff, and the person confirms each
   done-when row at review. `add-owned-file` sets this value itself on such a task, on an order
   created with no `--proof` whose first file is code. The person may pick another kind with
   `update --proof`.
+- Changes to tests alone, from an approved test cleanup. A merge, a shrink or a rewrite is a
+  `tests` order that owns only test files, and it `reuses` the code its tests call. Whole files
+  to delete are one tests-only order: `confirm`, owning only files of the cleanup run the goal
+  names. Name each file in a done-when row, and make the order depend on every `tests` order.
 
-A machine-verified criterion does not mean `tests`. Every kind proves one in its own way: the
-tests, the gate lines, the checks on the record, the look, or the person's confirmation.
+A machine-verified criterion does not mean `tests`. Tests prove one, and so do the gate lines and
+run lines. A text-only order proves none, so the check refuses it. A look or a record order's
+reading proves none either, so the check refuses one an `observe` or `record` order owns, unless a
+run line proves it.
+Code with logic gets tests even when it owns no machine-verified criterion.
 `create` and `update` print `impliedProof:` beside the proof the order declares. It says
-`record` when every owned file lies under the project folder. On a task with no automated tests
-it says `confirm` for any other order. Otherwise it says `any kind` for a machine-verified
-criterion. What the order produces decides. When the product is truly unclear,
+`record` when every owned file lies under the project folder. It says `confirm` on a task with no
+automated tests, and when every owned file is a document or configuration. Otherwise it says
+`any kind` for a machine-verified criterion. What the order produces decides. When the product is truly unclear,
 `tests` stays the default, on a task that has tests. A wrongly
 tested configuration order wastes one build, and a wrongly untested code order ships unproven.
 
@@ -289,7 +299,7 @@ research stated it, the cost dimensions compared, the verdict, and why:
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh --run-mode <interactive|autonomous> \
   dispose "<task_folder>" --id <woId> --candidate "<what research found>" \
   --distance <same-name|same-directory|same-layer> --cost <build|carry|agent|risk[,...]> \
-  --verdict <reuse|extend|supersede|decline> --why "<why this verdict>" [--confirmed] \
+  --verdict <reuse|extend|supersede|decline> --why "<why this verdict>" \
   [--path "<where it lives>" --interface "<what it exposes>"]
 ```
 Give `--path` and `--interface` whenever the order's build or tests will call the candidate.
@@ -314,15 +324,15 @@ recorded decision, not a downgrade.
 
 The script applies a fixed table and appends the outcome to the order's `reasoning`, one
 paragraph per candidate. Re-disposing a candidate adds a paragraph; the last one stands. It
-prints `disposition:`, which is what stands. A supersede citing only build cost, or a candidate sharing
-only a layer, comes back as `extend`. Autonomous, a supersede comes back as `extend`, with the
-reason in the `reasoning`. A reuse or extend citing no cost dimension stands, with the thin
-reasoning recorded, because there is nothing to downgrade it to.
+prints `disposition:`, which is what stands. A supersede citing only build cost or no cost
+dimension, or a candidate sharing only a layer, comes back as `extend`. Autonomous, a supersede
+comes back as `extend`. Each downgrade is in the `reasoning` and is a warning in the task record.
+A reuse or extend citing no cost dimension stands, with the thin reasoning recorded, because there
+is nothing to downgrade it to.
 
-Interactive, the script refuses a supersede until the person has been asked. Ask this: the
-candidate, how close it is, and that a supersede widens this task and owes a migration; does it
-stand? A yes is `--confirmed`. A no is the verdict the person chose. A supersede citing no cost
-dimension is refused the same way; ask what it compared, then call again.
+Interactive, ask the person once before a supersede. Name the candidate, how close it is, and that
+a supersede widens this task and owes a migration. A yes is `--verdict supersede`. A no is the
+verdict the person chose.
 
 A rejection that lives only in the conversation is not a rejection anyone can check later.
 
@@ -339,11 +349,10 @@ Never this conversation's own account: being denied that is the entire reason th
 and handing it over turns the check into the decision reading itself. Record what it found with
 `update --append-reasoning`, which adds a paragraph after the text `dispose` wrote.
 
-An unattended `close` refuses with exit 8 while a disposition made unattended lacks an agreeing
-value in its order's verdict file. It prints one line per such disposition. A missing value
-needs one confirmer for that order. A different value is a disagreement, and asking again does
-not clear it. Dispose that candidate again with `--verdict` set to the confirmer's value. When the
-confirmer answered `supersede`, an unattended dispose cannot record it, and a person decides.
+`close` reads each disposition made unattended against its order's verdict file. A missing
+value, or a value the confirmer answered differently, is a warning in the task record, one line
+per disposition. The builder and the architecture reviewer both read the reused interface, and
+both stop on a misfit. To take the confirmer's value, dispose that candidate again with it.
 
 Interactive runs do not dispatch it. A person read the reasoning, and the role has nothing to add.
 
@@ -408,6 +417,8 @@ recorded note reaches a person; a silent change or a silent skip does not.
 
 ## Size a work order
 
+An order holds a handful of behaviours, not a feature. The design check warns on an order with
+more than eight done-when rows, or more than three for each criterion it owns.
 Three to seven build steps, ten at the most. Split when the steps mix independent concerns, or
 mix phases. Merge two orders when each has fewer than three steps, they address the same
 component, and they cannot run in parallel anyway. The script folds one into the other:
@@ -433,12 +444,11 @@ through the script with its reason:
 ```
 The script deletes the order's files and records the id and the reason in
 `design-removed.json`. The close copies that list into `design-closed.json`. A removed id is
-never minted again. The script refuses an order that implementation started. Fold that order
-into the order that takes its work with `merge`, and implementation's `restart` sets its
-records aside. It also refuses an order that another order depends on. It also refuses the only
-order that serves or owns a criterion of the contract. Move the dependency or the criterion
-with `update` first. A finding that the removed order accounted for shows in `check`. Account
-for it again.
+never minted again. Move a dependency or a criterion with `update` first. The design check
+refuses a dependsOn that names nothing. It also names a criterion left with no serving order or
+owner. For an order implementation started, fold it into the order that takes its work with
+`merge`. Implementation's `start` stops it for design drift, and `drop` sets its records aside.
+A finding that the removed order accounted for shows in `check`. Account for it again.
 
 An order folded before `merge` wrote that record left no entry, so the design shows a gap in its
 numbers. Record it with the survivor and a reason:
@@ -447,7 +457,7 @@ numbers. Record it with the survivor and a reason:
   --id <woId> --merged-into <woId> --reason "<why the order was folded>"
 ```
 The script refuses an id that is still an order, and an id the record already holds. `check`
-lists each such id under `unrecordedIds:`. Recording changes no order, so it halts nothing. Then
+lists each such id under `unrecordedIds:`. Recording changes no order, so it stops nothing. Then
 run `check`, `close` with the verdict the last `design-closed.json` records, and `distill`, as for
 an owned-file reopen. The close copies the entry into its record.
 
@@ -457,8 +467,8 @@ doubled it, or the order became a `gate`:
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove-test "<task_folder>" \
   --id <woId> --description "<the test's description, exactly as declared>"
 ```
-It refuses the last test of a `tests` order that owns a machine-verified criterion, the rule the
-check applies. Add the replacement first.
+The design check refuses a `tests` order that owns a machine-verified criterion and declares no
+test. Add the replacement first.
 
 A done-when row or an owned file leaves the same way. Moving a file to the order the sizing rule
 names leaves its rows on the old order. The checkpoint would then judge that order on a file it
@@ -469,8 +479,8 @@ may not write:
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh remove-owned-file "<task_folder>" \
   --id <woId> --path "<the path, exactly as declared>"
 ```
-Each prints what it removed. The last owned file is refused, because an order that names no
-file gives the builder no boundary. Add the replacement first, or fold the order with `merge`. A
+Each prints what it removed. The design check refuses an order with no owned file, because it
+gives the builder no boundary. Add the replacement first, or fold the order with `merge`. A
 `record` order left with no file under the project folder loses its proof, and the output says so.
 Set `--proof` again if that was wrong.
 
@@ -487,10 +497,14 @@ work is split wrong, not a sign both should claim it.
 
 **Light:** the first order, `wo1`, is the walking skeleton. It is a tiny version that links the
 input, the logic and the output end to end along the demo path. Every other order depends on it,
-directly or through its chain, and `check` refuses one that does not. When end to end is on,
-`wo1` also owns the script that walks the demo path. For a page, it sits where the harness reads
-its tests. For a command surface, it is the file the command runs. That script is the one test a
-light run keeps.
+directly or through its chain, and `check` refuses one that does not. A project keeps at most
+one script that walks the demo path. `start` prints the `path-script:` line, and its first word
+says the case. `create`: `wo1` also owns that script. For a page, it sits where the harness reads
+its tests. For a command surface, it is the file the command runs. A person registers it with
+`/aida:surfaces`. `registered`: the project has the script, and no order writes or extends it.
+`check` refuses an order that owns one of its files, `wo1` included.
+`declined` or `off`: no order writes one. A change to the script goes through `/aida:surfaces`
+with a person.
 
 Create it:
 ```
@@ -509,9 +523,9 @@ this conversation; the id space is shared and minted in order, so naming it ahea
 `create` call is safe as long as it is created before design finishes.
 
 Write `--interface` so that it names each exposed element in backticks. That is the service id,
-the class, the interface, the method, the route, the hook and the config key. The build's
-interface check counts only the backtick-quoted names, and wants each one in the builder's record.
-So write a choice the builder makes, such as two calls it may pick from, as plain text. An order
+the class, the interface, the method, the route, the hook and the config key. The build brief
+lists only the backtick-quoted names, and the builder names each one in its record, which the
+reviewer compares. So write a choice the builder makes, such as two calls it may pick from, as plain text. An order
 that exposes nothing takes no `--interface`.
 
 Start `--diff-budget` with `small`, `medium` or `large`. The build reads the first word. An order
@@ -549,7 +563,7 @@ the field files alone and leaves the displays to other orders cannot import on i
 same rule holds for code. An order that changes a class owns every file the recipe couples to
 that class. A constructor change, for one, rewrites the service definition. A file added here
 to an order the build already started is taken in place at the next `start`, once design has
-closed again on the live files. Nothing halts when nothing else on the order changed.
+closed again on the live files. Nothing stops when nothing else on the order changed.
 
 A file that several orders only add to may have more than one owner. A list of enabled modules
 and a dependency manifest are examples. Each order that adds to it passes `--shared` with that
@@ -562,28 +576,25 @@ own changes to the file.
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-done-when "<task_folder>" \
   --id <woId> --text "<what must be true for this order to be finished>"
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh add-test "<task_folder>" \
-  --id <woId> --description "<what this test must observe>"
+  --id <woId> --description "<the one behaviour this test proves>"
 ```
 Write an absence as a done-when row of its own. An absence says the change added nothing of a
 named kind, such as no new dependency or no static call to the container. No test can watch it
 fail, so the build routes it to review by its exact words. A row that joins it to a behaviour,
 such as "contains no static call and saves no entity", cannot be routed without a reopen.
 
-A criterion whose `verifiedBy` is `machine`, on the order that owns it, needs at least one test
-here; the check below refuses an order that skips this. Four orders are the exception. One created
-with `--proof gate` declares no test, and the configuration check judges its owned machine
-criterion at build time. One whose proof is `record` declares no test either, and its done-when
-rows, judged at the checkpoint, stand in for the test. One whose proof is `observe` declares no
-test, and a model judges its done-when rows against its surfaces after the build. One whose proof
-is `confirm` declares no test, and the person confirms its done-when rows at review. A criterion
-whose `verifiedBy` is `person` needs no test, though one is never wrong to add.
+A criterion whose `verifiedBy` is `machine`, on the `tests` order that owns it, needs a test
+here. The check below refuses an order that skips this. The other kinds declare no test. The
+configuration check judges a `gate` order's machine criterion at build time. A `record` order has
+no checkpoint: its reviewer reads the document against its done-when rows. A model judges an `observe` order's done-when rows
+against its surfaces after the build. The person confirms a `confirm` order's done-when rows at
+review. A criterion whose `verifiedBy` is `person` needs no test.
 
-A test is what a test author writes as a file, red before the code and green after it. Add that
-file to the order with `add-owned-file`. The test author writes into it, and the freeze refuses a
-test in a file the order does not own. The review stage's surface row is not a test, so `add-test`
-refuses a description naming one of a `tests` order's own surfaces. A machine criterion only a
-surface can prove is proved by a spec described by what it observes, or reads `person` after scope
-reopens.
+A test is what this page defines:
+`${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`. Add its file to the order
+with `add-owned-file`. The test author writes into it, and the freeze refuses a test in a
+file the order does not own. Each description names the one behaviour its test proves, and that
+page says what a test is not.
 
 To change a scalar or an id list on an order already created, `update` takes the same flags as
 `create`, replacing whichever are given:
@@ -642,17 +653,17 @@ Give `--kind live-site` when the check needs a served site; the source says so o
 A research `--run` never runs until a person approves it at the close. Without that, the
 reviewer judges it as a check.
 Give `--criterion` when the command's output alone proves a machine criterion the order owns,
-such as a linter run. A `tests` order then owes no test for that criterion, so the criterion
-stays on it. The order still declares at least one test of its own. The check refuses a `tests`
-order with no test, and the freeze refuses one with no row (exit 74). Give a criterion that only
-tool output proves to an order that has a test. The freeze runs the line over the test author's
-files, and the row-checker judges whether the line proves the whole clause. A clause that names
-two tools needs a line for each.
+such as a linter run. That criterion then needs no test. When run lines prove every machine
+criterion an order owns, give the order `--proof confirm`. The lines run in its check, and the
+person confirms its done-when rows at review. On a `tests` order, the freeze runs the line over
+the test author's files, and the row-checker judges whether the line proves the whole clause. A
+clause that names two tools needs a line for each.
 A line runs unattended when it equals, word for word, an `argv` in the project's check recipe
 `check_commands`. Any other research line needs the person's approval at the close.
 `--clear` empties the list, and `--recipe` replaces it.
 
-A run line is argv, never a shell, so the script refuses a shell character. It also refuses a
+A run line is argv, never a shell, so `--run` refuses a shell character. A recipe entry with one is
+skipped, with a warning. It also refuses a
 pass outside the three forms. Read the refusal and write the entry again, or leave it out and
 say why in the `reasoning`.
 
@@ -690,7 +701,9 @@ Once every criterion has a drafted owner, run:
 ```
 This reads every work order's JSON and writes its report to `<task_folder>/records/design-check.json`.
 It prints `status:`, the report's line count and `report:` with the path. When the status is not
-zero it adds one `open:` line naming what is open. The report holds:
+zero it adds one `open:` line naming what stops the design. It prints one `unattended:` line for
+each finding that stops only an unattended close, and one `warning:` line for each finding that
+never stops. The report holds:
 
 - a work order file with a missing, empty or malformed required field;
 - every criterion with no work order serving it, and every criterion owned by zero or by more
@@ -705,22 +718,38 @@ zero it adds one `open:` line naming what is open. The report holds:
   no done-when row;
 - every work order whose proof is `confirm` and that declares a test, or has no done-when row;
 - every work order whose proof is `confirm` and that owns a file a test glob matches. The globs
-  are the ones this project's earlier freezes recorded;
-- every work order whose proof is `confirm` on a task whose contract does not say it has no
-  automated tests;
+  are the ones this project's earlier freezes recorded. A tests-only order is exempt;
+- every work order whose proof is `confirm` on a task with tests, unless it is text only, run
+  lines prove every machine criterion it owns, or it is a tests-only order;
+- every tests-only order with an owned file no done-when row names, or a row that names no owned
+  file, and every one that does not depend on each `tests` order of its task;
+- every work order that owns a test another task froze, while that task is not complete;
+- every work order whose proof is `tests` and whose every owned file is a document or
+  configuration;
+- every machine-verified criterion owned by an order whose every owned file is a document or
+  configuration, a `gate` order excepted;
+- every machine-verified criterion owned by an `observe` or `record` order, unless a run line
+  proves it;
+- every machine-verified criterion that a `confirm`, `observe` or `record` order rests on a
+  research run line that never runs: not binding, not approved, and not a check command. This
+  stops only an unattended close;
 - every work order that owns nothing and that no owning order depends on, directly or through
   the chain, and every dependency cycle;
+- on a light task, every work order that owns a file of the registered script that walks the demo
+  path;
 - two work orders sharing a declared owned file that one of them does not mark `--shared`;
 - any criterion, non-goal, or work order id named anywhere that resolves to nothing real.
 
 `check` also prints `verifyNotBinding:`, the orders holding an entry that is not binding.
 Interactive: before the close, show each such order's entries with their sources. Say that the
 source is not one this project accepted. The person keeps each entry, drops it with `--clear`,
-or asks for another source. A kept run entry runs only when the person also approves it: pass
-`--approve-runs` to the close on that yes, and the close stamps each such entry. Autonomous: the
-line and the rendered order carry it to a person later. An autonomous `--approve-runs` refuses and
-lists the lines. It passes once the main session writes the person's answer to
-`person-answer.json` in the task folder, step `close`, with those lines as the answer.
+or asks for another source. A kept run entry runs only when the person also approves it, in
+every run mode. The approval is the person's answer, recorded with the task skill's
+`person-answer.sh`, step `design close`, with the lines as the words. Then pass `--approve-runs` to
+the close, and the close stamps each such entry. Without the answer, `--approve-runs` refuses with
+exit 70 and prints the command. Autonomous: the line and the rendered order carry it to a person
+later. A `confirm`, `observe` or `record` order can rest a machine-verified criterion on such a
+line. Then the autonomous close stops instead, because nothing would prove that criterion.
 
 `check` also prints `impliedProofDisagrees:`, at every exit code. It names every work order whose
 proof is `tests` that owns criteria of which none is machine-verified. The design still closes with
@@ -748,29 +777,23 @@ element it exposes.
 
 `check` also prints `interfaceUnowned:`, at every exit code. It names each path an order's
 interface holds in backticks that the order does not own, no reuse of it declares, and no order
-in its `dependsOn` owns. A `./` prefix and a `:line` or `::member` suffix are ignored. The
-build's interface check wants every backticked name repeated in the builder's record. A builder
-leaves out a path it did not touch, and the build stops. It is best effort, and it never blocks
+in its `dependsOn` owns. A `./` prefix and a `:line` or `::member` suffix are ignored. The build
+brief lists every backticked name for the builder's record. A builder leaves out a path it did not
+touch, and the reviewer finds the two texts apart. It is best effort, and it never blocks
 the close. Answer each one: write the path as plain text with `update --interface`, or add the
 reuse with `dispose --path --interface`.
 
 `check` also prints `interfaceShaped:`, at every exit code. It names each name in backticks in an
 order's interface that holds `<` or `{`. Such a name is often a shape, such as `type.<id>`. The
-build's interface check matches a shape only when the builder's record repeats its text. A generic
+builder's record can name a shape only by repeating its text, which the reviewer reads. A generic
 type holds `<` too, so the line never blocks the close. Name each real element instead, or write
 the shape as plain text with `update --interface`.
 
 `check` also prints `interfaceChoice:`, at every exit code. It names each pair of names in
 backticks that an order's interface joins with `or`. Such a pair is often a choice the builder
-makes, and a builder that takes one option leaves the other out of its record. `check` and
-`close` refuse, exit 9, while a pair is open, in both run modes. Answer each pair. Write a
-choice as plain text with `update --interface`. When each name must exist, such as two exit
-codes, keep the order's pairs:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh update "<task_folder>" \
-  --id <woId> --keep-choices
-```
-The builder's record must then name both. A kept pair whose text changes is open again.
+makes, and a builder that takes one option leaves the other out of its record. The line never
+blocks the close. Write a choice as plain text with `update --interface`. Leave a pair whose two
+names must each exist, such as two exit codes.
 
 `check` also prints `callsUndeclared:`, at every exit code. It names each `name()` call in an
 order's done-when rows and tests that no interface the order declares holds. It reads the order's
@@ -779,18 +802,16 @@ missing signature stops the tests. It is best effort, and a call a clause denies
 never blocks the close. Answer each one: add the reuse with `dispose --path --interface`, or say
 why the call needs no signature.
 
-Exit 0: nothing to do. Design is finished, subject to the judgment step above.
+Exit 0: nothing stops the design, subject to the judgment step above. An `unaccounted:` line
+names a research finding in no order's list, with its id and the first line of its text. Account
+for each one, as "Then account for each research finding" says. A person's close writes it to the
+task record as a warning, and an unattended close stops on it.
 
-Exit 7: the design check is clean, but a research finding is in no order's list. Each one prints
-on an `unaccounted:` line, with its id and the first line of its text. Account for each one, as
-"Then account for each research finding" says, and check again. A design that closed before this
-rule has no entries, so its next `check` or `close` stops here.
-
-Exit 4: a work order file itself is broken: not valid JSON, not an object, or a missing or
-malformed required field. Fix it with another `update` call, or by hand, and check again.
-
-Exit 5: the schema is fine but a content or cross-order check is not. The `open:` line names each
-problem. Read the report file when the line is not enough, and fix the specific order it names:
+Exit 5: a finding stops the design. The `open:` line names each one. Read the report file when the
+lines are not enough, and fix the specific order each line names. The same repairs answer the
+`unattended:` and `warning:` lines:
+  - a work order file that is broken, not valid JSON, not an object, or with a missing or
+    malformed required field, needs another `update` call;
   - a criterion with no serving order needs a work order that names it in `--criteria-served`;
   - a criterion with no owner, or with more than one, needs its `--criteria-owned` reconciled so
     exactly one order claims it;
@@ -808,8 +829,15 @@ problem. Read the report file when the line is not enough, and fix the specific 
   - a `confirm` order declaring a test needs a `remove-test` call for it, or `--proof tests` if
     the task has tests after all. One with no done-when row needs an `add-done-when` call. Each
     row is a sentence the person confirms at review, so write it as one thing they can check. A
-    `confirm` order on a task whose contract does not say it has no automated tests needs
-    `update --proof tests` and its tests;
+    `confirm` order on a task with tests that owns code needs `update --proof tests` and its
+    tests, unless run lines prove every machine criterion it owns;
+  - a `tests` order that owns only documents or configuration needs `update --proof confirm`,
+    or `record` when its files lie under the project folder;
+  - a machine-verified criterion on an order that owns only documents or configuration is a
+    person's. Change it to `person` with scope's `update --verified-by person`, or give it to an
+    order that builds code;
+  - a machine-verified criterion on an `observe` or `record` order is a person's too. Change it
+    the same way, add a run line that proves it, or give it to an order that builds code;
   - a `confirm` order that owns a test file needs `remove-owned-file` for it. Nothing runs that
     file, and the freeze never sees it. When the task does have tests, a person answers yes in
     scope instead, and the order takes `update --proof tests` and its tests;
@@ -819,6 +847,10 @@ problem. Read the report file when the line is not enough, and fix the specific 
     entry point that is not a screen belongs in the order that builds the feature, as above, not
     in an order of its own; an order for it alone needs a criterion that names it;
   - a cycle needs one of the `dependsOn` edges in it removed;
+  - a light order that owns the registered demo-path script needs `remove-owned-file` for it. A
+    change to that script goes through `/aida:surfaces` with a person;
+  - a criterion that rests on a research run line nobody approved needs the person's yes at an
+    attended close, with `--approve-runs`, or another proof;
   - overlapping owned files need one order's `ownedFiles` narrowed so the paths do not repeat,
     or `--shared` on both orders when each only adds to the file;
   - a wildcard in an owned file needs the directory named instead, or each file added, because
@@ -828,14 +860,11 @@ problem. Read the report file when the line is not enough, and fix the specific 
 Then check again. Exit 3: the script could not run the check at all. Read its stderr and fix the
 named problem, then check again.
 
-Design is done when this check comes back clean. Nothing else counts as done.
-
-An earlier version of this skill said a content or cross-order problem could be left open with a
-reason recorded in an order's own `reasoning`. It cannot. Every one of those problems is an
-assumption implementation builds on: a criterion with no order producing it, a criterion two orders
-both claim, and two orders declaring the same file. Implementation refuses to start on any of them
-and tells the person to finish design, so leaving one open only moves the stop to a later and more
-expensive place.
+Design is done when this check finds nothing that stops it. Implementation refuses to start on
+an `open:` finding, so leaving one only moves the stop to a later and more expensive place. A
+`warning:` line never stops the close. Show each one to the person. The close writes it to the task
+record, and review lists it. An `unattended:` line stops an unattended close, because nobody reads
+it before the build.
 
 ## Critique the design
 
@@ -868,13 +897,11 @@ A person reads the findings, because a critic that can block trains the builder 
 critic. The critic decides nothing about closing, and neither does the count.
 
 **Interactive:** show the findings grouped by work order, each with its severity, what it found,
-why it matters and what would fix it. Take one answer per finding: change the order, or leave
-it. A change is one of the `update`, `add-owned-file`, `add-done-when` or `add-test` calls above,
-then `check` again. A leave needs a reason from the person. Write it into that order's
-`reasoning` with `update --append-reasoning`, so the reason outlives this conversation.
-Closed orders are not critiqued, and a leave reason on a started or closed order does not halt it.
-A finding on `contract` is a scope question: ask, and use the scope skill's own update path when
-the contract has to change.
+why it matters and what would fix it. The person decides what to change. Nobody answers each
+finding one by one: a finding nobody acted on stays in its file, which the close commits. A change
+is one of the `update`, `add-owned-file`, `add-done-when` or `add-test` calls above, then `check`
+again. Closed orders are not critiqued. A finding on `contract` is a scope question: ask, and use
+the scope skill's own update path when the contract has to change.
 
 Answer each change with the lines the call printed, and end the turn. Do not show the orders
 again, and do not ask whether the design is ready to close. The close below is an action the
@@ -898,21 +925,22 @@ those words to the call below. Autonomous, nobody says so: run it once the check
 ```
 Pass the fit verdict judged above. Pass `--no-recipe` instead only when no recipe body was read.
 `close` refuses with neither, and a later close restates the verdict rather than carrying it over.
-Unattended, `close` exits 8 on a disposition no confirmer agreed with. "The reuse decision" says
-what to do.
+Unattended, `close` stops on an `unattended:` line, exit 5, and on an unaccounted finding, exit 7.
+A person's close writes those lines, each `warning:` line and each disposition no confirmer agreed
+with to the task record, and closes.
 
 On a first close, interactive, when critique files exist: ask the person for one line. It names
 how many findings changed an order and how many were left with a reason. Pass it as
 `--critique-outcome`. The record holds it as `critique.outcome` beside the files and the count,
-and `close` prints it as `critiqueOutcome:`. Autonomous: pass none; the flag is refused
-unattended, and the record says `none`, because nobody answered the findings. A count alone said
-nothing about what changed.
+and `close` prints it as `critiqueOutcome:`. Autonomous: pass one line that says the findings were
+recorded and not judged. A count alone said nothing about what changed.
 A re-close after a reopen, with no new critique file, needs no flag in either mode. `close`
 keeps the last record's answer and prints `critiqueCarriedFrom:`, naming the close that gave it.
-When an order was added, removed or merged since that close, `close` records `none` and says so
-on stderr. Run "Critique the design" again, then close again.
+When an order was added, removed or merged since that close, the answer is still carried. The
+close writes a warning to the task record that names both sets of orders.
 
-This runs the design check again. It writes `design-closed.json` only when that check exits clean.
+This runs the design check again. It writes `design-closed.json` only when that check finds nothing
+that stops the design.
 The record is committed when the stage closes: `close` commits the task folder, and the work order
 edits above commit nothing. Closing records what design closed on: a hash over the contract and every work order, the run mode,
 and who was present. Pass the run mode you settled at the start. An interactive close records
@@ -921,8 +949,8 @@ critique files it moved into `design/`, their finding count and the outcome line
 later what was read and answered before closing, and can open the files the record names.
 
 A design left open at exit 5, with a reason recorded in an order's own `reasoning`, is not closed.
-Closing needs a clean check. Resolve the open item first, or record why it cannot close yet, and
-tell the person before you stop.
+Resolve the open item first, or record why it cannot close yet, and tell the person before you
+stop.
 
 Implementation reads this record before it freezes anything. It refuses to start on a contract or
 a work order that does not match the recorded hash. This is what catches a work order edited after
@@ -945,20 +973,11 @@ stage's lines, and a `stale` on any stage means this same dispatch again. Then r
 It prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show each
 `gap:` line; acting on one is an `update` and a second close. `standsAlone: stale` means the
 orders or the close changed after the distiller read them: dispatch it again, then run the same
-call again. Exit 2 means the sidecar was not written. Send the same agent one message: write the
-file and read it back. An agent has reported a write it never made. Dispatch a fresh one only
-when exit 2 repeats. Exit 4 means the sidecar was malformed. The script set it aside at the
-`setAside:` path it printed. Dispatch a fresh distiller, with the rule it broke quoted from
-`agents/distiller.md`. Then run the same call again. A second exit 4 stops for the person: show
-the stderr line and the path set aside. A dispatch that ends before the role's first write is the
-third case. The scope skill states the rule under "The distill check": once more with the same
-message, then once on `model: sonnet`.
+call again. `standsAlone: none` means the sidecar was missing or unusable, and the task record
+holds a warning. The scope skill states the one retry rule under "The distill check".
 
-Interactive: stop here. Name the next command for the person, `/aida:implement <task-id>`, and
-never invoke it yourself. Autonomous: invoke `aida:implement` through the Skill tool, once, with
-the task id, and stop if it refuses. Invoke it only when the mode covers implement too; otherwise
-end as interactive does, naming the command. Each stage refuses to start without the previous
-stage's record, so a stage cannot run out of order. That is why this chain is safe.
+Then hand off to `implement`, as `${CLAUDE_PLUGIN_ROOT}/skills/next/references/handoff.md` says:
+interactive, name `/aida:implement <task-id>` and stop; autonomous, invoke it when the run mode covers it.
 
 ## What this skill never does
 

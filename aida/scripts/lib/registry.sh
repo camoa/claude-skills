@@ -63,9 +63,15 @@
 #     stdout and exits 0; prints nothing and exits 1 when no project matches. Ported from version
 #     5's scripts/project-for-cwd.sh, which carried this algorithm correctly.
 #
+#   registry_taken <name> <except> <path>...
+#     The one uniqueness check. Prints `name <name>` or `path <path>` for the first value another
+#     row holds and exits 1: a name, or a path held as a codePath or a project folder. <except> is
+#     the project folder of the row the caller changes, left out; empty leaves out none. An empty
+#     <name> checks no name. Exits 0 when nothing is taken, and 2 when the store cannot be read.
+#
 #   registry_add_project <codePath> <path> <name>
 #     Adds one row with lastAccessed set to today (UTC date, YYYY-MM-DD) and state "active". Exits
-#     1 without writing when codePath is already registered.
+#     1 without writing when registry_taken finds the name or either path taken.
 #
 #   registry_touch_last_accessed <path>
 #     Sets lastAccessed to today for the project at <path>. Exits 1 without writing when no
@@ -320,11 +326,20 @@ registry_resolve_by_directory() {
 # name, so each route that writes a row asks this first. Two rows sharing one name make
 # check-project.sh exit 4 fire for both projects, forever after. The project file cannot say
 # which row is its own.
-registry_name_free() {
+registry_taken() {
   registry__require_jq || return 2
-  local name="${1:?registry_name_free: a name is required}" current
+  local name="$1" except="$2" current hit
+  shift 2
   current="$(registry__current)" || return 2
-  ! printf '%s' "$current" | jq -e --arg n "$name" 'any(.projects[]?; .name == $n)' >/dev/null 2>&1
+  # The paths arrive as one JSON array, not as jq 1.6's --args, so an older jq reads them too.
+  hit="$(printf '%s' "$current" | jq -r --arg n "$name" --arg x "$except" \
+      --argjson paths "$(for p in "$@"; do printf '%s\n' "$p"; done | jq -R . | jq -sc .)" '
+    [ (.projects // [])[] | select((.path // "" | sub("/+$"; "")) != $x) ] as $rows
+    | ([ $paths[] | . as $p
+         | select(any($rows[]; [.codePath, .path] | any((. // "" | sub("/+$"; "")) == $p))) | "path " + $p ]
+       + (if $n != "" and any($rows[]; .name == $n) then ["name " + $n] else [] end))[0] // empty')" \
+    || return 2
+  [ -z "$hit" ] || { printf '%s' "$hit"; return 1; }
 }
 
 registry_add_project() {
@@ -338,9 +353,10 @@ registry_add_project() {
   local current
   current="$(registry__current)" || return 1
 
-  if printf '%s' "$current" | jq -e --arg c "$codepath" \
-      'any(.projects[]?; (.codePath // "" | sub("/+$"; "")) == $c)' >/dev/null 2>&1; then
-    printf 'registry_add_project: codePath is already registered: %s\n' "$codepath" >&2
+  local taken
+  if taken="$(registry_taken "$name" "" "$codepath" "$projectpath")"; then :
+  else
+    [ -z "$taken" ] || printf 'registry_add_project: another project already holds the %s\n' "$taken" >&2
     return 1
   fi
 
@@ -591,7 +607,7 @@ OUTSIDE
       continue
     fi
 
-    # The fourth door. registry_add_project is never called here, so registry_name_free never runs
+    # The fourth door. registry_add_project is never called here, so registry_taken never runs
     # and a duplicate name would pass. That helper tests the store on disk, which this rebuild
     # replaces whole, so the only set a rebuild can test against is the one it has built so far.
     # Two rows sharing a name make check-project.sh exit 4 for both projects, forever after. The

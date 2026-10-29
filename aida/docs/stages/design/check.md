@@ -14,12 +14,9 @@ that own one file, an id that names nothing. Each open item names the order it i
 refusal, and what clears it, is in
 [The design check refuses to close](../../when-it-stops/design-check.md).
 
-No open item can be left with a reason. The build refuses to start on any of them, so leaving one
-open only moves the stop to a later and more costly place.
-
-Two names in an interface joined by `or` also hold the close. Design writes a real choice as
-plain text, or keeps the pair when both names must exist. A kept pair whose text changes is open
-again.
+No finding that stops can be left with a reason. The build refuses to start on any of them, so
+leaving one open only moves the stop to a later and more costly place. A warning never stops the
+close: you read it there, and the close writes it to the task record.
 
 ## Lines that inform and never hold the close
 
@@ -32,6 +29,8 @@ again.
   order it depends on owns. Design writes it as plain text, or records the reuse.
 - `interfaceShaped:` a name in backticks that holds `<` or `{`, which is often a shape and not a
   name.
+- `interfaceChoice:` two names in backticks joined by `or`, which is often a choice the builder
+  makes. Design writes a real choice as plain text.
 - `callsUndeclared:` a call in a done-when row or a test that no interface declares. The test
   author cannot read the code to learn its signature.
 - `unrecordedIds:` a work order number below the highest with no order and no removal on record,

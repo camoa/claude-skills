@@ -1,7 +1,7 @@
 # Create your first project
 
-Open Claude Code in your code folder and type `/aida:project create`. AIDA asks for a name,
-confirms the code path and the stack, and writes the project.
+Open Claude Code in your code folder and type `/aida:project create`. AIDA names the code path,
+the name and the stack it found, asks only for what it cannot find, and writes the project.
 
 ## What you do
 
@@ -15,10 +15,11 @@ recorded, and AIDA does not offer again in that folder.
 
 ## What AIDA asks you
 
-1. **The code path.** AIDA looks at the current folder. When it finds code, it proposes that
-   folder and asks you to confirm. When it finds none, it asks where the code lives.
-2. **The name.** Always asked. Use lower case letters, digits and underscores, starting with a
-   letter, such as `shop_site`.
+1. **The code path.** AIDA looks at the current folder. When it finds code, it uses that folder
+   and names it. When it finds none, it asks where the code lives.
+2. **The name.** The one you give, or the code folder's name made lower case. AIDA asks only when
+   that name breaks the rule: lower case letters, digits and underscores, starting with a letter,
+   such as `shop_site`.
 3. **The stack.** AIDA detects `drupal`, `php-cli`, `node`, `go` and `python-cli` from the files
    in the code path. For any other stack, it asks you to name it. Use the name the catalog's
    recipes use, such as `claude-code-plugins` for a Claude plugin. A stack with no recipe still
@@ -27,8 +28,8 @@ recorded, and AIDA does not offer again in that folder.
    [sources](../sources/README.md).
 4. **Where project folders go.** Asked once per machine. The default is
    `~/.claude/aida/projects`.
-5. **Where task worktrees go.** Asked once per project. The default is the folder that holds your
-   code path.
+5. **Where task worktrees go.** Not asked. AIDA uses the folder that holds your code path, and
+   names it.
 
 ## What happens
 

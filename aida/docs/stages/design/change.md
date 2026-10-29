@@ -33,7 +33,7 @@ never removed.
 `remove-test`, `remove-done-when` and `remove-owned-file` take one item off an order. A `record`
 order left with no file under the project folder loses its proof, and the output says so.
 
-What `merge`, `remove` and the remove calls refuse is in
+What a `merge`, a `remove` or a remove call leaves wrong, the next check names. See
 [The design check refuses to close](../../when-it-stops/design-check.md).
 
 ## Change a design that already closed
@@ -41,9 +41,9 @@ What `merge`, `remove` and the remove calls refuse is in
 Change the order, then close again. The new close replaces the old one. A change to owned files,
 done-when rows or accounted findings may skip reading the guides again.
 
-Most changes to an order the build has started halt that order at the next build start, and a
-few are taken in place. Which ones, and how to clear a halt, are in
-[A work order halted](../../when-it-stops/halts.md).
+Most changes to an order the build has started stop that order at the next build start, and a
+few are taken in place. Which ones, and how to leave a stop, are in
+[A work order stopped](../../when-it-stops/stopped.md).
 
 ## Why it works this way
 

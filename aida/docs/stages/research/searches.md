@@ -33,7 +33,8 @@ Design decides whether to reuse, extend, supersede or decline it.
 Some questions no document answers. Only when the searches come back empty, research writes a
 small experiment under `.aida-spike/` in the task's worktree and runs it. That folder must already
 be in the project's `.gitignore`, or research writes nothing and says so. The answer becomes a
-finding. Research deletes the folder before it closes, and design writes the real code fresh.
+finding. Research deletes the folder before it closes, and design writes the real code fresh. A
+folder left behind is a warning at the close.
 
 ## What a finding holds
 

@@ -12,8 +12,8 @@ its records each time: the first stage whose close record is absent.
 
 The state lives in `task.json`. The task folder never moves when the state changes.
 
-A complete task is not reopened. A stage that tries to start it prints
-`REFUSED: <id> is already complete`. For more work, create a new task.
+A complete task is not reopened. A stage that tries to start it is refused at exit 3. For more
+work, create a new task.
 
 There is no state after complete: no archive and no delete. A completed task stays readable in
 its folder for as long as the project does.
@@ -37,8 +37,8 @@ absent:
 
 | Stage | Closes when this exists |
 |---|---|
-| scope | `records/scope-distill.json`. A light task closes scope when the contract records the plugin version |
-| research | `records/research-check.json`, with a passing exit code |
+| scope | the plugin version in `alignment.json`, which only the scope close writes |
+| research | `records/research-check.json`, with a passing exit code, or a design folder: research is optional |
 | design | `design-closed.json` |
 | implement | `implementation/finished.json` |
 | review | `review/review.json` with a passed or failed verdict, for the build that is finished now |

@@ -1,56 +1,52 @@
 # An attempt failed its checks
 
-Each build attempt must pass eight checks, and each work order gets two attempts. When the last
-attempt fails, the order halts with `attempts spent` and waits for you. What the checks are is on
-[the eight checks](../stages/implement/checks.md).
+Each build attempt must pass three checks: its own tests, its owned files and its frozen tests. Each
+work order gets two attempts. No tool runs at this step, so a tool finding never spends an
+attempt. When the last attempt fails, the order stops with `attempts spent` and waits for you.
+What the checks are is on [the three checks](../stages/implement/checks.md).
 
 ## When the attempts run out
 
 AIDA opens with "The builder used every attempt it was allowed on this unit of work and still
 failed a check. You decide which of three things is true." It names the recorded attempts by path.
-The halted order refuses every record (exit 49) until a person acts, so each route starts with a
-grant, a restart or a retake:
+The stopped order refuses every record (exit 49) until you choose a way out:
 
-- **The code is hard, or one more try may pass.** Say so. AIDA runs `grant-attempt` with your
-  reason, which clears the halt and allows one more attempt. When you write the code yourself,
-  the grant comes first too, because a halted order records nothing. The same checks judge it.
+- **The code is hard, or one more try may pass.** Say so. AIDA goes on with one more build attempt,
+  with your words. When you write the code yourself, commit it, then AIDA goes on with the checks.
+  The same checks judge it.
 - **The work order is wrong**, too big or with an interface that does not fit. Change it in
-  design and close design. The next `start` halts it for design drift, and the restart builds it
-  fresh. See [a work order halted](halts.md).
-- **The test is wrong.** Say which test and why. AIDA runs `retake-tests --because` with your
-  words. It moves the build records aside, sends the order back to its tests step, clears the
-  halt, and grants one more attempt with your words as the reason. The test writer corrects the
-  test, the checker reads it, the freeze runs again, and the order is built again. A freeze or an
-  edit on its own is refused: the freeze refuses once an attempt is recorded (exit 76), and an
-  edited test fails the frozen-tests check.
+  design and close design. AIDA then redoes the order: its commits are reverted, and it is built
+  fresh. See [a work order stopped](stopped.md).
+- **The test is wrong.** Say which test and why, and change it through design. AIDA redoes the
+  order with your words. Its commits and its tests are reverted, its records move aside, and it
+  goes back to planned. The test writer writes the tests again, the checker reads them, the freeze
+  runs again, and the order is built again. An edit on its own is refused: the freeze refuses once
+  an attempt is recorded (exit 76), and an edited test fails the frozen-tests check.
 
-A grant or a retake needs a person. On an unattended run it refuses (exit 68) until you set the task
-interactive or give your answer as a record. See [a run with nobody present](person-must-answer.md).
+Each way out needs your answer on record (exit 68). See
+[a run with nobody present](person-must-answer.md).
 
-## When only a tool check failed
+## When the cause is outside the code
 
-An attempt that failed only on coding standards, static analysis, security, owned files or the
-interface record needs no second build. AIDA offers `build-recheck`, which runs the checks again
-over the same commits and spends no attempt. Amend the interface record, or give the order the
-file in design, first.
-
-When that failure was on the last attempt, the order already halted. Grant the attempt first,
-then let AIDA run the re-check. A failed test or suite is never re-checked; its route is a new
-build. The re-check's refusals are on [the eight checks](../stages/implement/checks.md).
+An attempt that failed on owned files, or on a test that failed for a reason outside the code, may
+need no new build. While attempts remain, the next attempt answers it. When the last attempt
+failed, the stop allows AIDA to go on with the checks. They run again over the same commits, and
+no attempt is spent. Repair the cause first, or give the order the file it needs as part of going
+on. The checks are on [the three checks](../stages/implement/checks.md).
 
 ## Other refusals at the record step
 
-- **Exit 103: the site is down.** See [the site is down](site-down.md). No attempt is spent.
+- **Exit 3: the site is down.** See [the site is down](site-down.md). No attempt is spent.
 - **Exit 61: uncommitted work.** See [the code repository is not ready](repository.md).
-- **Exit 84: a check is missing from the record.** Nothing is written and no attempt is spent.
-- **Exit 48: the order is past its review.** One order gets one review, so later code comes from
+- **Exit 3: a check is missing from the record.** Nothing is written and no attempt is spent.
+- **Exit 3: the order is past its review.** One order gets one review, so later code comes from
   a fix round.
 
 ## Why it works this way
 
 - **Two attempts, then a person.** You can tell a wrong test from hard code; a model choosing
   would let the test describe the code.
-- **A tool fault is not a builder fault.** A re-check spends no attempt, so a refused path or a
-  missing record line does not use up the build.
+- **A tool fault is not a builder fault.** Running the checks again spends no attempt, so a
+  refused path or a missing record line does not use up the build.
 
 Source: skills/implement/references/build.md, skills/implement/references/finish.md, skills/implement/scripts/implement-actions.sh

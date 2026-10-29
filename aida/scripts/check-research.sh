@@ -90,11 +90,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # sentence saying so when false, and is empty when true.
 #
 # What this script could not check is always named on stdout, never silently skipped
-# (check-alignment.sh states the same rule in its own header): schema-check.sh evaluates only
+# (check-design.sh states the same rule in its own header): schema-check.sh evaluates only
 # minLength, pattern, minItems and enum by its own header, and does not evaluate minimum at all;
 # research-schema.json's own schemaVersion carries "minimum": 1, and a value of 0 or of -7 both
 # pass that shared comparison undetected. This script does not add a schemaVersion-specific check
-# of its own, for the same reason check-alignment.sh does not: alignment.json, task.json and
+# of its own, for the same reason check-design.sh does not: alignment.json, task.json and
 # project.json carry the identical field under the identical gap, and a fix scoped to this file
 # only would misstate the other three as fixed. The coverage join against the contract is its own
 # "not checked" case, named above, when alignment.json cannot be read.
@@ -118,7 +118,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   report instead of producing two identical rows.
 #
 # Portability notes, because this script must run wherever the plugin runs:
-#   - No awk, no GNU-only flags, the same as check-alignment.sh. Every read of a research file
+#   - No awk, no GNU-only flags, the same as check-design.sh. Every read of a research file
 #     goes through jq; a criterion id's own shape is matched by jq's `test()` with no interval
 #     quantifier, "a digit 1-9 then zero or more digits", not a bounded repeat count.
 
@@ -447,8 +447,7 @@ NOT_CHECKED_JSON="$(printf '%s\n' "${NOT_CHECKED_ITEMS[@]}" | jq -R . | jq -s .)
 
 # ---------------------------------------------------------------------------
 # 8. Decide the exit code. Priority, highest first: 3 already exited above on its own; between
-#    what remains, 1 outranks 4, the same order check-alignment.sh uses between a schema finding
-#    and a cross-cutting one. Research not having started, on its own, never raises this above 0;
+#    what remains, 1 outranks 4: a schema finding comes before a cross-cutting one. Research not having started, on its own, never raises this above 0;
 #    it is COVERAGE_ISSUE_COUNT, computed the same way regardless, that decides.
 # ---------------------------------------------------------------------------
 

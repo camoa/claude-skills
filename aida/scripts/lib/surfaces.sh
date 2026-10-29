@@ -7,11 +7,8 @@
 #                                    SF_SURFACES, a JSON array of {id, url, kinds, enabled, masks,
 #                                    paths, critical}, empty unless ok; paths reads [] and
 #                                    critical false when a row lacks them. A row that carries a
-#                                    command, an argv array, keeps it as a last key (gap row 289).
-#                                    Also SF_VIEWPORTS, a
-#                                    JSON array of the file's viewport names, empty unless ok;
-#                                    the observed check reads it for the rows an order owes
-#                                    (live-run row 104)
+#                                    reason keeps it next. A row that carries a command, an argv
+#                                    array, keeps it as a last key (gap row 289)
 #   sf_surface_path <registryPath> <tree>   prints the surface file's absolute path: <registryPath>
 #                                    joined to <tree> when it is relative, or <registryPath> as it
 #                                    is when a record written before row 32 of
@@ -35,10 +32,10 @@ elif [ -n "${BASH_VERSION:-}" ] && [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   exit 1
 fi
 
-SF_STATE="absent"; SF_SURFACES="[]"; SF_VIEWPORTS="[]"
+SF_STATE="absent"; SF_SURFACES="[]"
 sf_load_surfaces() {
   local surface_file="$1" rows
-  SF_STATE="absent"; SF_SURFACES='[]'; SF_VIEWPORTS='[]'
+  SF_STATE="absent"; SF_SURFACES='[]'
   [ -n "$surface_file" ] || return 0
   if [ ! -f "$surface_file" ]; then
     SF_STATE="missing"
@@ -49,7 +46,7 @@ sf_load_surfaces() {
        and all(.surfaces[]; (.id | type) == "string" and (.kinds | type) == "array" and (.enabled | type) == "boolean"
          and ((.command // ["x"]) | type == "array" and length > 0 and all(.[]; type == "string")))
     then [ .surfaces[] | {id, url: (.url // ""), kinds, enabled, masks: (.masks // []), paths: (.paths // []), critical: (.critical // false)}
-           + (if has("command") then {command} else {} end) ] else empty end' \
+           + (if has("reason") then {reason} else {} end) + (if has("command") then {command} else {} end) ] else empty end' \
     "$surface_file" 2>/dev/null)"
   if [ -z "$rows" ]; then
     SF_STATE="unreadable"
@@ -59,8 +56,6 @@ sf_load_surfaces() {
   SF_STATE="ok"
   # shellcheck disable=SC2034 # read by the sourcing script
   SF_SURFACES="$rows"
-  # shellcheck disable=SC2034 # read by the sourcing script
-  SF_VIEWPORTS="$(jq -c '[ (.viewports // [])[] | .name | select(type == "string") ]' "$surface_file" 2>/dev/null)"
 }
 
 # $1 the project record's `surfaces.registryPath`, may be empty. $2 the tree the caller runs in.

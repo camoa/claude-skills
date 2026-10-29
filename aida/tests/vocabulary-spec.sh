@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vocabulary-spec.sh: one name per thing. Reads tests/vocabulary.txt, `<word> | <thing> | <banned
-# synonyms>` per line, and flags every banned synonym in shipped prose: skill bodies and
-# references, agents, docs, templates and the README. Fenced blocks and inline code spans are
+# synonyms>` per line, and flags every banned synonym in the prose a model reads: skill bodies
+# and references, agents and templates. Fenced blocks and inline code spans are
 # skipped, because a command or a field name is not prose. A hit is a whole word, any case, and
 # prints as `<path>:<line>: <word>`. The last line is `hits: <n>`; the exit is 1 on any hit.
 # A code span is stripped per line, so a span that wraps across lines is only half skipped.
@@ -19,7 +19,7 @@ LIST="${1:-$HERE/vocabulary.txt}"
 HITS="$(mktemp)"; trap 'rm -f "$HITS"' EXIT
 # The list is awk's first input and fills the banned set; the prose file is its second. A token is
 # a run of word characters, so `machine-verified` yields `verified` the way `grep -w` would.
-(cd "$PLUGIN" && { find skills agents docs templates -name '*.md'; echo README.md; } | sort) \
+(cd "$PLUGIN" && find skills agents templates -name '*.md' | sort) \
   | while IFS= read -r p; do
       awk -v F="$p" '
         FNR == NR {

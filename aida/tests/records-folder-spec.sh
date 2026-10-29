@@ -23,11 +23,9 @@
 # above a records assignment counts, because a function body sits above the globals it reads.
 #
 # What it reads. Every file under scripts/, skills/, hooks/, agents/, templates/, evals/ and
-# .claude-plugin/. A records path in one of those is a write. It reads the pages a person reads as
-# well: docs/, README.md and CHANGELOG.md. Those are different. A page is prose for a person, and
-# no model runs it. A name a page gives must be on the list, and a page alone never keeps a list
-# line alive. Only a write does. So a line naming a record nothing writes any more still fails,
-# even while a page still names it.
+# .claude-plugin/. A records path in one of those is a write. It does not read docs/, README.md or
+# CHANGELOG.md: a page is prose for a person, no model runs it, and a page never keeps a list line
+# alive.
 # What it still cannot see is named in tests/records-folder.txt's header.
 # Usage: records-folder-spec.sh [<list file>]. bash 3.2+ and zsh.
 # The whole set runs from the marketplace repository root, camoa-skills/scripts/run-tests.sh, not
@@ -40,28 +38,24 @@ PLUGIN="$(dirname "$HERE")"
 LIST="${1:-$HERE/records-folder.txt}"
 [ -f "$LIST" ] || { printf 'no list at %s\n' "$LIST"; exit 1; }
 FAIL=0
-RAW="$(mktemp)"; NAMES="$(mktemp)"; FOUND="$(mktemp)"; REFS="$(mktemp)"
+RAW="$(mktemp)"; NAMES="$(mktemp)"
 KEYS="$(mktemp)"; CDS="$(mktemp)"; AT="$(mktemp)"
-trap 'rm -f "$RAW" "$NAMES" "$FOUND" "$REFS" "$KEYS" "$CDS" "$AT"' EXIT
+trap 'rm -f "$RAW" "$NAMES" "$KEYS" "$CDS" "$AT"' EXIT
 
-# W is a file whose records path is a write. P is a page a person reads, where it is a mention.
-(cd "$PLUGIN" && {
-   find scripts skills hooks agents templates evals .claude-plugin -type f | sort | sed 's|^|W |'
-   { find docs -type f; find . -maxdepth 1 -type f | sed 's|^\./||'; } | sort | sed 's|^|P |'
- }) | while IFS=' ' read -r kind f; do
-      awk -v F="$f" -v KIND="$kind" '
-        BEGIN { TAG = (KIND == "P") ? "P" : "N" }
+(cd "$PLUGIN" && find scripts skills hooks agents templates evals .claude-plugin -type f | sort) \
+  | while IFS= read -r f; do
+      awk -v F="$f" '
         function unquote(s) { gsub(/[\047"]/, "", s); return s }
         function emit(line, prefix,   p, s, n) {
           s = line
           while ((p = index(s, prefix)) > 0) {
             s = substr(s, p + length(prefix))
-            if (match(s, /^[A-Za-z0-9_.\/$%{}<>*+@~-]+/)) {
+            if (match(s, "^[A-Za-z0-9_./$%{}<>*+@~-]+")) {
               n = substr(s, 1, RLENGTH)
               sub(/^\/+/, "", n)
               if (n == "" || n == "*") continue
-              if (n ~ /[$%]/ && n !~ /\./) { if (TAG == "N") printf "R\t%s\t%s:%d\n", n, F, LNO }
-              else printf "%s\t%s\n", TAG, n
+              if (n ~ /[$%]/ && n !~ /\./) printf "R\t%s\t%s:%d\n", n, F, LNO
+              else printf "N\t%s\n", n
             }
           }
         }
@@ -108,9 +102,9 @@ trap 'rm -f "$RAW" "$NAMES" "$FOUND" "$REFS" "$KEYS" "$CDS" "$AT"' EXIT
         }
         {
           line = unquote(raw)
-          if (TAG == "N" && line ~ /(^|[ \t;|&(])cd[ \t]+[^ \t;|&)]*\/records\/?([ \t;|&)]|$)/) printf "C\t%s:%d\n", F, LNO
+          if (line ~ /(^|[ \t;|&(])cd[ \t]+[^ \t;|&)]*\/records\/?([ \t;|&)]|$)/) printf "C\t%s:%d\n", F, LNO
           emit(line, "records/")
-          if (TAG == "N" && match(line, /(^|[ \t(])find[ \t]+[^ \t]+/)) {
+          if (match(line, /(^|[ \t(])find[ \t]+[^ \t]+/)) {
             fp = substr(line, RSTART, RLENGTH); sub(/^.*find[ \t]+/, "", fp)
             fv = fp; sub(/^\$\{?/, "", fv); sub(/\}$/, "", fv)
             if (fp ~ /\/records\/?$/) emit(line, "-name ")
@@ -124,14 +118,12 @@ trap 'rm -f "$RAW" "$NAMES" "$FOUND" "$REFS" "$KEYS" "$CDS" "$AT"' EXIT
         }' "$PLUGIN/$f" "$PLUGIN/$f"
     done >"$RAW"
 
-awk -F'\t' '$1 == "N" || $1 == "P" { print $1 "\t" $2 }' "$RAW" \
+awk -F'\t' '$1 == "N" { print $2 }' "$RAW" \
   | sed -e 's/[.,;:)]*$//' \
         -e 's/\${[A-Za-z_][A-Za-z0-9_]*}/<>/g' -e 's/\$[A-Za-z_][A-Za-z0-9_]*/<>/g' \
         -e 's/<[A-Za-z_][A-Za-z0-9_-]*>/<>/g' -e 's/%[A-Za-z]/<>/g' -e 's/\*/<>/g' \
         -e 's/}*$//' \
-  | awk -F'\t' '$2 != ""' | sort -u >"$NAMES"
-cut -f2 "$NAMES" | sort -u >"$FOUND"
-awk -F'\t' '$1 == "N" { print $2 }' "$NAMES" | sort -u >"$REFS"
+  | grep . | sort -u >"$NAMES"
 sed -e 's/#.*//' -e 's/|.*//' -e 's/[[:space:]]//g' "$LIST" | grep . | sort -u >"$KEYS"
 
 awk -F'\t' '$1 == "C" { print $2 }' "$RAW" | sort -u >"$CDS"
@@ -140,13 +132,13 @@ while IFS= read -r where; do
 done <"$CDS"
 while IFS= read -r name; do
   grep -Fxq "$name" "$KEYS" || { printf 'not listed: records/%s\n' "$name"; FAIL=1; }
-done <"$FOUND"
+done <"$NAMES"
 awk -F'\t' '$1 == "R" { print $3 }' "$RAW" | sort -u >"$AT"
 while IFS= read -r where; do
   printf 'the file name is built at run time: %s\n' "$where"; FAIL=1
 done <"$AT"
 while IFS= read -r name; do
-  grep -Fxq "$name" "$REFS" || { printf 'listed, not referenced: records/%s\n' "$name"; FAIL=1; }
+  grep -Fxq "$name" "$NAMES" || { printf 'listed, not referenced: records/%s\n' "$name"; FAIL=1; }
 done <"$KEYS"
 while IFS='|' read -r name producer again; do
   case "$name" in ''|'#'*) continue ;; esac

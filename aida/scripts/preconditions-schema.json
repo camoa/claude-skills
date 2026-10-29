@@ -15,7 +15,7 @@
     "takenAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-      "description": "The UTC date the checks ran, YYYY-MM-DD. Set by the script, never typed. A person arriving at a halted run weeks later needs to know how old these verdicts are, because a precondition is a fact about a machine and machines change."
+      "description": "The UTC date the checks ran, YYYY-MM-DD. Set by the script, never typed. A person arriving at a stopped run weeks later needs to know how old these verdicts are, because a precondition is a fact about a machine and machines change."
     },
     "verdict": {
       "type": "string",

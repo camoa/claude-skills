@@ -20,7 +20,7 @@ The earlier task must belong to the same project.
   reads `worktree: none` and `after-build: unfinished`.
 - `/aida:next` shows the task each one waits on.
 - Every stage of the new task refuses to start until the earlier build is finished. The refusal
-  reads `REFUSED: <id> builds on <other>, whose build is unfinished`, and nothing is written.
+  names the task it builds on and exits 3, and nothing is written.
   Build the earlier task first.
 - When the earlier build is finished, the first stage starts the task and cuts the tree from
   the earlier task's branch.

@@ -30,19 +30,28 @@
 #   recipe_block_into <recipe> <heading> <key> <file>   cuts one YAML block out; prints the state
 #   tc_parse_recipe <recipe> <out>            one JSON object per `## Test commands` row
 #   cc_parse_recipe <recipe> <heading> <key> <out>      the same for a check or surface block
+#   cc_check_argv <baseline>...               each check_commands argv the baselines' check recipes
+#                                             declare, words joined by one space, as one JSON array
 #   cc_markers_in_text <text>                 the literal markers in one silent-pass text
 #   cc_failure_signal_markers <recipe> <key>  the same, from one key of a test recipe's failure_signal
 #   cc_silent_pass_markers <recipe>           the same, from the file-level key of a test recipe
 #   cc_unit_declaration_globs <recipe>        the globs under ## Unit declaration of an implement recipe
 #   cr_recipe_pair <action> <flag> <value>    parses <framework>=<path> into CR_PAIR
+#   cr_take_flag <action> <flag>=<variable>... <arg>...  takes one recipe flag a verb names off
+#                                             the arguments; returns how many it took, 2 or 0
 #   cr_resolve                                resolves the recipes into CR_DOC
 #   cr_lookup <tab list> <name>               the value that name was given, as whole text
 #   cr_row_command <rows> <row id> <label>    one row's argv, or why there is none
 #   cr_require_baseline_recipes <action> <baseline file>  exit 73 on a changed check recipe
 #   tf_sha256_of <file>                       the sha256 of that file, lowercase hex
+#   tf_with_repair_tests <action> <order>     the order's frozen record with its repairs', into TF_REPAIR_TESTS_DOC
 #   tf_path_matches_glob <path> <glob>        one segment against one glob segment
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob, or its file name when the glob has no /
-#   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>] [<log>]   runs one resolved command
+#   tests_only_order <task folder> <order>    true when the order deletes test files of the one cleanup run its goal names
+#   tr_find_tool_row <recipes> <id> <label>   one tool row of the resolved recipes, or why it runs nothing
+#   tr_run_tool_row <row> <dir> <paths> <values> <out>   runs one tool row, its streams joined
+#   br_run_resolved <argv> <dir> <out> <paths> <values> [<err>] [<log>]   runs one resolved command,
+#                                             within BR_RUN_LIMIT seconds when that is set
 #   br_token_value <values> <name>            a run line's value for that name, from every source
 #   br_fill_arg <values> <arg>                the argument with each {name} filled, or the unfilled name
 #   br_recorded_token <name>                  the value preconditions recorded for a ## Tokens name
@@ -121,11 +130,10 @@
 #                               implement-actions.sh's own table gives it, so one number never
 #                               means two things in two scripts: 3 could not do its job, 5 the
 #                               codePath is not a git repository, 14 project.json will not parse,
-#                               15 the codePath is not on disk, 61 the working tree is dirty, 72
-#                               two frameworks each command one tool, 73 the check recipe is not
-#                               the one the baseline was taken with, and 52 a findings file that
+#                               15 the codePath is not on disk, 61 the working tree is dirty, 73
+#                               the check recipe is not the one the baseline was taken with, and 52 a findings file that
 #                               cannot be read as a findings file.
-#   write_atomic, halt_order_in  read by br_require_clean_tree only on the branch an autonomous
+#   write_atomic, stop_order_in  read by br_require_clean_tree only on the branch an autonomous
 #                               caller asks for by passing its ledger. A caller that passes no
 #                               ledger never reaches them.
 #   scripts/lib/records-hash.sh  sourced by the caller before this file: cr_resolve and
@@ -167,6 +175,16 @@ resolve_project_folder() {
   p="$(cd "$task_path/../.." 2>/dev/null && pwd -P)" || return 1
   [ -f "$p/project.json" ] || return 1
   printf '%s' "$p"
+}
+
+# Prints the JSON array $1, rows that each name a framework, ordered as project.json $2 lists the
+# frameworks. A framework it does not list comes last. Where two frameworks answer one question,
+# the first row after this is the one that runs, with a warning (summary conflict 6).
+cr_by_project_order() {
+  local order
+  order="$(jq -c '.frameworks // []' "$2" 2>/dev/null)"
+  [ -n "$order" ] || order='[]'
+  printf '%s' "$1" | jq -c --argjson o "$order" 'sort_by(.framework as $f | ($o | index($f)) // length)'
 }
 
 # The task's own project, and the code repository it records. $1 the action's own name. Sets
@@ -263,8 +281,7 @@ tc_indent() {
 # The state the two recipe parsers last read: undeclared, unparseable or ok. A global rather than a
 # printed value, because a `$(...)` capture runs the parser in a subshell, and the refusal each one
 # makes on a row it cannot record would exit that subshell alone and let the caller carry on with a
-# tool recorded undeclared. That is the same rule br_seven_checks states, and both parsers were
-# written the wrong way round.
+# tool recorded undeclared. Both parsers were written the wrong way round once.
 RECIPE_STATE=""
 
 # Cuts the YAML block a recipe writes under one H2 into the file $4, and prints the section own
@@ -537,6 +554,29 @@ cc_parse_recipe() {
   rm -f "$block_file"
 }
 
+# Prints, as one JSON array, each check_commands argv of the check recipes that the baseline files
+# $@ record in checkRecipes, its words joined by one space. The project's review recipe runs such a
+# command on every build, so a run line that equals one runs with no person's stamp (gap row 370).
+# A baseline or a recipe that is not there adds nothing. Returns 3 when it cannot make its
+# temporary file.
+cc_check_argv() {
+  local argv_json='[]' baseline rec_path rows
+  rows="$(mktemp)" || return 3
+  for baseline in "$@"; do
+    [ -f "$baseline" ] || continue
+    while IFS= read -r rec_path; do
+      [ -n "$rec_path" ] && [ -f "$rec_path" ] || continue
+      : >"$rows"
+      cc_parse_recipe "$rec_path" "Check commands" "check_commands" "$rows"
+      argv_json="$(jq -s -c --argjson a "$argv_json" '$a + [ .[] | select(has("argv")) | .argv | join(" ") ]' "$rows")"
+    done <<CC_CHECK_RECIPES
+$(jq -r '(.checkRecipes // [])[].path' "$baseline" 2>/dev/null)
+CC_CHECK_RECIPES
+  done
+  rm -f "$rows"
+  printf '%s' "$argv_json"
+}
+
 # Prints, one per line, the literal markers in the silent-pass text $1. A marker is a backtick-quoted
 # token in that folded text. A token holding a `<placeholder>` is not printed: it is a shape for a
 # person to read, never a literal substring anything can search for. A text that opens with `None`
@@ -604,8 +644,7 @@ cc_unit_declaration_globs() {
 #
 # A global rather than a printed value, because a `$(...)` capture runs this in a subshell and a
 # refusal inside it would exit that subshell alone, leaving the caller to carry on with an empty
-# entry. That is the same rule br_seven_checks states above, and this function was written the
-# wrong way round once already.
+# entry. This function was written the wrong way round once already.
 CR_PAIR=""
 cr_recipe_pair() {
   local who="$1" flag="$2" value="$3" fw rp
@@ -653,9 +692,35 @@ cr_catalog_pair() {
   esac
 }
 
+# The one reader of the recipe flags. $1 the action, $2 the flags this verb takes, as space-separated
+# <flag>=<variable> words, then the arguments still to parse. When the first of them is one of the
+# verb's flags, it parses the value the way that flag reads and appends one line to the caller's
+# variable, then returns 2. Otherwise it returns 0 and takes nothing. One flag fills a different
+# variable per verb, so the verb names the variable. Call it as a plain statement in the verb's own
+# argument loop: its refusals must end the action, and the append must reach the caller's shell.
+cr_take_flag() {
+  local who="$1" targets=" $2 " flag="${3:-}" var
+  case "$targets" in *" $flag="*) ;; *) return 0 ;; esac
+  var="${targets#*" $flag="}"; var="${var%% *}"
+  need_value "$who" "$flag" "$(($# - 2))" "${4:-}"
+  case "$flag" in
+    --lookup-failed|--check-lookup-failed) cr_lookup_failure_pair "$who" "$flag" "$4" ;;
+    --catalog-recipe|--catalog-check-recipe|--implement-lookup) cr_catalog_pair "$who" "$4" "$flag" ;;
+    --value)
+      case "$4" in *=*) ;; *) die 3 "$who: --value takes <name>=<value>, got: $4" ;; esac
+      pc_refuse_forged_value "$who" "$4"
+      CR_PAIR="$(printf '%s\t%s' "${4%%=*}" "${4#*=}")" ;;
+    --tooling) CR_PAIR="$4" ;;
+    *) cr_recipe_pair "$who" "$flag" "$4" ;;
+  esac
+  eval "$var=\"\${$var}\$CR_PAIR
+\""
+  return 2
+}
+
 # Resolves the recipes into the commands the checks run. The caller sets these globals first,
 # because a `$(...)` capture would run this in a subshell and a refusal inside it would exit that
-# subshell alone, which is the rule br_seven_checks already states.
+# subshell alone.
 #   CR_WHO              the action's own name, for a message
 #   CR_TEST_RECIPES     newline list of <framework><TAB><path>, the `## Test commands` source
 #   CR_CHECK_RECIPES    the same, for `## Check commands`
@@ -663,10 +728,11 @@ cr_catalog_pair() {
 #                       this caller has none (the baseline, which runs the suite whole)
 # Sets CR_DOC.
 #
-# One tool row may carry a command from one framework only. A project on two frameworks whose
-# recipes both name a coding-standards tool has two answers to one question, and nothing here may
-# choose between them (exit 72). A row every framework declares absent is absent, and its reasons
-# are joined.
+# One tool row carries a command from one framework only. A project on two frameworks whose
+# recipes both name a coding-standards tool has two answers to one question. The first framework
+# in project.json's order runs, its row names it, and a warning in the task record at TASK_PATH
+# names the others. A refusal there stopped the whole step, and no case on record needed it. A row
+# every framework declares absent is absent, and its reasons are joined.
 CR_WHO=""; CR_TEST_RECIPES=""; CR_CHECK_RECIPES=""; CR_DOC=""
 # False resolves implementation's three tool rows. True resolves every row id the check recipes
 # declare, which is review's own reading of the same block.
@@ -781,7 +847,10 @@ security'
       '[ .[] | select(.id == $id and (has("argv")) and (((.unreadable // []) | index("argv")) == null)) ]')"
     count="$(printf '%s' "$commanded" | jq 'length')"
     if [ "$count" -gt 1 ]; then
-      die 72 "$CR_WHO: $(printf '%s' "$commanded" | jq -r '[ .[].framework ] | join(" and ")') each declare a $tool_id command, and nothing here may choose between two answers to one question. Resolve one check recipe for this task, or split the frameworks into two tasks."
+      commanded="$(cr_by_project_order "$commanded" "$(resolve_project_folder "$TASK_PATH")/project.json")"
+      task_warn "$TASK_PATH" "$CR_WHO" "" "$(printf '%s' "$commanded" | jq -r --arg t "$tool_id" \
+        '"\([ .[].framework ] | join(" and ")) each declare a \($t) command. \(.[0].framework) runs it, the first in project.json"')"
+      commanded="$(printf '%s' "$commanded" | jq -c '.[:1]')"; count=1
     fi
     if [ "$count" -eq 1 ]; then
       tools_out="$(jq -nc --argjson out "$tools_out" --argjson row "$(printf '%s' "$commanded" | jq -c '.[0]')" '$out + [$row]')"
@@ -865,6 +934,60 @@ cr_row_command() {
 # here carries a second copy of that decision.
 tf_sha256_of() {
   "${RECORDS_HASH_SHA256_CMD[@]}" <"$1" 2>/dev/null | cut -d' ' -f1
+}
+
+# Hashes every frozen test file of tests record $1 (its JSON text) and every support file frozen
+# with them, read under code root $2. A support file is a base class or a fixture the author wrote
+# beside the tests (live-run row 90). build-record runs this for its own order, and review's checks
+# for every order at the final commit. Sets TF_FROZEN_COUNT to the files hashed, and
+# TF_FROZEN_CHANGED to the paths that no longer match, each followed by ", ". A missing file does
+# not match. The caller resolves RECORDS_HASH_SHA256_CMD first.
+TF_FROZEN_COUNT=0; TF_FROZEN_CHANGED=""
+tf_frozen_changed() {
+  local frozen_paths fidx frozen_file fsha current_sha
+  TF_FROZEN_CHANGED=""
+  frozen_paths="$(printf '%s' "$1" | jq -c \
+    '([ (.rows // [])[] | select(.kind == "machine") | (.tests // [])[] | {path, sha256} ]
+      + [ (.support // [])[] | {path, sha256} ]) | unique_by(.path)')"
+  TF_FROZEN_COUNT="$(printf '%s' "$frozen_paths" | jq 'length')"
+  fidx=0
+  while [ "$fidx" -lt "$TF_FROZEN_COUNT" ]; do
+    frozen_file="$(printf '%s' "$frozen_paths" | jq -r --argjson fidx "$fidx" '.[$fidx].path')"
+    fsha="$(printf '%s' "$frozen_paths" | jq -r --argjson fidx "$fidx" '.[$fidx].sha256')"
+    current_sha=""
+    [ ! -f "$2/$frozen_file" ] || current_sha="$(tf_sha256_of "$2/$frozen_file")"
+    [ "$current_sha" = "$fsha" ] || TF_FROZEN_CHANGED="$TF_FROZEN_CHANGED$frozen_file, "
+    fidx=$((fidx + 1))
+  done
+}
+
+# Order $2's frozen test record in IMPL_DIR, with the rows and the support files of each repair's
+# record appended. A repair's record, tests-<order>-repair-<n>.json, holds the failing test of a bug
+# a task review found, or the corrected copy of a test a person ruled wrong (gap row 449). A path a
+# later record holds is held to that record's hash, so the earlier entry for it is dropped, and the
+# first record is never rewritten. Sets TF_REPAIR_TESTS_DOC. Refuses at 3, naming the file, when a
+# record does not parse: the files the freezes hold are then unknown. $1 the action. Call it as a
+# plain statement, never in $(...).
+TF_REPAIR_TESTS_DOC=""
+tf_with_repair_tests() {
+  local f doc
+  doc="$(jq -c '.' "$IMPL_DIR/tests-$2.json" 2>/dev/null)"
+  [ -n "$doc" ] \
+    || die 3 "$1: $IMPL_DIR/tests-$2.json could not be read as JSON, so the files the freezes of $2 hold are unknown. Repair or remove it by hand before running this again."
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    doc="$(printf '%s' "$doc" | jq -c --slurpfile r "$f" '
+      ([ ($r[0].rows // [])[] | (.tests // [])[] | .path ] + [ ($r[0].support // [])[] | .path ]) as $now
+      | .rows = ([ (.rows // [])[] | .tests = [ (.tests // [])[] | select(.path as $p | $now | index($p) | not) ] ]
+                 + ($r[0].rows // []))
+      | .support = ([ (.support // [])[] | select(.path as $p | $now | index($p) | not) ] + ($r[0].support // []))' 2>/dev/null)"
+    [ -n "$doc" ] \
+      || die 3 "$1: $f could not be read as JSON, so the files the freezes of $2 hold are unknown. Repair or remove it by hand before running this again."
+  done <<TWR_EOF
+$(find "$IMPL_DIR" -maxdepth 1 -type f -name "tests-$2-repair-*.json" 2>/dev/null | sort)
+TWR_EOF
+  # shellcheck disable=SC2034 # read by the sourcing script
+  TF_REPAIR_TESTS_DOC="$doc"
 }
 
 # True when path $1 matches the glob $2 (a real catalog example is `*Test.php`, so the star must
@@ -972,6 +1095,25 @@ tf_path_matches_catalog_glob() {
   return 1
 }
 
+# True when work order $2, as JSON text, of task folder $1 is a tests-only order (audit/24a): its
+# proof is confirm, and each file it owns is a test of the one cleanup run its contract's goal names.
+# A test there is a path that run's groups.json lists, relative to the code repository root, as an
+# owned file is. A goal that names no run, or two, makes no order tests-only. The run must lie in
+# this project's test-cleanup folder, so a goal cannot point at a list someone else wrote.
+tests_only_order() {
+  local project runs run
+  [ "$(printf '%s' "$2" | jq -r '.proof // ""')" = confirm ] || return 1
+  project="$(cd "$1/../.." 2>/dev/null && pwd -P)" || return 1
+  runs="$(jq -r '.goal // ""' "$1/alignment.json" 2>/dev/null \
+    | grep -oE "[^[:space:]\`'\"]*/test-cleanup/run-[^/[:space:]\`'\"]+/decisions\.md" | LC_ALL=C sort -u)"
+  [ -n "$runs" ] && [ "$(printf '%s\n' "$runs" | wc -l)" -eq 1 ] || return 1
+  run="$(cd "${runs%/decisions.md}" 2>/dev/null && pwd -P)" || return 1
+  [ "${run%/*}" = "$project/test-cleanup" ] && [ -r "$run/groups.json" ] || return 1
+  printf '%s' "$2" | jq -e --slurpfile g "$run/groups.json" '
+    [ $g[0][]?.files[]? ] as $tests
+    | (.ownedFiles // []) | length > 0 and all(ltrimstr("./") as $p | $tests | index($p) != null)' >/dev/null
+}
+
 
 # Runs the argv array $1 from inside $2, writing what the command printed to $3. $4 is the JSON
 # array a token that is exactly `{paths}` or `{file}` expands to, one argv token per entry, and
@@ -983,11 +1125,77 @@ tf_path_matches_catalog_glob() {
 # token that is empty or holds a character outside [A-Za-z0-9_./:=@%+,-] is in single quotes, so a
 # reader can tell the tokens apart.
 #
+# BR_RUN_LIMIT, when it holds a number of seconds, stops a command that runs longer: the command
+# and every process under it get TERM, and the exit status reads 124, the status GNU timeout uses.
+# `timeout` is not on a stock macOS, and zsh cannot start a process group from a script, so a
+# watchdog in the shell walks the tree with pgrep, which both systems carry.
+#
 # Prints one of three tab-separated results and never dies:
 #   UNRESOLVED<TAB><name>  a placeholder token nothing supplied a value for, naming it
 #   EMPTY<TAB>             the argv holds no token at all. An exec with no operands returns 0
 #                          without replacing the shell, so this is a refusal and never a run
 #   RAN<TAB><exit status>  once the command actually ran, whatever it exited with
+BR_RUN_LIMIT=""
+
+# The tool row of id $2 in the resolved recipe document $1, read once for the baseline and the
+# freeze. Sets TR_ROW, the row or empty, and TR_SKIP, a reason the row runs nothing: the recipe
+# declares it absent (TR_ABSENT is then true), or it is missing, or no recipe was resolved. $3 a word
+# for the reason.
+# shellcheck disable=SC2034 # read by the sourcing script
+TR_ROW=""; TR_SKIP=""; TR_ABSENT=false
+tr_find_tool_row() {
+  TR_ROW="$(printf '%s' "$1" | jq -c --arg id "$2" '[ (.tools // [])[] | select(.id == $id) ][0] // empty')"
+  TR_SKIP=""; TR_ABSENT=false
+  if [ -z "$TR_ROW" ]; then
+    TR_SKIP="no check recipe was resolved for this task, so $3 was not checked"
+    return 0
+  fi
+  # shellcheck disable=SC2034 # read by the sourcing script
+  TR_SKIP="$(printf '%s' "$TR_ROW" | jq -r 'if (.absent // false) then (.absentReason // "the recipe declares this row absent") else (.missing // "") end')"
+  # shellcheck disable=SC2034 # read by the sourcing script
+  [ "$(printf '%s' "$TR_ROW" | jq -r '.absent // false')" != "true" ] || TR_ABSENT=true
+}
+
+# Runs the tool row $1 from inside $2 over the paths $3, with the --value list $4, writing its output
+# to $5: standard output first, then standard error when the row declares a signal. Sets TR_KIND
+# and TR_PAYLOAD from br_run_resolved, TR_SIGNAL, and TR_STDOUT_LEN, the bytes it printed on
+# standard output before the join.
+# shellcheck disable=SC2034 # read by the sourcing script
+TR_KIND=""; TR_PAYLOAD=""; TR_SIGNAL=""; TR_STDOUT_LEN=0
+tr_run_tool_row() {
+  local argv_json result errfile=""
+  argv_json="$(printf '%s' "$1" | jq -c '.argv // []')"
+  TR_SIGNAL="$(printf '%s' "$1" | jq -r '.signal // ""')"
+  TR_STDOUT_LEN=0
+  if [ -n "$TR_SIGNAL" ]; then
+    errfile="$5.err"
+    result="$(br_run_resolved "$argv_json" "$2" "$5" "$3" "$4" "$errfile")"
+  else
+    result="$(br_run_resolved "$argv_json" "$2" "$5" "$3" "$4")"
+  fi
+  TR_KIND="$(printf '%s' "$result" | cut -f1)"
+  # shellcheck disable=SC2034 # read by the sourcing script
+  TR_PAYLOAD="$(printf '%s' "$result" | cut -f2-)"
+  if [ -n "$errfile" ]; then
+    if [ "$TR_KIND" = "RAN" ]; then
+      TR_STDOUT_LEN="$(wc -c <"$5" 2>/dev/null | tr -d '[:space:]')"
+      case "$TR_STDOUT_LEN" in ''|*[!0-9]*) TR_STDOUT_LEN=0 ;; esac
+      cat "$errfile" >>"$5" 2>/dev/null
+    fi
+    rm -f "$errfile"
+  fi
+}
+
+# Sends TERM to the process $1 and to every process under it, children first, so none is left.
+br_kill_tree() {
+  local child
+  while IFS= read -r child; do
+    [ -z "$child" ] || br_kill_tree "$child"
+  done <<BR_KIDS
+$(pgrep -P "$1" 2>/dev/null)
+BR_KIDS
+  kill -TERM "$1" 2>/dev/null
+}
 br_run_resolved() {
   local argv_json="$1" dir="$2" outfile="$3" paths_json="$4" values="$5" errfile="${6:-}" logfile="${7:-}"
   local count i tok list_json pcount pi rc
@@ -1046,13 +1254,36 @@ br_run_resolved() {
       printf '\n'
     } >>"$logfile"
   fi
-  if [ -n "$errfile" ]; then
-    ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>"$errfile"
-    rc=$?
-  else
-    ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>&1
-    rc=$?
-  fi
+  [ -n "$errfile" ] || errfile="$outfile"
+  case "$BR_RUN_LIMIT" in
+    ''|*[!0-9]*)
+      if [ "$errfile" = "$outfile" ]; then
+        ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>&1
+      else
+        ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>"$errfile"
+      fi
+      rc=$? ;;
+    *)
+      # The watchdog's own output goes to /dev/null, or the command substitution around this call
+      # would wait for its sleep. The mark file says the watchdog fired, so a command that exits
+      # 143 on its own is not read as stopped.
+      local cmd_pid dog_pid mark
+      mark="$(mktemp)" && rm -f "$mark"
+      if [ "$errfile" = "$outfile" ]; then
+        ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>&1 &
+      else
+        ( cd "$dir" || exit 127; exec "$@" </dev/null ) >"$outfile" 2>"$errfile" &
+      fi
+      cmd_pid=$!
+      ( trap 'kill "$sleep_pid" 2>/dev/null; exit 0' TERM
+        sleep "$BR_RUN_LIMIT" & sleep_pid=$!
+        wait "$sleep_pid"
+        : >"$mark"; br_kill_tree "$cmd_pid" ) >/dev/null 2>&1 &
+      dog_pid=$!
+      wait "$cmd_pid"; rc=$?
+      kill -TERM "$dog_pid" 2>/dev/null; wait "$dog_pid" 2>/dev/null
+      [ ! -f "$mark" ] || { rc=124; rm -f "$mark"; } ;;
+  esac
   printf 'RAN\t%s' "$rc"
 }
 
@@ -1107,8 +1338,8 @@ br_filter_extensions() {
 }
 
 # Prints the frozen test files named by $1, a JSON array of rows as a tests-<unit>.json holds them.
-# The build and review leave these out of their tool rows, because no role after the freeze may
-# write them (gap row 270).
+# The build runs them as the order's own tests. Review leaves them out of its tool rows, because no
+# role after the freeze may write them (gap row 270).
 br_frozen_test_paths() {
   printf '%s' "$1" | jq -c '[ .[] | select(.kind == "machine") | (.tests // [])[] | .path ] | unique'
 }
@@ -1144,8 +1375,8 @@ br_line_keys() {
 # The lines of the run at $2 whose key is absent from the run at $1: the first 20, in their own
 # words and order, written to $3, and the count of all of them in BR_NEW_COUNT. A line whose key
 # comes out empty is never new. A global for the count and a file for the lines, never a printed
-# value, for the reason br_seven_checks states: a refusal inside a `$(...)` exits that subshell
-# alone. Moved from implement-actions.sh; $CR_WHO names the caller, the way cr_resolve does.
+# value, because a refusal inside a `$(...)` exits that subshell alone. Moved from
+# implement-actions.sh; $CR_WHO names the caller, the way cr_resolve does.
 BR_NEW_COUNT=0
 br_lines_not_in() {
   local base="$1" now="$2" out="$3" base_keys now_keys nums picks
@@ -1155,7 +1386,13 @@ br_lines_not_in() {
   br_line_keys "$now" >"$now_keys"
   # -a: a byte that is not UTF-8 in a line would otherwise make grep print "binary file matches"
   # and no line number, and the check would read met over a line it never compared.
-  nums="$(grep -a -n -v -x -F -f "$base_keys" "$now_keys" 2>/dev/null | grep -v '^[0-9]*:$' | cut -d: -f1)"
+  # An empty pattern file with -v prints every line under GNU grep and none under busybox grep. So
+  # with no baseline key, every line passes through without that grep.
+  if [ -s "$base_keys" ]; then
+    nums="$(grep -a -n -v -x -F -f "$base_keys" "$now_keys" 2>/dev/null | grep -v '^[0-9]*:$' | cut -d: -f1)"
+  else
+    nums="$(grep -a -n '' "$now_keys" | grep -v '^[0-9]*:$' | cut -d: -f1)"
+  fi
   BR_NEW_COUNT="$(printf '%s\n' "$nums" | grep -c '^[0-9]')"
   picks="$(printf '%s\n' "$nums" | grep '^[0-9]' | head -20 | sed 's/$/p/' | paste -s -d ';' -)"
   : >"$out"
@@ -1318,6 +1555,55 @@ rw_baseline_path_for() {
   esac
 }
 
+# The verdict of one tool row that ran, for the freeze's coding-standards run and for review's
+# tool rows alike. $1 the row id, $2 its exit status, $3 its `signal`, $4 the bytes it printed on
+# standard output, $5 its output file, $6 the baseline file, $7 the paths it read, a JSON array,
+# $8 the code repository, $9 whose change it judged, such as "this task".
+#
+# Exit 0 is met, unless the row's signal is empty-stdout and it printed: gofmt -l cannot fail by
+# exit status. A failure is compared against the same tool's baseline, because a finding already
+# there at the commit the build started from is not this change's. A baseline that was met makes
+# it unmet. One that was unmet has its output subtracted line by line (br_subtract_baseline). One
+# that was unknown or undeclared reads unknown, except over files absent at its commit
+# (br_new_files_only). Sets BR_SUB_VERDICT, BR_SUB_DETAIL, BR_SUB_NEW and BR_SUB_COUNT.
+# shellcheck disable=SC2034 # read by the sourcing script
+br_judge_tool_run() {
+  local row_id="$1" rc="$2" signal="$3" stdout_len="$4" out="$5" baseline_file="$6" paths="$7" repo="$8" whose="$9"
+  local how field baseline_doc="" was="" kept=""
+  BR_SUB_VERDICT=""; BR_SUB_DETAIL=""; BR_SUB_NEW="[]"; BR_SUB_COUNT=0
+  if [ "$rc" = "0" ] && [ -n "$signal" ] && [ "$stdout_len" -gt 0 ]; then
+    how="exited 0 and printed on standard output, which its row's own signal empty-stdout makes a finding"
+  elif [ "$rc" != "0" ]; then
+    how="exited $rc"
+  else
+    BR_SUB_VERDICT="met"
+    BR_SUB_DETAIL="the $row_id command exited 0 over the files $whose changed."
+    return 0
+  fi
+  field="$(rw_baseline_path_for "$row_id")"
+  [ ! -f "$baseline_file" ] || baseline_doc="$(jq -c '.' "$baseline_file" 2>/dev/null)"
+  if [ -n "$baseline_doc" ]; then
+    was="$(printf '%s' "$baseline_doc" | jq -r --argjson f "$field" 'getpath($f).verdict // ""')"
+    kept="$(printf '%s' "$baseline_doc" | jq -r --argjson f "$field" 'getpath($f).outputFile // ""')"
+    [ -z "$kept" ] || kept="$(dirname -- "$baseline_file")/$kept"
+  fi
+  case "$was" in
+    met)
+      BR_SUB_VERDICT="unmet"
+      BR_SUB_DETAIL="the $row_id command $how, and the baseline recorded this tool met at the commit the build started from; $whose introduced the finding." ;;
+    unmet)
+      br_subtract_baseline "$kept" "$out" "$row_id" "$how" ;;
+    unknown|undeclared)
+      br_new_files_only "$row_id" "$how" "$was" "$repo" \
+        "$(printf '%s' "$baseline_doc" | jq -r '.commit // ""')" "$paths" "$out" "$rc" ;;
+    *)
+      # The file could not be read, or it holds no result for this row, which is a baseline taken
+      # before toolRows existed. The detail tells the two apart.
+      BR_SUB_VERDICT="unknown"
+      BR_SUB_DETAIL="the $row_id command $how, and $([ -n "$baseline_doc" ] && printf 'the baseline holds no result for this row' || printf '%s could not be read for the baseline verdict of this tool' "$baseline_file"), so this cannot tell a finding $whose introduced from one that predates it." ;;
+  esac
+}
+
 # Exit 73. Every tool check compares its own result against the baseline that step two took, and
 # that comparison is only honest while both ran the same command. The baseline records the check
 # recipe it read and a sha256 of that file, per framework; a later run resolving a different file
@@ -1337,7 +1623,7 @@ cr_require_baseline_recipes() {
     was_sha="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].sha256 // ""')"
     was_path="$(printf '%s' "$baseline_doc" | jq -r --arg f "$fw" '[ (.checkRecipes // [])[] | select(.framework == $f) ][0].path // ""')"
     if [ -n "$now_sha" ] && [ -n "$was_sha" ] && [ "$now_sha" != "$was_sha" ]; then
-      die 73 "$who: the check recipe resolved for $fw moved after this task's baseline was taken. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline. The baseline is not retaken mid-task: it reads the tree before the task, and the tree now holds this task's own code. Run this again with the recipe body the baseline read, the one at sha256 $was_sha. Or adopt the new body: implement-actions.sh recipe-refresh --check-recipe $fw=<path> adopts it only when every tool row of it reads met or undeclared on the current tree. Otherwise the one way on is to abandon the baseline by hand. The review skill's page and references/preconditions.md describe that and what it costs. Nothing was recorded."
+      die 73 "$who: the check recipe resolved for $fw moved after this task's baseline was taken. The baseline read $was_path (sha256 $was_sha) and this run reads sha256 $now_sha. Every tool check compares itself against that baseline. The baseline is not retaken mid-task: it reads the tree before the task, and the tree now holds this task's own code. Run this again with the recipe body the baseline read, the one at sha256 $was_sha. Or adopt the new body with implement-actions.sh recipe-refresh --check-recipe $fw=<path>, which writes a warning for each tool row of it that does not read met or undeclared on the current tree. Nothing was recorded."
     fi
     idx=$((idx + 1))
   done
@@ -1389,8 +1675,8 @@ git_diff_of() {
 # $3 the unit id, $4 the run mode, $5 the ledger file and $6 the ledger document are optional, and
 # together they are what an unattended run needs. Interactive, the refusal is enough: a person is
 # there to commit and run the step again. Unattended there is nobody, so the order would sit in
-# flight with no reason on it, which is the halt nobody sees until they ask. So an autonomous run
-# writes haltedBecause first and then refuses. `close` passes none of the four and only refuses,
+# flight with no reason on it, which is the stop nobody sees until they ask. So an autonomous run
+# writes a stop reason first and then refuses. `close` passes none of the four and only refuses,
 # because an order reaching close has already been recorded and judged.
 # $7, optional: pathspecs, one per line. Then only those paths are read. A `record` order lands
 # its deliverable in the project folder, whose tree the running stage keeps dirty on purpose
@@ -1398,30 +1684,33 @@ git_diff_of() {
 # check reads the owned files alone (nyc defect 17).
 br_require_clean_tree() {
   local who="$1" repo="$2" unit_id="${3:-}" run_mode="${4:-}" ledger_file="${5:-}" ledger_doc="${6:-}"
-  local dirty why halted_doc
+  local dirty why stopped_doc allows='["build"]'
   # Not --ignored. A gitignored file an implementer wrote can change a test outcome while leaving
   # a clean tree, and that is a real gap, but --ignored lists node_modules and every other build
   # product a repository ignores on purpose, so every record step refused. The gap stands.
   dirty="$(git_status_of "$repo" "${7:-}")"
   [ -z "$dirty" ] && return 0
-  # The reason never carries the filenames. A path holding the text this stage joins halt reasons
-  # with would forge a segment, and the reason is read back by split. The count is the fact a halt
-  # needs; the names go to standard error, where nothing parses them.
+  # The reason carries the count, the fact a stop needs. The names go to standard error.
   local dirty_count
   dirty_count="$(printf '%s' "$dirty" | grep -c '.' 2>/dev/null)"
   case "$dirty_count" in ''|*[!0-9]*) dirty_count=0 ;; esac
   why="uncommitted changes in the repository ($dirty_count paths, listed on stderr)"
   printf '%s: the uncommitted paths in %s are:\n%s\n' "$who" "$repo" "$dirty" >&2
   if [ "$run_mode" = "autonomous" ] && [ -n "$ledger_file" ] && [ -n "$ledger_doc" ] && [ -n "$unit_id" ]; then
-    halted_doc="$(halt_order_in "$ledger_doc" "$unit_id" "$why")"
-    [ -n "$halted_doc" ] || die 3 "$who: the ledger update for $unit_id failed."
-    write_atomic "$ledger_file" "$halted_doc"
-    echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): $unit_id is halted. $why" >&2
+    # Once the person commits the tree, the order goes on with the step this one belongs to.
+    [ "$who" != "fix-record" ] || allows='["fix"]'
+    stopped_doc="$(stop_order_in "$ledger_doc" "$unit_id" "$who" "$why" "$allows")"
+    [ -n "$stopped_doc" ] || die 3 "$who: the ledger update for $unit_id failed."
+    write_atomic "$ledger_file" "$stopped_doc"
+    echo "$(printf '%s' "$who" | tr '[:lower:]' '[:upper:]'): $unit_id is stopped. $why" >&2
   fi
   # One message for every caller. For the record step the reason is that the owned-files check
   # compares two commits, so an uncommitted change would pass it while staying in the tree; for
   # an install or a bring-up it is that the commit which follows would sweep the change in.
-  die 61 "$who: the working tree at $repo is not clean, so nothing here can commit or record it faithfully. Commit or move the changes aside, then run $who again. What is uncommitted: $(printf '%s' "$dirty" | tr '\n' ' ')"
+  # redo and drop revert the commits the records list, so a commit made now would stay.
+  local route="Commit or move the changes aside"
+  case "$who" in redo|drop) route="Discard or stash the changes, because a commit made now is in no record, so $who would not revert it" ;; esac
+  die 61 "$who: the working tree at $repo is not clean, so nothing here can commit or record it faithfully. $route, then run $who again. What is uncommitted: $(printf '%s' "$dirty" | tr '\n' ' ')"
 }
 
 
@@ -1582,23 +1871,25 @@ SW_LINES
 # Exit 70. $1 the flag, $2 what it says a person did. A caller with a task passes $3 the task
 # folder and $4 the person's words the call carries. Then the task's own run mode for implement
 # also counts, so a call that leaves out --run-mode is not interactive by that alone; the site
-# serves the build, as fn_require_interactive reads it. And the person's answer at
-# <task>/person-answer.json, step "$ACTION $1", passes the refusal without a change of mode (gap
-# row 380, task_person_answered). The caller removes it with task_answer_consume once it wrote.
+# serves the build. And a person's answer in the task's answer record, step "task $ACTION $1",
+# passes the refusal without a change of mode (task_answer_find). Only the task script passes a
+# task. The caller marks the answer used with task_answer_consume once it wrote.
 cr_require_person() {
   local mode="$RUN_MODE" route=""
   [ -z "${3:-}" ] || [ "$(task_run_mode "$3" implement)" != "autonomous" ] || mode="autonomous"
   [ "$mode" = "autonomous" ] || return 0
   if [ -n "${3:-}" ]; then
-    task_person_answered "$3/person-answer.json" "$3" "$ACTION $1" "" "$4" && return 0
-    route="$(task_answer_route "$3/person-answer.json" "$3" "$ACTION $1" "$4")"
+    task_answer_find "$3" "task $ACTION $1" "" "$4" && return 0
+    route="$(task_answer_route "$3" "task $ACTION $1" "" "$4")"
   fi
   die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written.$route"
 }
 
 # One recipe per kind, or a lookup that failed, per framework. Sets RECIPE and RECIPE_FW, or ends
-# the action: no recipe anywhere is not-applicable (exit 0), a lookup nobody completed is unknown
-# (exit 3), and two recipes are two answers to one question (exit 72). The words are the ones
+# the action: no recipe anywhere is not-applicable (exit 0), and a lookup nobody completed is
+# unknown (exit 3). Two recipes are two answers to one question, as in cr_resolve: the first in
+# FRAMEWORKS, project.json's order, is taken, and a `warning:` line names the other. This step may
+# have no task, so the line is printed and not written to a record. The words are the ones
 # cr_lookup_failure_pair accepts, and nothing here reads a fourth.
 cr_resolve_recipe() {
   RECIPE=""; RECIPE_FW=""; VIEWPORTS_ARG=""
@@ -1621,8 +1912,12 @@ cr_resolve_recipe() {
     pair="$(cr_lookup "$recipes" "$fw")"; reason="$(cr_lookup "$failures" "$fw")"
     [ -n "$pair" ] || [ -n "$reason" ] || die 3 "$ACTION: nothing was said about the framework $fw. Pass --recipe $fw=<path> or --lookup-failed $fw=<word>."
     if [ -n "$pair" ]; then
-      [ -z "$RECIPE" ] || die 72 "$ACTION: $RECIPE_FW and $fw each carry a $KIND recipe, and nothing here may choose between two answers to one question."
-      RECIPE="$pair"; RECIPE_FW="$fw"
+      if [ -n "$RECIPE" ]; then
+        printf 'warning: %s: %s and %s each carry a %s recipe. %s is taken, the first in project.json\n' \
+          "$ACTION" "$RECIPE_FW" "$fw" "$KIND" "$RECIPE_FW"
+      else
+        RECIPE="$pair"; RECIPE_FW="$fw"
+      fi
     fi
     case "$reason" in listing-unreachable|fetch-failed) unknown="$unknown $fw=$reason" ;; esac
   done <<CR_FRAMEWORKS
@@ -1690,13 +1985,21 @@ recipe_files_into() {
 }
 
 # Runs one recipe line as arguments and appends its output to $4. $1 the script's own name, $2 the
-# recipe, $3 the line, the rest extra arguments. Exits 3 on a refused line. zsh does not split an
-# unquoted expansion. The split happens in a subshell that sets SH_WORD_SPLIT for zsh, and the
-# option never leaks to the caller.
+# recipe, $3 the line, the rest extra arguments. A line refuse_if_unsafe refuses is not run: a
+# `warning:` line in the output and in $4 names it unknown, RL_UNKNOWN turns true, and the call
+# returns RL_UNKNOWN_STATUS. A caller reads the flag, because a tool may exit 9 too (summary
+# conflict 8). zsh does not split an unquoted expansion. The split happens in
+# a subshell that sets SH_WORD_SPLIT for zsh, and the option never leaks to the caller.
+RL_UNKNOWN=false; RL_UNKNOWN_STATUS=9
 run_recipe_line() {
   local who="$1" recipe="$2" line="$3" outfile="$4"
   shift 4
-  refuse_if_unsafe "$who" "$recipe" "$line" || exit 3
+  if ! refuse_if_unsafe "$who" "$recipe" "$line" 2>/dev/null; then
+    printf 'warning: %s: not run, so its result is unknown: a line of %s carries a shell character: %s\n' \
+      "$who" "$recipe" "$line" | tee -a "$outfile"
+    RL_UNKNOWN=true
+    return "$RL_UNKNOWN_STATUS"
+  fi
   printf '+ %s\n' "$line"
   # The record says what ran, above the output that run produced. The extra arguments come from
   # the conversation, so the recipe line alone does not account for the output, and after a
@@ -1715,13 +2018,13 @@ run_recipe_line() {
   ) >>"$outfile" 2>&1
 }
 
-# The one summary printer for a recipe command's run. $1 the exit status, $2 the output file, $3
-# the line to quote on a failure, counted from one.
+# The one summary printer for a recipe command's run. $1 the exit status, or unknown when a line
+# was not run, $2 the output file, $3 the line to quote on a failure or an unknown, counted from one.
 recipe_output_summary() {
   printf 'status: %s\n' "$1"
   printf 'lines: %s\n' "$(wc -l <"$2" | tr -d '[:space:]')"
   printf 'output: %s\n' "$2"
-  if [ "$1" -ne 0 ]; then
+  if [ "$1" != 0 ]; then
     printf 'first: %s\n' "$(sed -n "${3}p" "$2")"
   fi
 }
@@ -1801,18 +2104,25 @@ RT_LIST
 }
 
 # Runs every non-blank line of $3 as one command where the caller stands, output appended to $4,
-# and exits 4 at the first failure with the `first:` line. $1 the name run_recipe_line refuses
+# and exits 4 at the first failure with the `first:` line. A line not run, which run_recipe_line
+# names unknown, does not stop the run. After the last line the run then prints `status: unknown`
+# and exits RL_UNKNOWN_STATUS, so no caller reports a success nobody got. $1 the name run_recipe_line refuses
 # under, $2 the recipe the lines came from, $5 the text the failure message opens with. $6, when
 # given, is a function that prints each line filled before it runs, or exits 3 to refuse it; it
 # runs in a command substitution, so its exit status is the loop's. Every recipe skill ran this
 # loop itself before it lived here, and the messages are each caller's own.
 run_recipe_lines() {
-  local who="$1" recipe="$2" steps="$3" outfile="$4" label="$5" fill="${6:-}" line before
+  local who="$1" recipe="$2" steps="$3" outfile="$4" label="$5" fill="${6:-}" line before unknown_at=""
+  RL_UNKNOWN=false
   while IFS= read -r line; do
     [ -n "${line// /}" ] || continue
     if [ -n "$fill" ]; then line="$("$fill" "$line" "$who")" || exit $?; fi
     before="$(wc -l <"$outfile" | tr -d '[:space:]')"
     run_recipe_line "$who" "$recipe" "$line" "$outfile" && continue
+    if [ "$RL_UNKNOWN" = true ]; then
+      [ -n "$unknown_at" ] || unknown_at=$((before + 1))
+      RL_UNKNOWN=false; continue
+    fi
     printf '%s step failed: %s\n' "$label" "$line" >&2
     # Two past the count: the command's own line, then its first line of output, which is what
     # `first:` quotes.
@@ -1820,6 +2130,7 @@ run_recipe_lines() {
   done <<RL_STEPS
 $steps
 RL_STEPS
+  [ -z "$unknown_at" ] || { recipe_output_summary unknown "$outfile" "$unknown_at"; exit "$RL_UNKNOWN_STATUS"; }
 }
 
 # The prose under the H2 $2 of the recipe $1, indented, the way show prints it.
@@ -2157,7 +2468,7 @@ rv_is_finding_id() {
 # It sets a global rather than printing, and every caller calls it as a plain statement. A function
 # that refuses must never be called with `$(...)`: a command substitution runs in a subshell, so the
 # refusal would exit that subshell alone and the caller would carry on with an empty list. That is
-# the same rule br_seven_checks states above, and this function was written the wrong way once.
+# the rule, and this function was written the wrong way once.
 RV_FINDINGS_ARRAY=""
 # Refuses a hand-written JSON file that names one key twice. jq resolves a duplicate to the last
 # occurrence and says nothing, so a findings file carrying `findings` twice silently discards the

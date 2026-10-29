@@ -22,8 +22,9 @@ One question per finding. Each question names the finding, its severity, and the
 get: this task's id followed by the finding's id. Nobody has to name the task.
 
 A yes creates the task the same way `/aida:task create` does. Its goal is the finding's evidence
-and one sentence that names where it came from. For each new task, completion prints the commit
-its worktree was cut from.
+and one sentence that names where it came from. The task gets no worktree yet. Its tree is made
+from the trunk when it starts, so a follow-up nobody starts costs no disk. A follow-up you find
+moot closes with `/aida:task complete` and the reason.
 
 ## A high severity finding
 

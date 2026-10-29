@@ -30,16 +30,15 @@ or changed and not committed, and the orders whose owned files hold it. A role s
 leaves such files, and the next role would work beside them. A gitignored file is never named.
 The usual first-run case is `package-lock.json`, changed by a surfaces harness install at `environment up`. Commit it.
 
-Interactive, such a file refuses with exit 104, and nothing is written. Read the paths to the
-person and offer two choices. To keep a file, the person commits it. Or you run start again with
-`--leftovers keep` to leave it as it is, for that run only. To set the files aside, run start
-again with `--leftovers set-aside`. Unattended, the script sets them aside itself, and
-`--leftovers keep` refuses.
+With no `--leftovers`, the script sets such files aside itself, in both run modes, and writes a
+warning. Read the paths to the person. To keep a file next time, the person commits it first. Or
+run start with `--leftovers keep` to leave it as it is, for that run only. `--leftovers keep`
+refuses without the person's answer on record (exit 68).
 
 Set aside moves each untracked file to `<task_folder>/implementation/set-aside/<time>/`, under its
 own path. A modified file is copied there, and its committed version comes back. Nothing is
-deleted. Any other change, such as a deleted file or a staged new one, refuses with exit 104 in
-both modes. The ledger records each move under `setAside`. The `setAside:` line names the folder,
+deleted. Any other change, such as a deleted file or a staged new one, stays in the tree, and a
+warning names it. The person commits it or undoes it. The ledger records each move under `setAside`. The `setAside:` line names the folder,
 so give the person that path. The `leftovers:` line names each file that was kept or set aside.
 
 Unattended, a start after a design reopen sets aside the tests an author has not frozen yet. Do
@@ -47,12 +46,13 @@ not copy them back by hand. The next fresh `dispatch-open` of a test author name
 of each test file that order owns. Put its `earlier tests:` paths in the dispatch message.
 
 The freeze keeps its own warning about uncommitted files. It names a file that the test author
-made during its own run, after this check.
+made during its own run, after this check. An untracked file under a path the order owns, which the
+freeze would leave out, refuses the freeze (exit 27).
 
 On success the script prints summary lines. They say whether this is a new run or a resumed one.
 They give the snapshot's path, hash and counts, and the ledger's path. They name which order is in
-flight and at what step, what drifted since an earlier snapshot, and which work orders that halted.
-Each halt has its reason. They name which orders are ready to build, what the trunk check could
+flight and at what step, what drifted since an earlier snapshot, and which work orders stopped.
+Each stop has its reasons. They name which orders are ready to build, what the trunk check could
 establish, and `next:`. Read those lines to the person before doing anything else. The snapshot
 and the ledger stay in their files; name the paths rather than opening them here.
 
@@ -60,46 +60,32 @@ A first run has no earlier snapshot to compare against. The `drift:` line then r
 never that nothing changed; those are different facts and only that line tells them apart. Say the
 same to the person: nothing was compared yet, not that a check found nothing.
 
-A resumed run that halts one or more work orders for drift is not a failure. Say plainly which
-orders halted and why. This run un-halts one thing by itself. It removes a `design drift` segment
-about an order's own design file, once its own comparison finds no drift for that order. Every
-other halt stays until a person acts on it, and nothing here decides whether the drift is
-acceptable.
+A resumed run that finds the design changed mid-build is not a failure. Attended, each order the
+change touches goes on with its frozen copy, and the `changed:` line names it. A warning goes into
+the task record, naming the change, and naming any criterion no order serves now. Put each one to
+the person: go on with the frozen copy, keep the change with go-on `keep`, or redo the order.
+Unattended, the change stops each order it touches, and the stop allows go-on `keep` and redo. In
+both modes, an order the design removed stops, and a person drops it. Say plainly which orders
+changed or stopped and why. This run removes a `design drift` reason about an order's own design
+file, or a criterion, once no drift is found for it. Every other reason stays until a person takes
+one of the three ways out, and nothing here decides whether the change is acceptable.
 
 The `driftCleared:` line names each order whose own design file no longer differs, and whose
-drift segment this run removed. It prints only when one was removed. An order left with no other
-segment is no longer halted and resumes at its own step. An order carrying another segment stays
-halted for that one. The ledger records each clearing under `haltsCleared`, with the halt text as
-it stood. Tell the person which orders cleared, and which are still halted and why.
-
-After a retake, or a restart from before restart reverted a halted order's commits, a
-`partialBuild(<order>):` line can name an order sent back to its tests step. It names the order
-while its build or fix commits are still on the branch. It lists
-those commits with their kinds, and they are exactly what a `commit:` reason may cite. It prints
-only while one is there. It stops once the order is built again: its ledger entry reads code-written
-or later. It is not a refusal: a retake keeps the build on purpose. Tell the person the tree
-still holds that order's earlier code, and that its test author will be told so.
-
-The line is read from the branch each time it prints. Every restart record the task holds says which
-orders started over, not the newest alone. The ledger names every retaken order. An order named
-twice gets one line. Each build and fix commit is read from the order's own records, in every folder
-a retake or an earlier restart moved them to. After `start --rebased-onto`, a commit the rebase
-rewrote is found again by its change and its author, date and subject. A commit whose diff the
-rebase changed is named as not found on this branch, with the reason. So the line agrees with the
-tree it describes. The commits are in the order the branch holds them, oldest first. The restart's
-own list also names the freezes, because its reset needs them. The line leaves them out, since no
-reader acts on one.
+drift reason this run removed. It prints only when one was removed. An order left with no other
+reason is no longer stopped and resumes at its own step. An order carrying another reason stays
+stopped for that one. The ledger records each clearing under `stopsCleared`, with the reasons as
+they stood. Tell the person which orders cleared, and which are still stopped and why.
 
 The `drift:` line's `contractChanged` says whether the live `alignment.json` differs from the
 snapshot's copy. A changed criterion that a started order serves or owns is held. Each order that
-serves or owns it halts, closed and not started included, with a reason naming the criterion. The
+serves or owns it stops, closed and not started included, with a reason naming the criterion. The
 snapshot keeps the held criterion's frozen copy, because the started orders' tests prove that
-text. So the halt clears when the live text equals it again, and review refuses the change until
+text. So the stop clears when the live text equals it again, and review refuses the change until
 then. A changed criterion that only unstarted orders serve is not held. The snapshot takes its
 live text, so the tests are written from the criterion the person approved. An order serving none
 of the changed criteria is untouched. Taking live text needs design closed on the live files too.
 
-A criterion whose verify clause alone changed halts fewer orders. A started order is spared when
+A criterion whose verify clause alone changed stops fewer orders. A started order is spared when
 its frozen test record exists and names that criterion in no row. Its observed record must not
 name it either, and the ledger must hold no judgement of it by that order. The briefs quoted the
 old clause, but nothing frozen or judged rests on it. Review reads the clause from the refreshed
@@ -108,11 +94,11 @@ already closed, that pass moves aside, the line says so, and review runs again. 
 unattended spares nothing without a recorded reason: a scope decision on that criterion, added
 after the snapshot.
 
-Only a started order halts for drift: one with a step reached, a frozen test record or a build
-record. A drifted order that has not started is taken fresh from the live design instead, and
-nothing is halted for it. Nothing was built against its old shape, so its dependents are untouched.
+Only a started order stops for drift: one with a step reached, a frozen test record or a build
+record. A dropped order is never compared. A drifted order that has not started is taken fresh
+from the live design instead, and nothing stops for it. Nothing was built against its old shape, so its dependents are untouched.
 The `resnapshotted:` line names those orders, and the ledger records each with the two hashes.
-A started order that only gained owned files is taken in place the same way, and nothing halts
+A started order that only gained owned files is taken in place the same way, and nothing stops
 for it. So is a started or closed order whose research findings changed through `account`. So is
 one whose reasoning only grew through `update --append-reasoning`. So is one whose absence rows
 design marked reviewed. Its frozen tests were written from
@@ -121,39 +107,43 @@ has not had yet, never into the build it already had. So is one that dropped an 
 path that names no file now and named none where the build started. Such a path never existed.
 A started order whose done-when only gained rows after its frozen rows is taken in place too.
 Tests are frozen against criteria, and only the done-when row reads the done-when text. When that
-row was judged, the order keeps its tests only at `tests-frozen`. The judgement leaves its ledger
-entry, and `doneWhenGained` lists the new rows. Its next step judges the row again and freezes
-the same tests. Past `tests-frozen` it halts, because a build already rests on the old text.
-An order with no done-when row keeps its tests until review. From `reviewed` on it halts,
-because nothing would read the new row.
-A removed owned file the code holds or held, or any other change, halts it as before. A reasoning
-whose earlier text changed halts too. So does a changed or removed done-when row.
+row was judged, the order keeps its tests only at `tests-frozen`. The judgement stays for the
+frozen rows, and `doneWhenGained` lists the new rows. Its next step judges the row again and freezes
+the same tests. Past `tests-frozen` it is a change mid-build, because a build already rests on
+the old text. An order with no done-when row keeps its tests until review. From `reviewed` on it
+is a change mid-build, because nothing would read the new row.
+A removed owned file the code holds or held, or any other change, is a change mid-build, as above.
+So is a reasoning whose earlier text changed, and a changed or removed done-when row. A person
+keeps the change, redoes such an order once design closes on the change, or puts the design back.
+A kept change sets `doneWhenGained` to the kept rows that are not frozen rows. A gained row taken
+out leaves the list, and a reworded row joins it. When the list is empty, no judgement is owed,
+and the order builds.
 An order the live design no longer holds, because design merged or removed it, has no live copy
 to take. When it has not started, it is dropped from the snapshot and the ledger, and the
 `removed:` line names it. That line prints only when an order was dropped. When it has started,
-it halts with a reason that says the design removed it. The restart then drops it instead of
-taking it fresh. Its owned files take no part in the build order, so the survivor that absorbed
-them is ready. Run `restart` before the survivor's tests are written, because the removed
-order's frozen record still guards its test files. The `next:` line names the restart first for
-that reason. Both need design closed on the live files; otherwise the run refuses with exit
-13 and says to close design again. The `haltedDependents:` line names only orders the ledger
-halts, each of which depends on a started drifted order, directly or through another order.
+it stops with a reason that says the design removed it. A person drops it then. Its owned files
+take no part in the build order, so the survivor that absorbed them is ready. Drop it before the
+survivor's tests are written, because the removed order's frozen record still guards its test
+files. The `next:` line names the drop first for that reason. Taking a live copy needs design
+closed on the live files; otherwise the run refuses with exit 13 and says to close design again.
+An order that depends on a changed order is not stopped. Unbuilt, `build-brief` refuses it until
+the changed order closes again (exit 40). Built, review reads it.
 An order the live design holds and the snapshot does not was added after the snapshot was taken.
 It enters the snapshot and the ledger as not started, and the `added:` line names it. That needs
 design closed on the live files too. It is ready when every order it depends on is closed.
-`implementation/finished.json` stands only while every order is closed and none is halted. When
-that stops being true, the run removes the record and the `finished:` line says why. Take
-`finish` again when every order is closed.
+`implementation/finished.json` stands only while every order is closed or dropped and none is
+stopped. When that stops being true, the run removes the record and the `finished:` line says why.
+Take `finish` again when every order is closed or dropped.
 
 A resumed run refuses two more things, before it writes. Exit 82: HEAD does not descend from the
 commit the ledger started from. The branch was rewritten under the build, by a rebase or an
 amend. Run `start "<task_folder>" --rebased-onto <commit>`, naming the commit the branch now
 builds on. It rewrites `startedFrom` and keeps the old value in the ledger with the date. The
 `startedFrom:` line then says the baseline must be retaken: move `baseline.json` and
-`baseline-output` aside, then run `preconditions`. Until then, `build-record`, `build-recheck`,
+`baseline-output` aside, then run `preconditions`. Until then, `build-record`, `go-on`'s check,
 `fix-record` and `finish` refuse with exit 21. The same flag takes a branch moved forward onto a
 later commit, such as a trunk fix. The flag refuses if a commit between the two starts is on no
-other branch, or if an order has committed. Exit 83: `baseline.json` was written by an
+other branch, or if an order has committed. Exit 3: `baseline.json` was written by an
 earlier version, in a shape this one cannot subtract from. The message names the same retake.
 Neither refusal spends an attempt. The `startedFrom:` line always prints what the ledger holds,
 never the current HEAD.

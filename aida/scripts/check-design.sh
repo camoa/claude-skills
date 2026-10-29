@@ -29,32 +29,46 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #     has at least one done-when row: a model looks at each surface through a browser after the
 #     build and judges each done-when row against what renders (live-run row 104);
 #   - a work order whose proof is confirm declares no test either, and has at least one done-when
-#     row: its task has no automated tests, and a person confirms each row at review (gap row 196).
-#     Its task's contract says it has no automated tests. A contract answered yes after design, or
-#     a confirm set by hand on a task with tests, would build code with no test. It owns no file
-#     that a test glob of this project's earlier freezes matches: a test file on such an order is
-#     plain code that no check runs (gap row 367);
+#     row: no test proves it, and a person confirms each row at review (gap row 196). It sits on a
+#     task whose contract says it has no automated tests, or it is text only, or run lines prove
+#     every machine criterion it owns (gap row 461). Any other confirm order is code with no test.
+#     It owns no file that a test glob of this project's earlier freezes matches: a test file on
+#     such an order is plain code that no check runs (gap row 367). A tests-only order is exempt
+#     from both rules (audit/24a): tests_only_order in scripts/lib/recipes.sh decides it;
+#   - a tests-only order names each owned file in a done-when row, and each row names an owned
+#     file, so the rows a person confirms at review list every file in its reach. It reaches every
+#     `tests` order of its task through dependsOn, so the kept tests are frozen first (audit/24a);
+#   - no tests-only order, and no `tests` order whose every owned file is a test, owns a test that
+#     a freeze of another task holds while that task is not complete (audit/24a);
+#   - a work order whose proof is tests is not text only, and no text-only order owns a criterion
+#     whose verifiedBy is machine. A document or configuration holds no logic, so a test of it only
+#     reads the text back, and nothing tests the criterion: it is a person's (gap row 461);
+#   - no order whose proof is observe or record owns a criterion whose verifiedBy is machine,
+#     unless a run line proves it. The look judges a page and the reviewer reads a document, and
+#     neither judges a machine criterion, so it is a person's;
 #   - a work order whose proof is tests owns at least one criterion whose verifiedBy is machine,
 #     when it owns any criterion at all. The rule above asks whether an order owning a machine
 #     criterion declares a test. This asks the same question the other way, so the default proof is
 #     questioned as well as a departure from it (live-run row 145). This one list reports and never
 #     raises the exit code, the way designStarted below never raises it: which of the other three
 #     proofs fits is a judgment, and a script that cannot name the repair must not hold the close;
-#   - every criterion's verifiedBy is machine or person, and never a third value: a criterion whose
-#     verifiedBy is neither needs no test, no checklist and no checkpoint row, so implementation
-#     would freeze it with nothing at all behind it. scripts/check-alignment.sh already refuses the
-#     value when scope closes; this reads it again here, because implementation runs this check and
-#     not that one;
 #   - a work order that owns nothing reaches an owning work order by walking dependsOn edges
 #     through its own dependents (ideal/design.md, "An order that owns nothing is a supporting
 #     order": "it reaches a criterion through the orders that depend on it"); a chain that reaches
 #     no owner fails, and a chain that loops fails too;
 #   - on a light task, every work order but wo1, the walking skeleton, reaches wo1 through its
 #     dependsOn chain, so the skeleton is built first (gap row 197);
-#   - ownedFiles do not overlap between work orders, compared as declared strings only, the same
+#   - on a light task, no work order owns a file of the registered script that walks the demo path,
+#     wo1 included: review runs that script, and a light order never extends it (audit/24);
+#   - no confirm, observe or record order spares a machine criterion on a research run line that
+#     never runs: one not binding, with no person's stamp, and not a check command (gap row 458).
+#     An unattended close stops on it, and a person who closes reads it;
+#   - ownedFiles do not overlap between work orders, a warning, compared as declared strings only, the same
 #     bound version 5's own overlap check carried (ideal/design.md, "What a work order holds"):
 #     this is not a glob-intersection check, and it proves nothing about what a builder actually
 #     touches. A path both orders list in sharedFiles is not an overlap (gap row 287);
+#   - no work order holds more than eight done-when rows, or more than three for each criterion
+#     it owns, a warning (gap row 439);
 #   - every criterion id and every non-goal id named anywhere resolves to a real one in the
 #     contract, and every dependsOn id resolves to a real work order in this task's own design/
 #     folder.
@@ -81,8 +95,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   <plugin root>/scripts/lib/proof.sh: what one order's proof kind means, sourced, never run
 #   <plugin root>/scripts/lib/task-helpers.sh: automated_tests and task_is_light, sourced, never run
 #   <project folder>/tasks/*/implementation*/tests-*.json: the test globs each freeze recorded,
-#     read only when an order's proof is confirm
-#   <plugin root>/scripts/lib/recipes.sh: tf_path_matches_catalog_glob, sourced in a subshell
+#     and the paths each freeze of another open task holds
+#   <project folder>/tasks/*/task.json: whether the task that wrote such a freeze is complete
+#   <project folder>/test-cleanup/run-*/groups.json: the tests of the cleanup run the goal names
+#   <project folder>/tasks/*/implementation*/baseline.json: the check recipes each baseline read,
+#     whose check_commands argv lines run with no person's stamp
+#   <plugin root>/scripts/lib/recipes.sh: tf_path_matches_catalog_glob and cc_check_argv, sourced
+#     in a subshell
 #
 # The plugin root is ${CLAUDE_PLUGIN_ROOT} when a skill sets it, and this script's own parent
 # folder otherwise, so a person can run it directly.
@@ -91,51 +110,33 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # read; nothing here needs a second copy on disk, because nothing yet reads a saved design check
 # back.
 #
-# Exit codes, each one and only one meaning. When more than one condition is true at once, the
-# report still names every one of them; the exit code picks the single most severe, in this
-# order, highest first: 3, 1, 4.
+# Exit codes, each one and only one meaning. The report names every finding at whatever code.
 #
-#   0  every work order file matches its schema and carries no field the schema does not declare,
-#      every list item in every file passes its own checks, and every cross-order check named
-#      above passes. Reported, with every findings list empty, as the JSON object on stdout
-#      described below. A task whose design/ folder does not exist yet reaches this same code
-#      when the contract has no criteria at all: see "designStarted" below.
-#   1  a work order file exists but cannot be read as this format: it is not valid JSON, or is
-#      valid JSON but not an object; or a top-level field on a readable file is missing, the
-#      wrong shape, or not declared by the schema at all (any of the thirteen fields, or any
-#      other key present). Each is named in the JSON on stdout against the file it came from. A
-#      missing or malformed list field also stops that field's own per-item check (see exit 4)
-#      from running, and stops that work order from taking part in the cross-order checks; the
-#      report says so under that file's own "checked" key instead of guessing, and that alone
-#      never raises the exit code past what this paragraph already sets. The same code when
-#      <task_folder>/design-guides-read.json exists and cannot be read as its own format: not
-#      valid JSON, not an object, a top-level field missing, wrong or undeclared, or an entry
-#      without a path, a sha256 or a date. Named under "guidesRead" on stdout.
+#   0  nothing found stops the design. Findings that warn, and findings that stop only an
+#      unattended close, may still be listed under `open`, below. A task whose design/ folder does
+#      not exist yet reaches this code when the contract has no criteria: see designStarted.
 #   3  this script could not do its job: no task folder was given, the given path is not a
 #      folder, the schema file is missing or fails to parse, or the comparison itself failed to
-#      run. Reported to stderr; nothing is printed on stdout, so this is never confused with a
-#      finding about what design wrote, which is always reported as JSON. A design/ folder that
-#      does not exist, or that exists and is empty, is not this case: both are reported as zero
-#      files checked, on stdout, at whatever exit code their own coverage produces, because
-#      design not having started, or having started with nothing written yet, is a fact about the
-#      task, not a reason this script cannot run.
-#   4  every work order file passed the schema comparison, but a list item, or one of the
-#      cross-order checks named above, fails. Since 2026-09-23 the comparison reads every level,
-#      so a list item fault it can express now raises exit 1 instead. What is left here: a
-#      criterion/non-goal/work-order id that is not a
-#      valid shape, a tests entry that is not well-formed, a criterion with no serving order, a
-#      criterion owned by zero or by more than one order, an order serving no criterion, an order
-#      that owns a machine-verified criterion and declares no test, an order whose proof is gate
-#      and that declares a test, an order whose proof is record and that declares a test, owns a
-#      file outside the project folder or under an ignored path, or has no done-when row, an
-#      order whose proof is observe and
-#      that declares a test, names no surface or has no done-when row, an order whose proof is
-#      confirm and that declares a test, has no done-when row, owns a test file, or sits on a
-#      task whose contract does not say it has no automated tests, an order that owns nothing
-#      and reaches no owner, an order of a light task that does not come after wo1, a
-#      dependency cycle, two orders sharing
-#      a declared owned file, or an id named anywhere that resolves to nothing. Each is named in
-#      the JSON on stdout.
+#      run. Reported to stderr, and nothing is printed on stdout. A design/ folder that is absent
+#      or empty is not this case: design not having started is a fact about the task.
+#   4  a finding stops the design in either run mode: a file or the guides-read record that does
+#      not match its shape, a list item that fails its own check, an id that resolves to nothing,
+#      an owned path that is not one literal path, a dependency cycle, an order whose proof does
+#      not fit its tests, rows or files, a confirm order that is code on a task with tests or that
+#      owns a test file, a tests-only order whose done-when rows and owned files do not name each
+#      other or that does not come after every tests order, such an order or a tests order of
+#      test files only that owns a test another open task froze, a machine criterion an observe
+#      or record order owns with no run line proving it, or a light order that owns the
+#      registered script that walks the demo path. Implementation's `start` refuses on this code.
+#
+# `open` sorts every finding by what it does, one line each. Both callers print these lines, so
+# they are written once, here. `stop` raises exit 4. `unattended` stops an autonomous close and
+# is a warning when a person closes: a criterion with no serving order, no owner or two owners,
+# and a machine criterion an order spares on a research run line that never runs.
+# `warn` never stops: an
+# order that serves nothing, a supporting order no owner reaches, a light order not after wo1,
+# two orders that declare one owned file, and an order with more than eight done-when rows or
+# more than three for each criterion it owns.
 #
 # designStarted (top level, on stdout) is false when <task_folder>/design does not exist yet, true
 # otherwise. It being false is not an error and never raises the exit code on its own: every
@@ -144,7 +145,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # a plain sentence saying so when false, and is empty when true.
 #
 # What this script could not check is always named on stdout, never silently skipped
-# (check-research.sh and check-alignment.sh state the same rule in their own headers):
+# (check-research.sh states the same rule in its own header):
 #   - schema-check.sh evaluates only minLength, pattern, minItems and enum by its own header, and
 #     does not evaluate minimum at all; design-schema.json's schemaVersion carries "minimum": 1,
 #     and a value of 0 or of -7 both pass that shared comparison undetected. This script does not
@@ -168,6 +169,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Reported stdout shape (always one JSON object, always present, never empty output on exit 0):
 #   {
 #     timestamp, taskPath, designDir, designStarted, designStartedNote, exitCode,
+#     open: { stop: [line], unattended: [line], warn: [line] },
 #     files: [ { path, schema: {missingFields, unreadableFields, unknownFields, issueCount},
 #                content: {checked, note, issues} } ],
 #     duplicateWorkOrderIds: [ {id, paths} ],
@@ -176,7 +178,6 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 criteriaWithNoServingOrder: [ {id, text} ],
 #                 criteriaWithNoOwner: [ {id, text} ],
 #                 criteriaWithMultipleOwners: [ {id, text, owners} ],
-#                 criteriaWithUnusableVerifiedBy: [ {id, text, verifiedBy} ],
 #                 ordersServingNothing: [ {id, path} ],
 #                 ordersMissingRequiredTests: [ {id, path, criterionId, problem} ],
 #                 gateOrdersDeclaringTests: [ {id, path} ],
@@ -184,8 +185,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 recordOrdersOwningOutsideProjectFolder: [ {id, path, reason} ],
 #                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record, observe and confirm orders
 #                 observeOrdersWithNoSurface: [ {id, path} ],
-#                 confirmOrdersOnTaskWithTests: [ {id, path} ],
+#                 confirmOrdersOnTaskWithTests: [ {id, path, machineOwned} ],
 #                 confirmOrdersOwningTestFiles: [ {id, path, glob} ],   path is the owned test file
+#                 testsOnlyRowsUnmatched: [ {id, item, problem} ],   item is an owned file or a row
+#                 unstampedRunProofs: [ {id, path, criterionId} ],
+#                 textOnlyTestOrders: [ {id, path} ],
+#                 machineCriteriaOnTextOnlyOrders: [ {id, path, criterionId} ],
+#                 machineCriteriaOnLookOrRecordOrders: [ {id, path, criterionId, proof} ],
 #                 testOrdersOwningNoMachineCriterion: [ {id, path} ],
 #                 unknownCriteriaIds: [ {path, field, id} ],
 #                 unknownNonGoalIds: [ {path, id} ] },
@@ -194,15 +200,19 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #              dependencyCycles: [ id, ... ],
 #              orphanSupportOrders: [ id, ... ],
 #              ordersNotAfterSkeleton: [ id, ... ],   a light task only
+#              lightOrdersOwningPathScript: [ {id, path} ],   a light task only
 #              overlappingOwnedFiles: [ {ids: [id, id], path} ],
+#              ordersPastHandfulOfRows: [ {id, path, count, owned} ],   a warning
 #              globbedOwnedFiles: [ {id, path} ],
+#              testsOnlyOrdersBeforeTests: [ {id, testsOrder} ],
+#              ordersOwningFrozenPaths: [ {id, path, task} ],
 #              unrecordedIds: [ id, ... ] },   advisory, never raises the exit code
 #     fileIssueCount, contentIssueCount,
 #     notChecked: [...]
 #   }
 #
 # Portability notes, because this script must run wherever the plugin runs:
-#   - No awk, no GNU-only flags, the same as check-research.sh and check-alignment.sh. Every read
+#   - No awk, no GNU-only flags, the same as check-research.sh. Every read
 #     of a work order file goes through jq. Every jq filter that tests one id against a set of ids
 #     binds that id to a named variable first, never a bare `.`, because piping into a second
 #     filter rebinds the dot: check-research.sh's own coverage join shipped exactly that defect
@@ -348,6 +358,18 @@ fi
 FILES_JSON='[]'
 RAW_IDS_JSON='[]'
 WORK_ORDERS_JSON='[]'
+PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
+TAB="$(printf '\t')"
+
+# The check_commands argv of each check recipe that a baseline in this project read, for the
+# projection's criteriaByUnstampedRun: brv_kept runs a line that equals one (gap row 370).
+# recipes.sh empties TASK_PATH when it loads, so it loads only inside this subshell.
+CHECK_ARGV_JSON="$(
+  [ -z "${ZSH_VERSION:-}" ] || setopt NULL_GLOB
+  # shellcheck source=/dev/null
+  source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
+  cc_check_argv "$PROJECT_PATH"/tasks/*/implementation*/baseline.json
+)" || die3 "could not read the check recipes that this project's baselines record"
 FILE_ISSUE_COUNT=0
 CONTENT_ISSUE_COUNT=0
 
@@ -454,15 +476,23 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             slot: $f.slot,
             range: $f.range,
             ownsCode: $f.ownsCode,
+            textOnly: textOnly,
             surfacesCount: ([ (.surfaces // [])[]? | select(type == "string" and length > 0) ] | length),
+            doneWhen: [ (.doneWhen // [])[]? | select(type == "string" and length > 0) ],
             doneWhenCount: ([ (.doneWhen // [])[]? | select(type == "string" and length > 0) ] | length),
             criteriaByRun: [ (.verify // [])[]? | select(type == "object" and has("run")) | .criterion? | strings ],
+            # The criteria that only lines brv_kept never runs name: not binding, no stamp, and no
+            # check command of the same words (gap row 458).
+            criteriaByUnstampedRun: ( [ (.verify // [])[]? | select(type == "object" and has("run")) ] as $runs
+              | [ $runs[] | select(.binding != false or has("approved") or (.run as $r | $checkArgv | index($r) != null))
+                  | .criterion? | strings ] as $running
+              | [ $runs[] | .criterion? | strings | select(. as $c | $running | index($c) == null) ] | unique ),
             # A test counts on its description alone. The level is optional and design does not set
             # one: choosing a tier belongs to the stage that writes the test.
             testsCount: ( [ (.tests // [])[]? | select(type == "object")
                             | select((.description? | type) == "string" and (.description | length) > 0) ] | length )
           }
-        ' --arg path "$wfile" "$wfile")"
+        ' --arg path "$wfile" --argjson checkArgv "$CHECK_ARGV_JSON" "$wfile")"
         WORK_ORDERS_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq --argjson e "$THIS_ORDER" '. + [$e]')"
       fi
     fi
@@ -582,11 +612,70 @@ OBSERVE_ORDERS_WITH_NO_SURFACE_JSON='[]'
 CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON='[]'
 CONFIRM_ORDERS_OWNING_TEST_FILES_JSON='[]'
 CONFIRM_TEST_GLOBS=""
+TEXT_ONLY_TEST_ORDERS_JSON='[]'
+MACHINE_ON_TEXT_ONLY_JSON='[]'
+MACHINE_ON_LOOK_OR_RECORD_JSON='[]'
 TEST_ORDERS_OWNING_NO_MACHINE_JSON='[]'
-CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON='[]'
 UNKNOWN_CRITERIA_IDS_JSON='[]'
 UNKNOWN_NONGOAL_IDS_JSON='[]'
 COVERAGE_ISSUE_COUNT=0
+TESTS_ONLY_ROWS_UNMATCHED_JSON='[]'
+UNSTAMPED_RUN_PROOFS_JSON='[]'
+
+# Every freeze record in the project, read once. Each freeze recorded the implement recipe's test
+# globs, so the records say which path is a test with no lookup. A project that froze no test yet
+# records none. A record of another task that is not complete also gives the paths it froze. A
+# task with no task.json counts as open. This task's own freezes are left out of those paths,
+# because the frozen-test hook guards them. Each record gets its own jq call: one record jq
+# cannot parse then hides nothing of the others.
+FREEZE_READ="$(
+  [ -z "${ZSH_VERSION:-}" ] || setopt NULL_GLOB
+  for FREEZE_RECORD in "$PROJECT_PATH"/tasks/*/implementation*/tests-*.json; do
+    [ -f "$FREEZE_RECORD" ] || continue
+    FREEZE_TASK="${FREEZE_RECORD%/implementation*}"
+    FREEZE_OPEN=false
+    [ "$FREEZE_TASK" = "$TASK_PATH" ] || [ "$(jq -r '.state // ""' "$FREEZE_TASK/task.json" 2>/dev/null)" = complete ] \
+      || FREEZE_OPEN=true
+    jq -r --arg t "${FREEZE_TASK##*/}" --argjson open "$FREEZE_OPEN" '
+      ((.testGlobs // [])[]? | strings | ["glob", .] | @tsv),
+      (select($open) | ((.rows // [])[]?.tests // [])[]?.path?, (.support // [])[]?.path? | strings | ["frozen", $t, .] | @tsv)
+    ' "$FREEZE_RECORD" 2>/dev/null
+  done)"
+CONFIRM_TEST_GLOBS="$(printf '%s\n' "$FREEZE_READ" | grep "^glob$TAB" | cut -f2 | LC_ALL=C sort -u)"
+
+# The tests-only orders (audit/24a), by the one classifier the build's owned-files check calls
+# too. Beside them, the orders of the row-369 route: a `tests` order whose every owned file
+# matches a recorded test glob. recipes.sh empties TASK_PATH when it loads, so it loads only
+# inside this subshell. Prints one `<id><tab><kind>` line per such order.
+ROUTE_ORDERS=""
+if printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .proof == "confirm")' >/dev/null || [ -n "$CONFIRM_TEST_GLOBS" ]; then
+  ROUTE_ORDERS="$(
+    TO_TASK="$TASK_PATH"
+    # shellcheck source=/dev/null
+    source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
+    printf '%s' "$WORK_ORDERS_JSON" | jq -c '.[]' | while IFS= read -r TO_ORDER; do
+      if tests_only_order "$TO_TASK" "$TO_ORDER"; then
+        printf '%s\ttests-only\n' "$(printf '%s' "$TO_ORDER" | jq -r '.id')"
+      elif [ -n "$CONFIRM_TEST_GLOBS" ] && [ "$(printf '%s' "$TO_ORDER" | jq -r '.slot')" = order-tests ]; then
+        TO_ALL=true
+        while IFS= read -r TO_FILE; do
+          TO_HIT=false
+          while IFS= read -r TO_GLOB; do
+            tf_path_matches_catalog_glob "$TO_FILE" "$TO_GLOB" && { TO_HIT=true; break; }
+          done <<TO_GLOBS
+$CONFIRM_TEST_GLOBS
+TO_GLOBS
+          [ "$TO_HIT" = true ] || { TO_ALL=false; break; }
+        done <<TO_FILES
+$(printf '%s' "$TO_ORDER" | jq -r '.ownedFiles[]')
+TO_FILES
+        if [ "$TO_ALL" = true ]; then printf '%s' "$TO_ORDER" | jq -r '.id + "\ttests"'; fi
+      fi
+    done
+  )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"
+fi
+TESTS_ONLY_IDS_JSON="$(printf '%s\n' "$ROUTE_ORDERS" | grep "${TAB}tests-only\$" | cut -f1 | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+ROUTE_IDS_JSON="$(printf '%s\n' "$ROUTE_ORDERS" | cut -f1 | jq -R -s -c 'split("\n") | map(select(length > 0))')"
 
 if [ "$CONTRACT_READABLE" != "true" ]; then
   COVERAGE_NOTE="$CONTRACT_NOTE"
@@ -632,17 +721,41 @@ else
   # needs a surface as well. An order whose proof is confirm owes no test and needs a done-when
   # row on the same two rules: a person confirms each row at review (gap row 196). The two shared
   # rules keep the record lists, with the proof on each entry. A run line that names a criterion
-  # spares that criterion a test, never the order its last one: the freeze refuses an order with no
-  # row (exit 74). So the entry's problem says which repair applies (gap row 412).
+  # spares that criterion a test. A `tests` order freezes at least one row (exit 74), so an order
+  # whose run lines prove every machine criterion it owns is a confirm order (gap row 461). The
+  # entry's problem says which repair applies (gap row 412). A text-only order is named on its own
+  # lists below, with their own repairs.
   ORDERS_MISSING_REQUIRED_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
     ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
-    | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.slot == "order-tests")
+    | [ $orders[] | . as $o | select($o.testsCount == 0) | select($o.slot == "order-tests") | select($o.textOnly | not)
         | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
         | {id: $o.id, path: $o.path, criterionId: $cid,
            problem: (if ($o.criteriaByRun | index($cid)) == null
                      then "owns a machine-verified criterion (" + $cid + ") with no test"
-                     else "declares no test, and a run line proves " + $cid + " but is not a test of its own. Add a test to " + $o.id + ", or give " + $cid + " to an order that has a test"
+                     else "declares no test, and a run line proves " + $cid + ". Set " + $o.id + " to --proof confirm when run lines prove every machine criterion it owns, or add a test of a behaviour it builds"
                      end)} ]
+  ')"
+  # An order whose every file is a document or configuration holds no logic, so a test of it only
+  # reads the text back (gap row 461). Nothing there can test a machine criterion either, so such a
+  # criterion is a person's. textOnly in scripts/lib/proof.sh holds the rule, gate orders excepted.
+  TEXT_ONLY_TEST_ORDERS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
+    [ $orders[] | select(.slot == "order-tests") | select(.textOnly) | {id: .id, path: .path} ]
+  ')"
+  MACHINE_ON_TEXT_ONLY_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
+    ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
+    | [ $orders[] | . as $o | select($o.textOnly)
+        | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
+        | {id: $o.id, path: $o.path, criterionId: $cid} ]
+  ')"
+  # The look judges what a page shows, and an observe order's reviewer reads the page. A record
+  # order has no checkpoint, and its reviewer reads a document. Neither judges a machine criterion,
+  # so one such an order owns is a person's, unless a run line proves it.
+  MACHINE_ON_LOOK_OR_RECORD_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" '
+    ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
+    | [ $orders[] | . as $o | select($o.slot == "observed" or $o.slot == "done-when")
+        | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
+        | select(($o.criteriaByRun | index($cid)) == null)
+        | {id: $o.id, path: $o.path, criterionId: $cid, proof: $o.proof} ]
   ')"
   GATE_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "configuration-gate") | select(.testsCount > 0) | {id: .id, path: .path} ]
@@ -650,12 +763,10 @@ else
   RECORD_ORDERS_DECLARING_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "done-when" or .slot == "observed" or .slot == "confirm-at-review") | select(.testsCount > 0) | {id: .id, path: .path, proof: .proof} ]
   ')"
-  PROJECT_PATH="$(dirname -- "$(dirname -- "$TASK_PATH")")"
   RECORD_ORDERS_OWNING_OUTSIDE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg p "$PROJECT_PATH/" '
     [ $orders[] | .id as $id | select(.range == "project") | (.ownedFiles // [])[]
       | select(startswith($p) | not) | {id: $id, path: ., reason: "outside the project folder"} ]
   ')"
-  TAB="$(printf '\t')"
   while IFS="$TAB" read -r REC_ID REC_PATH; do
     [ -n "$REC_PATH" ] || continue
     git -C "$TASK_PATH" check-ignore -q -- "$REC_PATH" 2>/dev/null || continue
@@ -670,39 +781,48 @@ else
   OBSERVE_ORDERS_WITH_NO_SURFACE_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" '
     [ $orders[] | select(.slot == "observed") | select(.surfacesCount == 0) | {id: .id, path: .path} ]
   ')"
-  # An order a person confirms is built with no test. That is only right on a task whose contract
-  # says it has no automated tests (gap row 196). The answer can move to yes after design, and a
-  # confirm can be set by hand on a task with tests. Either way the order needs a test.
-  CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --arg tests "$(automated_tests "$TASK_PATH")" '
-    [ $orders[] | select(.slot == "confirm-at-review") | select($tests != "no") | {id: .id, path: .path} ]
+  # An order a person confirms is built with no test. On a task whose contract says it has no
+  # automated tests, that is every code order (gap row 196). On a task with tests it is right for an
+  # order that is text only, and for one whose run lines prove every machine criterion it owns
+  # (gap row 461). The answer can move to yes after design, and a confirm can be set by hand. Any
+  # other confirm order on a task with tests is code that needs a test.
+  CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" --arg tests "$(automated_tests "$TASK_PATH")" --argjson testsOnly "$TESTS_ONLY_IDS_JSON" '
+    ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
+    | [ $orders[] | select(.slot == "confirm-at-review") | select($tests != "no") | select(.textOnly | not)
+        | select(.id as $i | $testsOnly | index($i) == null)
+        | . as $o | [ ($o.criteriaOwned // [])[] | select(($vbOf[.] // "") == "machine") ] as $machine
+        | select(($machine | length) == 0 or any($machine[]; . as $c | ($o.criteriaByRun | index($c)) == null))
+        | {id: .id, path: .path, machineOwned: ($machine | length)} ]
+  ')"
+  # The three lists above spare a machine criterion on a run line that names it. A research line runs
+  # only when it is binding, a person stamped it at the close, or it equals a check command. One that
+  # runs on none of those grounds may never run, so nothing proves the criterion (gap row 458). An
+  # attended close stamps it with --approve-runs, after the person reads this line. An unattended
+  # close stops on it.
+  UNSTAMPED_RUN_PROOFS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" --arg tests "$(automated_tests "$TASK_PATH")" --argjson testsOnly "$TESTS_ONLY_IDS_JSON" '
+    ($verifiedBy | map({(.id): .verifiedBy}) | add // {}) as $vbOf
+    | [ $orders[] | . as $o
+        | select($o.slot == "observed" or $o.slot == "done-when"
+            or ($o.slot == "confirm-at-review" and $tests != "no" and ($o.textOnly | not) and ($testsOnly | index($o.id)) == null))
+        | ($o.criteriaOwned // [])[] as $cid | select(($vbOf[$cid] // "") == "machine")
+        | select(($o.criteriaByUnstampedRun | index($cid)) != null)
+        | {id: $o.id, path: $o.path, criterionId: $cid} ]
   ')"
   # A confirm order is built with no test. So a test file it owns is written as plain code that no
   # check runs and the freeze never sees (gap row 367). Which path is a test is the framework's to
-  # say, and this script knows no framework. Each freeze in this project recorded the implement
-  # recipe's test globs, so those records answer here with no lookup. A project that froze no test
-  # yet records none, and notChecked says so. recipes.sh empties TASK_PATH when it loads, so it
-  # loads only inside the subshell that matches.
-  if printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .slot == "confirm-at-review")' >/dev/null; then
-    # One jq call reads every record. jq stops at a record it cannot parse, so only then does
-    # each record get a call of its own.
-    CONFIRM_TEST_GLOBS="$(
-      [ -z "${ZSH_VERSION:-}" ] || setopt NULL_GLOB
-      set -- "$PROJECT_PATH"/tasks/*/implementation*/tests-*.json
-      [ -f "${1:-}" ] || exit 0
-      jq -r '(.testGlobs // [])[]? | strings' "$@" 2>/dev/null \
-        || for TEST_RECORD in "$@"; do jq -r '(.testGlobs // [])[]? | strings' "$TEST_RECORD" 2>/dev/null; done
-      )"
-    CONFIRM_TEST_GLOBS="$(printf '%s\n' "$CONFIRM_TEST_GLOBS" | sort -u | sed '/^$/d')"
-  fi
+  # say, and this script knows no framework: the recorded test globs answer, read once above. A
+  # project that froze no test yet records none, and notChecked says so. recipes.sh empties
+  # TASK_PATH when it loads, so it loads only inside the subshell that matches.
   CONFIRM_ORDERS_OWNING_TEST_FILES_JSON="$(
     # shellcheck source=/dev/null
     [ -z "$CONFIRM_TEST_GLOBS" ] || source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
-    jq -r -n --argjson orders "$WORK_ORDERS_JSON" '
-      $orders[] | select(.slot == "confirm-at-review") | .id as $id | (.ownedFiles // [])[] | [$id, .] | @tsv' \
+    jq -r -n --argjson orders "$WORK_ORDERS_JSON" --argjson testsOnly "$TESTS_ONLY_IDS_JSON" '
+      $orders[] | select(.slot == "confirm-at-review") | .id as $id | select($testsOnly | index($id) == null)
+      | (.ownedFiles // [])[] | [$id, .] | @tsv' \
     | while IFS="$TAB" read -r REC_ID REC_PATH; do
         while IFS= read -r TEST_GLOB; do
           [ -n "$TEST_GLOB" ] || continue
-          # The file name must match the glob's last segment first. That is one call of the
+          # The file name must match the last segment of the glob first. That is one call of the
           # segment matcher, where the whole-path matcher calls it once per segment.
           if [ "${TEST_GLOB##*/}" != "**" ]; then
             tf_path_matches_glob "${REC_PATH##*/}" "${TEST_GLOB##*/}" || continue
@@ -716,6 +836,16 @@ $CONFIRM_TEST_GLOBS
 CONFIRM_GLOBS
       done | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {id: .[0], path: .[1], glob: .[2]})'
   )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"
+
+  # A person confirms a tests-only order's done-when rows at review. So each row names an owned
+  # file, and each owned file is named in a row: the rows then list every file in its reach.
+  TESTS_ONLY_ROWS_UNMATCHED_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson testsOnly "$TESTS_ONLY_IDS_JSON" '
+    [ $orders[] | . as $o | select($testsOnly | index($o.id) != null)
+      | ( ($o.ownedFiles[] | . as $p | select(any($o.doneWhen[]; contains($p)) | not)
+            | {id: $o.id, item: $p, problem: "owned file named in no done-when row"}),
+          ($o.doneWhen[] | . as $r | select(any($o.ownedFiles[]; . as $p | $r | contains($p)) | not)
+            | {id: $o.id, item: $r, problem: "done-when row names no owned file"}) ) ]
+  ')"
 
   # The same question asked the other way (live-run row 145). The list above asks whether an order
   # owning a machine-verified criterion declares a test. This one asks whether an order left at the
@@ -734,16 +864,6 @@ CONFIRM_GLOBS
         | {id: $o.id, path: $o.path} ]
   ')"
 
-  # A fact about the contract alone, so it needs no work order and is never withheld when one
-  # cannot be read: it reports a value that is present and wrong, not something absent.
-  CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON="$(jq -c -n --argjson verifiedBy "$CRITERIA_VERIFIED_BY_JSON" --argjson criteria "$CRITERIA_WITH_TEXT_JSON" '
-    ($criteria | map({(.id): .text}) | add // {}) as $textOf
-    | [ $verifiedBy[] | select(.verifiedBy != "machine") | select(.verifiedBy != "person")
-        | {id: .id,
-           text: (($textOf[.id] // "") | if length > 120 then (.[0:117] + "...") else . end),
-           verifiedBy: .verifiedBy} ]
-  ')"
-
   UNKNOWN_CRITERIA_IDS_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$CRITERION_IDS_JSON" '
     [ $orders[] | . as $o
       | ( ( ($o.criteriaServed // [])[] | {field: "criteriaServed", id: .} ),
@@ -758,13 +878,9 @@ CONFIRM_GLOBS
       | {path: $o.path, id: $nid} ]
   ')"
 
-  NO_SERVE_COUNT="$(printf '%s' "$CRITERIA_WITH_NO_SERVING_ORDER_JSON" | jq 'length')"
-  NO_OWNER_COUNT="$(printf '%s' "$CRITERIA_WITH_NO_OWNER_JSON" | jq 'length')"
-  MULTI_OWNER_COUNT="$(printf '%s' "$CRITERIA_WITH_MULTIPLE_OWNERS_JSON" | jq 'length')"
-  UNUSABLE_VERIFIED_BY_COUNT="$(printf '%s' "$CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON" | jq 'length')"
-  SERVES_NOTHING_COUNT="$(printf '%s' "$ORDERS_SERVING_NOTHING_JSON" | jq 'length')"
   MISSING_TESTS_COUNT="$(printf '%s' "$ORDERS_MISSING_REQUIRED_TESTS_JSON" | jq 'length')"
   GATE_WITH_TESTS_COUNT="$(printf '%s' "$GATE_ORDERS_DECLARING_TESTS_JSON" | jq 'length')"
+  TEXT_ONLY_COUNT="$(jq -n --argjson a "$TEXT_ONLY_TEST_ORDERS_JSON" --argjson b "$MACHINE_ON_TEXT_ONLY_JSON" --argjson c "$MACHINE_ON_LOOK_OR_RECORD_JSON" '($a | length) + ($b | length) + ($c | length)')"
   RECORD_ISSUE_COUNT="$(jq -n --argjson a "$RECORD_ORDERS_DECLARING_TESTS_JSON" --argjson b "$RECORD_ORDERS_OWNING_OUTSIDE_JSON" --argjson c "$RECORD_ORDERS_WITH_NO_DONE_WHEN_JSON" --argjson d "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" --argjson e "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" --argjson f "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" '($a | length) + ($b | length) + ($c | length) + ($d | length) + ($e | length) + ($f | length)')"
   UNKNOWN_CRIT_COUNT="$(printf '%s' "$UNKNOWN_CRITERIA_IDS_JSON" | jq 'length')"
   UNKNOWN_NONGOAL_COUNT="$(printf '%s' "$UNKNOWN_NONGOAL_IDS_JSON" | jq 'length')"
@@ -781,14 +897,13 @@ CONFIRM_GLOBS
     CRITERIA_WITH_NO_SERVING_ORDER_JSON='[]'
     CRITERIA_WITH_NO_OWNER_JSON='[]'
     ORPHAN_SUPPORT_ORDERS_JSON='[]'
-    NO_SERVE_COUNT=0
-    NO_OWNER_COUNT=0
     COVERAGE_WITHHELD="true"
   else
     COVERAGE_WITHHELD="false"
   fi
 
-  COVERAGE_ISSUE_COUNT=$((NO_SERVE_COUNT + NO_OWNER_COUNT + MULTI_OWNER_COUNT + SERVES_NOTHING_COUNT + MISSING_TESTS_COUNT + GATE_WITH_TESTS_COUNT + RECORD_ISSUE_COUNT + UNKNOWN_CRIT_COUNT + UNKNOWN_NONGOAL_COUNT + UNUSABLE_VERIFIED_BY_COUNT))
+  # The findings that stop. The others are in `open`, sorted by what they do.
+  COVERAGE_ISSUE_COUNT=$((MISSING_TESTS_COUNT + GATE_WITH_TESTS_COUNT + TEXT_ONLY_COUNT + RECORD_ISSUE_COUNT + UNKNOWN_CRIT_COUNT + UNKNOWN_NONGOAL_COUNT))
   if [ "$DESIGN_STARTED" = "true" ] && [ "$COVERAGE_WITHHELD" = "true" ]; then
     COVERAGE_NOTE="ran in part: $FILE_COUNT file(s), $COUNTED_ORDERS work order(s) counted, $EXCLUDED_COUNT excluded as unreadable, against $(printf '%s' "$CRITERION_IDS_JSON" | jq 'length') criterion/criteria. Every finding that reports something absent is withheld, because an excluded work order and a missing one look the same from here. Repair the files listed above and run this again."
   elif [ "$DESIGN_STARTED" = "true" ]; then
@@ -809,8 +924,13 @@ UNKNOWN_DEPENDS_ON_IDS_JSON='[]'
 DEPENDENCY_CYCLES_JSON='[]'
 ORPHAN_SUPPORT_ORDERS_JSON='[]'
 ORDERS_NOT_AFTER_SKELETON_JSON='[]'
+LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON='[]'
+PATH_SCRIPT_UNREAD=false
 OVERLAPPING_OWNED_FILES_JSON='[]'
+ORDERS_PAST_HANDFUL_JSON='[]'
 GLOBBED_OWNED_FILES_JSON='[]'
+TESTS_ONLY_BEFORE_TESTS_JSON='[]'
+ORDERS_OWNING_FROZEN_PATHS_JSON='[]'
 UNRECORDED_IDS_JSON='[]'
 GRAPH_ISSUE_COUNT=0
 
@@ -831,7 +951,9 @@ else
   # dependsOn chain (gap row 197). Any other task leaves the list empty.
   LIGHT_TASK=false
   task_is_light "$TASK_PATH" && LIGHT_TASK=true
-  GRAPH_RESULT_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$KNOWN_WO_IDS_JSON" --argjson light "$LIGHT_TASK" '
+  # A tests-only order reaches every `tests` order of its task, so the kept tests are frozen while
+  # the old ones still exist (audit/24a).
+  GRAPH_RESULT_JSON="$(jq -c -n --argjson orders "$WORK_ORDERS_JSON" --argjson known "$KNOWN_WO_IDS_JSON" --argjson light "$LIGHT_TASK" --argjson testsOnly "$TESTS_ONLY_IDS_JSON" '
     def reach($adj; $start):
       def go($frontier; $visited):
         if ($frontier | length) == 0 then $visited
@@ -857,16 +979,50 @@ else
           | select( ( ([$x] + ($revClosure[$x] // [])) | any(. as $y | $owners | index($y) != null) ) | not )
           | $x ],
         notAfterSkeleton: (if $light then [ $ids[] | . as $x | select($x != "wo1")
-          | select(($fwdClosure[$x] // []) | index("wo1") == null) ] else [] end)
+          | select(($fwdClosure[$x] // []) | index("wo1") == null) ] else [] end),
+        testsOnlyBeforeTests: [ $testsOnly[] as $x | $orders[] | select(.slot == "order-tests") | .id as $t
+          | select(($fwdClosure[$x] // []) | index($t) == null) | {id: $x, testsOrder: $t} ]
       }
   ')"
   DEPENDENCY_CYCLES_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.cycles')"
   ORPHAN_SUPPORT_ORDERS_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.orphans')"
   ORDERS_NOT_AFTER_SKELETON_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.notAfterSkeleton')"
 
+  # A light task never extends the registered script that walks the demo path, wo1 included (audit/24,
+  # "Light mode"). path_script_state names its files the way review reads them. recipes.sh empties
+  # TASK_PATH when it loads, so it loads only inside this subshell.
+  if [ "$LIGHT_TASK" = true ]; then
+    PATH_SCRIPT="$(
+      PS_TASK="$TASK_PATH"
+      # shellcheck source=/dev/null
+      source "$PLUGIN_ROOT/scripts/lib/recipes.sh" || exit 3
+      path_script_state "$PS_TASK"
+      printf '%s\n%s' "$PS_STATE" "$PS_FILES"
+    )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"
+    if [ "${PATH_SCRIPT%%$'\n'*}" = registered ]; then
+      LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON="$(printf '%s' "$PATH_SCRIPT" | sed 1d | jq -R -s -c --argjson orders "$WORK_ORDERS_JSON" '
+        (split("\n") | map(select(length > 0))) as $files
+        | [ $orders[] | .id as $id | (.ownedFiles // [])[]
+            | (ltrimstr("./") | rtrimstr("/")) as $p
+            | select(any($files[]; . == $p or startswith($p + "/")))
+            | {id: $id, path: $p} ]')"
+      [ -n "$(printf '%s' "$PATH_SCRIPT" | sed 1d)" ] || PATH_SCRIPT_UNREAD=true
+    fi
+  fi
+
   # Overlap on the declared strings only, never a glob intersection (ideal/design.md, "What a
   # work order holds"): two orders sharing one identical entry in ownedFiles.
   OVERLAPPING_OWNED_FILES_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq -c "$OWNED_OVERLAP_JQ")"
+
+  # An order holds a handful of behaviours, not a feature (audit/24). Past eight done-when rows,
+  # or past three for each criterion it owns, the order has grown past what its criteria need, as
+  # a critic's finding that became a row does (gap row 439). No record ties a row to a criterion,
+  # so the count is what a script can read. An order that owns no criterion is asked the first
+  # question only. A warning, because which rows to cut or where to split is a person's call.
+  ORDERS_PAST_HANDFUL_JSON="$(printf '%s' "$WORK_ORDERS_JSON" | jq -c '
+    [ .[] | (.criteriaOwned | length) as $owned
+      | select(.doneWhenCount > 8 or ($owned > 0 and .doneWhenCount > 3 * $owned))
+      | {id, path, count: .doneWhenCount, owned: $owned} ]')"
 
   # An owned file must be a path and never a glob. Implementation derives the test author's denied
   # reads from these entries and compares them as paths, so a glob would deny nothing while the
@@ -884,6 +1040,20 @@ else
     ]
   ')"
 
+  TESTS_ONLY_BEFORE_TESTS_JSON="$(printf '%s' "$GRAPH_RESULT_JSON" | jq -c '.testsOnlyBeforeTests')"
+
+  # A tests-only order and a row-369 order change tests only. Neither may own a test that a
+  # freeze of another task holds while that task is not complete: its build would change a file
+  # that task's frozen-tests check still reads (audit/24a). A freeze path and an owned file are
+  # both relative to the code repository root.
+  ORDERS_OWNING_FROZEN_PATHS_JSON="$(printf '%s\n' "$FREEZE_READ" | grep "^frozen$TAB" | jq -R -s -c \
+    --argjson orders "$WORK_ORDERS_JSON" --argjson route "$ROUTE_IDS_JSON" '
+    [ split("\n")[] | select(length > 0) | split("\t") | {task: .[1], path: .[2]} ] as $frozen
+    | [ $orders[] | .id as $id | select($route | index($id) != null)
+        | (.ownedFiles // [])[] | (ltrimstr("./") | rtrimstr("/")) as $p
+        | $frozen[] | select(.path == $p or (.path | startswith($p + "/")))
+        | {id: $id, path: .path, task: .task} ] | unique')"
+
   # Each wo<n> below the highest id, live or recorded, that has no order file and no entry in
   # <task_folder>/design-removed.json (gap row 245). An order folded before merge kept a record
   # leaves such a gap. Only a person knows the survivor, so the list never raises the exit code.
@@ -898,15 +1068,15 @@ else
 
   UNKNOWN_DEPENDS_COUNT="$(printf '%s' "$UNKNOWN_DEPENDS_ON_IDS_JSON" | jq 'length')"
   CYCLE_COUNT="$(printf '%s' "$DEPENDENCY_CYCLES_JSON" | jq 'length')"
-  ORPHAN_COUNT="$(printf '%s' "$ORPHAN_SUPPORT_ORDERS_JSON" | jq 'length')"
-  OVERLAP_COUNT="$(printf '%s' "$OVERLAPPING_OWNED_FILES_JSON" | jq 'length')"
   GLOBBED_COUNT="$(printf '%s' "$GLOBBED_OWNED_FILES_JSON" | jq 'length')"
-  SKELETON_COUNT="$(printf '%s' "$ORDERS_NOT_AFTER_SKELETON_JSON" | jq 'length')"
-  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + ORPHAN_COUNT + OVERLAP_COUNT + GLOBBED_COUNT + SKELETON_COUNT))
+  GRAPH_ISSUE_COUNT=$((UNKNOWN_DEPENDS_COUNT + CYCLE_COUNT + GLOBBED_COUNT + $(printf '%s' "$LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON" | jq 'length')))
   GRAPH_NOTE="ran: $(printf '%s' "$WORK_ORDERS_JSON" | jq 'length') work order(s) in the graph"
 fi
 
 CONTENT_ISSUE_COUNT=$((CONTENT_ISSUE_COUNT + GRAPH_ISSUE_COUNT))
+# The tests-only rows stop in either run mode (audit/24a).
+CONTENT_ISSUE_COUNT=$((CONTENT_ISSUE_COUNT + $(jq -n --argjson a "$TESTS_ONLY_ROWS_UNMATCHED_JSON" \
+  --argjson b "$TESTS_ONLY_BEFORE_TESTS_JSON" --argjson c "$ORDERS_OWNING_FROZEN_PATHS_JSON" '($a + $b + $c) | length')))
 
 # ---------------------------------------------------------------------------
 # 9. What this script could not check, named on stdout rather than silently skipped.
@@ -924,6 +1094,9 @@ if [ "$CONTRACT_READABLE" = "true" ] && [ -z "$CONFIRM_TEST_GLOBS" ] \
    && printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .slot == "confirm-at-review")' >/dev/null; then
   NOT_CHECKED_ITEMS+=("whether a confirm order owns a test file: no freeze in this project recorded a test glob, so nothing here says which path is a test.")
 fi
+if [ "$PATH_SCRIPT_UNREAD" = true ]; then
+  NOT_CHECKED_ITEMS+=("whether a light order owns the registered script that walks the demo path: that surface names no file of the tree, such as a page surface, so no file is known to compare.")
+fi
 if [ "$DESIGN_STARTED" != "true" ]; then
   NOT_CHECKED_ITEMS+=("the graph checks between work orders: $GRAPH_NOTE")
 fi
@@ -931,17 +1104,65 @@ fi
 NOT_CHECKED_JSON="$(printf '%s\n' "${NOT_CHECKED_ITEMS[@]}" | jq -R . | jq -s .)"
 
 # ---------------------------------------------------------------------------
-# 10. Decide the exit code. Priority, highest first: 3 already exited above on its own; between
-#     what remains, 1 outranks 4, the same order check-research.sh and check-alignment.sh use.
+# 10. Decide the exit code: 3 already exited above, and any finding that stops is 4.
 # ---------------------------------------------------------------------------
 
-if [ "$FILE_ISSUE_COUNT" -gt 0 ]; then
-  EXIT_CODE=1
-elif [ "$CONTENT_ISSUE_COUNT" -gt 0 ]; then
+if [ "$FILE_ISSUE_COUNT" -gt 0 ] || [ "$CONTENT_ISSUE_COUNT" -gt 0 ]; then
   EXIT_CODE=4
 else
   EXIT_CODE=0
 fi
+
+# Each finding as one line, sorted by what it does (the header, `open`).
+OPEN_JQ='
+def prover(p): if p == "observe" then "proved by a model looking through a browser"
+               elif p == "confirm" then "confirmed by a person"
+               else "proved by its record" end;
+def open: {
+  stop: [
+    ((.files // [])[] | select((.schema.issueCount // 0) > 0) | "file " + .path + " does not match the design shape"),
+    ((.files // [])[] | .path as $p | (.content.issues // [])[] | "file " + $p + ": " + .problem),
+    (.guidesRead // {} | select((.issueCount // 0) > 0) | "file " + .path + " does not match the guides-read shape: " + ([.issues[].problem] | join(", "))),
+    ((.duplicateWorkOrderIds // [])[] | "work order id " + .id + " is used by more than one file: " + (.paths | join(", "))),
+    ((.coverage.unknownCriteriaIds // [])[] | "file " + .path + " names an unknown criterion id " + .id + " in " + .field),
+    ((.coverage.unknownNonGoalIds // [])[] | "file " + .path + " names an unknown non-goal id " + .id),
+    ((.coverage.ordersMissingRequiredTests // [])[] | "order " + .id + " " + .problem),
+    ((.coverage.gateOrdersDeclaringTests // [])[] | "order " + .id + " is proved by the configuration gate and declares a test"),
+    ((.coverage.recordOrdersDeclaringTests // [])[] | "order " + .id + " is " + prover(.proof) + " and declares a test"),
+    ((.coverage.recordOrdersOwningOutsideProjectFolder // [])[] | "order " + .id + " is proved by its record and owns " + .path + " " + .reason),
+    ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
+    ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
+    ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests, so a test would only read the text back: update --proof confirm, or record for a document under the project folder"),
+    ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope, or give it to an order that builds code"),
+    ((.coverage.machineCriteriaOnLookOrRecordOrders // [])[] | "order " + .id + " is " + prover(.proof) + " and owns the machine-verified criterion " + .criterionId + ", which neither a look nor a reading judges: make it person-verified in scope, add a run line that proves it, or give it to an order that builds code"),
+    ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person on a task with tests and owns code, "
+      + (if .machineOwned == 0 then "which gets tests even with no machine criterion" else "and run lines do not prove every machine criterion it owns" end) + ": update --proof tests"),
+    ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests"),
+    ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
+    ((.graph.unknownDependsOnIds // [])[] | "file " + .path + " depends on an unknown work order id " + .id),
+    ((.graph.globbedOwnedFiles // [])[] | "order " + .id + " owns " + .path + ", which is not one literal path"),
+    ((.graph.lightOrdersOwningPathScript // [])[] | "order " + .id + " owns " + .path + ", the registered script that walks the demo path, and on a light task no order extends it: remove-owned-file"),
+    ((.coverage.testsOnlyRowsUnmatched // [])[] | "order " + .id + " deletes the tests of a cleanup run, and "
+      + (if .problem == "owned file named in no done-when row" then "no done-when row names its file " + .item + ": add-done-when"
+         else "its done-when row \"" + .item + "\" names no file it owns: remove-done-when, or name the file in it" end)),
+    ((.graph.testsOnlyOrdersBeforeTests // [])[] | "order " + .id + " deletes the tests of a cleanup run and does not come after the tests order " + .testsOrder + ": add " + .testsOrder + " to its dependsOn"),
+    ((.graph.ordersOwningFrozenPaths // [])[] | "order " + .id + " owns " + .path + ", a test that task " + .task + " froze and has not completed: remove-owned-file, or wait until " + .task + " is complete")
+  ],
+  unattended: [
+    ((.coverage.criteriaWithNoServingOrder // [])[] | "criterion " + .id + " has no serving order"),
+    ((.coverage.criteriaWithNoOwner // [])[] | "criterion " + .id + " has no owner"),
+    ((.coverage.criteriaWithMultipleOwners // [])[] | "criterion " + .id + " is owned by more than one order"),
+    ((.coverage.unstampedRunProofs // [])[] | "order " + .id + " rests criterion " + .criterionId + " on a research run line that runs only when a person approves it: close attended with --approve-runs, or give " + .criterionId + " another proof")
+  ],
+  warn: [
+    ((.coverage.ordersServingNothing // [])[] | "order " + .id + " serves no criterion"),
+    ((.graph.orphanSupportOrders // [])[] | "order " + . + " owns nothing and no owning order depends on it"),
+    ((.graph.ordersNotAfterSkeleton // [])[] | "order " + . + " does not come after wo1, the walking skeleton: add wo1 to its dependsOn"),
+    ((.graph.overlappingOwnedFiles // [])[] | "orders " + (.ids | join(", ")) + " both declare " + .path),
+    ((.graph.ordersPastHandfulOfRows // [])[] | "order " + .id + " holds " + (.count | tostring) + " done-when rows for " + (if .owned == 0 then "no owned criterion" elif .owned == 1 then "1 owned criterion" else (.owned | tostring) + " owned criteria" end) + ", more than a handful of behaviours: remove-done-when for a row no criterion needs, or split the order")
+  ]
+};
+'
 
 # ---------------------------------------------------------------------------
 # 11. Print the one JSON report (stdout, always non-empty, never exit 0 with nothing said)
@@ -965,7 +1186,6 @@ jq -n \
   --argjson criteriaWithNoServingOrder "$CRITERIA_WITH_NO_SERVING_ORDER_JSON" \
   --argjson criteriaWithNoOwner "$CRITERIA_WITH_NO_OWNER_JSON" \
   --argjson criteriaWithMultipleOwners "$CRITERIA_WITH_MULTIPLE_OWNERS_JSON" \
-  --argjson criteriaWithUnusableVerifiedBy "$CRITERIA_WITH_UNUSABLE_VERIFIED_BY_JSON" \
   --argjson ordersServingNothing "$ORDERS_SERVING_NOTHING_JSON" \
   --argjson ordersMissingRequiredTests "$ORDERS_MISSING_REQUIRED_TESTS_JSON" \
   --argjson gateOrdersDeclaringTests "$GATE_ORDERS_DECLARING_TESTS_JSON" \
@@ -975,6 +1195,11 @@ jq -n \
   --argjson observeOrdersWithNoSurface "$OBSERVE_ORDERS_WITH_NO_SURFACE_JSON" \
   --argjson confirmOrdersOnTaskWithTests "$CONFIRM_ORDERS_ON_TASK_WITH_TESTS_JSON" \
   --argjson confirmOrdersOwningTestFiles "$CONFIRM_ORDERS_OWNING_TEST_FILES_JSON" \
+  --argjson testsOnlyRowsUnmatched "$TESTS_ONLY_ROWS_UNMATCHED_JSON" \
+  --argjson unstampedRunProofs "$UNSTAMPED_RUN_PROOFS_JSON" \
+  --argjson textOnlyTestOrders "$TEXT_ONLY_TEST_ORDERS_JSON" \
+  --argjson machineCriteriaOnTextOnlyOrders "$MACHINE_ON_TEXT_ONLY_JSON" \
+  --argjson machineCriteriaOnLookOrRecordOrders "$MACHINE_ON_LOOK_OR_RECORD_JSON" \
   --argjson testOrdersOwningNoMachineCriterion "$TEST_ORDERS_OWNING_NO_MACHINE_JSON" \
   --argjson unknownCriteriaIds "$UNKNOWN_CRITERIA_IDS_JSON" \
   --argjson unknownNonGoalIds "$UNKNOWN_NONGOAL_IDS_JSON" \
@@ -984,13 +1209,17 @@ jq -n \
   --argjson dependencyCycles "$DEPENDENCY_CYCLES_JSON" \
   --argjson orphanSupportOrders "$ORPHAN_SUPPORT_ORDERS_JSON" \
   --argjson ordersNotAfterSkeleton "$ORDERS_NOT_AFTER_SKELETON_JSON" \
+  --argjson lightOrdersOwningPathScript "$LIGHT_ORDERS_OWNING_PATH_SCRIPT_JSON" \
   --argjson overlappingOwnedFiles "$OVERLAPPING_OWNED_FILES_JSON" \
+  --argjson ordersPastHandfulOfRows "$ORDERS_PAST_HANDFUL_JSON" \
   --argjson globbedOwnedFiles "$GLOBBED_OWNED_FILES_JSON" \
+  --argjson testsOnlyOrdersBeforeTests "$TESTS_ONLY_BEFORE_TESTS_JSON" \
+  --argjson ordersOwningFrozenPaths "$ORDERS_OWNING_FROZEN_PATHS_JSON" \
   --argjson unrecordedIds "$UNRECORDED_IDS_JSON" \
   --argjson fileIssueCount "$FILE_ISSUE_COUNT" \
   --argjson contentIssueCount "$CONTENT_ISSUE_COUNT" \
   --argjson notChecked "$NOT_CHECKED_JSON" \
-  '{
+  "$OPEN_JQ"'{
     timestamp: $timestamp,
     taskPath: $taskPath,
     designDir: $designDir,
@@ -1006,7 +1235,6 @@ jq -n \
       criteriaWithNoServingOrder: $criteriaWithNoServingOrder,
       criteriaWithNoOwner: $criteriaWithNoOwner,
       criteriaWithMultipleOwners: $criteriaWithMultipleOwners,
-      criteriaWithUnusableVerifiedBy: $criteriaWithUnusableVerifiedBy,
       ordersServingNothing: $ordersServingNothing,
       ordersMissingRequiredTests: $ordersMissingRequiredTests,
       gateOrdersDeclaringTests: $gateOrdersDeclaringTests,
@@ -1016,6 +1244,11 @@ jq -n \
       observeOrdersWithNoSurface: $observeOrdersWithNoSurface,
       confirmOrdersOnTaskWithTests: $confirmOrdersOnTaskWithTests,
       confirmOrdersOwningTestFiles: $confirmOrdersOwningTestFiles,
+      testsOnlyRowsUnmatched: $testsOnlyRowsUnmatched,
+      unstampedRunProofs: $unstampedRunProofs,
+      textOnlyTestOrders: $textOnlyTestOrders,
+      machineCriteriaOnTextOnlyOrders: $machineCriteriaOnTextOnlyOrders,
+      machineCriteriaOnLookOrRecordOrders: $machineCriteriaOnLookOrRecordOrders,
       testOrdersOwningNoMachineCriterion: $testOrdersOwningNoMachineCriterion,
       unknownCriteriaIds: $unknownCriteriaIds,
       unknownNonGoalIds: $unknownNonGoalIds
@@ -1027,13 +1260,17 @@ jq -n \
       dependencyCycles: $dependencyCycles,
       orphanSupportOrders: $orphanSupportOrders,
       ordersNotAfterSkeleton: $ordersNotAfterSkeleton,
+      lightOrdersOwningPathScript: $lightOrdersOwningPathScript,
       overlappingOwnedFiles: $overlappingOwnedFiles,
+      ordersPastHandfulOfRows: $ordersPastHandfulOfRows,
       globbedOwnedFiles: $globbedOwnedFiles,
+      testsOnlyOrdersBeforeTests: $testsOnlyOrdersBeforeTests,
+      ordersOwningFrozenPaths: $ordersOwningFrozenPaths,
       unrecordedIds: $unrecordedIds
     },
     fileIssueCount: $fileIssueCount,
     contentIssueCount: $contentIssueCount,
     notChecked: $notChecked
-  }'
+  } | .open = open'
 
 exit "$EXIT_CODE"

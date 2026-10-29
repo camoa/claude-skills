@@ -23,17 +23,14 @@ Start lists each file git reports untracked or changed, and the work order that 
 gitignored file is never listed. A role stopped mid-run leaves such files, and the next role
 would work beside them.
 
-Interactive, start refuses and asks you. You have three choices:
-
-- Commit the file to keep it.
-- Run start again with `--leftovers keep`. The files stay as they are, for that run only.
-- Run start again with `--leftovers set-aside`.
+Start sets such files aside itself, in both run modes, and writes a warning naming them. To keep a
+file, commit it before start. Or run start with `--leftovers keep`, and the files stay as they
+are, for that run only. Keeping needs your answer on record.
 
 Set aside moves each untracked file to `implementation/set-aside/<time>/` in the task folder. A
 changed file is copied there, and its committed version comes back. Nothing is deleted. A deleted
-file or a staged new file cannot be set aside, so set aside refuses on it. Commit it, undo it by
-hand, or keep it with `--leftovers keep`. Unattended, start sets the files aside itself, and
-`--leftovers keep` refuses.
+file or a staged new file cannot be set aside, so it stays in the tree, and a warning names it.
+Commit it or undo it by hand.
 
 The usual first-run case is `package-lock.json`, changed when `task environment up` installed a
 test harness. Commit it.
@@ -45,16 +42,13 @@ next test author is told where the latest copy of each one is.
 
 Start prints one line per fact. It says whether this is a new run or a resumed one, and gives
 the snapshot and ledger paths. It names the order in flight, the orders ready to build, and each
-halted order with its reason. It ends with `next:`, the step that comes after.
+stopped order with its reasons. It ends with `next:`, the step that comes after.
 
 - `drift: not checked` on a first run means nothing was compared yet. It does not mean nothing
   changed.
 - `proofAbsent:` names orders from a design closed before work orders had a proof kind. Each is
   proved by tests unless design sets `gate` on it. A configuration order on that line would go to
   a test author, so check it before the first order.
-- `partialBuild(<order>):` names an order sent back to its tests while its earlier build commits
-  are still on the branch, after a retake or a restart. The tree still holds that order's earlier
-  code, and its test author is told so. The line stops once the order is built again.
 
 What a resumed run reports about a changed design is in [Change the design
 mid-build](drift.md). A rewritten branch is in [Come back to a build](resume.md).

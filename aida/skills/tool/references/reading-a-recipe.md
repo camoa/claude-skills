@@ -25,7 +25,7 @@ its own. Add one for a tool that no catalog id fits, such as a spell checker. Do
 tool as a command a person runs by hand. `skills/review/references/checks.md` says how review and
 the baseline treat the added row. A verify run line that equals its argv runs with no approval. A
 task past preconditions adopts the changed copy with `implement-actions.sh recipe-refresh
---check-recipe <framework>=<path>`, or every check stops at exit 73.
+--check-recipe <framework>=<path>`, or every review check stops at exit 73.
 
 ## The verdicts
 

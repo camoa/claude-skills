@@ -1,39 +1,48 @@
 # The design check refuses to close
 
-Design closes only when its check passes on the live work orders, and implementation refuses to
-start until it does. The check names each problem. AIDA repairs the work orders and checks again;
-a few problems need your answer. What the check holds, in full, is on
-[the design check](../stages/design/check.md).
+Design closes when its check finds nothing that stops it, and implementation refuses to start
+until it does. The check names each finding, sorted by what it does. What the check holds, in
+full, is on [the design check](../stages/design/check.md).
 
-## Refusals at check and close
+## What stops, and what warns
 
-- **Exit 5: the work orders do not fit together.** For example, a criterion no order owns, two
-  orders owning one file that neither marks shared, or a dependency cycle. AIDA repairs the
-  orders.
-- **Exit 7: a research finding no order accounts for.** Each one prints as `<search>#<n>` with
-  its first line. AIDA records which order accounts for it, or why none does.
-- **Exit 8: an unattended choice not confirmed.** On an unattended close, a reuse decision that a
-  second agent did not confirm stops the close. AIDA records the decision again with that agent's
-  verdict. When the agent answers `supersede`, a person decides.
-- **Exit 9: two names joined by `or`.** An order's interface offers a choice, and the builder
-  would leave one name out. Write the choice as plain text, or keep both names when each must
-  exist.
+- **Exit 5: the work orders cannot be built from.** A file that does not match its shape, an id
+  that names nothing, an owned path that is not one literal path, a dependency cycle, or an order
+  whose proof does not fit its tests, rows or files. AIDA repairs the orders and checks again.
+  These shapes stop too:
+  - a `tests` order whose every owned file is a document or configuration;
+  - a machine-verified criterion that such an order owns. Nothing there can test it, so make the
+    criterion a person's;
+  - a machine-verified criterion that an `observe` or `record` order owns, with no run line
+    proving it. Make the criterion a person's, or prove it with a run line;
+  - a tests-only order whose done-when rows and owned files do not match, or that does not come
+    after every `tests` order. See [clean up a test suite](../task/test-cleanup.md);
+  - a tests-only order, or a `tests` order whose owned files are all tests, that owns a test
+    another open task froze;
+  - on a light task, an order that owns a file of the registered demo-path script.
+- **Unattended only, exit 5 or 7: what a person would read first.** A criterion with no serving
+  order, no owner or two owners. A machine-verified criterion that a `confirm`, `observe` or
+  `record` order rests on a run line nobody approved. A research finding no order accounts for
+  (exit 7). With you
+  present, each is a warning. A confirm order that is code on a task with tests, or that owns a
+  test file, stops in both modes.
+- **Warnings.** Two orders that declare one owned file, an order that serves nothing, a supporting
+  order no owner reaches, an order with more than eight done-when rows or more than three for each
+  criterion it owns, and a reuse decision a second agent did not confirm. Design shows them, the
+  close writes them to the task record, and review lists them.
 
 ## A command that proves a criterion
 
 A model wrote it from research, so it runs only with your yes at the close, unless it matches the
 check recipe word for word. A line you did not approve never runs: the reviewer reads it as a
-check instead. On an unattended run the close goes ahead without it. Only an unattended close
-asked to approve the lines refuses (exit 3) and lists them; your answer reaches it as
-[a person's answer](person-must-answer.md). See [prove a criterion by a command](../stages/design/verify.md).
+check instead. Your yes is [a person's answer](person-must-answer.md), in every run mode. Without
+it, a close asked to approve the lines refuses (exit 70) and lists them. See
+[prove a criterion by a command](../stages/design/verify.md).
 
-## Refusals while editing an order
+## While editing an order
 
-- **Merge** refuses two orders whose proofs differ, and an order merged into itself.
-- **Remove** refuses an order implementation started, one another order depends on, or the only
-  order that serves or owns a criterion.
-- **Remove an owned file** refuses the last file an order owns.
-- **Add an owned file** refuses an ignored path on an order proved by its record (exit 3).
+Merge, remove and the remove calls refuse only a malformed call. What an edit leaves wrong, such
+as a criterion no order serves or an order with no owned file, the next check names.
 
 ## When the design changes after the build started
 
@@ -51,14 +60,15 @@ These changes are taken in place, and the order keeps its tests and attempts:
   with no done-when row takes them until its review;
 - a changed verify clause on a criterion whose frozen tests and records never named it.
 
-Any other change halts a started order for design drift. See
-[change the design mid-build](../stages/implement/drift.md) and [a work order halted](halts.md).
+Any other change to a started order is a change mid-build: a warning with you present, a stop with
+nobody present. See
+[change the design mid-build](../stages/implement/drift.md) and [a work order stopped](stopped.md).
 
 ## Why it works this way
 
 - **Each criterion has one owner.** Exactly one order's tests can prove it, so nothing is proved
   twice or not at all.
-- **A change the frozen tests never read halts nothing.** The build only stops for a change that
+- **A change the frozen tests never read stops nothing.** The build only stops for a change that
   would make what is built disagree with what is frozen.
 
 Source: skills/design/SKILL.md, skills/design/scripts/design-actions.sh, scripts/check-design.sh, skills/implement/scripts/implement-actions.sh, skills/implement/references/start.md

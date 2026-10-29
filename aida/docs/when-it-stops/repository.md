@@ -18,33 +18,30 @@ When AIDA cannot work out the trunk, it says so and goes on. See
 
 ## Uncommitted files
 
-- **Exit 61.** The tree holds uncommitted work. A record step, `close`, `finish`, a restart, and
-  review's checks all refuse it. Commit the work, then run the step again. On an unattended run
-  the record step also halts the order; clear the halt after you commit.
-- **Exit 104 at `start`.** A role stopped mid-run left files, or an install changed one, such as
-  `package-lock.json`. Commit a file to keep it, keep the files for this run only, or set them
-  aside. The choices, and where set-aside files go, are on
-  [start the build](../stages/implement/start.md).
+- **Exit 61.** The tree holds uncommitted work. A record step, going on with the checks, a redo,
+  a drop, and review's checks all refuse it. Commit the work, then run the step again. On an
+  unattended run the record step also stops the order; AIDA goes on after you commit. At `close`
+  and `finish` uncommitted work is a warning.
+- **Files a stopped role left, at `start`.** A role stopped mid-run left files, or an install
+  changed one, such as `package-lock.json`. Start sets them aside and warns. Commit a file first
+  to keep it. Where set-aside files go is on [start the build](../stages/implement/start.md).
 
 ## The code moved after a record
 
-- **In review, exit 51.** The code changed after `checks` ran. Run `checks` again.
-- **Before a fix round is checked, exit 63.** Commits landed after the fix record. When no
-  verifier has read the round yet, AIDA records the round again at the new commit, and no round
-  is spent.
-- **At an order's close, exit 63.** Commits landed after the order's last record, and nothing is
-  open to take them. When they are your fix after a finding you ruled load-bearing, clear the
-  halt, then let AIDA run `build-recheck`. See [the review of one work order](order-review.md).
-  Otherwise move the branch back to the commit the message names, and put that later work in a
-  follow-up task. Or run the restart, which sets every order's records aside. See
-  [a work order halted](halts.md).
+- **In the task review.** The code changed after `checks` ran. With you present it is a warning;
+  an unattended run refuses at exit 51. Run `checks` again.
+- **In a work order, exit 63.** Commits landed after the order's last record, and they change a
+  frozen test or a file the order does not own. No record judged them. Move the branch back to the
+  commit the message names, or redo the order. See [a work order stopped](stopped.md). Commits
+  inside the order's own files do not stop the build: AIDA writes a warning into the task record,
+  keeps them on the order's commit list, and goes on. Review lists the warning.
 
 ## The branch was rewritten
 
 - **Exit 82.** A rebase or an amend rewrote the branch under the build. Run
   `start --rebased-onto <commit>`, then retake the baseline by hand. Until then the record steps
   and `finish` refuse with exit 21.
-- **Exit 83.** The baseline was written by an earlier version of AIDA. Retake it the same way.
+- **Exit 3.** The baseline was written by an earlier version of AIDA. Retake it the same way.
 
 The steps, and when the flag refuses, are on [come back to a build](../stages/implement/resume.md).
 

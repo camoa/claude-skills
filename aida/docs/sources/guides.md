@@ -37,8 +37,8 @@ cited is a finding under the guides check. A guide the code contradicts is also 
 catalog note in the review summary.
 
 When no guide body is on disk, review searches once for current practice for the frameworks, and
-the reviewer judges against what it finds. When that search finds nothing, review asks you
-whether any guide covers the task. If none does, you judge the diff yourself, met or unmet. See
+the reviewer judges against what it finds. When that search finds nothing, the guides and
+practices checks read unknown, a warning you read at the close. See
 [Review](../stages/review/README.md).
 
 ## Why it works this way

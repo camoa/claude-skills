@@ -36,7 +36,8 @@ When the task stays flat, research names `/aida:design <task-id>` and stops. It 
 design for you, unless the task's run mode covers design. See
 [Research on an autonomous or light run](unattended.md) and [Design](../design/README.md).
 
-The distiller or the advisor can fail to write a record. See
+The distiller or the advisor can fail to write a record. Research sends it once more, and a
+second miss is a warning. See
 [The research check refuses to close](../../when-it-stops/research-check.md).
 
 ## Why it works this way

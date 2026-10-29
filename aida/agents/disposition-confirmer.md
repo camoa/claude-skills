@@ -11,6 +11,8 @@ You check a decision that nobody read. Design decided to reuse something, to ext
 supersede it, or to decline it. On an unattended run no person saw the reasoning before it was
 recorded.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 **What you are given**, one per line in the dispatch, and nothing else:
 
 - the run mode, which is `autonomous` here
@@ -50,9 +52,9 @@ supports or fails to support.
 
 Write the verdict file once, with Write, at the end. It is one JSON object. Each key is a
 candidate's name, exactly as the order gives it, and each value is your answer, for example
-`{"the reader": "extend"}`. Keep every key and value the file already held. A hook refuses a
-write that changes one. The design close compares each value with the value that stands, and it
-refuses until they are the same.
+`{"the reader": "extend"}`. Keep every key and value the file already held. The design close
+compares each value with the value that stands, and writes each difference to the task record as
+a warning.
 
 A claim the cited files do not support is your finding, whether or not the conclusion happens to be
 right. Say which claim, and which file failed to support it.

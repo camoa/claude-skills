@@ -26,8 +26,8 @@ your project.
 Every task runs through six stages. Scope writes a contract: the goals, the non-goals, and the
 criteria that prove each goal was met. Research looks for prior art in your own code first, then
 outside, and reads current documentation rather than the model's memory. Design writes a spec
-detailed enough to build from. Implementation writes the tests first. Review runs the blocking
-checks and compares the result against the contract. Completion closes the task on that verdict
+detailed enough to build from. Implementation writes the tests first. Review runs the checks, runs
+the product, and compares the result against the contract. Completion closes the task on that verdict
 and writes the pull request body from the records.
 
 Two things hold the process together.
@@ -52,18 +52,20 @@ make a decision once.
 | Research | prior art, the guides to read, and how this is done today |
 | Design | the spec: what to build, where the logic lives, which pattern each part follows |
 | Implementation | the code, written test first, reviewed as it lands |
-| Review | the blocking checks, and the result held against the contract |
+| Review | the checks, evidence from running the product, and the result held against the contract |
 | Completion | the pull request body, and the task closed on the review's verdict |
 
 ## Status
 
-Version 6. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. Every stage is
-built against behaviour fixtures. On every pull request, continuous integration runs the structure
-specs and the behaviour suite in `tests/behaviour`, under bash on Linux. The suite runs each stage
-end to end, and tests the hooks that guard commands, writes, reads, stops and compaction. The
-plugin's scripts run under bash, whatever shell the session uses. Live tasks on real projects have
-run since the betas, and each release fixes the defects they found. Copilot CLI, Codex, Cursor,
-OpenCode and Antigravity are not supported yet. A task to support them is open.
+Version 6. A rewrite of `ai-dev-assistant`, which it replaces in the marketplace. On every pull
+request, continuous integration runs the specs in `tests/`, under bash on Linux. The static specs
+read the scripts and the prose. The behaviour specs test the five hard stops: frozen tests, owned files, the trunk, the
+person's answer, and a test newly broken at finish. They also test the three ways out of
+a stopped work order, the test freeze and the command hook. Each one calls one step directly, on
+records it writes itself. The plugin's scripts run under bash, whatever shell the session uses.
+Live tasks on real projects have run since the betas, and each release fixes the defects they
+found. Copilot CLI, Codex, Cursor, OpenCode and Antigravity are not supported yet. A task to
+support them is open.
 
 ## Installing it
 

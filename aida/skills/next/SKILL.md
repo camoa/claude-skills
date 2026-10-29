@@ -61,7 +61,8 @@ Each `OPEN:` line is one of two shapes:
   record. An open task reading `passed` or `failed` is reviewed, and completion closes it. Also
   `notes`: the date of the newest file under the task's `notes/`, or `none`. It also carries
   `worktree`: the path of the task's own git worktree, or `none` for a task made before every
-  task had one, or one waiting on another task's build (`afterBuild`, below). With a path it carries `worktreeOnDisk` too, `yes` or `no`: whether that folder
+  task had one, or one waiting on another task's build (`afterBuild`, below). A follow-up and a
+  split's child read `none` too, until `start` makes the tree. With a path it carries `worktreeOnDisk` too, `yes` or `no`: whether that folder
   is on this machine. The key is absent with `none`.
   And `stage`: where the task stands, the first stage whose close record is absent,
   one of `scope`, `research`, `design`, `implement`, `review`, `completion`.
@@ -195,7 +196,7 @@ Read the first line.
   inside one. Move it, above. Then run the same action again. Read it as `FOUND: new`.
 - **`FOUND: legacy_complete`.** The same lines follow. Say plainly that this task finished before
   the tasks folder existed and stays where it is: no contract is offered on it here.
-- **`REFUSED: ...`** on stderr. The name is not a safe task id (a path separator, `.` or `..`).
+- **Exit 3** naming the target: the name is not a safe task id (a path separator, `.` or `..`).
   Say so and ask for a different one.
 - **`NOT FOUND: <target>`** on stderr. Say so, then offer the same choice as "With nothing open,"
   above: start a new task with this name, or show what is open instead.

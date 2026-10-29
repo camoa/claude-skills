@@ -18,7 +18,8 @@ lines. Design writes a run line only when the source gives the command. A source
 a result in words gives a check line. A line from research is not binding, because this project
 never accepted that source.
 
-A run line is a list of arguments, never a shell. Design refuses a shell character in it.
+A run line is a list of arguments, never a shell. Design refuses a shell character in a line you
+give. A recipe entry with one is skipped, with a warning.
 
 ## A run line that proves a criterion
 
@@ -34,12 +35,13 @@ criterion needs at least one, even when a run line proves that criterion.
 
 Before the close, design shows each order that holds a line that is not binding, with its
 sources. For each line you keep it, drop it, or ask for another source. To let a kept run line
-run, say yes to it, and design records your approval at the close. An unapproved run line is
+run, say yes to it. Your yes is a person's answer, in every run mode, and design records it at
+the close. An unapproved run line is
 judged by the reviewer as a check.
 
 Which lines run without your yes, and what happens when nobody is present, is in
 [The design check refuses to close](../../when-it-stops/design-check.md). How a person's answer
-reaches an autonomous run is in [Answer for a person in an unattended run](../../task/person-answer.md).
+reaches an autonomous run is in [the person's answer](../../task/person-answer.md).
 
 ## What each proof does with the lines
 

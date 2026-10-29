@@ -71,58 +71,19 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Exit codes, each one and only one meaning:
 #   0  did what was asked. For `read`, this includes an honest report that no contract exists yet
-#      and that no research has started yet. For `check`, this is check-research.sh's own exit 0.
-#   1  the given path does not exist, is not a folder, or holds no task.json: not a task folder
-#      (ideal/scope.md, 'Scope runs against a task that already exists', the same rule a task
-#      part applies to every stage that runs against one). This is the only meaning of exit 1
-#      from this script, for every action, `check` included: check-research.sh's own exit 1
-#      means something else, a research file is malformed, and it is remapped to 4 below so a
-#      caller branching on 1 never confuses "not a task folder" with "a file is broken".
-#   2  the target of this action is not present: `start` was asked to begin a task with no
-#      alignment.json, or with one that will not parse or is not a contract (an object carrying
-#      schemaVersion, goal, expectedResult, and criteria/nonGoals as arrays). Research reads the
-#      contract's criteria to know what it is answering for (ideal/research.md, 'The criteria are
-#      what stops research'), so it refuses to start without one rather than starting blind.
-#      Or `distill` found no records/research-distill.json, so the distiller has not been
-#      dispatched yet. A light task's `distill` reads no sidecar (distill_deferred).
-#      Or `split-read` found no records/research-split.json, so the split-advisor has not
-#      been dispatched yet.
-#   3  the script could not do its job: a missing, blank or malformed argument; an argument value
-#      that is itself another option; a `--search` that is not lowercase letters, digits and
-#      single hyphens; a `--criteria-served` entry that is not a valid criterion id shape; a
-#      research file already on disk that is not valid JSON or is not a JSON object; a research
-#      file already on disk whose searchedFor is absent, empty, not a string, or a different set
-#      of words from the one this call gives (one search records one set of words, and this
-#      script never rewrites the field on a file that already exists); a --recipe-fit outside its
-#      three words, without its two companions, or differing from the recipeFit on disk; a `serve`
-#      or `drop` naming a search with no file, or a --finding not shaped <search>#<n> from 1 or
-#      naming no finding in that file, or the old --search and --index pair; a `serve` with no
-#      --criteria-served; the plugin root could not be resolved; a write that failed; a call to
-#      research-render.sh failing to produce <search>.md; or `check`'s own call to check-research.sh failing to run at all
-#      (check-research.sh's own exit 3, meaning it could not do its job either).
-#   4  `check` ran and found a research file that cannot be read as this format: not valid JSON,
-#      not an object, or a missing, malformed or unknown field at any depth (check-research.sh's
-#      own exit 1, remapped here so it never collides with this script's own exit 1, "not a task
-#      folder"). Since 2026-09-23 a malformed finding lands here rather than under 5: the schema
-#      comparison reads every level, so a fault a schema can state is a schema fault.
-#      Or `distill` found a sidecar that fails scripts/distill-schema.json, or says
-#      standsAlone false with no gap.
-#      Or `split-read` found a sidecar that is not in the split-advisor's shape, or whose
-#      children do not claim every contract criterion exactly once (the id is on stderr).
-#      Either malformed sidecar is moved aside first, to <name>.malformed-<date>.json, and
-#      stdout names it in a `setAside:` line.
-#   5  `check` ran, every research file reads fine, but the coverage itself has a problem: a
-#      criterion with no finding, a finding with no criterion, a criteriaServed id naming no
-#      criterion in the contract, or a finding text citing a finding research does not hold
-#      (check-research.sh's own exit 4).
-#   6  `check` found the coverage clean, but <codePath>/.aida-spike/ still exists. A spike is a
-#      throwaway experiment research writes to answer one question (skills/research/SKILL.md,
-#      "A spike"). Research closes only once it is deleted, so nothing throwaway ships. The
-#      report is still written, with exitCode 6. A coverage gap outranks this: a spike open
-#      mid-research is fine.
-#   7  `check` found the coverage clean, but the contract says no automated tests and
-#      records/test-runner.json does not exist: the runner check never ran (gap row 366). The
-#      report is still written, with exitCode 7. A spike outranks this.
+#      and that no research has started yet. For `check`, nothing found stops research, and the
+#      check is the close. What it found that does not stop is a warning in the task record: a
+#      criterion with no finding, a finding with no criterion, an id or a citation that resolves
+#      to nothing, a spike folder left in the tree, or no runner record on a task with no automated
+#      tests. For `distill` and `split-read`, a missing or unusable sidecar is a warning too.
+#   3  the call or the script could not do its job: not a task folder, no contract to start from,
+#      a missing or malformed argument, a --search not in lowercase letters, digits and single
+#      hyphens, a --criteria-served entry that is not a criterion id shape, a research file on disk
+#      that does not parse or holds no usable searchedFor, a --finding that names nothing, a write
+#      or a render that failed, or check-research.sh that could not run. Nothing was written.
+#   5  `check` found a research file that is not in its format, or the run is unattended and the
+#      check found a criterion with no finding, or an id or a citation that resolves to nothing.
+#      Nobody reads the warning before design builds on it, so the close stops instead.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # `read` also reports <task_folder>/inputs/, the material captured before the task existed. Its
@@ -131,7 +92,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # was lost" are different facts, and the second must never read as the first.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular
-# expression interval quantifier anywhere, the same rule scope-actions.sh and check-alignment.sh
+# expression interval quantifier anywhere, the same rule scope-actions.sh and design-actions.sh
 # state for the same reason (foundations.md, Honesty). An id's own shape is checked with a `case`
 # glob (`c[1-9][0-9]*`), never a regular expression, the same way scope-actions.sh checks one.
 
@@ -160,15 +121,12 @@ CHECK_RESEARCH_SCRIPT="${PLUGIN_ROOT}/scripts/check-research.sh"
 
 command -v jq >/dev/null 2>&1 || { printf 'research-actions: jq is required and was not found on PATH\n' >&2; exit 3; }
 
-# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
-die1() { printf 'research-actions: %s\n' "$1" >&2; exit 1; }
-die2() { printf 'research-actions: %s\n' "$1" >&2; exit 2; }
-die3() { printf 'research-actions: %s\n' "$1" >&2; exit 3; }
-die4() { printf 'research-actions: %s\n' "$1" >&2; exit 4; }
-# The refusal recipes.sh calls. `runner` reaches only its exit 3 paths.
 die() { printf 'research-actions: %s\n' "$2" >&2; exit "$1"; }
+die3() { die 3 "$1"; }
 # shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
-die79() { printf 'research-actions: %s\n' "$1" >&2; exit 79; }
+die1() { die 3 "$1"; }
+# shellcheck disable=SC2329 # called by functions in scripts/lib/task-helpers.sh
+die79() { die 79 "$1"; }
 
 usage() {
   cat <<'EOF' >&2
@@ -324,7 +282,7 @@ do_start() {
   [ "$#" -eq 0 ] || die3 "start: unrecognized argument: $1"
 
   [ "$(contract_ok)" = "true" ] \
-    || die2 "start: $ALIGNMENT_FILE not found, unreadable, or not a contract. Run the scope skill on this task first"
+    || die3 "start: $ALIGNMENT_FILE not found, unreadable, or not a contract. Run the scope skill on this task first"
 
   mark_task_in_progress "$TASK_PATH" "research started" research
   mkdir -p "$RESEARCH_DIR" || die3 "start: could not create $RESEARCH_DIR"
@@ -516,9 +474,9 @@ do_record() {
     # The search is the unit, so one search records one set of words. A broadened search is a
     # new search with its own name, not a widened record: merging the two would leave every
     # finding already in the file claiming a bound only some of them were found under. So this
-    # script never writes searchedFor onto a file that already exists. It reads what is there and
-    # refuses anything that does not match, and a missing field, an unreadable one, an empty one
-    # and a conflicting one are four different facts with four different messages.
+    # script never writes searchedFor onto a file that already exists. A missing, unreadable or
+    # empty one is refused, each with its own message. A different one keeps the stored words, and
+    # the difference is a warning.
     local stored_type stored_searched_for
     stored_type="$(jq -r 'if has("searchedFor") then (.searchedFor | type) else "absent" end' "$file")"
     case "$stored_type" in
@@ -527,9 +485,8 @@ do_record() {
         if [ -z "$stored_searched_for" ]; then
           die3 "record: $file records searchedFor as an empty string, so its findings state no bound. This script does not repair that: record this search again under a new --search name"
         fi
-        if [ "$stored_searched_for" != "$searched_for" ]; then
-          die3 "record: $file already records searchedFor as '$stored_searched_for', and this call gives '$searched_for'. One search records one set of words; give a new --search name for a different search"
-        fi
+        [ "$stored_searched_for" = "$searched_for" ] \
+          || task_warn "$TASK_PATH" "research record" "" "$file keeps searchedFor '$stored_searched_for', and a finding was added under '$searched_for'. A different search takes a new --search name"
         ;;
       absent)
         die3 "record: $file records no searchedFor at all, so the findings in it were found under a bound nobody wrote down. Stamping '$searched_for' on them here would claim a bound they were never found under; record this search again under a new --search name"
@@ -539,9 +496,8 @@ do_record() {
         ;;
     esac
     local stored_fit; stored_fit="$(jq -Sc '.recipeFit // empty' "$file")"
-    if [ -n "$fit_json" ] && [ -n "$stored_fit" ] && [ "$stored_fit" != "$fit_json" ]; then
-      die3 "record: $file already records a recipeFit, and this call gives a different one. One judgment gets one record; give the same three values, or leave the flags off"
-    fi
+    [ -z "$fit_json" ] || [ -z "$stored_fit" ] || [ "$stored_fit" = "$fit_json" ] \
+      || task_warn "$TASK_PATH" "research record" "" "$file keeps its recipeFit $stored_fit, and this call gave $fit_json"
     doc="$(jq --argjson f "$finding_json" '.findings = ((.findings // []) + [$f])' "$file")" \
       || die3 "record: could not add the new finding to $file"
   else
@@ -762,8 +718,7 @@ do_runner() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# check: calls check-research.sh and remaps its exit code onto this script's own vocabulary, so
-# exit 1 keeps one meaning across every action here (see the exit-code table above).
+# check: calls check-research.sh and maps its exit code onto this script's own table above.
 # ------------------------------------------------------------------------------------------------
 
 do_check() {
@@ -779,37 +734,52 @@ do_check() {
   bash "$CHECK_RESEARCH_SCRIPT" "$TASK_PATH" >"$CHECK_FILE"
   rc=$?
   case "$rc" in
-    0) verdict=0 ;;
-    1) verdict=4 ;;
+    0|4) verdict=0 ;;
+    1) verdict=5 ;;
     3) verdict=3 ;;
-    4) verdict=5 ;;
     *) die3 "check: check-research.sh exited with an unexpected code $rc" ;;
   esac
-  # Clean coverage is the close, and a spike still on disk refuses it. No project or no codePath
-  # means no place a spike could be, so there is nothing to refuse. The place is the task's own
-  # worktree when task.json records one, and the code path when it does not.
-  local spike_dir="" project_folder
+  # Coverage a person reads at the close, as warnings. Unattended, nobody reads them before design
+  # builds on the findings, so a gap in the grounding stops the close instead. A finding that
+  # serves no criterion costs reading time only, so it never stops.
+  local gaps="" orphans="" spike_dir="" project_folder line
+  if [ "$rc" -eq 4 ]; then
+    gaps="$(jq -r '
+      ((.coverage.criteriaWithNoFinding // [])[] | "criterion " + .id + " has no finding"),
+      ((.coverage.unknownCriteriaIds // []) | map(.id) | unique[] | "a finding names " + . + ", which is not a criterion of the contract"),
+      ((.danglingCitations // [])[] | .path + " finding " + (.finding | tostring) + " cites " + (.cites | tostring) + ", which research does not hold")' "$CHECK_FILE")"
+    orphans="$(jq -r '(.coverage.findingsWithNoCriterion // []) | length | select(. > 0)
+      | tostring + (if . == 1 then " finding serves" else " findings serve" end) + " no criterion"' "$CHECK_FILE")"
+    [ -z "$gaps" ] || [ "$(task_run_mode "$TASK_PATH" research)" != autonomous ] || verdict=5
+  fi
+  # A spike is throwaway, and the stage commits name only task paths, so one left in the tree is
+  # a warning. The place is the task's own worktree when task.json records one, and the code
+  # path when it does not.
   if [ "$verdict" -eq 0 ] && project_folder="$(resolve_project_folder "$TASK_PATH")" \
       && [ "$(project_code_path_state "$project_folder")" = "ok" ]; then
     spike_dir="$(jq -r '.worktree.path // empty' "$TASK_PATH/task.json" 2>/dev/null)"
     [ -n "$spike_dir" ] || spike_dir="$(project_code_path_value "$project_folder")"
     spike_dir="${spike_dir:+$spike_dir/.aida-spike}"
-    [ -n "$spike_dir" ] && [ -d "$spike_dir" ] && verdict=6
   fi
-  # A task with no automated tests closes only once the runner check has run, in every run mode,
-  # so a skipped step is caught here rather than trusted (gap row 366).
-  [ "$verdict" -eq 0 ] && [ "$(automated_tests "$TASK_PATH")" = "no" ] \
-    && [ ! -f "$TASK_PATH/$TEST_RUNNER_RECORD" ] && verdict=7
-  # The report's exitCode is what design's `start` reads, so a spike or runner refusal must land
-  # there too. check-research.sh wrote 0; left alone, design would accept a task research refused.
-  [ "$verdict" -eq 6 ] || [ "$verdict" -eq 7 ] \
-    && write_atomic "$CHECK_FILE" "$(jq --argjson v "$verdict" '.exitCode = $v' "$CHECK_FILE")"
+  if [ "$verdict" -eq 0 ]; then
+    while IFS= read -r line; do
+      [ -z "$line" ] || task_warn "$TASK_PATH" "research check" "" "$line"
+    done < <(printf '%s\n%s\n' "$gaps" "$orphans")
+    [ -z "$spike_dir" ] || [ ! -d "$spike_dir" ] \
+      || task_warn "$TASK_PATH" "research check" "" "the spike folder $spike_dir is still in the tree. Delete it, so nothing throwaway ships"
+    # Implementation's preconditions establish whether the repository can build and test (gap row 366).
+    [ "$(automated_tests "$TASK_PATH")" != "no" ] || [ -f "$TASK_PATH/$TEST_RUNNER_RECORD" ] \
+      || task_warn "$TASK_PATH" "research check" "" "the task has no automated tests and $TASK_PATH/$TEST_RUNNER_RECORD does not exist, so the runner check never ran"
+  fi
+  # The report's exitCode is what design's `start` and the task's stage read, so it carries this
+  # verdict, not check-research.sh's own code.
+  write_atomic "$CHECK_FILE" "$(jq --argjson v "$verdict" '.exitCode = $v' "$CHECK_FILE")"
   # A clean check is the close, when a stated mechanism counts as grounded. One sha256 per
   # mechanismHints[].approach in task.json, each hashed as its own compact JSON string, goes into
   # the report so design's `start` can tell a claim edited later. Same computation there.
   if [ "$verdict" -eq 0 ]; then
     records_hash__resolve_sha256_cmd || die3 "check: neither sha256sum nor 'shasum -a 256' was found on PATH"
-    local hashes='[]' line h
+    local hashes='[]' h
     while IFS= read -r line; do
       [ -n "$line" ] || continue
       h="$(printf '%s' "$line" | "${RECORDS_HASH_SHA256_CMD[@]}" | cut -d' ' -f1)"
@@ -828,13 +798,7 @@ do_check() {
   echo "status: $verdict"
   echo "lines: $lines"
   echo "report: $CHECK_FILE"
-  if [ "$verdict" -eq 6 ]; then
-    echo "spike: $spike_dir"
-    printf 'research-actions: check: coverage is clean, but the spike folder %s still exists. Delete it, then check again; nothing throwaway ships\n' "$spike_dir" >&2
-  fi
-  [ "$verdict" -eq 7 ] \
-    && printf 'research-actions: check: the task has no automated tests and %s does not exist. Run the runner check, then check again\n' "$TASK_PATH/$TEST_RUNNER_RECORD" >&2
-  if [ "$verdict" -eq 4 ] || [ "$verdict" -eq 5 ]; then
+  if [ "$verdict" -eq 5 ]; then
     echo "open: $(jq -r '
       [ ("criteria with no finding: " + ((.coverage.criteriaWithNoFinding // []) | map(.id) | join(" "))
           | select(endswith(": ") | not)),
@@ -857,13 +821,21 @@ do_distill() {
 }
 
 # Reads the sidecar the split-advisor wrote, checks it against the contract, and prints summary
-# lines. The recommendation is the value and a person decides; nothing here splits.
+# lines. The recommendation is the value and a person decides; nothing here splits. Advice that
+# is missing or unusable is a warning, and the task goes on flat.
+split_missing() {
+  task_warn "$TASK_PATH" "research split-read" "" "$1, so the task goes on flat"
+  echo "recommendation: none"
+  exit 0
+}
 do_split_read() {
   [ "$#" -eq 0 ] || die3 "split-read: unrecognized argument: $1"
   local sidecar="$TASK_PATH/records/research-split.json" fault
-  [ -f "$sidecar" ] || die2 "split-read: no sidecar at $sidecar. Dispatch the split-advisor first"
+  if [ ! -f "$sidecar" ]; then
+    split_missing "no split advice at $sidecar"
+  fi
   jq empty "$sidecar" 2>/dev/null \
-    || { sidecar_set_aside "$sidecar"; die4 "split-read: $sidecar could not be read as JSON"; }
+    || { sidecar_set_aside "$sidecar"; split_missing "the split advice at $sidecar could not be read as JSON, and was set aside"; }
   # One jq program prints the first fault, or nothing when the sidecar holds. The child id pattern
   # is the one scripts/task-schema.json declares; a criterion is a fault when no child claims it
   # or two do, since the split hands each one down exactly once.
@@ -890,7 +862,7 @@ do_split_read() {
         elif $unknown then "criterion \($unknown) is not in the contract"
         else empty end
     end' "$sidecar")"
-  [ -z "$fault" ] || { sidecar_set_aside "$sidecar"; die4 "split-read: $sidecar: $fault"; }
+  [ -z "$fault" ] || { sidecar_set_aside "$sidecar"; split_missing "the split advice at $sidecar was set aside: $fault"; }
   echo "recommendation: $(jq -r '.recommendation' "$sidecar")"
   echo "children: $(jq -r '.children | length' "$sidecar")"
   jq -r '.children[] | "child: " + .id + " " + (.criteria | length | tostring) + " criteria"' "$sidecar"

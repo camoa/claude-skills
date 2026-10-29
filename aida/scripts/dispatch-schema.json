@@ -35,7 +35,7 @@
     "resumedAt": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
-      "description": "Present once the role returned with no report and `dispatch-close --no-report` kept the record open for one resume by message, UTC, to the second (gap row 228). `dispatch-open --resume` writes it at once, equal to openedAt, when the earlier record was already closed. A `--no-report` once `resumes` reaches `resumesAllowed` halts the order and removes the record (exit 110)."
+      "description": "Present once the role returned with no report and `dispatch-close --no-report` kept the record open for one resume by message, UTC, to the second (gap row 228). `dispatch-open --resume` writes it at once, equal to openedAt, when the earlier record was already closed. A `--no-report` once `resumes` reaches `resumesAllowed` is a warning, and the record is removed. A capped builder spends an attempt, and another role's cap counts toward the order's attempt limit, so the cap that reaches that limit stops the order, as does a cap whose commits breach the frozen tests or the owned files."
     },
     "resumes": {
       "type": "integer",
@@ -53,12 +53,6 @@
       "minimum": 1,
       "maximum": 2,
       "description": "Present on an implementer's record (gap row 301): 2 when the order's diffBudget in the frozen snapshot starts with the word `large`, else 1. `dispatch-open` derives it and never takes it by hand. Absent means 1. The runtime reads `maxTurns` from the agent definition alone. The Agent tool takes no turn cap per call. So a larger turn budget is one more resume at the same cap."
-    },
-    "rowsToCheck": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "type": "string", "pattern": "^wo[1-9][0-9]*:[1-9][0-9]*$" },
-      "description": "Present on a row-checker's record for an order proved by its record (gap row 361): the done-when rows, keyed <order id>:<n>, that `dispatch-open` put to the checker. `dispatch-close` keeps the checker's verdicts on these rows alone, beside each row's line."
     },
     "reportPath": {
       "type": "string",

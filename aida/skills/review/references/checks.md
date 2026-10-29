@@ -27,7 +27,7 @@ or the lookup's word. Pass the `test-execution` one as `--catalog-recipe` and th
 `--catalog-check-recipe`. A project copy behind the catalog's copy becomes a catalog note, because
 the copy can fall behind after preconditions compared them.
 
-Then invoke the tool skill with `require --advisory <path>` for each `review` recipe path, from
+Then invoke the tool skill with `require <path>` for each `review` recipe path, from
 the worktree. Read its `TOOLING:` lines to the person, and go on whatever they say. A missing tool
 makes its own check row read unknown.
 
@@ -49,8 +49,8 @@ commands` block and its `## Surface commands` block. Pass paths only.
 
 Every framework needs a `--recipe` or a `--lookup-failed` for it, and the script refuses rather than
 guess. A lookup nobody ran must never be recorded as a recipe that declared nothing. A project
-recording no framework refuses at exit 77, because no recipe can be chosen for it. Two frameworks
-that each command one tool refuse at exit 72, rather than give the script two answers to one question.
+recording no framework refuses at exit 77, because no recipe can be chosen for it. When two
+frameworks each command one tool, the first in project.json runs it, and the task record gets a warning.
 
 `--value` supplies a placeholder a command carries, such as the runner a Python project declares. The
 script never guesses one and never reads a default out of a recipe's prose.
@@ -74,9 +74,13 @@ result for every row by its id, so a failing added row subtracts as the three fl
 task past preconditions adopts the copy with `implement-actions.sh recipe-refresh --check-recipe`,
 or every check stops at exit 73.
 
-**The tool rows leave the frozen tests out, as the build's do.** The frozen tests are the reference
+**The tool rows leave the frozen tests out.** The frozen tests are the reference
 this stage judges against, and no role after the freeze may change them. A row's detail names each
 test it left out. A row whose files are all frozen tests reads undeclared.
+
+**Each tool row has a time limit.** A tool row that runs past 600 seconds is stopped and reads
+unknown, naming the limit. Preconditions already ran each tool once, so a tool that cannot run at
+all was found before the build.
 
 **The static-analysis row runs once more, over the frozen tests alone.** The project's own analyser
 reads the tests after the merge. A run that reads unmet or unknown becomes one finding on the
@@ -94,10 +98,14 @@ line is met. A new line is unmet, and the record lists the first twenty under `n
 count.
 The check reads unknown only when the baseline kept no output or the run printed nothing.
 
-**Check 8 reads the recipe's outcome words, not the exit status.** Three of the five frameworks print
-that nothing was selected and exit zero. A silent pass reads unknown, never met. A failing suite on
-a framework the baseline recorded unmet subtracts the same way. When the suite row declares
-`failure_line`, only the lines it selects are compared, and the record names it under `failureLine`.
+**Check 8 reads the suite result that `finish` recorded, and runs nothing.** `finish` ran the whole
+suite once at this commit and subtracted the baseline. It stops on a newly broken test, so check 8
+never reads unmet. It reads warned or unknown when `finish` recorded a warning. The record names
+each framework's `failure_line` under `failureLine`.
+
+**Mutation testing runs only when the project opts in.** With no `review.mutation` in
+`project.json`, or with it false, the mutation command never runs. Check 4 then reads the
+coverage half alone, and `audit` names it `off`. The project skill's `set-mutation` turns it on.
 
 **Check 4 records the score and every survivor, as the record holds them.** No mutation row reads
 undeclared, never met. The survivors go to the reviewer at the next step, as one more lens. The score
@@ -116,8 +124,8 @@ undeclared, not met: it opened no file. The three tool rows and the mutation row
 too, the word the build stage answers with. The mutation command never runs over zero paths. The
 suite reads not-needed, which finishing the build already decided. Every lens reads undeclared:
 the diff holds nothing, and this stage does not hand the reviewer the deliverables. Check 4 reads
-the judgement such an order left on the ledger, the way it reads an observed record for a page
-order. A criterion judged at build time is covered.
+the judgement such an order left on the ledger, from the run lines that proved it, as for a page
+order. A criterion judged at build time is covered. A look judges no machine criterion.
 
 **Check 3 is decided twice.** A changed file no order owns is unmet, decided here. A support file
 that an order's tests froze is set aside while it holds the content the freeze hashed. A hunk

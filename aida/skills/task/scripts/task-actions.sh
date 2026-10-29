@@ -25,7 +25,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/task-schema.json         (read by check-task.sh, a later part;
 #                                                            not read by this script)
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh      sourced, for commit_task_change and
-#                                                            for task_worktree: create and split
+#                                                            for task_worktree: create and start
 #                                                            make each task's own worktree
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recipes.sh           sourced, for the codePath readers
 #                                                            task_worktree needs
@@ -34,7 +34,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Usage:
 #   task-actions.sh [--run-mode <interactive|autonomous>] create --project <path> --name <id> \
-#                    [--after <task-id> [--in-tree]] -- <goal...>
+#                    [--after <task-id> [--in-tree]] [--tree-at-start] -- <goal...>
 #   task-actions.sh [--run-mode <interactive|autonomous>] repair --project <path> <old-task-folder>
 #   task-actions.sh [--run-mode <interactive|autonomous>] start --project <path> <task-id> \
 #                    -- <why...>
@@ -62,20 +62,19 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Pass --run-mode autonomous as the very first argument to mark this run as made with no person
 # present. Absent, or any other value, means interactive, the safe default (foundations.md, Run
-# mode). Nothing below asks a question, so only `environment up`, `environment not-applicable`,
-# `prune`, the second `environment down` of an adopted site and the `environment:` line of `start`
-# read it. A site coming up, a tree going, a task needing no site and an adopted site gone with no
-# `## Status` line to tell are a person's answer, so the four refuse unattended at 70. It is
+# mode). Nothing below asks a question, so only `prune`, the second `environment down` of an
+# adopted site and the `environment:` line of `start` read it. A tree going and an adopted site gone
+# with no `## Status` line to tell are a person's answer, so the two refuse unattended at 70. A site
+# coming up and a task needing no site can be undone, so neither waits for a person. It is
 # accepted in the same place and shape project-actions.sh accepts it, because a later check-task.sh will want it passed the same way,
 # and because Claude Code matches a Bash permission rule against the whole command line, so
 # writing it as an environment-variable prefix would stop matching a rule naming this script.
 #
 # A reader that cannot read fails loudly here too: every action that cannot do its job prints why
 # to stderr and exits 3. A create whose worktree cannot be made exits 3 the same way, and removes
-# the folder it made first. A miss that is a real, expected outcome (start or complete or split
-# naming a task that does not exist) exits 1 and prints nothing useful to stdout, never confused
-# with 3. So does a start refused because the task it builds on (`after`) has not finished its
-# build. A start whose tree cannot be cut from that task's branch exits 3 and writes no state.
+# the folder it made first. So does a call that names a task the project does not hold, or a start
+# refused because the task it builds on (`after`) has not finished its build. A start whose tree
+# cannot be cut writes no state. A command a recipe names that ran and failed exits 4.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no awk
 # regular-expression interval (foundations.md, Honesty: the exact construct that made every
@@ -108,7 +107,8 @@ die3() {
   exit 3
 }
 # The two libraries take these from their caller, so a refusal still says which script refused.
-die() { printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
+# An answer task_answer_find held is marked refused before the exit (task-helpers.sh).
+die() { ! command -v task_answer_refused >/dev/null 2>&1 || task_answer_refused "$1"; printf 'task-actions: %s\n' "$2" >&2; exit "$1"; }
 die1() { die 1 "$1"; }
 for lib_name in "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" "${PLUGIN_ROOT}/scripts/lib/recipes.sh" \
     "${PLUGIN_ROOT}/scripts/lib/proof.sh"; do
@@ -119,7 +119,7 @@ done
 
 usage() {
   cat <<'EOF' >&2
-usage: task-actions.sh create   --project <path> --name <id> [--after <task-id> [--in-tree]] -- <goal...>
+usage: task-actions.sh create   --project <path> --name <id> [--after <task-id> [--in-tree]] [--tree-at-start] -- <goal...>
        task-actions.sh repair   --project <path> <old-task-folder>
        task-actions.sh start    --project <path> <task-id> -- <why...>
        task-actions.sh complete --project <path> <task-id> -- <summary...>
@@ -201,13 +201,14 @@ task_summary() {
 # ------------------------------------------------------------------------------------------------
 
 do_create() {
-  local project_path="" id="" after="" in_tree=false
+  local project_path="" id="" after="" in_tree=false tree_now=yes
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
-      --name) id="${2:?--name needs a value}"; shift 2 ;;
-      --after) after="${2:?--after needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; project_path="$2"; shift 2 ;;
+      --name) need_value "$action" --name "$#" "${2:-}"; id="$2"; shift 2 ;;
+      --after) need_value "$action" --after "$#" "${2:-}"; after="$2"; shift 2 ;;
       --in-tree) in_tree=true; shift ;;
+      --tree-at-start) tree_now=no; shift ;;
       --) shift; break ;;
       *) die3 "create: unrecognized argument: $1" ;;
     esac
@@ -253,12 +254,15 @@ do_create() {
 
   # The task's own worktree, made right after the record is written whole, so a second window
   # can open the tree before any stage runs. A tree that cannot be made leaves no half-made task.
-  # A task built on another whose build is unfinished gets its tree at start instead.
+  # A task built on another whose build is unfinished gets its tree at start instead. So does a
+  # task made with --tree-at-start, such as a follow-up nobody may start (gap row 440).
   local after_state
   after_state="$(task_after_state "$task_dir")"
   # An --in-tree task whose predecessor's review is open gets its tree at start, which comes later
   # and so more often finds that review closed and the tree free (gap row 302).
-  if [ "$in_tree" = true ] && ! task_after_reviewed "$task_dir"; then
+  if [ "$tree_now" = no ]; then
+    :
+  elif [ "$in_tree" = true ] && ! task_after_reviewed "$task_dir"; then
     echo "in-tree: waits for the review of ${after}. start takes its tree over then, or cuts a new tree."
   elif [ -z "$after_state" ] || [ "${after_state##* }" = "finished" ]; then
     ( task_worktree "$task_dir" "create" >/dev/null ) || { rm -rf "$task_dir"; exit 3; }
@@ -471,7 +475,7 @@ do_repair() {
   local project_path="" old_folder=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; project_path="$2"; shift 2 ;;
       *)
         [ -z "$old_folder" ] || die3 "repair: unrecognized argument: $1"
         old_folder="$1"; shift ;;
@@ -483,6 +487,13 @@ do_repair() {
   project_path="$_resolved_project"
   require_project_folder "$project_path" "repair"
   [ -n "$old_folder" ] || die3 "repair: an old task folder is required"
+  # A folder already moved is gone from its old place, and tasks/ holds it. That is the state a
+  # repair writes, so a second repair names it and exits 0.
+  if [ ! -e "$old_folder" ] && [ -f "$(task_dir_for "$project_path" "$(basename -- "$old_folder")")/task.json" ]; then
+    echo "UNCHANGED: $(basename -- "$old_folder") is already repaired into tasks/"
+    task_summary "$(task_dir_for "$project_path" "$(basename -- "$old_folder")")/task.json"
+    return 0
+  fi
   local _resolved_old
   _resolved_old="$(canon_existing_dir "$old_folder")" || die3 "repair: not a folder: $old_folder"
   old_folder="$_resolved_old"
@@ -512,7 +523,7 @@ do_repair() {
   reason="$(repair_refusal "$old_folder" "$new_task_dir")"
   [ -z "$reason" ] || die3 "repair: $reason"
   heading="$(goal_heading "$old_folder/task.md")"
-  keep_v5_files "$old_folder" check || return 1
+  keep_v5_files "$old_folder" check || exit 3
 
   mkdir -p "$project_path/tasks" || die3 "repair: cannot create $project_path/tasks"
   local parent_json="" parent_task_json=""
@@ -603,7 +614,7 @@ do_start() {
   local project_path="" id=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; project_path="$2"; shift 2 ;;
       --) shift; break ;;
       *)
         [ -z "$id" ] || die3 "start: unrecognized argument: $1"
@@ -622,17 +633,14 @@ do_start() {
   local task_dir task_json
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
-  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  [ -f "$task_json" ] || die3 "$action: this project holds no task ${id}"
 
   local old_state
   old_state="$(jq -r '.state' "$task_json" 2>/dev/null)"
   [ -n "$old_state" ] && [ "$old_state" != "null" ] || die3 "start: could not read the state from $task_json"
 
   case "$old_state" in
-    complete)
-      echo "REFUSED: ${id} is already complete. A completed task is not reopened here." >&2
-      return 1
-      ;;
+    complete) die3 "start: ${id} is already complete. A completed task is not reopened here" ;;
     in_progress)
       echo "UNCHANGED: ${id} is already in_progress."
       task_summary "$task_json"
@@ -642,14 +650,13 @@ do_start() {
   esac
 
   # A task built on another starts once that task's build is finished, read from its records, and
-  # its tree is cut then, from that task's branch (gap row 291).
+  # its tree is cut then, from that task's branch (gap row 291). A task that records no tree gets it
+  # here, as a follow-up does (gap row 440).
   local after_state
   after_state="$(task_after_state "$task_dir")"
-  if [ -n "$after_state" ]; then
-    if [ "${after_state##* }" != "finished" ]; then
-      echo "REFUSED: ${id} builds on ${after_state% *}, whose build is ${after_state##* }. Start ${id} once implementation of ${after_state% *} has finished." >&2
-      return 1
-    fi
+  [ -z "$after_state" ] || [ "${after_state##* }" = "finished" ] \
+    || die3 "start: ${id} builds on ${after_state% *}, whose build is ${after_state##* }. Start ${id} once implementation of ${after_state% *} has finished"
+  if [ -n "$after_state" ] || [ -z "$(jq -r '.worktree.path // empty' "$task_json")" ]; then
     ( task_worktree "$task_dir" "start" >/dev/null ) || exit 3
   fi
 
@@ -657,6 +664,14 @@ do_start() {
   tmp="$(mktemp)" || die3 "start: cannot create a temp file"
   jq '.state = "in_progress"' "$task_json" > "$tmp" && mv "$tmp" "$task_json" \
     || { rm -f "$tmp"; die3 "start: could not update state in $task_json"; }
+
+  # A task is repaired one thing at a time, only when it is worked on and a deterministic check
+  # fails. Starting a task is when it is worked on, so the check runs here. It reports and never
+  # repairs. The start is written, so a finding is a warning in the task record, committed with
+  # the start, and the stage that reads the field refuses on it.
+  local check_rc=0
+  bash "$CHECK_TASK_SCRIPT" "$task_dir" || check_rc=$?
+  [ "$check_rc" -eq 0 ] || task_warn "$task_dir" "task start" "" "the task check exited $check_rc; its report names each finding"
 
   commit_task_change "$project_path" \
     "Start ${id}" \
@@ -669,19 +684,13 @@ do_start() {
   echo "STATE: ${old_state} -> in_progress"
   task_summary "$task_json"
   environment_offer_line "$task_json"
-
-  # A task is repaired one thing at a time, only when it is worked on and a deterministic check
-  # fails. Starting a task is when it is worked on, so the check runs here. It reports and never
-  # repairs, and its own exit code becomes this action's, the same way every project action ends
-  # with its check.
-  bash "$CHECK_TASK_SCRIPT" "$task_dir"
 }
 
 do_complete() {
   local project_path="" id=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; project_path="$2"; shift 2 ;;
       --) shift; break ;;
       *)
         [ -z "$id" ] || die3 "complete: unrecognized argument: $1"
@@ -701,7 +710,7 @@ do_complete() {
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
   task_md="$task_dir/task.md"
-  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  [ -f "$task_json" ] || die3 "$action: this project holds no task ${id}"
 
   local old_state
   old_state="$(jq -r '.state' "$task_json" 2>/dev/null)"
@@ -745,7 +754,7 @@ do_split() {
   local project_path="" parent_id=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; project_path="$2"; shift 2 ;;
       --child) break ;;
       *)
         [ -z "$parent_id" ] || die3 "split: unrecognized argument: $1"
@@ -762,14 +771,12 @@ do_split() {
   local parent_dir parent_json_file
   parent_dir="$(task_dir_for "$project_path" "$parent_id")"
   parent_json_file="$parent_dir/task.json"
-  [ -f "$parent_json_file" ] || { echo "NOT FOUND: ${parent_id}" >&2; return 1; }
+  [ -f "$parent_json_file" ] || die3 "$action: this project holds no task ${parent_id}"
 
   local parent_of_parent
   parent_of_parent="$(jq -r '.parent // "null"' "$parent_json_file" 2>/dev/null)"
-  if [ "$parent_of_parent" != "null" ]; then
-    echo "REFUSED: ${parent_id} already has a parent (${parent_of_parent}). The two-level limit stops it gaining children of its own." >&2
-    return 1
-  fi
+  [ "$parent_of_parent" = "null" ] \
+    || die3 "split: ${parent_id} already has a parent (${parent_of_parent}). The two-level limit stops it gaining children of its own"
 
   # Collect --child blocks. Each --child opens a new child record; --goal and --criterion after
   # it belong to that child until the next --child. Only scalars and append-only arrays are used
@@ -796,17 +803,17 @@ do_split() {
     case "$1" in
       --child)
         flush_child
-        current_id="${2:?--child needs a value}"; current_goal=""; current_criteria=()
+        need_value split --child "$#" "${2:-}"; current_id="$2"; current_goal=""; current_criteria=()
         shift 2
         ;;
       --goal)
         [ -n "$current_id" ] || die3 "split: --goal must follow --child"
-        current_goal="${2:?--goal needs a value}"
+        need_value split --goal "$#" "${2:-}" text; current_goal="$2"
         shift 2
         ;;
       --criterion)
         [ -n "$current_id" ] || die3 "split: --criterion must follow --child"
-        current_criteria+=("${2:?--criterion needs a value}")
+        need_value split --criterion "$#" "${2:-}" text; current_criteria+=("$2")
         shift 2
         ;;
       *) die3 "split: unrecognized argument: $1" ;;
@@ -844,13 +851,14 @@ do_split() {
   # Write every child, then update the parent, then commit all of it in one step: split creates
   # no temporary location and performs no atomic swap, because nothing here moves anything that
   # already existed (ideal/task.md, "New": the transactional machinery version 5 needed for this
-  # is gone, because nothing here moves).
+  # is gone, because nothing here moves). No child gets a tree here. Each gets it when it starts,
+  # so a tree refused for one child never leaves the others written.
   mkdir -p "$project_path/tasks" || die3 "split: cannot create $project_path/tasks"
 
   # The positional list, empty by now, collects each child's folder for the commit: the commit
   # stages the parent's folder and every child's, never tasks/ whole.
   i=0
-  local cgoal ccrit after_state
+  local cgoal ccrit
   while [ "$i" -lt "$child_count" ]; do
     cid="${child_ids[$i]}"; cgoal="${child_goals[$i]}"; ccrit="${child_criteria_json[$i]}"
     cdir="$(task_dir_for "$project_path" "$cid")"
@@ -878,12 +886,6 @@ do_split() {
         printf '%s' "$ccrit" | jq -r '.[] | "- " + .'
       fi
     } > "$cdir/task.md" || die3 "split: could not write $cdir/task.md"
-    # Each child gets its tree now, so no child waits for a first stage action to make one. A
-    # child whose parent waits on an unfinished build gets its tree at start, as create does.
-    after_state="$(task_after_state "$cdir")"
-    if [ -z "$after_state" ] || [ "${after_state##* }" = "finished" ]; then
-      task_worktree "$cdir" "split" >/dev/null
-    fi
 
     i=$((i + 1))
   done
@@ -931,14 +933,16 @@ do_split() {
 # set-run-mode: written only when a person asks for autonomous or light. Nothing here asks.
 # `--stage`, repeatable, limits the mode to the stages named (task-schema.json, runModeStages): a
 # person who wants the build alone unattended keeps their hand on scope and review. No `--stage`
-# covers every stage, as before the field existed.
+# covers every stage, as before the field existed. The run mode decides the person checks still
+# read it, so a change needs a person's answer for step `task set-run-mode`, in every mode: the
+# mode, then each stage, one space apart, such as `autonomous implement`.
 # ------------------------------------------------------------------------------------------------
 
 do_set_run_mode() {
   local project_path="" id="" value="" stages_json='[]' person_rows orders absent_tools
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; project_path="$2"; shift 2 ;;
       --stage)
         [ "$#" -ge 2 ] || die3 "set-run-mode: --stage needs a stage name"
         case "$2" in
@@ -971,9 +975,11 @@ do_set_run_mode() {
   local task_dir task_json
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
-  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
-  local was_light=no
+  [ -f "$task_json" ] || die3 "$action: this project holds no task ${id}"
+  local was_light=no words
   ! task_is_light "$task_dir" || was_light=yes
+  words="$value$(printf '%s' "$stages_json" | jq -r '.[] | " " + .' | tr -d '\n')"
+  task_require_answer 70 set-run-mode "the run mode" "$task_dir" "task set-run-mode" "" "$words"
 
   local tmp
   tmp="$(mktemp)" || die3 "set-run-mode: cannot create a temp file"
@@ -994,6 +1000,7 @@ do_set_run_mode() {
   # jq is tested before the move. Without that test an unreadable task.json makes jq write
   # nothing, the move succeeds on an empty file, and the task loses everything it held.
   mv "$tmp" "$task_json" || { rm -f "$tmp"; die3 "set-run-mode: could not update $task_json"; }
+  task_answer_consume
 
   local stages_note=""
   [ "$stages_json" = "[]" ] || stages_note=" ($(printf '%s' "$stages_json" | jq -r 'join(", ")'))"
@@ -1006,28 +1013,13 @@ do_set_run_mode() {
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
 
   echo "RUN MODE: ${value}${stages_note}"
-  # A light scope closes with no sidecar and a stamped contract (distill_deferred). Out of light,
-  # the stage rule wants the sidecar again, so the task reads scope until one distiller runs.
-  if [ "$value" != "light" ] && [ ! -f "$task_dir/records/scope-distill.json" ] \
-      && [ -n "$(jq -r '.pluginVersion // empty' "$task_dir/alignment.json" 2>/dev/null)" ]; then
-    echo "distill: scope closed in light mode with no distiller, so this task reads stage scope. Dispatch one distiller for stage scope, then run scope's distill."
-  fi
   # Light scope wrote automatedTests false (gap row 197). Leaving light does not undo it, so the
   # orders keep their confirm or record proofs and finish runs no suite (gap row 362).
   if [ "$was_light" = yes ] && [ "$value" != "light" ] && [ "$(automated_tests "$task_dir")" = "no" ]; then
-    echo "light-contract: the contract still says this task has no automated tests, so each order stays confirm or record and no suite runs. To change it, a person runs scope's set-tests --automated yes, then design's update --proof tests on each code order. A started implementation takes the new orders through restart."
+    echo "light-contract: the contract still says this task has no automated tests, so each order stays confirm or record and no suite runs. To change it, a person runs scope's set-tests --automated yes, then design's update --proof tests on each code order. A started implementation takes the new orders through redo."
   fi
-  # Light keeps one script that walks the demo path. It is the project's end to end
-  # setup, which a person installs (gap row 197).
-  if [ "$value" = "light" ]; then
-    if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then
-      echo "path-script: end to end is on. Review fails this task until the demo path is registered as one critical surface with /aida:surfaces."
-    elif [ "$(jq -r '.surfaces.e2e.declined // false' "$project_path/project.json" 2>/dev/null)" = "true" ]; then
-      echo "path-script: end to end is declined for this project, so this task keeps no script that walks the demo path. Review runs nothing for it."
-    else
-      echo "path-script: end to end is off. Review fails this task until a person sets it up with /aida:surfaces e2e and registers the demo path as one critical surface."
-    fi
-  fi
+  # A project keeps at most one script that walks the demo path (gap rows 197 and 458).
+  [ "$value" != "light" ] || path_script_line "$task_dir"
   # An unattended review records each criterion a person answers as unanswered, so it writes no
   # verdict (gap rows 290 and 328). Said here, from the records, so the person chooses knowing it.
   if [ "$value" = "light" ] || { [ "$value" = "autonomous" ] \
@@ -1067,13 +1059,13 @@ do_set_run_mode() {
 # ------------------------------------------------------------------------------------------------
 # set-budget: the ceiling on one implementation run (task-schema.json, budget). Written only when
 # a person sets one. Nothing here asks. Either number alone is a ceiling. A number this call does
-# not name keeps the value it had. A person raising the dispatches of a halted run must not lose
+# not name keeps the value it had. A person raising the dispatches of a stopped run must not lose
 # the minutes they set earlier.
 # ------------------------------------------------------------------------------------------------
 
 # Refuses the value $2 of the flag $1 unless it is a whole number of 1 or more. scripts/lib/
 # schema-check.sh states that it does not read `minimum`, so a 0 written here passes check-task.sh
-# and then halts the first dispatch. This is the only guard. Called as a plain statement: die3 in a
+# and then stops the first dispatch. This is the only guard. Called as a plain statement: die3 in a
 # command substitution would end the subshell alone.
 budget_number_or_die() {
   case "$2" in
@@ -1086,7 +1078,7 @@ do_set_budget() {
   local project_path="" id="" dispatches="" minutes=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; project_path="$2"; shift 2 ;;
       --dispatches)
         [ "$#" -ge 2 ] || die3 "set-budget: --dispatches needs a number"
         budget_number_or_die dispatches "$2"
@@ -1114,7 +1106,7 @@ do_set_budget() {
   local task_dir task_json
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
-  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  [ -f "$task_json" ] || die3 "$action: this project holds no task ${id}"
 
   local budget_json='{}'
   [ -z "$dispatches" ] \
@@ -1146,18 +1138,19 @@ do_set_budget() {
 
 # ------------------------------------------------------------------------------------------------
 # A person's per-task answer, appended to one list field of task.json, committed and summarised.
-# Nothing here asks. A repeat is refused: the field is a set, and a second write would say the
-# person was asked twice. $1 the action, $2 the project, $3 the task id, $4 the field, $5 the
-# value, $6 the commit subject, $7 the commit reason, $8 the label printed before the value, $9
-# the refusal of a repeat, before the quoted value.
+# Nothing here asks. A repeat writes nothing and exits 0: the field is a set, and it already holds
+# the answer. $1 the action, $2 the project, $3 the task id, $4 the field, $5 the value, $6 the
+# commit subject, $7 the commit reason, $8 the label printed before the value.
 # ------------------------------------------------------------------------------------------------
 
 append_task_answer() {
   local action="$1" project_path="$2" id="$3" field="$4" value="$5" task_json
   task_json="$(task_dir_for "$project_path" "$id")/task.json"
-  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  [ -f "$task_json" ] || die3 "$action: this project holds no task ${id}"
   if jq -e --arg f "$field" --arg v "$value" '(.[$f] // []) | index($v) != null' "$task_json" >/dev/null 2>&1; then
-    die3 "$action: $task_json $9 '$value'"
+    echo "UNCHANGED: $field already holds ${value}"
+    task_summary "$task_json"
+    return 0
   fi
 
   write_atomic "$task_json" "$(jq --arg f "$field" --arg v "$value" '.[$f] = ((.[$f] // []) + [$v])' "$task_json")"
@@ -1178,7 +1171,7 @@ parse_task_answer() {
   AT_PROJECT=""; AT_ID=""; AT_VALUE=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) AT_PROJECT="${2:?--project needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; AT_PROJECT="$2"; shift 2 ;;
       *)
         if [ -z "$AT_ID" ]; then AT_ID="$1"; shift
         elif [ -z "$AT_VALUE" ]; then AT_VALUE="$1"; shift
@@ -1202,8 +1195,7 @@ do_decline_recipe() {
   jq -e --arg f "$AT_VALUE" '(.frameworks // []) | index($f) != null' "$AT_PROJECT/project.json" >/dev/null 2>&1 \
     || die3 "decline-recipe: $AT_PROJECT/project.json does not declare the framework '$AT_VALUE'"
   append_task_answer decline-recipe "$AT_PROJECT" "$AT_ID" recipesDeclined "$AT_VALUE" \
-    "Decline a process recipe for ${AT_VALUE} on ${AT_ID}" "a person answered not for this framework" "RECIPE DECLINED" \
-    "already declines a recipe for"
+    "Decline a process recipe for ${AT_VALUE} on ${AT_ID}" "a person answered not for this framework" "RECIPE DECLINED"
 }
 
 # defer-surface: written only when a person answers "not this task" to a surface setup offer at
@@ -1216,8 +1208,7 @@ do_defer_surface() {
     *) die3 "defer-surface: the kind is e2e or visual-regression, not '$AT_VALUE'" ;;
   esac
   append_task_answer defer-surface "$AT_PROJECT" "$AT_ID" surfacesDeferred "$AT_VALUE" \
-    "Defer ${AT_VALUE} surfaces on ${AT_ID}" "a person answered not this task" "SURFACE DEFERRED" \
-    "already defers"
+    "Defer ${AT_VALUE} surfaces on ${AT_ID}" "a person answered not this task" "SURFACE DEFERRED"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1250,7 +1241,7 @@ do_save() {
   local project_path="" id=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; project_path="$2"; shift 2 ;;
       --) shift; break ;;
       *)
         [ -z "$id" ] || die3 "save: unrecognized argument: $1"
@@ -1273,7 +1264,7 @@ do_save() {
 
   local task_dir
   task_dir="$(task_dir_for "$project_path" "$id")"
-  [ -f "$task_dir/task.json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  [ -f "$task_dir/task.json" ] || die3 "$action: this project holds no task ${id}"
 
   local note=""
   if [ -n "$text" ]; then
@@ -1312,8 +1303,9 @@ do_save() {
 # `root:` that is not the worktree stops before the later blocks: the environment resolved to
 # another tree. After the last block, `up` runs the `## Install` blocks of each enabled surfaces
 # kind's setup recipe, given as `--setup-recipe <kind>=<path>`, because a worktree has no
-# node_modules. `up` records `environment: {address, recipe, upAt, <keys>}` in task.json; `down`
-# reads the recipe path and the keys from that record, so it takes no recipe flag. Once
+# node_modules. `up` records `environment: {address, recipe, upAt, <keys>, <tokens>}` in task.json;
+# `down` reads the recipe path, the keys and the token values from that record, so it takes no
+# recipe flag. Once
 # task_env_restore_commit finds the recorded files back at their fork point content, `up` and
 # `down` refuse and `show` runs no status line (gap row 262).
 # ------------------------------------------------------------------------------------------------
@@ -1494,9 +1486,11 @@ environment_check() {
   if [ -n "$preconditions" ]; then
     result="$(run_recipe_lines "$sub" "$RECIPE" "$preconditions" "$outfile" "environment: precondition" fill_line_or_refuse)" || rc=$?
   fi
+  # A precondition line not run is unknown: its summary is printed, and the step stops on it.
+  [ "$rc" -ne "$RL_UNKNOWN_STATUS" ] || { printf '%s\n' "$result"; exit "$rc"; }
   if [ "$rc" -ne 0 ]; then
     cat "$outfile" >&2
-    # run_recipe_lines exits 4 when a line ran and failed, and 3 when a line was refused unrun.
+    # run_recipe_lines exits 4 when a line ran and failed, and 3 when a line holds a token nothing fills.
     [ "$rc" -ne 4 ] || environment_branch_lines "$wt" >&2
     exit 3
   fi
@@ -1508,7 +1502,7 @@ do_environment() {
   local project_path="" id="" sub="" setup_recipes="" n tab probe_dir; tab="$(printf '\t')"
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; project_path="$2"; shift 2 ;;
       --*) break ;;
       *)
         if [ -z "$id" ]; then id="$1"; shift
@@ -1543,18 +1537,16 @@ do_environment() {
   local task_dir task_json wt outfile addr_mark restored let_go_tear=""
   task_dir="$(task_dir_for "$project_path" "$id")"
   task_json="$task_dir/task.json"
-  [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+  [ -f "$task_json" ] || die3 "$action: this project holds no task ${id}"
 
   # shellcheck disable=SC2034 # read by cr_require_person and cr_resolve_recipe in scripts/lib/recipes.sh
   ACTION="environment"
-  # The person's no: this task needs no site, with the reason, so nothing offers again. It is a
-  # person's answer, so it refuses unattended at 70 the way up does. `up` later replaces it.
+  # The no: this task needs no site, with the reason, so nothing offers again. `up` later replaces
+  # it, so it needs no person's answer.
   if [ "$sub" = "not-applicable" ]; then
     [ "${1:-}" != "--" ] || shift
     is_blank "$*" && die3 "environment: not-applicable needs the person's reason after --"
-    cr_require_person "not-applicable" "a person decided this task needs no site" "$task_dir" "$*"
     write_atomic "$task_json" "$(jq --arg r "$*" '.environment = {"not-applicable": $r}' "$task_json")"
-    task_answer_consume
     commit_task_change "$project_path" "Record that ${id} needs no site" "$*" "" "" "$id" "environment" \
       || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
     printf 'environment: not-applicable\n'; task_summary "$task_json"
@@ -1767,7 +1759,6 @@ TA_TOKEN_LIST
     trap - EXIT INT TERM
     return 0
   fi
-  cr_require_person up "a person approved the site coming up" "$task_dir" yes
   wt="$(task_worktree "$task_dir" "environment")"; outfile="$task_dir/records/environment-up.txt"
   # Same reason as the down branch above: an empty path here means task_worktree already refused
   # inside its own subshell. Without this test `cd ""` changes nothing and the bring-up lines run
@@ -1813,7 +1804,7 @@ $capture"
   recipe_changes="$({ printf '%s\n' "$file_list" | cut -f2 | sed "s/^/files$tab/"
       [ -n "$adopt" ] || recipe_precondition_names "$RECIPE" | sed "s/^/named$tab/"; } \
     | while IFS="$tab" read -r kind n; do
-        case "$n" in ''|/*|*..*) continue ;; esac
+        case "$n" in (''|/*|*..*) continue ;; esac
         [ -f "$wt/$n" ] || continue
         git -C "$wt" rev-parse -q --verify "HEAD:$n" >/dev/null 2>&1 \
           || { [ -n "$fork" ] && git -C "$wt" rev-parse -q --verify "$fork:$n" >/dev/null 2>&1; } || continue
@@ -1826,10 +1817,14 @@ $capture"
   [ -n "$changes_doc" ] || die3 "environment: $task_json could not be read, so the files the recipe changed are not recorded and nothing was brought up. Repair $task_json, then run task environment $id up again. The recipe's files are committed, so the rerun commits nothing"
   write_atomic "$task_json" "$changes_doc"
   # Each token's value is the first line its command prints. Nothing printed, or a non-zero exit,
-  # refuses by the token's name at 4, before any bring-up line runs.
+  # refuses by the token's name at 4, before any bring-up line runs. The values go into the marker
+  # and the record, so `down` fills them into a tear-down line too, such as the removal of a seed
+  # the bring-up took in the main checkout (gap row 468).
+  local token_doc='{}'
   if [ -z "$adopt" ]; then
     recipe_tokens_run environment "$RECIPE" "$outfile" "$wt" "$TOKENS" "$ENV_TOKENS_HINT" \
       || { printf 'environment: the token %s has no value: its command failed or printed nothing\n' "$RT_FAILED" >&2; recipe_output_summary 4 "$outfile" "$((RT_BEFORE + 2))"; exit 4; }
+    token_doc="$(printf '%s' "${RT_TOKENS#"$TOKENS"}" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')"
     TOKENS="$RT_TOKENS"
   fi
   rm -rf "$tokens_dir"
@@ -1842,9 +1837,9 @@ $capture"
   # of an adopted site are dropped, because `up` replaces them. An adopted site was up before this run,
   # so it needs no marker.
   if [ -z "$adopt" ]; then
-    marker_doc="$(jq --arg r "$RECIPE" --arg t "$marker_at" \
+    marker_doc="$(jq --arg r "$RECIPE" --arg t "$marker_at" --argjson tok "$token_doc" \
       '.environment = ((.environment // {}) | del(.["not-applicable"], .adopted, .adoptedRecipe, .tearDown))
-         + {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
+         + $tok + {state: "coming-up", recipe: $r, startedAt: $t}' "$task_json")"
     [ -n "$marker_doc" ] || die3 "environment: $task_json could not be read, so no marker can name the site $RECIPE brings up. Nothing was brought up"
     write_atomic "$task_json" "$marker_doc"
     printf 'environment: coming-up\n'
@@ -1866,7 +1861,8 @@ $capture"
   # `adopted` tells `down` and prune that the database is no copy of the main checkout's.
   up_doc="$(jq --arg a "$value" --arg r "$RECIPE" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg ad "$adopt" \
     --argjson k "$(printf '%s\n' "$keys" | jq -Rn '[inputs | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))}] | from_entries')" \
-    '.environment = ($k + {address: $a, recipe: $r, upAt: $t} + (if $ad == "" then {} else {adopted: true} end))' "$task_json")"
+    --argjson tok "$token_doc" \
+    '.environment = ($tok + $k + {address: $a, recipe: $r, upAt: $t} + (if $ad == "" then {} else {adopted: true} end))' "$task_json")"
   [ -n "$up_doc" ] || die3 "environment: the site of $id is up at $value. $task_json could not be written. The marker this run wrote before the bring-up still names $RECIPE. Run task environment $id down to tear this site down. It fills a tear-down token from the address command's lines in $outfile"
   write_atomic "$task_json" "$up_doc"
   if [ -z "$adopt" ]; then
@@ -1885,8 +1881,7 @@ $capture"
     # paths are the recipe's to know, and a commit of everything would sweep other work in.
     [ -z "$(git -C "$wt" status --porcelain)" ] || printf 'environment: after the %s install, uncommitted changes remain in %s: %s\n' "$kind" "$wt" "$(git -C "$wt" status --porcelain | tr '\n' ' ')" >&2
   done
-  task_answer_consume
-  commit_task_change "$project_path" "$([ -n "$adopt" ] && echo "Record the site already up for" || echo "Bring up the site of") ${id}" "a person approved it" "" "" "$id" "environment" \
+  commit_task_change "$project_path" "$([ -n "$adopt" ] && echo "Record the site already up for" || echo "Bring up the site of") ${id}" "requested" "" "" "$id" "environment" \
     || printf 'task-actions: %s was written but not committed. Commit it by hand.\n' "$task_json" >&2
   environment_cleanup quiet; trap - EXIT INT TERM
   printf 'address: %s\n' "$value"; task_summary "$task_json"; recipe_output_summary 0 "$outfile" 1
@@ -1896,9 +1891,12 @@ $capture"
 # prune: the worktrees of complete tasks. A tree kept after completion costs disk and a site each,
 # and a tree removed too early loses uncommitted work. So with no id it only lists, which is the
 # whole action unattended, and it removes the named trees one at a time: the site down first, so
-# the framework keeps no orphaned registry entry, then the tree, then the branch when it is merged.
+# the framework keeps no orphaned registry entry, then the tree, then the branch when git deletes
+# it as merged. A task nobody started reaches prune once it is complete, such as a moot follow-up
+# closed with its reason (gap row 440). An open task keeps its tree.
 # The group folder that held the tree goes when it is left empty.
-# Never --force: git's refusal on uncommitted changes stops it at 3 (version 5's worktree-prune).
+# Never --force: git's refusal on uncommitted changes stops it at 3 (version 5's worktree-prune),
+# and a branch git will not delete as merged stays, named in the output for the person.
 # ------------------------------------------------------------------------------------------------
 
 # One line per complete task that records a worktree. $1 the project folder, $2 the merged
@@ -1927,7 +1925,7 @@ do_prune() {
   local project_path="" all=no ids=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --project) project_path="${2:?--project needs a value}"; shift 2 ;;
+      --project) need_value "$action" --project "$#" "${2:-}"; project_path="$2"; shift 2 ;;
       --all) all=yes; shift ;;
       --*) die3 "prune: unrecognized argument: $1" ;;
       *) ids="$ids$1
@@ -1963,13 +1961,14 @@ do_prune() {
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     task_json="$(task_dir_for "$project_path" "$id")/task.json"
-    [ -f "$task_json" ] || { echo "NOT FOUND: ${id}" >&2; return 1; }
+    [ -f "$task_json" ] || die3 "$action: this project holds no task ${id}"
     # A record this cannot read names no state, and the refusal below would then print an empty
     # word where the state belongs. It says what happened instead.
     state="$(jq -r '.state // "?"' "$task_json")" \
       || die3 "prune: could not read $task_json. Nothing was removed"
+    # A task that records no tree has nothing to prune, and the loop below says so.
+    [ -n "$(jq -r '.worktree.path // empty' "$task_json")" ] || continue
     [ "$state" = complete ] || die3 "prune: $id is $state, not complete, so its tree is where its work is. Nothing was removed"
-    [ -n "$(jq -r '.worktree.path // empty' "$task_json")" ] || die3 "prune: $id records no worktree. Nothing was removed"
     # An adopted site's database is no copy, so prune never tears it down, and a tree removed
     # under a running site leaves the framework's registration behind (gap row 351). A person
     # decides. A tree another task holds stays anyway, and the record below keeps the mark. A
@@ -1987,7 +1986,8 @@ TA_IDS
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     task_dir="$(task_dir_for "$project_path" "$id")"; task_json="$task_dir/task.json"
-    wt="$(jq -r '.worktree.path' "$task_json")"; branch="$(jq -r '.worktree.branch' "$task_json")"
+    wt="$(jq -r '.worktree.path // empty' "$task_json")"; branch="$(jq -r '.worktree.branch' "$task_json")"
+    [ -n "$wt" ] || { printf 'unchanged: %s records no tree\n' "$id"; continue; }
     # A later task made with --in-tree builds in this tree now, so the tree stays (gap row 302).
     held="$(task_tree_others "$project_path" "$wt" "$id" | head -1)"
     # The last prune of this tree must still see the adopted site, so this record keeps it all.

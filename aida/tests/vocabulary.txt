@@ -1,9 +1,9 @@
 # The controlled vocabulary: <word> | <the thing it names> | <banned synonyms, comma separated>.
 # A word is here because the docs say it must mean one thing (foundations.md, "One name per
 # thing, enforced"). tests/vocabulary-spec.sh flags every banned synonym, as a whole word,
-# case-insensitive, in shipped prose outside fenced blocks and code spans. A synonym goes in the
-# third column only when it has no other sense in the plugin's prose. The check cannot read
-# meaning, so a word with a second legitimate use is left off and named here instead.
+# case-insensitive, in skills, agents and templates, outside fenced blocks and code spans. A
+# synonym goes in the third column only when it has no other sense in the plugin's prose. The check
+# cannot read meaning, so a word with a second legitimate use is left off and named here instead.
 #
 # The stages, named as their skills are.
 scope | the first stage: the contract a task is judged against |
@@ -48,6 +48,12 @@ gate | the proof kind of a configuration order: the recipe's own lines decide it
 tests | the proof kind of a code order, the default: tests frozen before the code is written |
 confirm | the proof kind of a code order on a task with no automated tests: the person answers its done-when rows at review |
 observe | the proof kind of a page order: a model looks through a browser after the build and judges each done-when row |
+# A test is defined once, in skills/implement/references/what-a-test-is.md. End to end and visual
+# regression are surfaces, never tests (gap rows 451 to 455). No synonym is banned: each word has
+# ordinary uses in the prose.
+test | what the implement stage writes before the code, as skills/implement/references/what-a-test-is.md defines it |
+frozen test | a test after the freeze: nothing changes it, so the code cannot bend it to pass |
+surface | a page or a command that review runs end to end or for visual regression after the build. Never a test |
 # record as a proof kind is the same word as the record below, a file a stage writes. No synonym
 # is banned for either sense; the two are told apart by the field they sit in.
 # verify is not banned: a criterion's verify clause and the reviewer's verify mode are its own senses.

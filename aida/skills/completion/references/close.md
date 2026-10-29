@@ -1,7 +1,8 @@
 # Offer the follow up tasks, take the grounds, and close
 
 This step runs in one sitting. It offers a task per follow up finding, takes the reason when the
-review did not pass, takes the summary, and writes everything through `close`.
+review did not pass or passed with warnings, takes the summary, and writes everything through
+`close`.
 
 ## Offer one task per follow up finding
 
@@ -21,51 +22,35 @@ each yes, run:
 Several accepted findings can go in one call, with one `--create` each. The script creates each
 task through the task skill, with a goal made of the evidence and one sentence naming the finding.
 It prints `created:` with the new ids, and `existing:` when a named finding already has a task.
-Each new tree prints one `<id> base:` line with the commit it was cut from and why. Show it.
-A name collision comes back at exit 3 with the task script's own line above; relay that line.
+A new task has no tree yet. It gets one from the trunk when it starts. A task nobody starts
+costs no tree, and closes with `task complete` and the reason it is moot. A name collision comes back at exit 3 with the task script's own line above; relay that line.
 
 Autonomous: run `follow-ups` once with no flag. Every finding still without a task is created
 and listed, because a task changes the contract least and nobody has to name it.
 
-A high severity finding left with no task refuses the close below. Interactive, the person says
-why through `--leave <finding id>=<reason>`; leaving a queued security fault ships it, so the
+A high severity finding left with no task is a warning in the task record. Interactive, the person
+says why through `--leave <finding id>=<reason>`; leaving a queued security fault ships it, so the
 record keeps the reason. A finding below high severity may be left with no reason.
 
-A finding that fails a criterion is no follow up, so `--leave` refuses it. The person rules it
-at review close instead: `--row <finding>=deferred` makes it a follow up, and `--row
-<finding>=wrong` says the reviewer was mistaken.
+A finding that fails a criterion is no follow up, so a `--leave` for it decides nothing and is
+named as a warning. The person rules it at review close instead, as review's close step says.
+
+A finding ruled `contract-wrong` at review close is a follow up. Its task's goal names the
+criterion and the corrected text, so that task changes the criterion through scope.
 
 ## Take the grounds
 
-`read` printed the review verdict. `passed` closes the task with nothing asked.
+`read` printed the review verdict and its `closes:` line. `passed` with no warning closes the task
+with nothing asked.
 
-Any other word needs a reason. Interactive: ask the person why the task closes without a passed
-review, in one sentence, and pass it as `--reason`. Say the verdict you read, in its own word: a
-review that failed, one that ran and did not close, or none at all. Autonomous: do not run
-`close`. Say the verdict and that a person closes this task with a reason, and stop.
+Anything else needs a reason. Interactive: say the verdict you read, in its own word, and each
+warning. Then ask the person why the task closes over them, in one sentence, and pass it as
+`--reason`. Autonomous: do not run `close`. Say the verdict and the warnings, and that a person
+closes this task with a reason, and stop.
 
 When `read` prints `personRoute`, a criterion waits for a person's met or unmet in review. In
 both modes, give the person that line first. Their answer in review can pass the review, and then
 the close needs no reason.
-
-## Put each observed criterion to the person
-
-`read` printed one `observed(<criterion>)` line per criterion a model judged through a browser.
-It printed one `observedRow(<criterion>)` line per row. Each row carries the verdict, the surface
-and viewport, the before image, the screenshot after, and the done-when sentence the model
-judged. A model looked, not a person, so the person decides whether that look stands.
-
-Interactive: ask one plain question per criterion whose record is on disk. Name the criterion,
-show its rows verbatim from the output, and name both images per row, before and after, so
-the person can open them. A row that says the page is as it was is judged between the two.
-Ask whether they accept the observation. Their answer becomes one flag on `close`:
-`--observed-accepted <criterion>=yes|no`. Every such criterion needs an answer; the close
-refuses at exit 1 naming the ones without. A no needs a reason, the way a verdict that did not
-pass does. Ask why the task closes with an observation rejected, in one sentence, and pass it as
-`--reason`.
-
-Autonomous: ask nothing and pass no answer. The record says the observations were not accepted
-by a person, and the pull request body says so beside each such criterion.
 
 ## Take the summary
 
@@ -99,23 +84,27 @@ Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/completion/scripts/completion-actions.sh close "<task_folder>" \
   [--reason "<sentence>"] [--leave <finding id>=<reason>]... [--captures-offered <n>] \
-  [--observed-accepted <criterion>=yes|no]... [-- <summary...>]
+  [-- <summary...>]
 ```
-It refuses at exit 1 in four cases. A child is open. A high severity follow up has no task and
-no `--leave`. The review did not pass and no `--reason` was given. Interactive, an observed
-criterion has no answer, or was answered no with no `--reason`.
+It refuses at exit 1 when the review did not pass, or passed with warnings, and no `--reason` was
+given. An open child, a high severity follow up with no task, and a `--leave` that decides nothing
+are warnings in the task record. Relay each `warning:` line.
 
 Then it takes out of the task branch the files `task environment up` changed for the worktree's
 own site. Merged, they would change the main checkout's site. It reads them from
 `worktree.recipeChanges`. First it takes the site down through `task environment down`, while
 the site still has the worktree's name. Then it makes one commit in the worktree. That commit
 puts each file back to its content where the branch started. A file already back needs nothing.
-A task with no such files gets no tear-down and no commit. It refuses at exit 1 when an order
-changed one of those files after `up`, because it never puts that file back silently. Relay its
-line: it names each file and the content a person puts back by hand. A file a person already put
-back needs nothing, under any commit subject. When every file is back, it makes no commit of its
-own. It refuses at exit 1 when a file that existed where the branch started is back and the
-record still names a site.
+A task with no such files gets no commit. An order may have changed one of those files after `up`,
+or one may hold an uncommitted change. Then it puts nothing back, because it never puts a file
+back silently.
+It writes a warning naming each file, and a person puts the content back by hand. A file a person
+already put back needs nothing, under any commit subject. When every file is back, it makes no
+commit of its own. A file that existed where the branch started may be back while the record
+still names a site. Then the site stays up, and the warning says how to take it down.
+
+A site with no file to put back goes down through `task environment down` too, so no finished
+task leaves its site running. An adopted site stays up, as `task environment down` says.
 
 Otherwise it writes the record to `<task_folder>/completion/completed.json`, then the pull
 request body to `<task_folder>/completion/pr-body.md`. The body names each restore commit, a
@@ -131,8 +120,7 @@ run `close` again with the same arguments; that is the repair.
 Give the person the body path and the record path from the summary. Say the verdict the record
 holds and who closed it. Name the restore commit and its files from the `restoreCommit` line,
 or say there was none. Name each follow up task created and each finding left, with its reason.
-Name each play captured by its id, or say "no play captured". Name each observed criterion
-with the person's answer, or say nobody was asked.
+Name each play captured by its id, or say "no play captured".
 Say the person opens the pull request from the body file by hand, changing nothing in it first.
 End by naming `/aida:next`. When the script says every child of the parent is complete, say the
 parent closes next.

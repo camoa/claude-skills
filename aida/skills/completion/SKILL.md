@@ -76,9 +76,9 @@ create`, and `close` moves the state through `task complete`. Completion writes 
 itself. When the task script refuses, its own line is printed above the refusal; relay it as
 printed.
 
-**A reason is a sentence, not a bypass.** A review that did not pass closes only on a person's
-word. The record keeps that sentence. Never invent one, and never suggest one. Ask the person
-why the task closes without a passed review, and pass what they said.
+**A reason is a sentence, not a bypass.** A review that did not pass, or that passed with
+warnings, closes only on a person's word. The record keeps that sentence. Never invent one, and
+never suggest one. Ask the person why the task closes over them, and pass what they said.
 
 ## The run mode decides who answers
 
@@ -90,15 +90,15 @@ A person's answer is accepted only when a person is present.
 | Question | Interactive | Autonomous |
 |---|---|---|
 | A follow up finding with no task | the person accepts or declines each one | every one is created and listed |
-| A review that did not pass | the person gives the reason | the close halts, naming the verdict |
-| A high severity follow up with no task | the person creates it, or says why not | the close refuses, since the tasks were created first |
+| A review that did not pass, or passed with warnings | the person gives the reason | the close halts, naming the verdict and the warnings |
+| A high severity follow up with no task | the person creates it, or says why not | the close warns, since the tasks were created first |
 | The summary for `task complete` | the person gives one or two lines | one line naming the grounds |
 | A saved note offered as a play | the person says yes or no per note, and names the play | offers nothing; the record says `autonomous` |
 
-`close` refuses `--reason`, `--leave`, `--captures-offered` and `--observed-accepted` on an
-autonomous run at exit 70. A run with nobody present closes a task on a passed review and on
-nothing else. Or the main session writes the person's answer to `completion/person-answer.json`.
-The refusal prints that record whole. The implement skill's `references/finish.md` says how.
+`close` refuses `--reason`, `--leave` and `--captures-offered` on an autonomous run at exit 70. A run with nobody present closes a task on a passed review with no
+warning and on nothing else. That is the one place an unattended task stops on the review. Or the person's answer is recorded with the task skill's `person-answer.sh`, step
+`completion close`. Claude Code asks the person first. The refusal prints the command whole. The
+implement skill's `references/finish.md` says how.
 
 ## The exit codes
 
@@ -106,7 +106,7 @@ One number never means two things, and none is new to this plugin.
 
 | Code | What it says |
 |---|---|
-| 1 | refused, with the reason on the first line. The path holds no `task.json`, or the task is already complete. A child is open. A high severity follow up has no task. The review did not pass and no reason was given. A file `task environment up` committed was changed by an order, or holds an uncommitted change. The task records no base. Those files are back while the site is recorded up. |
+| 1 | refused, with the reason on the first line. The path holds no `task.json`, or the task is already complete. Or the review did not pass, or passed with warnings, and no reason was given. Everything else `close` finds is a warning in the task record. Examples are an open child and a high severity follow up with no task. |
 | 3 | the script could not do its job. A missing argument, a record it could not read or that fails its schema, a file it could not write, or a task name the task script refused. |
 | 70 | `--reason` or `--leave` was passed on a run with nobody present |
 | 79 | the call ran outside the task's worktree. Enter the tree, the way `/aida:next` does, and run it again. `read` alone runs from anywhere |

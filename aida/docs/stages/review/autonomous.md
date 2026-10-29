@@ -5,21 +5,21 @@ its own branch, and the record says which branch ran. A light task reads as auto
 
 | Question | A person is present | Nobody is present |
 |---|---|---|
-| a criterion a person verifies | you answer met or unmet | your answer from the person-answer file; else unanswered, and no sign off |
-| the walk of the surfaces | you walk every one | recorded as not done, and the surface checks read unknown |
+| a criterion a person verifies | you answer met or unmet | your recorded answer; else unanswered, and no sign off |
+| a verifier row not met on a surface whose run passed | you read the evidence and answer met or unmet | unanswered, and the surface checks read unknown |
 | a lens check whose findings are all low | you confirm, met, or reject, unmet | met, and named in the audit list |
 | a follow up finding | review offers a task | recorded, and no task is created |
 | a decision the build left | you answer it | unanswered, so review writes no verdict |
 | a new baseline for a surface | shown, confirmed, then written | refused, and the refusal is recorded |
 | setting up a surface | offered once | not offered, and recorded as not offered |
 
-So an autonomous run with no person-answer file cannot sign off a task that carries one criterion
+So an autonomous run with no recorded answer cannot sign off a task that carries one criterion
 a person verifies. A check
 that could not run has established nothing. The close names each criterion that waits, and the
 route to answer it.
 
 To answer a waiting criterion or decision, see
-[answer for a person in an unattended run](../../task/person-answer.md).
+[the person's answer](../../task/person-answer.md).
 
 ## After the close
 
@@ -36,4 +36,4 @@ A light task changes what the surface checks require. See
 - Each stage refuses to start without the previous stage's record, so the chain to completion
   cannot run out of order.
 
-Source: skills/review/SKILL.md, skills/review/references/close.md, skills/review/references/surfaces.md, skills/implement/references/finish.md
+Source: skills/review/SKILL.md, skills/review/references/close.md, skills/review/references/acceptance.md, skills/implement/references/finish.md

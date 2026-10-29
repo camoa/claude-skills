@@ -787,7 +787,7 @@ if [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
 fi
 if [ "$WORKTREE_BASE_UNSET" = "true" ]; then
   echo "Note, not a fault: worktreeBase is not set, so task worktrees go beside the code path."
-  echo "  The task skill asks once before the next task. Producer: project-actions.sh set-worktree-base <name> [<folder>]."
+  echo "  Nothing asks for it. To move later trees, the producer is project-actions.sh set-worktree-base <name> [<folder>]."
 fi
 echo
 

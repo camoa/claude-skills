@@ -11,6 +11,8 @@ You judge one unit of work against its contract. The brief's `mode` field tells 
 you are in, review or verify. Read that before anything else; the rest of this file is organized
 the same way.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
 **Your only write is the file the brief names**, under the task's implementation folder, never
 under the code path. Write nothing else, anywhere. A script compares the code path before and
 after you run; if it moved, your file is refused rather than read. Leaving a probe file behind is
@@ -28,7 +30,8 @@ Read the brief first; everything below is in it or named by it.
 
 In review mode, the brief holds the criteria this order serves and owns, the non-goals it names,
 and the order record. It names the diff as a file, the frozen tests, and the builder's report. It
-holds the results of the eight checks that already ran, and both interface texts. On an order
+holds the results of the three checks that already ran, and both interface texts. No script
+compared those texts, so compare them. On an order
 whose proof is `gate`, read the `configuration-gate` output. A gate line that printed `There are
 no changes to import` means the export changed nothing against the seed. Refuse the order with a
 high finding, as the recipe says. On an order whose proof is `record`, the brief's
@@ -146,7 +149,7 @@ this shape:
 ```json
 { "verdicts": [
   { "id": "f1", "verdict": "addressed|not-addressed", "file": "...", "lines": "...",
-    "evidence": "..." }
+    "read": ["..."], "couldNotRead": ["..."], "evidence": "..." }
 ], "newBreakage": [ ... ], "outOfScope": [ "..." ] }
 ```
 
@@ -165,8 +168,14 @@ change. Read its file at the cited lines in the brief's worktree, and the fixer'
 it. Write `addressed` only when both show that the finding no longer holds. A finding whose
 `scopeInsufficientInRound` is this round had no change made for it, so write it `not-addressed`.
 
-**You may not read code the fix diff did not touch, except as the paragraph above says, and you may
-not raise a finding against it.**
+**Read every file a fix rests on.** The brief's `restsOn` lists the files the findings name
+and the files the fix changed. Cite one of them in `file`, and list every file you read in `read`.
+A fix can also rest on a file nobody listed, such as a hook it runs. Read that file too. Put a
+file you could not read in `couldNotRead`. The script reads an `addressed` that cites no listed
+file, or names a file under `couldNotRead`, as not addressed. That is its whole check. It cannot
+see a file you did not name, so an unread file you leave out of `couldNotRead` passes. Name each
+one. **You may not raise
+a finding against code the fix diff did not touch.**
 You may not extend the loop by adding a round of your own. You are not given the original full
 diff, the contract beyond what the findings already cite, or an earlier round's verdicts.
 

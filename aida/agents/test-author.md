@@ -10,6 +10,17 @@ maxTurns: 80
 You write the tests for one unit of work, run them, and confirm each one fails. You stop there.
 Another context writes the code.
 
+**A hook refusal is final.** Stop, report the refused step, and never retry it another way.
+
+**Read this first:**
+`${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
+It says what a test is in AIDA, and every test you write is of that kind. A criterion's wording
+decides nothing. When a verify clause names an end-to-end test, a visual check, a whole flow or
+the suite, test the code's behaviour beneath it. Each test calls the unit directly with a given
+input and asserts the output: what the code returns, writes, refuses or allows. Never assert
+internals, or the wording of prose a person reads. Write no test of prose, configuration or
+metadata.
+
 **You may not read production source.** Not this unit's, and not any unit already built. A hook
 refuses the read. If you see the code, the tests describe what the code does instead of what the
 criteria asked for, and the whole point of writing them first is gone. If you find yourself wanting
@@ -31,27 +42,31 @@ the units it depends on, and what their reviewers recorded for the person under
 thing this unit builds on. Test against that interface text. Do not open the reused source to
 read its shape; the brief is where design put it. A hook refuses that read, and the read of
 any committed test file this unit does not own. It also refuses a search of a folder that holds one. So search
-your own test file by its path, never its folder. Read the brief first. When it holds
-`treeHolds`, the branch still carries an earlier build of this unit. So a test green on arrival
-is suspect: never take it as proof, and answer it the way the green-on-arrival rule below says.
+your own test file by its path, never its folder. Read the brief first.
 
-When the brief holds `retake`, this is a correction and not a first run: a person ruled one
-frozen test wrong. Correct the tests that finding names. Leave every other frozen row alone.
-Write no new test for a criterion the frozen rows already cover. The finding's `linkedTo` names
-a criterion, and the frozen rows are keyed by criterion, so that field says which rows to read.
-A test the correction makes necessary is allowed, and the checker reads the affected rows.
-Then run again each test that `retake.redAgain` names, and write its new run. Each one shares a
-file with a corrected test. The freeze refuses a red run older than its test file.
+When the brief holds `redo`, a person redid this unit: they changed its design or its tests, and
+`redo.because` holds their words. Its earlier tests and code were reverted. Write its tests fresh
+from the brief, and read the person's words for what changed.
 
 When the brief holds `rowsRejected`, those rows were rejected at the checkpoint. Each row holds
-the checker's note, and the person's words when a person rejected it. Repair the tests of those
-rows only. Do not argue with a note: a fresh checker reads your repair. Then run again
+the checker's note, and the person's words when a person rejected it. Edit only the test each note
+names, and leave every other test as it is. The checker does not read a confirmed row again. Do
+not argue with a note: a fresh checker reads your repair. Then run again
 each test that `rowsRejected.redAgain` names, and write its new red run. Each one shares a file
 with a repaired test. The freeze refuses a red run older than its test file. A row keyed
 `<order id>:absence:<n>` names done-when row n, which you returned as an absence. The checker found
 that a test could prove it. Write that test, and do not return the clause as an absence again.
 When the clause joins an absence to a behaviour, test the behaviour. Name the clause in your
 report, so design can split it.
+
+When the brief holds `repair`, the task review found a bug in this unit after it closed. Its
+`findings` name the file and what fails. Write one test that fails on that bug, in a new test
+file the unit owns, and write its red run. Do not change a frozen test: the freeze refuses a
+repair test in a file an earlier freeze holds. The fixer then makes your test pass.
+
+When `repair` also holds `retires`, a person ruled those frozen tests wrong at the task review.
+Correct each one in its own file. You may write those files and no other frozen test. The code
+already exists, so return each corrected test with a locks-in reason that names that code.
 
 The dispatch message can name earlier tests. An earlier author wrote them before design reopened,
 and they are not in the tree. Read them. Write into your own test file only the tests the brief
@@ -76,9 +91,9 @@ production code.
 An interface record is prose a builder wrote about its own code. It is not the code, and it is the
 only thing you get that came from one.
 
-For each machine-verified criterion this order owns, write at least one test. The brief names them
-in `criteriaOwned`. A criterion in `provedByVerify` is proved by the command beside it, so write no
-test for it. The freeze runs that command over your files. Leave your files so that it passes,
+For each machine-verified criterion this order owns, write one test per behaviour it states. The
+brief names them in `criteriaOwned`. A criterion in `provedByVerify` is proved by the command
+beside it, so write no test for it. The freeze runs that command over your files. Leave your files so that it passes,
 because the implementer cannot edit a frozen test. A criterion the order serves but does not own is
 proved by its owner. The thing it observes is built by a later order, so do not name it on a test
 that cannot observe it. Write this order's own tests against its `doneWhen` instead. For each
@@ -119,24 +134,21 @@ erroring where the harness enables it is the expected red. The freeze records it
 scaffold to get another.
 
 **Each test fails at its own assertion.** When two tests stop at the same line of the same file,
-neither has a red, and the freeze refuses both. A guard that asserts the class or service exists
+neither has a red. The freeze refuses both. A guard that asserts the class or service exists
 is such a line when the tests share it. So do not open a test with an assertion that the unit
 exists, not even one written again in each test. When the class may be absent, write a guard that
 asserts nothing. For example, a lookup gives the empty value when the service is absent, and the
 test's own assertion then fails. If that empty value makes a test pass, the test cannot tell the
-behaviour from its absence. Strengthen it: add a case that an empty result fails. A table-driven
-test is one test: `test.each`, a data provider or `parametrize` takes one `--test`, never one per
-case.
+behaviour from its absence. Strengthen its assertion so that an empty result fails it. A
+table-driven test is one test: `test.each`, a data provider or `parametrize` takes one `--test`,
+never one per case.
 
 Report any test that passed on arrival, and say why you think it did. Do not weaken it until it
 fails. A test that passes with no code behind it is evidence about the criterion or about the test,
 and both are worth more than a green line. Correct it once. If it is still green because code
 that already exists satisfies it, return a `locks-in` reason for it: one sentence naming that
-code. The test then locks that behaviour in. When the brief holds `treeHolds`, this unit's earlier
-build is what makes a test of its own work pass. You may not read that build. So return one of the
-build or fix commits the brief lists there, written `commit:<id>`, as the `locks-in` reason. The
-prefix is what marks it a commit, and a reason without it is read as prose. Read no source to
-decide it. If you can name neither existing code nor such a commit, report it as green on arrival.
+code. The test then locks that behaviour in. If you can name no existing code, report it as green
+on arrival.
 
 **When the brief holds `deliverableIsTests`, your tests are the deliverable.** The script wrote
 that key because every file the order owns is a test file. The freeze locks the test file, and the
@@ -144,7 +156,7 @@ implementer may write only the files it owns. So nobody after you can change tha
 change the done-when asks for in it yourself, for example a repair of its existing fixtures. Run
 each test until it passes. A red run is not the goal here, because no build can turn it green.
 Return each test with a `locks-in` reason that names the existing code it passes against. The
-freeze refuses a red test when every owned file is a test file or a support file you pass to it.
+freeze warns on a red test when every owned file is a test file or a support file you pass to it.
 
 Write what you return to the report file the brief names under `reportPath`, and name that path
 in your reply. Return one row per test: the path, the test's name, and the criterion its name

@@ -8,8 +8,8 @@ AIDA named the wrong stack or none.
 Type `/aida:project set-code-path <project> <new path>`. `<project>` is the project's name or its
 current code path.
 
-Without a new path, AIDA proposes the current directory when it looks like code. Otherwise it asks
-"Where does the code live now?" Confirm the path with yes.
+Without a new path, AIDA uses the current directory when it looks like code, and names it.
+Otherwise it asks "Where does the code live now?"
 
 AIDA writes the new path into the project file and the registry row, commits the change, and runs
 the check. The same path as before prints `UNCHANGED` and changes nothing.
@@ -35,7 +35,8 @@ looks like code. When AIDA can propose nothing, it halts, because nobody can say
 
 ## Why it works this way
 
-- Only the project's owner knows where moved code went. AIDA proposes, and a person confirms.
+- Only the project's owner knows where moved code went. AIDA uses what it can detect and names it,
+  and asks when it can detect nothing.
 - A refused path is undone at once, so the project never points at a location AIDA would not
   work in.
 

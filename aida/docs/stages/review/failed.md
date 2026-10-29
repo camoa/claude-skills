@@ -1,7 +1,8 @@
 # After a failed review
 
-A failed review hands you the record and stops. You fix the code and review again, or you close
-the task without a passed review.
+A review fails when a criterion reads unmet. It hands you the record and stops. You fix the code
+and review again, or you close the task without a passed review. A review that passed with
+warnings is handled the same way, with your reason at completion.
 
 ## Fix the code, then review again
 
@@ -11,17 +12,24 @@ order's own fixer repairs it, a fresh verifier checks the round, and the order c
 build then finishes again, with a range that ends at the new head. Then run
 `/aida:review <task-id>`. It starts from the checks, and archives the old record first.
 
-`reopen` takes only findings that fail a criterion. It names each one it could not send, with
-the reason: the finding names no file, no order owns the file, two orders own it and neither
-serves the criterion, or the owning order is not closed. When it can send none, it refuses and
-keeps the build record.
+A bug in an order proved by tests gets a failing test first. That order's test author writes one
+test that fails on the bug, and it freezes as a new record. Then the fixer makes it pass. See
+[finish](../implement/finish.md).
+
+`reopen` takes findings that fail a criterion, and findings you ruled `test-wrong`. A test ruled
+wrong goes to the order whose frozen record holds it. That order's test author corrects it, and
+the correction freezes as a new record. You never correct a frozen test by hand. `reopen` names
+each finding it could not send, with the reason. The finding names no file, or no order owns the
+file. Or two orders own it and neither serves the criterion, or the owning order is not closed.
+When it can send none, it refuses and keeps the build record.
 
 `reopen` never takes these, and never names them:
 
 - a failed check that cites no finding;
-- a medium or high finding that cites no criterion. Rule it `wrong` or `deferred` at the
-  [close](close.md), or fix it yourself;
-- a decision you ruled `load-bearing`, `test-wrong` or `rebuild`.
+- a medium or high finding that cites no criterion, unless you ruled it `test-wrong`. Rule it at
+  the [close](close.md), or fix it yourself;
+- a decision you ruled `load-bearing`. A decision you ruled `rebuild` goes through `redo`. A decision you ruled `test-wrong` goes to
+  its order's test author, like a finding.
 
 For each one you fix yourself, commit the fix on the task branch, then run the build's finish
 again. Keep the fix inside the files the orders own. A file no order owns reads unmet at
@@ -41,12 +49,12 @@ and review again.
 | the tool printed nothing, and the baseline kept nothing | open the tool's output in the record and see why |
 | the suite, or a surface run, selected no tests | make it select tests |
 | the end to end preflight failed, so the run never started | fix what it checks, such as the site being up |
-| nobody walked the surfaces, on an autonomous run | review again with a person present |
+| a verifier row on a passing surface waited for a person, on an autonomous run | review again with a person present |
 
 ## Close without a passed review
 
-Completion closes a task on a failed review only on your reason, one sentence that the record
-keeps. See [completion](../completion/README.md).
+Completion closes a task on a failed review, or on one with warnings, only on your reason, one
+sentence that the record keeps. See [completion](../completion/README.md).
 
 ## Why it works this way
 

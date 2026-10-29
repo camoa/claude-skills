@@ -32,8 +32,8 @@ stage reads the file. So a long recipe never enters the conversation that runs t
 ## A recipe is data, not commands
 
 A stage's script reads the command blocks of a recipe itself. It runs each command as a list of
-arguments, never through a shell. It refuses a command that carries a shell character. The model
-never retypes a command out of a recipe.
+arguments, never through a shell. It does not run a command that carries a shell character: the
+record names it unknown, and a warning says so. The model never retypes a command out of a recipe.
 
 ## A failed lookup has three answers
 

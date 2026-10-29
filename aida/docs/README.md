@@ -4,7 +4,7 @@ AIDA is a Claude Code plugin that keeps AI coding work inside a process. Every t
 six stages, scripts check each stage against the records the stage before it wrote, and the
 knowledge about your stack comes from recipes AIDA fetches.
 
-These pages describe AIDA 6.0.22.
+These pages describe AIDA 6.1.0.
 
 ## The path through it
 

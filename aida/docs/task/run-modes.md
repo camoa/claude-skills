@@ -10,7 +10,7 @@ records that it did, and stops where only you can decide.
   stage AIDA names the next command and stops.
 - **Autonomous.** Each stage takes its unattended branch and, at its end, starts the next stage
   itself. One command can carry the task from scope to completion. The chain ends early when a
-  work order halts in the build.
+  work order stops in the build.
 - **Autonomous for some stages.** You name the stages. The rest stay interactive. A common use:
   you write the contract and read the review, and the build runs without you.
 - **Light.** An autonomous run over every stage that skips named steps. See
@@ -33,7 +33,9 @@ modes.
 shows the stages in brackets, such as `autonomous (implement)`; see
 [how a stage reads its mode](../stages/scope/unattended.md). `interactive` removes the
 mode, because no mode already means interactive. Nothing in AIDA sets or proposes a mode; only you
-do. Every step reads the mode from the task, so a change takes effect at once.
+do. Each change needs your answer first, through a permission prompt; see [the person's
+answer](person-answer.md). Every step reads the mode from the task, so a change takes effect at
+once.
 
 Then start the run with the command for the stage the task is at, such as `/aida:scope <task-id>`
 for a new task. `/aida:next <task-id>` names it. Each autonomous stage then starts the next one.
@@ -51,8 +53,8 @@ the record says which:
   without you.
 - **Not done, and recorded.** An offer is not made. Nothing is switched on or installed on a
   guess.
-- **Halted.** A step you cannot easily undo, or an answer only you can give, stops that piece of
-  work. One halted work order stops only the orders that depend on it.
+- **Stopped.** A step you cannot easily undo, or an answer only you can give, stops that piece of
+  work. One stopped work order holds back only the orders that depend on it.
 
 ## Where each stage stops or decides
 
@@ -66,20 +68,21 @@ Each stage page says what its unattended branch does. In short, with where each 
 - [design](../stages/design/README.md) checks each reuse decision with a confirmer, and records
   its verdict in the work order. Its close record says who was present. A verify line that is not
   a recipe's own command waits for your approval at close.
-- [implementation](../stages/implement/README.md) halts a work order at each point only you can
-  decide, and records each halt with its reason. A finding with an empty fix scope, and a
-  departure from the design, do not halt: review puts each to you before its verdict. The
-  finished record counts the test rows a model judged, which nobody read.
+- [implementation](../stages/implement/README.md) stops a work order at each point only you can
+  decide, and records each stop with its reasons. A finding with an empty fix scope, and a
+  departure from the design, do not stop it: review puts each to you before its verdict. A test
+  newly broken at finish stops the task before review. The finished record counts the test rows a
+  model judged, which nobody read.
 - [review](../stages/review/README.md) leaves each person-answered criterion unanswered and
   writes no verdict. The task has no sign-off until you answer them.
-- [completion](../stages/completion/README.md) closes only on a passed review.
+- [completion](../stages/completion/README.md) closes only on a review that passed with no warning.
 
-To answer a halt, see [answer for a person](person-answer.md).
+To answer a stop, see [the person's answer](person-answer.md).
 
 ## Why it works this way
 
 - A model that decides for an absent person, with nobody watching, removes the checkpoint that
-  person was. So AIDA halts there instead.
+  person was. So AIDA stops there instead.
 - Each stage refuses to start without the record of the stage before it, so an autonomous chain
   cannot run out of order.
 

@@ -53,32 +53,28 @@ check only saves a round trip.
 Autonomous with no name given: **halt.** A task cannot be filed without one.
 
 **2. Goal.** Ask what this task is for, in the spirit of a user story: what someone wants to
-accomplish and why, not a ticket. Write it back in one or two sentences and confirm with a plain
-yes or no before writing anything. Autonomous with no goal given or implied by the conversation:
-**halt.** A task with no stated goal is not a record of anything.
+accomplish and why, not a ticket. Write it back in one or two sentences and go on. Scope reads the
+goal with the person before anything is built. Autonomous with no goal given or implied by the
+conversation: **halt.** A task with no stated goal is not a record of anything.
 
 **3. Write it.** First the worktree base. A project made before this setting may record none. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh read-worktree-base "<projectPath>"
 ```
-Exit 0: a base is recorded. Use it silently; this is never asked a second time. Exit 1: it
-printed the default. Interactive: ask once, "Where should task worktrees go? Default:
-`<printed folder>`." An empty answer passes no folder, which records the default. A typed
-absolute path passes that path. Record it:
+Exit 0: a base is recorded. Use it silently. Exit 1: it printed the default, and the tree goes
+there. Nothing is asked. Name that folder once, and say that the project's `set-worktree-base`
+action moves the next tree elsewhere:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh --run-mode <interactive|autonomous> \
   set-worktree-base "<projectPath>" ["<folder>"]
 ```
-Exit 3 refuses the folder, for the reason it prints: ask again. Autonomous: do not ask, and
-record nothing. The tree goes in the default folder. Say so; the next attended create asks. This
-is asked here
-because the first tree is about to be made, and a tree once made stays where it is.
+A tree once made stays where it is.
 
 Then run the create, with the run mode set as decided above. Add `--after <task-id>` when the
 person said this task builds on another task of this project:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
-  create --project "<projectPath>" --name "<name>" [--after <task-id> [--in-tree]] -- <goal...>
+  create --project "<projectPath>" --name "<name>" [--after <task-id> [--in-tree]] [--tree-at-start] -- <goal...>
 ```
 It writes the folder, `task.json` with `state: "new"`, and `task.md` with the goal under `## Goal`.
 It then makes the task's own git worktree in one folder per repository beside the code path, at
@@ -89,9 +85,10 @@ slug of the code folder plus the task name, so a site name is predictable and un
 outside the code path for one reason. A nested worktree is invisible to a tool that registers
 projects by folder, and DDEV hands it to the parent project. A tree that `task.json` already
 records on disk stays where it is.
-The tree is cut from the trunk, HEAD of the code path. Made from inside another task's tree, it
-starts from that task's work only while that task is open and its branch is not in the trunk.
-The `base:` line names the commit and the reason. Show it. With `--after`, the tree is cut from
+The tree is cut from the trunk, HEAD of the code path, wherever `create` runs. The `base:` line
+names the commit. Show it. With `--tree-at-start`, `create` makes no tree: `start` makes it.
+Completion makes each follow-up task this way, so a follow-up nobody starts costs no tree. Skip
+steps 4 and 5 then. With `--after`, the tree is cut from
 that task's branch, and `task.json` records `after`. Use it for a chain of tasks made up front,
 because a tree cut now from trunk holds none of the earlier builds. While that task's build is
 unfinished, no tree is made: `worktree:` reads `none` and `after-build:` reads `unfinished`. Skip
@@ -111,18 +108,8 @@ came without `--after`. Or the worktree could not be made. In the last case the 
 repair the message gives and stop.
 
 **4. Enter the tree.** Every stage action of this task runs inside that worktree, and refuses
-from anywhere else. The `worktree:` line names it. Call the `EnterWorktree` tool with that path,
-so scoping in this same window is not refused. The tool asks for approval, because the path is
-outside `.claude/worktrees/`; that is expected. From a window outside the code repository the
-tool refuses on first entry, and from a session already inside a worktree it refuses too. A
-person may also decline the prompt, which is not a refusal. After either outcome, do not call the
-tool again. Take the other route, and read `/aida:next` for the whole rule. The scripts stay
-reachable without entry: start every Bash
-call with `cd <path> &&`. Every call needs it, because the shell's directory resets between
-calls. The `cd` part asks for approval, because the tree sits outside this window's directory.
-The exit 79 message names that form too. The way in is `/cd <path>`, typed by the person: it
-moves this session into the tree and keeps the conversation (Claude Code 2.1.169 or later).
-Print the path and say so. Go on to step 5 either way.
+from anywhere else. The `worktree:` line names it. Enter it as `/aida:next` says under "Enter the
+tree", the one copy of that rule. Go on to step 5 either way.
 
 **5. Offer the site.** Runs here after step 4, and again at `start` whenever the task record
 still has no `environment`, whoever called `start`. A worktree has the branch's files and no
@@ -164,8 +151,8 @@ and the `--setup-recipe` flags. `down` takes none: it reads the recipe path the 
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   environment --project "<projectPath>" "<task-id>" not-applicable -- <reason...>
 ```
-`not-applicable` writes `environment` as the reason alone, and commits. It is a person's answer,
-so it refuses unattended at 70. `up` replaces it; `down` with it recorded says nothing was up.
+`not-applicable` writes `environment` as the reason alone, and commits. `up` replaces it; `down`
+with it recorded says nothing was up.
 `show` prints the recipe path, the preconditions prose and the build-in-place prose. It prints
 the token, bring-up, address and tear-down commands with `{codePath}` filled, and runs none of
 them. It prints the paths of the `## Files` blocks, the files `up` writes, and one
@@ -182,7 +169,7 @@ there. Exit 0 prints `status: up`. Any other exit prints `status: down` and the 
 output. The line may run a script from `## Files`. The script is written where absent, and taken
 out after the line. The implementation step runs the same line before an order's verify lines.
 
-`up` is a person's yes, so it refuses unattended at 70. It runs in the task's worktree, with each
+`up` needs no person's answer, because `down` takes the site away again. It runs in the task's worktree, with each
 command as it ran and that command's own output in `records/environment-up.txt`, in this order,
 and one line in that record marking the address command, so `down` can find that command's output
 later.
@@ -212,7 +199,8 @@ that content. A site brought up before this record existed has none. Run `up` ag
 files already committed are not committed again. Then
 each `## Tokens` command, whose first output line is the token's value. A token command that
 prints nothing or fails refuses at 4 by the token's name. Then it writes the marker into
-`environment`: `state: coming-up`, the recipe, and the time. The record names the site before the
+`environment`: `state: coming-up`, the recipe, the time and each token's value. `down` fills those
+values into the tear-down, so it can remove what the bring-up made in the main checkout. The record names the site before the
 site exists, so a failure during the bring-up leaves a site `down` can still find. The marker
 keeps every other field the record held, so a second `up` over a site that is up does not drop
 that site's address while the bring-up runs again. Then the
@@ -266,34 +254,35 @@ site in a file absent where the branch started.
 
 ## `prune [<task-id>]...`
 
-The worktrees of complete tasks. A worktree kept after completion costs disk and a DDEV project
-each, and a tree removed too early loses uncommitted work. So this lists first, asks per tree,
-and removes only what a person named. Run it from the main checkout, never from inside a tree
-it may remove.
+The worktrees of complete tasks. A task nobody started reaches here once it is complete, such as
+a moot follow-up closed with its reason. An open task keeps its tree. A worktree kept after completion
+costs disk and a DDEV project each, and a tree removed too early loses uncommitted work. So this
+lists first, asks once, and removes only what a person named. Run it from the main checkout,
+never from inside a tree it may remove.
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   prune --project "<projectPath>" [--all] [<task-id>]...
 ```
 **1. List.** With no id the script prints one `id:` line per complete task that records a
 worktree. The line holds the path, the branch, and whether the branch is merged into the code
-path's current branch. It also says whether the tree is on disk and whether a site is up,
-which reads `coming-up` for a tree whose bring-up did not finish.
-`prune: none` means nothing to remove. Show the lines. Autonomous: this is the whole action.
-Say once that a tree goes only on a person's yes, and stop. The script refuses an id unattended
-at 70.
+path's current branch. It also says whether the tree is on disk and whether a site is up. A site
+reads `coming-up` for a tree whose bring-up did not finish. `prune: none` means nothing to remove. Show the lines. Autonomous: this is the whole
+action. Say once that a tree goes only on a person's yes, and stop. The script refuses an id
+unattended at 70.
 
-**2. Ask per tree.** For each listed tree ask a plain yes or no, one at a time, with the line.
-Never ask once for all of them. An unmerged branch is a reason to say so before asking: the
-tree goes, the branch stays.
+**2. Ask once.** Show the list and ask which trees go. The answer names the trees, or says all
+of them. Say first which branches are unmerged: the tree goes, that branch stays.
 
-**3. Remove.** Run the action once with every id that got a yes, in the order given, or with
-`--all` when every tree got one. For each tree the script tears the site down when one is up,
+**3. Remove.** Run the action once with every id the answer named, in the order given, or with
+`--all` when it named every tree. For each tree the script tears the site down when one is up,
 then removes the tree. It removes the group folder when it is empty, never the worktree base
-itself. It deletes the branch when it is merged. It clears `worktree` and
+itself. It deletes the branch when git deletes it as merged. Otherwise the branch stays, and the
+`pruned:` line names it, so the person decides. A task that records no tree prints `unchanged:`.
+It clears `worktree` and
 `environment` from `task.json` and commits. It prints one `pruned:` line per tree naming what
 happened to the branch. A tree that another task also records stays, and its line says `kept`:
-a later task made with `--in-tree` builds in it. Show them. Exit 3 names the tree it stopped at and why. The task is not
-complete, git refused a tree with uncommitted changes, or the tear-down failed. Nothing after
+a later task made with `--in-tree` builds in it. Show them. Exit 3 names the tree it stopped at and why. The task is
+not complete, git refused a tree with uncommitted changes, or the tear-down failed. Nothing after
 that tree was touched, and nothing is ever forced. Say what it printed and stop.
 
 ## `repair <old-task-folder>`
@@ -308,7 +297,8 @@ Given the path to a task folder still sitting under `implementation_process/in_p
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh repair --project "<projectPath>" "<old-task-folder>"
 ```
 No confirmation is needed: nothing here is destructive. The script refuses outright when the
-destination already exists. It reads the goal under `## Goal`, or under `## Problem` when there
+destination already exists. When the old folder is gone and `tasks/` holds the task, it was
+repaired already: it prints `UNCHANGED` and exits 0. It reads the goal under `## Goal`, or under `## Problem` when there
 is no `## Goal`, the heading some version 5 records used. With neither it refuses, naming both,
 rather than moving something it cannot verify. It prints `goal-heading:` with the one it read.
 It reads the goal, and the parent and children when an old header carries them, back from the
@@ -341,19 +331,20 @@ it is not usually a person typing a command. By hand, run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   start --project "<projectPath>" "<task-id>" -- <why...>
 ```
-Already `in_progress`: prints `UNCHANGED` and does nothing further. Already `complete`: refused,
-since a completed task is not reopened here. Otherwise it writes the new state, commits, and runs
-the task check. Show the whole output. The check reports and never repairs, so a finding here is
-the one thing to repair now, before the stage writes anything.
+Already `in_progress`: prints `UNCHANGED` and does nothing further. Already `complete`: refused at
+3, since a completed task is not reopened here. Otherwise it makes the tree when the task records
+none, as a follow-up does, cut from the trunk. Then it writes the new state, commits, and runs the
+task check. Show the whole output. The check reports and never repairs, and `start` exits 0
+whatever it found. A finding here is the one thing to repair now, before the stage writes anything.
 
 A task made with `--after` starts only when the task it builds on has finished its build. That
-task then holds `implementation/finished.json`, or reads complete. Otherwise `start` prints
-`REFUSED` and exits 1, and the stage that called it writes nothing. Say which task to build first.
+task then holds `implementation/finished.json`, or reads complete. Otherwise `start` refuses at 3, and the stage
+that called it writes nothing. Say which task to build first.
 When it starts, `start` cuts the tree from that task's branch, and `worktree:` names the tree.
 That task may be complete with its branch merged and pruned. The tree is then cut by the base
 rule above, because that work is on trunk. A tree that cannot be cut exits 3, and no state is
 written.
-Enter it as `create` step 4 says.
+Enter it as `/aida:next` says under "Enter the tree".
 
 When the output holds `environment: none`, run `create`'s step 5 now, whoever called `start`: a
 person by hand, or a stage's script through scope's `init`. A stage's script passes that line
@@ -375,6 +366,8 @@ one outright. By hand, the call is:
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   complete --project "<projectPath>" "<task-id>" -- <summary...>
 ```
+A task nobody started closes here too, such as a follow-up the person finds moot. The summary is
+the reason, and `prune` then removes its tree.
 It sets the state to `complete`, appends a dated `## Completed` section holding the summary to
 `task.md`, and commits this task's folder, `tasks/<id>`, alone. Every task action commits that
 way, never `tasks/` whole, so another task's uncommitted file is never taken. That commit carries
@@ -393,8 +386,8 @@ split advisor recommends the children and their criteria after research closes. 
 `split-read` action checks that every criterion is claimed once, before this action runs. This only performs
 the mechanical split.
 
-Each child takes the parent's `after`, so it waits for the same build, and gets its tree as
-`create` gives one. The two-level limit stays: a task that already has a parent cannot be split again, and a child
+Each child takes the parent's `after`, so it waits for the same build. It gets its tree when it
+starts, so a tree refused for one child never leaves a split half written. The two-level limit stays: a task that already has a parent cannot be split again, and a child
 always lives in the same project as its parent, never another one. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
@@ -404,17 +397,19 @@ always lives in the same project as its parent, never another one. Run:
 ```
 Repeat `--child ... --goal ... [--criterion ...]` once per child, at least twice. It creates each
 child's folder and `task.json` with `parent` set to the split task's own id, writes each child's
-goal and any handed-down criteria into its `task.md`, makes each child's own worktree the way
-`create` does, adds every new id to the parent's own
-`children` list, reads all of that back, and commits everything together. Exit code 1 means it
-stopped before writing anything: `NOT FOUND` says the named task does not exist, `REFUSED` says
-the two-level limit stopped it. Say which and stop. Show the whole output otherwise.
+goal and any handed-down criteria into its `task.md`, adds every new id to the parent's own
+`children` list, reads all of that back, and commits everything together. Exit code 3 before any
+write means the named task does not exist, a child id is refused, or the two-level limit stopped
+it. Say which and stop. Show the whole output otherwise.
 
 ## `set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]...`
 
 Run mode is written only when a person explicitly asks for an autonomous or a light run on this task.
 Nothing above asks about it on its own, and nothing here proposes it either. Only call this when
-asked. Run:
+asked. A change needs the person's answer first, in every mode, because the run mode decides
+which person checks still read it. Record it with `person-answer.sh` below, step
+`task set-run-mode`. The words are the mode, then each stage, one space apart, such as
+`autonomous implement`. Without it, the call refuses (exit 70) and prints the command. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   set-run-mode --project "<projectPath>" "<task-id>" <autonomous|light|interactive> [--stage <stage>]...
@@ -426,24 +421,41 @@ removes the field and the stages: there is no `"interactive"` value to write, si
 absence already means that. Show the whole output.
 
 `light` is an autonomous run over every stage that skips named steps, and it takes no `--stage`.
-Each skip is logged in `COMPROMISES.md` in the task folder. The `path-script:` line says
-whether end to end is on. Light keeps one script that walks the demo path, and review
-fails the task without it. When end to end is off, say that a person sets it up with
-`/aida:surfaces e2e` before the run. When the project declined end to end, light keeps no
-such script.
+Each skip is logged in `COMPROMISES.md` in the task folder. The `path-script:` line says what
+light does about the one script that walks the demo path. `registered`: the project has it, and
+no order writes or extends it. `create`: the first order writes it. `off`: say that a person may
+set up end to end with `/aida:surfaces e2e` before the run. `declined`: light keeps no such
+script.
 
 A light or autonomous run still stops for a person, and a dispatched agent cannot answer for one.
 So when one session coordinates agents that run the tasks, that session holds every person-only
-call. An agent never runs `set-run-mode` and never writes a person's answer. It reports the stop
-to the coordinator once and stops. The coordinator puts the stop to the person. Then it runs the
-call itself. For an implement call, review's `close`, or `environment` `up`, `not-applicable` or
-`down`, it can instead write the answer as a record. The exit 70 refusal prints that record.
-The implement skill's `references/finish.md` says how.
+call. An agent never runs `person-answer.sh`, and a hook refuses it. It reports the stop to the
+coordinator once and stops. The coordinator puts the stop to the person, records the answer, and
+runs the call itself.
 
 When the mode covers review, two lines can follow, on light or autonomous. The `sign-off:` line
 names the criteria a person answers, so an unattended review writes no verdict. The
 `review-tools:` line names the review tools that preconditions found absent. Before
 preconditions has run, it says that preconditions will check them. Read both to the person.
+
+## `person-answer.sh <task-id> --step <step> [--order <id>] -- <words>`
+
+Some steps are a person's decision only. Each one refuses until the person's answer is on record.
+The refusal prints this command with the step, the order and the words to use. Run it:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/person-answer.sh --project "<projectPath>" "<task-id>" \
+  --step "<step>" [--order <order id>] -- <the person's words>
+```
+Words that run over one line go in a file, passed as `@/<file>`. Claude Code shows its permission
+prompt for this script, and the person approves or denies it. Never answer for the person. A
+denied prompt records nothing. In bypassPermissions or dontAsk mode the hook refuses the script,
+because no prompt can show there. Then stop and report the step to the person.
+
+The script appends one entry to `person-answers.json` in the task folder. The step it serves marks
+the entry used, or refused when the step refuses for a reason other than an argument fault. So
+each attempt needs its own answer. No entry is removed. A hook refuses every other write of that file, and of
+`task.json`, from any session. The implement skill's `references/finish.md` lists the steps and
+their words.
 
 ## `set-budget <task-id> [--dispatches <n>] [--minutes <n>]`
 
@@ -456,14 +468,14 @@ it, and nothing here proposes one. Only call this when asked. Run:
 `--dispatches` counts the roles implementation dispatches over the whole run. `--minutes` counts
 wall-clock time from the ledger's own start. Either one alone is a ceiling, and both may be given.
 Neither is refused. Each takes a whole number of 1 or more, and the action refuses anything else.
-The task check does not read the schema's minimum, so a zero would pass it and halt the first
+The task check does not read the schema's minimum, so a zero would pass it and stop the first
 dispatch. A number this call does not name keeps the value it had. There is no action that removes
 a budget.
 
-The build halts the order it was about to dispatch when either number is reached, with `budget
-spent`. To answer that halt a person raises the number here first. Then they run `grant-attempt` in
-the implementation skill, which clears the halt segment. The order is the whole point. The spend is
-recomputed from the ledger at every dispatch, so a grant before the raise brings the halt straight
+The build stops the order it was about to dispatch when either number is reached, with `budget
+spent`. To answer that stop a person raises the number here first. Then they go on with `go-on` in
+the implementation skill, which clears the stop. The order is the whole point. The spend is
+recomputed from the ledger at every dispatch, so going on before the raise brings the stop straight
 back. Show the whole output.
 
 ## `save <task-id>`
@@ -473,9 +485,9 @@ it down for the next window. Only a person invokes it; nothing dispatches it.
 
 The current stage is the `stage` the next skill's report prints for this task, the first whose
 close record is absent.
-That is scope without `records/scope-distill.json`. A light task is at scope only when
-`alignment.json` also lacks `pluginVersion`, which scope's close stamps. Research is the stage without
-`records/research-check.json` at `exitCode` 0, and design without `design-closed.json`. A task in state `new`, or whose stage has no
+That is scope while `alignment.json` lacks `pluginVersion`, which only scope's close stamps.
+Research is the stage without `records/research-check.json` at `exitCode` 0 and with no design
+folder yet, and design without `design-closed.json`. A task in state `new`, or whose stage has no
 record on disk yet, skips the distiller: nothing exists to distill. The stage's first record is
 `alignment.json` for scope, `research/*.json` for research, `design/*.json` for design. Say which
 stage it would have been and that none exists, then go on to the list. Otherwise, when the
@@ -494,11 +506,11 @@ read the sidecar it writes. A record path absent mid-stage is normal; the distil
 a gap.
 
 Name what this conversation decided that neither the sidecar's `decisions` nor the stage's own
-files hold. Each is one sentence: what was decided and what it applies to. Show the list and ask
-for a plain yes or no. Nothing is written before yes. Nothing to save is said in one line, and
-`save` still runs with no text. That records the time, which clears the compaction hook's refusal.
+files hold. Each is one sentence: what was decided and what it applies to. Write them, then show
+what was saved. Nothing to save is said in one line, and `save` still runs with no text. That
+records the time, so a later manual compaction writes no warning.
 
-Yes: run once per sentence, or once with all of them:
+Run once per sentence, or once with all of them:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh --run-mode <interactive|autonomous> \
   save --project "<projectPath>" "<task-id>" -- <text...>

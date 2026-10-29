@@ -4,7 +4,7 @@
 # scope-actions.sh, research-actions.sh and design-actions.sh each carried their own copy of these
 # four. One implementation, not three copies drifting apart, the same reason schema-check.sh exists.
 #
-# The caller defines die1, die2, die3, die4 and die79 before it sources this file, each with its own
+# The caller defines die1, die3 and die79 before it sources this file, each with its own
 # script name in the message, so a refusal still says which script refused, and PLUGIN_ROOT, so
 # this library can find the task script. Those are the only things this library takes from its
 # caller rather than owning.
@@ -13,6 +13,10 @@
 #
 #   resolve_task_folder <path> <action>   prints the canonical task folder, or dies
 #   looks_like_flag <value>               true when the value is another option, not data
+#   need_value <action> <flag> <count> <value> [non-empty|text]
+#                                         refuses at 3 a flag with no value, or with another
+#                                         option as its value; with non-empty, an empty value too;
+#                                         text is non-empty for a value of free words
 #   is_blank <value>                      true when the value is empty or only whitespace
 #   text_args <arg>...                    sets TEXT_ARGS to the arguments, each @/<path> read
 #   parse_finding_ref <action> <ref> <research folder>
@@ -32,6 +36,9 @@
 #   task_run_mode <folder> <stage>        prints autonomous when the task's mode is autonomous and
 #                                         covers the stage, or is light, else interactive
 #   task_is_light <folder>                true when the task's mode is light
+#   path_script_state <folder>            sets PS_STATE and PS_FILES: what a light task does about
+#                                         the script that walks the demo path, and its files
+#   path_script_line <folder>             prints the `path-script:` line from path_script_state
 #   log_compromise <folder> <stage> <skipped> <normal>
 #                                         adds one row to COMPROMISES.md in the task folder
 #   unlog_compromise <folder> <stage> <skipped> <normal>
@@ -140,8 +147,7 @@ CITES_JQ='
     | {search: $s, n: tonumber};'
 
 # A backticked token from an order's interface, read as a repository path (gap row 253). Design's
-# check compares it with the order's owned and known paths, and build-recheck asks git whether it
-# exists, so both read a token alike. A leading ./ goes, and so does everything from the first
+# check compares it with the order's owned and known paths. A leading ./ goes, and so does everything from the first
 # colon, so `src/Foo.php::bar()` and `src/Foo.php:12` read as src/Foo.php. What is left is a path
 # when it holds a slash, and is neither absolute nor a URL. Anything else yields empty.
 # shellcheck disable=SC2034 # read by the sourcing script
@@ -252,6 +258,20 @@ looks_like_flag() {
     --*) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Every flag that takes a value refuses the same ways: no value at all, and a value that is itself
+# the next option, as in `--id --leave`. $1 the action, $2 the flag, $3 what is left of "$#",
+# $4 the value. A fifth argument refuses an empty value as well. A flag that takes a list keeps
+# the empty value, because an empty list is how design clears one. A fifth argument of text marks
+# a value of free words, such as a reason: words may open with "--", and a file read through
+# @/<path> may open with a "---" rule, so the next-option test is skipped for it.
+need_value() {
+  [ "$3" -ge 2 ] || die3 "$1: $2 needs a value. Pass it after the flag; --help shows its form."
+  [ "${5:-}" = text ] || ! looks_like_flag "$4" \
+    || die3 "$1: $2 needs a value, got the option $4 instead. Pass the value after the flag; --help shows its form."
+  [ -z "${5:-}" ] || [ -n "$4" ] || die3 "$1: $2 was given an empty value. Pass a value."
+  return 0
 }
 
 # True (exit 0) when $1 is empty, or holds only whitespace. This is a value with no characters in
@@ -517,41 +537,83 @@ task_run_mode() {
   if [ "$answer" = "autonomous" ]; then printf 'autonomous'; else printf 'interactive'; fi
 }
 
-# Gap row 357. A person's answer, held as a record, stands in for an interactive run on one call.
-# The record is {"task", "step", "order", "answer"}: the task's id, the action, the order ("" for a
-# task-wide action) and the exact words the call carries. Final newlines on either side are not
-# words. An empty answer never matches. Only the main session writes the record:
-# hooks/deny-frozen-test-writes.sh refuses it to every agent type. A match is held, not removed,
-# so a later refusal keeps the person's answer. task_answer_consume removes it once the action wrote.
-# $1 the record file, $2 the task folder, $3 the action, $4 the order or empty, $5 the words.
-TASK_ANSWER_MATCHED=""
-task_person_answered() {
-  local task_id
-  [ -n "$5" ] && [ -f "$1" ] || return 1
-  task_id="$(jq -r '.id // empty' "$2/task.json" 2>/dev/null)"
-  jq -e --arg task "$task_id" --arg step "$3" --arg order "$4" --arg answer "$5" \
-    '.task == $task and .step == $step and (.order // "") == $order
-     and ((.answer // "") | sub("\n+$"; "")) == ($answer | sub("\n+$"; ""))' "$1" >/dev/null 2>&1 || return 1
-  TASK_ANSWER_MATCHED="$1"
+# The person's answers, <task>/person-answers.json: a JSON array that
+# skills/task/scripts/person-answer.sh alone appends to. Each entry is {step, order, words, answeredAt}, and usedAt once a step used it.
+# The step is "<skill> <action>", such as "implement redo". The order is "" for a task-wide
+# step. Final newlines are not words, and empty words never match. The hook makes Claude Code show
+# its permission prompt for that script, and refuses every other write of this file, so an entry is a
+# yes that whoever answers prompts in the session gave. An entry is never removed: the step that
+# used it marks it usedAt, and a step that refused after it found the entry marks it refusedAt, so
+# review can count every answer and an answer serves one attempt.
+TASK_ANSWER_HELD=""
+task_answer_file() { printf '%s/person-answers.json' "$1"; }
+
+# True when the task holds an unused entry for this step, order and words: neither usedAt nor
+# refusedAt. The first such entry is held. task_answer_consume marks it once the action wrote, and
+# task_answer_refused marks it when the action refuses instead.
+# $1 the task folder, $2 the step, $3 the order or empty, $4 the words.
+task_answer_find() {
+  local file index
+  file="$(task_answer_file "$1")"
+  [ -n "$4" ] && [ -f "$file" ] || return 1
+  index="$(jq -r --arg step "$2" --arg order "$3" --arg words "$4" '
+      [ to_entries[] | select((.value.usedAt // null) == null and (.value.refusedAt // null) == null and .value.step == $step
+          and (.value.order // "") == $order
+          and ((.value.words // "") | sub("\n+$"; "")) == ($words | sub("\n+$"; ""))) | .key ][0] // empty' \
+      "$file" 2>/dev/null)"
+  [ -n "$index" ] || return 1
+  TASK_ANSWER_HELD="$file	$index"
 }
 
-# The end of a refusal that a record may pass: a clause when $1 answers another call, then the
-# record the main session writes, whole. $1 the record file, $2 the task folder, $3 the step, $4
-# the words.
+# The end of a refusal that an answer passes: the command that records the person's answer, with
+# its words in single quotes, or in a file when they run over one line. $1 the task folder, $2 the
+# step, $3 the order or empty, $4 the words.
 task_answer_route() {
-  [ ! -f "$1" ] || printf ' %s answers another call, so it was not used.' "$1"
-  printf " Or the main session writes the person's answer to %s as %s, as the implement skill's references/finish.md says." "$1" \
-    "$(jq -nc --arg task "$(jq -r '.id // empty' "$2/task.json" 2>/dev/null)" --arg step "$3" --arg answer "$4" \
-      '{task: $task, step: $step, order: "", answer: ($answer | sub("\n+$"; ""))}')"
+  local order="" words="$4"
+  [ -z "$3" ] || order=" --order $3"
+  while [ "${words%"
+"}" != "$words" ]; do words="${words%"
+"}"; done
+  case "$words" in
+    *"
+"*) words="@/<a file holding these lines>:
+$words" ;;
+    *) words="'$(printf '%s' "$words" | sed "s/'/'\\\\''/g")'" ;;
+  esac
+  printf " A person answers through person-answer.sh, which shows Claude Code's permission prompt: %s/skills/task/scripts/person-answer.sh --project %s %s --step '%s'%s -- %s" "$PLUGIN_ROOT" \
+    "$(dirname -- "$(dirname -- "$1")")" "$(basename -- "$1")" "$2" "$order" "$words"
 }
 
-# Removes the record task_person_answered matched, so one answer serves one call. The two summary
-# printers call it, because an action prints its summary only after its writes.
+# Refuses with exit $1 unless the task holds an unused answer for this call. $2 the action's own
+# name, $3 what a person decides, $4 the task folder, $5 the step, $6 the order or empty, $7 the
+# words the call carries.
+task_require_answer() {
+  task_answer_find "$4" "$5" "$6" "$7" && return 0
+  die "$1" "$2: $3 is a person's answer, and $(task_answer_file "$4") holds no unused answer for step $5${6:+, order $6}, with these words. Nothing is written.$(task_answer_route "$4" "$5" "$6" "$7")"
+}
+
+# Marks the held entry refused, with the exit code, so an answer for an attempt that refused cannot
+# pass a later call nobody was asked about. An argument fault, exit 3, keeps it: the person's answer
+# stands and only the call is retyped. Each script's die calls it. $1 the exit code.
+task_answer_refused() {
+  [ -n "$TASK_ANSWER_HELD" ] && [ "$1" != 3 ] || return 0
+  local file="${TASK_ANSWER_HELD%	*}" index="${TASK_ANSWER_HELD##*	}" written
+  TASK_ANSWER_HELD=""
+  written="$(jq --argjson i "$index" --argjson code "$1" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '.[$i].refusedAt = $at | .[$i].refusedWith = $code' "$file" 2>/dev/null)"
+  [ -n "$written" ] && write_atomic "$file" "$written"
+  printf "task-helpers: the person's answer %s in %s is marked refused, because the step refused. The next attempt needs a new answer.\n" "$index" "$file" >&2
+}
+
+# Marks the entry task_answer_find held as used, so one answer serves one call. Each action calls
+# it after its writes.
 task_answer_consume() {
-  [ -n "$TASK_ANSWER_MATCHED" ] || return 0
-  rm -f "$TASK_ANSWER_MATCHED"
-  printf "task-helpers: the person's answer at %s stood in for an interactive run, and it is now removed.\n" "$TASK_ANSWER_MATCHED" >&2
-  TASK_ANSWER_MATCHED=""
+  [ -n "$TASK_ANSWER_HELD" ] || return 0
+  local file="${TASK_ANSWER_HELD%	*}" index="${TASK_ANSWER_HELD##*	}"
+  write_atomic "$file" "$(jq --argjson i "$index" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '.[$i].usedAt = $at' "$file")"
+  printf "task-helpers: the person's answer %s in %s is now marked used.\n" "$index" "$file" >&2
+  TASK_ANSWER_HELD=""
 }
 
 # True when the task's runMode is light (task-schema.json, runMode). Every light rule is behind
@@ -560,7 +622,86 @@ task_is_light() {
   [ "$(jq -r '.runMode // ""' "$1/task.json" 2>/dev/null)" = "light" ]
 }
 
-# The one overlap rule for owned files, read by check-design.sh and by implementation's `start`.
+# What a light task does about the one script that walks the demo path (gap row 458). Sets PS_STATE
+# and PS_FILES. PS_STATE is `registered`: the surface file holds an enabled critical end to end
+# surface, which is that script, so no order writes or extends it. `create`: end to end is on and
+# none is registered, so wo1 writes it. `declined` and `off`: no order writes one. PS_FILES holds the
+# registered command's own files, one per line: each argv token that names a file in the tree. A
+# folder the command names, such as a test runner's test/, is not the script. A page surface records no file, so PS_FILES is empty for it.
+# The surface file is read in the task's worktree, or the code path when the task has none, the
+# tree review reads. The caller sources recipes.sh. $1 the task folder.
+path_script_state() {
+  local project tree tok
+  PS_STATE=""; PS_FILES=""
+  project="$(dirname -- "$(dirname -- "$1")")"
+  if [ "$(jq -r '.surfaces.e2e.enabled // false' "$project/project.json" 2>/dev/null)" != "true" ]; then
+    if [ "$(jq -r '.surfaces.e2e.declined // false' "$project/project.json" 2>/dev/null)" = "true" ]; then
+      PS_STATE=declined
+    else
+      PS_STATE=off
+    fi
+    return 0
+  fi
+  tree="$(jq -r '.worktree.path // empty' "$1/task.json" 2>/dev/null)"
+  [ -n "$tree" ] && [ -d "$tree" ] || tree="$(project_code_path_value "$project")"
+  # shellcheck source=/dev/null
+  command -v sf_load_surfaces >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/surfaces.sh" \
+    || die3 "the library failed to load: surfaces.sh"
+  # shellcheck source=/dev/null
+  command -v resolve_against >/dev/null 2>&1 || source "${PLUGIN_ROOT}/scripts/lib/paths.sh" \
+    || die3 "the library failed to load: paths.sh"
+  sf_load_surfaces "$(sf_surface_path "$(jq -r '.surfaces.registryPath // ""' "$project/project.json" 2>/dev/null)" "$tree")"
+  if [ "$SF_STATE" = "ok" ] && printf '%s' "$SF_SURFACES" | jq -e 'any(.[]; .enabled and .critical and (.kinds | index("e2e")))' >/dev/null; then
+    PS_STATE=registered
+    for tok in $(printf '%s' "$SF_SURFACES" | jq -r '[ .[] | select(.enabled and .critical and (.kinds | index("e2e"))) ][0].command // [] | .[]'); do
+      case "$tok" in -*|/*|*..*) continue ;; esac
+      [ ! -f "$tree/$tok" ] || PS_FILES="$PS_FILES$tok
+"
+    done
+  else
+    PS_STATE=create
+  fi
+}
+
+# Prints the `path-script:` line, path_script_state's answer. Its first word is the case the skills
+# act on. task's set-run-mode and design's start print it. $1 the task folder.
+path_script_line() {
+  path_script_state "$1"
+  case "$PS_STATE" in
+    declined) echo "path-script: declined. End to end is declined for this project, so no order writes a script that walks the demo path." ;;
+    off) echo "path-script: off. End to end is not set up, so no order writes a script that walks the demo path. A person may set it up with /aida:surfaces e2e." ;;
+    registered) echo "path-script: registered. The project's script that walks the demo path is registered, so no order writes or extends it. Review runs it." ;;
+    *) echo "path-script: create. End to end is on and no script that walks the demo path is registered, so wo1 writes it. A person registers it with /aida:surfaces." ;;
+  esac
+}
+
+# Writes one warning into the task record, task.json `warnings`, and prints it as a summary line.
+# A warning is a check that found something and let the step go on. Every stage writes its
+# warnings here, so review lists them from one place. The same step, order and words are written
+# once, so a step run again adds nothing. $1 the task folder, $2 the step, $3 the order or empty,
+# $4 the words, one line.
+task_warn() {
+  local doc
+  doc="$(jq --arg s "$2" --arg o "$3" --arg w "$4" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+    if any((.warnings // [])[]; .step == $s and .order == $o and .words == $w) then .
+    else .warnings = ((.warnings // []) + [{step: $s, order: $o, words: $w, at: $at}]) end' "$1/task.json")" \
+    || die3 "could not read $1/task.json to write the warning: $4"
+  write_atomic "$1/task.json" "$doc"
+  printf 'warning: %s%s: %s\n' "$2" "${3:+ $3}" "$4"
+}
+
+# Warns when one run of an order's frozen tests took more than TEST_WEIGHT_SECONDS (gap row 454).
+# The whole run is timed, so one heavy test is not hidden in an average. A test the recipes run
+# every attempt takes milliseconds or seconds. The heavy periplus tests ran a whole flow, 116 to
+# 2631 seconds each. The words carry no seconds, so a step run again warns once. A warning, never a
+# stop. $1 the task folder, $2 the step, $3 the order, $4 the run's seconds.
+TEST_WEIGHT_SECONDS=60
+test_weight_warn() {
+  [ "$4" -gt "$TEST_WEIGHT_SECONDS" ] || return 0
+  task_warn "$1" "$2" "$3" "a run of this order's frozen tests took over $TEST_WEIGHT_SECONDS s. A test heavier than its behaviour is sent back: see skills/implement/references/what-a-test-is.md"
+}
+
+# The one overlap rule for owned files, read by check-design.sh, where an overlap is a warning.
 # Input: the work orders as a JSON array. Output: one {ids, path} per entry two orders both
 # declare, compared as declared strings. An entry both orders list in sharedFiles is not an
 # overlap, because each order only adds to that file (gap row 287).
@@ -720,7 +861,7 @@ started_orders_json() {
   [ -n "$ids" ] || ids='[]'
   # find, not a glob: zsh refuses a glob that matches nothing.
   while IFS= read -r f; do
-    f="$(basename -- "$f" .json)"
+    f="$(basename -- "$f" .json)"; f="${f%%-repair-*}"
     ids="$(printf '%s' "$ids" | jq -c --arg id "${f#*-}" 'if index($id) == null then . + [$id] else . end')"
   done < <(find "$impl" -mindepth 1 -maxdepth 1 -type f \( -name 'tests-wo*.json' -o -name 'build-wo*.json' \) 2>/dev/null)
   printf '%s' "$ids"
@@ -756,16 +897,13 @@ mark_task_in_progress() {
 # another task's uncommitted file, left beside it (live run, row 120: `tasks` whole took another
 # window's pending file). Moved here from task-actions.sh so the stage closes commit the same
 # way the task actions do. project-commit.sh is sourced here because only task-actions.sh
-# sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller. A person's answer
-# record is left out at any depth, so one that matched no call never enters the history (gap row
-# 380). task_answer_consume removes the one that matched.
+# sourced it on its own; it takes die3 and PLUGIN_ROOT from the same caller.
 commit_task_change() {
   local project="$1" subject="$2" why="$3" principle="$4" ruled_out="$5" task="$6" stage="$7"
   shift 7
   # shellcheck source=/dev/null
   source "${PLUGIN_ROOT}/scripts/lib/project-commit.sh" || die3 "the project-commit library failed to load"
-  commit_project "$project" "$subject" "$why" "$principle" "$ruled_out" "$task" "$stage" "tasks/$task" \
-    ":(exclude,glob)tasks/$task/**/person-answer.json" "$@"
+  commit_project "$project" "$subject" "$why" "$principle" "$ruled_out" "$task" "$stage" "tasks/$task" "$@"
 }
 
 # The stage-boundary commit (foundations.md, History: "AIDA commits at stage boundaries, and the
@@ -873,7 +1011,8 @@ distill_stamp() {
 
 # Reads the sidecar the distiller wrote for one stage, records/<stage>-distill.json
 # (agents/distiller.md), and prints `standsAlone:` and one `gap:` line per gap. The check never
-# blocks, so every value exits 0. schema-check.sh is sourced here because no stage script sources
+# blocks. A missing sidecar, or one that is not in its shape, prints `standsAlone: none` and is a
+# warning in the task record, step `<stage> distill`. A malformed one is set aside first. schema-check.sh is sourced here because no stage script sources
 # it on its own. A stale sidecar prints `standsAlone: stale` and a `stale:` line naming the
 # dispatch that refreshes it, and none of its gaps. A current one gets its stamp, as distill_stale
 # says. $1 the canonical task folder, $2 the stage, $3 optional, the answer distill_stale gave
@@ -882,16 +1021,26 @@ distill_read() {
   local task_folder="$1" stage="$2" stale="${3:-}" sidecar schema result faults
   sidecar="$task_folder/records/$stage-distill.json"
   schema="${PLUGIN_ROOT}/scripts/distill-schema.json"
-  [ -f "$sidecar" ] || die2 "distill: no sidecar at $sidecar. Dispatch the distiller first"
+  if [ ! -f "$sidecar" ]; then
+    echo "standsAlone: none"
+    task_warn "$task_folder" "$stage distill" "" "no distiller sidecar at $sidecar, so nobody read the $stage record cold"
+    return 0
+  fi
   # shellcheck source=/dev/null
   source "${PLUGIN_ROOT}/scripts/lib/schema-check.sh" || die3 "distill: the schema-check library failed to load"
-  result="$(schema_check_compare "$schema" "$sidecar")" \
-    || { sidecar_set_aside "$sidecar"; die4 "distill: $sidecar could not be read as JSON"; }
-  faults="$(printf '%s' "$result" | jq -r '(.missing + .unreadable) | map(.field) | join(" ")')"
-  [ -z "$faults" ] || { sidecar_set_aside "$sidecar"; die4 "distill: $sidecar does not match $schema: $faults"; }
-  if [ "$(jq -r '(.standsAlone == false) != ((.gaps | length) > 0)' "$sidecar")" = "true" ]; then
+  if ! result="$(schema_check_compare "$schema" "$sidecar")"; then
+    faults="it could not be read as JSON"
+  else
+    faults="$(printf '%s' "$result" | jq -r '(.missing + .unreadable) | map(.field) | join(" ")')"
+    [ -z "$faults" ] || faults="it does not match $schema: $faults"
+    [ -n "$faults" ] || [ "$(jq -r '(.standsAlone == false) != ((.gaps | length) > 0)' "$sidecar")" != "true" ] \
+      || faults="its standsAlone and gaps disagree. False needs a gap, and a gap needs false"
+  fi
+  if [ -n "$faults" ]; then
     sidecar_set_aside "$sidecar"
-    die4 "distill: $sidecar has standsAlone and gaps that disagree. False needs a gap, and a gap needs false"
+    echo "standsAlone: none"
+    task_warn "$task_folder" "$stage distill" "" "the distiller sidecar for $stage was set aside, because $faults"
+    return 0
   fi
   [ -n "$stale" ] || stale="$(distill_stale "$task_folder" "$stage")" || exit $?
   if [ "$stale" = "yes" ]; then
@@ -938,19 +1087,17 @@ source "${PLUGIN_ROOT}/scripts/lib/task-state.sh"
 # Each word is the stage's skill name, so `/aida:<stage>` is the command to run.
 # Derived from the records in the task folder every time, never stored: each stage writes one
 # record when it closes, and the stage is the first whose record is absent. Scope's is the
-# distill sidecar, records/scope-distill.json, which approve and distill both need before they
-# close (scope-actions.sh, exit 2); alignment.json is written by init, at the stage's start. A
-# light task has no scope sidecar until design closes, so its scope closes on the pluginVersion
-# that only the scope close writes into alignment.json.
+# pluginVersion that only the scope close writes into alignment.json; init writes alignment.json
+# itself, at the stage's start. Research is optional: a task whose design has started is past it.
 # This is the one copy of that rule; the session-start hook and the next skill's report both
 # print what it says. $1 the task folder, $2 the review word next-actions.sh derives from
 # review/review.json (passed, failed, unfinished or none). Calls no die function.
 task_stage() {
   local task_folder="$1" review="$2"
-  if [ ! -f "$task_folder/records/scope-distill.json" ] && { ! task_is_light "$task_folder" \
-      || [ -z "$(jq -r '.pluginVersion // empty' "$task_folder/alignment.json" 2>/dev/null)" ]; }; then
+  if [ -z "$(jq -r '.pluginVersion // empty' "$task_folder/alignment.json" 2>/dev/null)" ]; then
     echo "scope"
-  elif [ "$(jq -r '.exitCode // 1' "$task_folder/records/research-check.json" 2>/dev/null)" != "0" ]; then
+  elif [ ! -d "$task_folder/design" ] \
+      && [ "$(jq -r '.exitCode // 1' "$task_folder/records/research-check.json" 2>/dev/null)" != "0" ]; then
     echo "research"
   elif [ ! -f "$task_folder/design-closed.json" ]; then
     echo "design"
@@ -1055,34 +1202,6 @@ task_worktree_group() {
   printf '%s/%s.worktrees' "$base" "$(pb_slug "$(basename -- "$code")")"
 }
 
-# Whether a new tree stacks on the tree this action runs in, or starts from the trunk (gap row
-# 382). The trunk is the code path's HEAD: a branch name in no fixed list, and the base a plain
-# create always had. The tree this action runs in is stacked on only when it is another tree of
-# this repository, its branch is the recorded branch of a task that is not complete, and that
-# branch is not merged into the trunk. So a follow-up made in its parent's tree holds the parent's
-# unmerged work, and gets every later task once the parent is merged. A branch no task records
-# is not stacked on, because `--after` is the route for a chain. $1 the project folder, $2 the
-# resolved code path. Prints the reason alone for the trunk, or that tree, a tab, and the reason
-# to stack. Calls no die function.
-task_worktree_stack() {
-  local code="$2" top held owner
-  top="$(active_tree_for "$code" "$(pwd -P)")"
-  if [ "$top" = "$code" ]; then printf 'This is the trunk, the HEAD of %s' "$code"; return 0; fi
-  held="$(git -C "$top" symbolic-ref -q --short HEAD 2>/dev/null)"
-  [ -z "$held" ] || owner="$(find "$1/tasks" -name task.json -exec jq -r --arg b "$held" \
-    'select(.worktree.branch == $b) | "\(.id) \(.state)"' {} + 2>/dev/null | head -1)"
-  if [ -z "${owner:-}" ]; then
-    printf 'This is the trunk, the HEAD of %s. The tree this ran in, %s, holds %s, and no task of this project records it' \
-      "$code" "$top" "${held:-a detached HEAD}"
-  elif [ "${owner##* }" = complete ]; then
-    printf 'This is the trunk, the HEAD of %s. The tree this ran in holds %s, and its task %s is complete' "$code" "$held" "${owner% *}"
-  elif git -C "$code" merge-base --is-ancestor "$held" HEAD 2>/dev/null; then
-    printf 'This is the trunk, the HEAD of %s. The tree this ran in holds %s of task %s, which the trunk already holds' "$code" "$held" "${owner% *}"
-  else
-    printf '%s\tThe tree this ran in holds %s of task %s, which is open and not merged into the HEAD of %s' "$top" "$held" "${owner% *}" "$code"
-  fi
-}
-
 # The task's own git worktree (ideal/task.md, "A worktree per task, always"), in the group folder
 # above, named <slug of the code folder>-<id>: a tree nested under the code path is invisible to a
 # tool that registers projects by folder, and DDEV hands it to the parent project. The folder name
@@ -1097,14 +1216,15 @@ task_worktree_stack() {
 # from disk is not trusted as an address: it is computed again by the rule above, and the tree is
 # made and recorded there. That is the repair for a task carried to a second machine, and for a
 # folder named before the id was slugged. A recorded tree on disk is kept. The base is the trunk,
-# the code path's HEAD, unless task_worktree_stack says to stack on the tree this action runs in.
+# the code path's HEAD, wherever the action runs (gap row 440: a tree cut from an open task's
+# branch replays that branch's history once it is squash-merged). `--after` is the route for a chain.
 # A task whose record names `after` is cut from that task's branch instead, or with `inTree`
 # takes over that task's tree. Uncommitted changes in the code path are not in a tree cut from a commit, so their count is
 # said once, on stderr, and nothing asks. One stderr line names the base and why.
 # $1 the canonical task folder, $2 the action's own name. Dies through die3.
 task_worktree() {
-  local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base_dir base said dirty id
-  local found rule group base_branch after after_branch after_base pred why tab
+  local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base said dirty id
+  local found rule group base_branch after after_branch after_base pred why
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
   if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
@@ -1206,13 +1326,10 @@ task_worktree() {
     if [ -n "$after_branch" ]; then
       base="$after_base"; base_branch="$after_branch"; why="Task $id builds on task ${after% *}"
     else
-      base_dir="$code"
-      why="$(task_worktree_stack "$project" "$code")"
-      tab="$(printf '\t')"
-      case "$why" in *"$tab"*) base_dir="${why%%"$tab"*}"; why="${why#*"$tab"}" ;; esac
-      base="$(git -C "$base_dir" rev-parse HEAD 2>/dev/null)" \
-        || { rmdir "$group" 2>/dev/null; die3 "$who: $base_dir has no commit to cut a worktree from"; }
-      base_branch="$(git -C "$base_dir" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
+      why="This is the trunk, the HEAD of $code"
+      base="$(git -C "$code" rev-parse HEAD 2>/dev/null)" \
+        || { rmdir "$group" 2>/dev/null; die3 "$who: $code has no commit to cut a worktree from"; }
+      base_branch="$(git -C "$code" symbolic-ref -q --short HEAD 2>/dev/null)" || base_branch="commit:$base"
     fi
     said="$(git -C "$code" worktree add -b "$branch" "$wt" "$base" 2>&1)" \
       || { rmdir "$group" 2>/dev/null; die3 "$who: git worktree add failed: $said"; }

@@ -79,8 +79,8 @@ fenced block. Then run:
   [--example-file <path>]
 ```
 It appends the play under the domain, at the end of the file when the domain is new, and commits
-the project folder. Exit 1 means the file already holds a play with that slug; say which and ask
-for another title. It prints `written:` and `play:`; show both. Completion runs the same call for
+the project folder. Exit 3 naming the slug means the file already holds that play; say which and
+ask for another title. It prints `written:` and `play:`; show both. Completion runs the same call for
 each note the person accepts as a play.
 
 ## Where `load` runs
@@ -89,7 +89,8 @@ each note the person accepts as a play.
 four sources. Research runs it at its start, after the loader agent has written the catalog
 record, and its stage report names the count per source. A person never needs to run it. It
 fetches nothing: a subscribed set the catalog cannot reach is recorded `unreachable`, never as
-zero plays.
+zero plays. A record off the schema is still written, with a `warning:` line the task record keeps
+for review.
 
 `load` refuses at exit 79 when the task builds in its worktree and this window is elsewhere. The
 refusal names the tree and the route that works from here, either the `EnterWorktree` tool or the

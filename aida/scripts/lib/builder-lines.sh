@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 # builder-lines.sh: the builder's stop and deviation lines, read from its answers file.
 #
-# build-record reads them to decide exits 105 and 106. hooks/require-stop-lines.sh reads them when
-# the implementer returns, because a builder once wrote both lines in its returned text and not in
-# the file (gap row 304). The returned text is not recorded anywhere a script can read, so the hook
-# sends the builder back to its file before it returns. Both read one parser and one rule.
+# build-record reads them to decide exits 105 and 106, and dispatch-close reads them to decide
+# whether an implementer finished. Both read one parser and one rule.
 #
 # Public functions:
 #

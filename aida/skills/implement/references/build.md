@@ -44,7 +44,7 @@ It reads the frozen copy and the frozen tests. It writes twelve things to
 
 - this order's own record, with the files it owns and, under `findings`, the research findings
   design used for it. Under `interfaceNames` it lists each name the declared interface holds in
-  backticks, the names the interface-record check counts;
+  backticks. Name each one in the interface record, which the reviewer compares;
 - the frozen tests for it, with the criterion each carries; a test with `criterion: null` proves
   the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;
@@ -62,16 +62,16 @@ It reads the frozen copy and the frozen tests. It writes twelve things to
   `commitIn`, that repository's path: the code worktree, or the project folder for an order
   whose proof is `record`;
 - `playbooksPath`, the path of `records/playbooks.json` when research loaded one, else null;
-- `beforeLookPath`, on an order whose proof is `observe` only: the folder the before-look goes
+- `beforeLookPath`, on an order whose proof is `observe` only: the folder a before-look goes
   in, `implementation/observed-<order id>-before/`;
 - `deniedReads`, present only when the order's own text names a path the implementer's dispatch
-  denies: another order's owned file. The deny stands. Do not tell the implementer to read one.
-  The summary's `next` then asks a person to rule first. A file outside the code path that an
-  order this one depends on owns is never denied, so a record it reads is not listed.
+  denies: a file of an order this one does not depend on. The deny stands. Do not tell the
+  implementer to read one. The summary's `next` then asks a person to rule first. A file an
+  order this one depends on owns is never denied, so it is not listed.
 
 It prints the brief's path, the report path, the interface path, `headNow`, the attempt count
-and counts, never the brief. The allowed count is two unless a person has granted this order one more; see
-`references/finish.md`. It is the order's own recorded allowance, never the constant alone.
+and counts, never the brief. The allowed count is two unless a person's go-on granted this order
+one more; see `references/finish.md`. It is the order's own recorded allowance, never the constant alone.
 
 **An order with nothing left to write gets no implementer.** Every file it owns is a frozen test or
 support file, and every frozen test locks in, so its freeze commit holds the work. A fixture repair
@@ -90,27 +90,26 @@ forward and none of them did; `build-brief` is what actually forwards it now.
 
 It refuses when the tests for this order were never frozen, when an order this one depends on has
 no completion record, and when the attempts are already spent. It also refuses an order past its
-build: a build starts only from `tests-frozen` or `code-written` (exit 116). It refuses an order
+build: a build starts only from `tests-frozen` or `code-written` (exit 3). It refuses an order
 whose done-when gained rows after the freeze until a freeze judges them (exit 120). Read a refusal
 and act on it.
 
 That list is the withheld list.
 
-## On an order whose proof is `observe`, look before the build
+## On an order whose proof is `observe`, look before the build only when a row needs it
 
-A done-when row often says the page is as it was apart from one thing. That row needs a before
-to judge from, and a script cannot tell which rows say it. So every observe order gets a look
-before the build. Take the same surfaces at the same viewports as the look after, at the
+A done-when row can say the page is as it was apart from one thing. Only that row needs a before
+to judge from. A script cannot tell which rows say it, so you decide. When no row says it, take
+no before. When one does, take the page that row judges, at the size the look after uses, at the
 brief's `headNow`, before the implementer is dispatched. The viewport and destination rules are
-the look after's, below. Save each image as
+the look after's, below. Save the image as
 `<task_folder>/implementation/observed-<order id>-before/<surface>-<viewport>.png`. That is the
-brief's `beforeLookPath`. Write no verdict; the images are the before.
+brief's `beforeLookPath`. Write no verdict; the image is the before.
 
-One before-look per order, at the first attempt's `headNow`. The brief prints `beforeLook:`
-with `(owed)` while the folder holds no image and `(taken)` once it does. A later attempt and
-every fix round reuse the images that are there; take them once. Each row of the observed
-record names its before image, and `build-record` refuses one not on disk or outside that
-folder (exit 94).
+Take it once, at the first attempt's `headNow`. The brief prints `beforeLook:` with `(none)`
+while the folder holds no image and `(taken)` once it does. A later attempt and every fix round
+reuse the image that is there. The row that needs it names it in `before`, and `build-record`
+refuses one not on disk or outside that folder (exit 94).
 
 ## Open the dispatch record, then dispatch the implementer
 
@@ -143,7 +142,8 @@ the code path outside it while the record is open. The reason tells it to stop a
 **It may not change a test.** A test that seems wrong is a reason to stop, not to edit. A hook
 refuses the write and names which order froze the file.
 
-**It may not read another order's source.** What another unit exposes is its interface record. A
+**It may not read the source of an order it does not depend on.** A dependency's files stay
+readable, because the facts it builds on live there (gap row 443). A
 hook refuses the Read, the Grep and the plain shell reads while the dispatch is open. A path a
 shell assembles at run time passes the hook and is still denied.
 
@@ -158,8 +158,8 @@ same refusal applies. The builder writes each line alone, and puts any note on i
 A deviation other than none, or a heading that starts with "Deviation", in
 the report or the interface record, is a stop. A cause is a stop even
 when code was committed after it. `build-record` refuses it (exit 105), records nothing and spends no
-attempt. It names each commit made after the attempt began, and the person reverts or keeps them
-before the next build. Interactive puts the stop to the person,
+attempt. It names each commit made after the attempt began and records them on the order, so redo and
+drop revert them. The order stops in both run modes. Interactive puts the stop to the person,
 opening with: "The builder stopped instead of working around something, and only you may change
 it. It says a test is wrong, a done-when row is wrong, the interface does not fit, it needs a file
 it does not own, or its attempts ran out.
@@ -167,11 +167,12 @@ Repair that and the next attempt continues. Leave it and this unit of work stays
 say in plain words
 what the builder's report names. The person, or design, adds a file the unit needs:
 `add-owned-file` on the order, design `close`, then `start` again. A wider owned list does not
-halt a started order. `build-record` refuses while the order's owned or shared files in the
-design differ from the snapshot (exit 117), and spends no attempt. Run `start` first. Unattended, run `build-record` as after any return. It halts the order
-itself, so do not halt it again. A halted order records no attempt: `build-record` refuses it
-(exit 49) until the halt is cleared, except the deviation halt `--accept-deviation` answers. The next `start` sets aside what was left.
-An order past its review records no attempt either: `build-record` refuses it (exit 48). One order
+stop a started order. `build-record` refuses while the order's owned or shared files in the
+design differ from the snapshot (exit 117), and spends no attempt. Run `start` first. In both run
+modes, `build-record` stops the order itself, so do not stop it again. A
+stopped order records no attempt: `build-record` refuses it (exit 49) until a person takes a way
+out. The next `start` sets aside what was left.
+An order past its review records no attempt either: `build-record` refuses it (exit 3). One order
 gets one review, so code after it comes from a fix round.
 
 **A defect in a closed order's file has its own route.** The stop line reads
@@ -182,8 +183,10 @@ cites the owner's first criterion by position, and says so. The script sends the
 review step and adds one fix round to its allowance, so no counter goes down. The ledger entry
 keeps the repair under `repairs`, with the range the order closed with. `finished.json` carries
 that range beside the new one. The script exits 0 and prints a `repair:` line. The stopped order
-spends no attempt. Commits it made after it began are named, as at any stop. Unattended, they
-halt the stopped order for a person. The owner's fixer works in the owner's files, and the
+spends no attempt. Commits it made after it began are named, as at any stop, and recorded on the
+repair entry. They stop the stopped order for a person, in both run modes. When tests prove the
+owner, its test author first writes one failing test of the defect, and `tests-freeze` freezes it.
+The owner's fixer works in the owner's files, and the
 reviewer verifies the round. The verifier also answers whether the failure arises in that file.
 A `no` makes the finding pending, and the person rules on it at the task review. So the route
 runs unattended too. Follow the `next:` line to the reopened order. Run `start` first when the
@@ -191,7 +194,7 @@ builder left files uncommitted. Then fix, verify and close that order under
 `references/review.md`. Until it closes, `build-brief` refuses the stopped order (exit 40). Then
 build the stopped order again. Its next stop of this kind at the same attempt opens another repair
 once every earlier one reads addressed. The stopped order's attempt allowance caps how many. A
-file no closed order owns, or a stop past that cap, halts as any other stop does. Interactive,
+file no closed order owns, or a stop past that cap, stops the order as any other stop does. Interactive,
 open with: "A finished unit of work had a defect, and the next unit found it. Its own fixer
 repairs it, and a reviewer checks the repair and where the defect lies. Nothing needs your
 decision unless the reviewer finds the defect elsewhere." Then name the file and the reopened
@@ -200,18 +203,16 @@ order.
 **A done-when row that cannot hold is no defect, so it never reopens an order.** The stop line
 reads `Stop: row-wrong: <row number>: <the evidence>`. `build-record` stops as at any stop
 (exit 105), and its message quotes that row from the snapshot. The person rules on the row. A
-wrong row is reworded in design, and design closes again. Then `start` halts the order for
-design drift, and `restart` answers that halt. A row that stands goes back to the builder.
-Unattended, the order halts, and the halt quotes the row. `clear-halt` and `restart` refuse on an
-autonomous run (exit 68), so a person first sets the task to interactive.
+wrong row is reworded in design, and design closes again. Then `start` names the change on the
+order, and a redo answers it. A row that stands goes back to the builder.
+The order stops in both run modes, and the stop reason quotes the row. Each way out refuses without the
+person's answer on record (exit 68), as "A person's answer" in `references/finish.md` says.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
-kind that a script can read, so a person sees each one. The person may keep a deviation. Then run
-`build-record` again with the same flags and `--accept-deviation <their reason>`. The build record
-and `haltsCleared` in the ledger hold the reason, and the flag clears the deviation's halt. Review
-carries the answer and does not ask again about that line. A stop line other than `Stop: none`
-has no such route. Unattended, the flag refuses (exit 68). There a deviation is no stop:
-`build-record` records the attempt, and `review-record` keeps the line for the task review.
+kind that a script can read, so a person sees each one. The order stops in both run modes. The person may keep a deviation with
+go-on `keep` ("Leave a stop" in `references/finish.md`). Then run `build-record` again with the
+same flags. The build record holds the person's words, and review does not ask again about that
+line. A stop line other than `Stop: none` has no keep.
 
 The interface record is prose about what this unit exposes, and it is what the next order's
 tests are written against.
@@ -219,33 +220,33 @@ tests are written against.
 **When the person rules that the test is wrong, the route is the tests step again, in this
 order.** The person rules it; a model never does. Open the test author's dispatch again for this
 order, per `references/tests.md`. The write hook lets that author edit the file its own order
-froze. It corrects the assertion and nothing else. Run the coding-standards row over the file it
-returned. Open the row-checker's dispatch again and put the affected rows to it. Then run
+froze. It corrects the assertion and nothing else. Open the row-checker's dispatch again and
+put the affected rows to it. Then run
 `tests-freeze` again, with every flag the first freeze took, the new red run, and the rows the
 checker returned. That freeze is
 allowed only while the order is still at `tests-frozen`. Once `build-record` has recorded an
-attempt, it refuses (exit 76). Then `retake-tests --because` with the person's ruling sends the
-order back, under "Offer the grant" in `references/finish.md`. Other orders may have committed since the first freeze. The freeze
-still retakes, because the report holds the `Stop: test-wrong` line. Unattended, the stop halted
-the order, and a halt still standing refuses (exit 35). `clear-halt` refuses on an autonomous run
-(exit 68), so a person first sets the task to interactive, then runs `clear-halt`. The
-retake prints `retaken:` with the earlier commit and the new one, and the record names the
+attempt, it refuses (exit 76). Then a redo with the person's ruling sends the order back to
+planned, under "Redo the order" in `references/finish.md`. Other orders may have committed since
+the first freeze. The freeze still takes the new tests, because the report holds the
+`Stop: test-wrong` line. The stop stopped the order in both run modes, so the freeze refuses
+(exit 35) until a person goes on with `build`. The second
+freeze prints `retaken:` with the earlier commit and the new one, and the record names the
 earlier one under `retakenFrom`. No attempt is spent, because none was recorded. The builder's
 stop left the tree dirty on purpose. The freeze commits only the test paths, and the next
 attempt continues over that uncommitted build. So the person either keeps it or cleans the tree
 before the re-freeze, and says which. Then build again from "Open the dispatch record" above.
-After the build, a frozen test found wrong at review is ruled `test-wrong`, and `retake-tests`
-brings the order back here, under Rulings in `references/review.md`. There the attempt counter
-stays.
+After the build, a frozen test found wrong at review is ruled `test-wrong`, and a redo brings the
+order back to planned, under Rulings in `references/review.md`.
 
 Close the dispatch record as soon as the role returns, per SKILL.md.
 
-## On an order whose proof is `observe`, look at the pages
+## On an order whose proof is `observe`, look at the page
 
-The implementer does not look. You do. Read the surface file that `surfaces.registryPath` in
-`<projectPath>/project.json` names. Review's surface step reads the same file. Take each
-surface the order names, its `url`, and the file's `viewports` list. Open each surface at each
-viewport with the browser tool, against the task's own site.
+The implementer does not look. You do. Look at the page this order builds, once, at one size.
+Every surface at every viewport is the surface check's work, and it runs once, at review. Read
+the surface file that `surfaces.registryPath` in `<projectPath>/project.json` names. Take the
+surface the order builds, its `url`, and one viewport from the file's `viewports` list. Open it
+with the browser tool, against the task's own site.
 
 The viewport is the requirement: the page must render at the viewport's width. Resizing the
 browser window is not that, because the page can still render wider than the window. A tool
@@ -257,15 +258,11 @@ rebuild step has run, and the look waits for that step. A note on a row judged a
 content is a lie.
 
 Judge each of the order's done-when rows against what renders, and each `check` entry of its
-`verify` list whose `kind` is `live-site` the same way. A row that says the page is as it was is judged against the before
-image of that surface and viewport. Also judge the
-`verification` clause of each machine criterion the order owns, as a row of its own beside the
-done-when rows. The snapshot's criteria hold the clause. The done-when rows may say less than
-the clause, and no script can compare the two, so the look judges the clause itself. Such a row
-carries `criterion` with the id, and `build-record` refuses a clause row without it (exit 96).
-Give one verdict per row per surface per viewport, `met` or `unmet`, with one sentence on what
-you saw. Save each
-screenshot under `<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`.
+`verify` list whose `kind` is `live-site` the same way. A row that says the page is as it was is
+judged against the before image. The look judges no criterion's verification clause: a machine
+criterion is proved by frozen tests or a named command. Give one verdict per row, `met` or
+`unmet`, with one sentence on what you saw. Save each screenshot under
+`<task_folder>/implementation/observed-<order id>/<surface>-<viewport>.png`.
 The screenshot must lie under that folder, and `build-record` refuses one that does not (exit
 94). A tool that refuses to write there writes into a folder inside the worktree. Move the
 file, then remove that folder before you record the attempt, because the tree check reads it.
@@ -273,17 +270,15 @@ Then write `<task_folder>/implementation/observed-<order id>.json`:
 ```
 { "order": "<order id>", "observedAt": "<YYYY-MM-DD>", "judgedBy": "model",
   "rows": [ { "doneWhen": "<the row, verbatim>", "surface": "<id>", "viewport": "<name>",
-              "screenshot": "<absolute path>", "before": "<absolute path of the before image>",
-              "verdict": "met|unmet", "note": "<what you saw>" },
-            { "doneWhen": "<the criterion's verification clause, verbatim>", "criterion": "<c-id>",
-              "surface": "<id>", "viewport": "<name>", "screenshot": "<absolute path>",
-              "before": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
+              "screenshot": "<absolute path>", "verdict": "met|unmet", "note": "<what you saw>" } ] }
 ```
-Every done-when row, every live-site verify check and every owned clause goes in, at every
-surface and viewport, and `build-record` refuses a record missing one (exit 97). The verdict is what the page
-showed, never what the report claims. Pass the record as `--observed` below. Nothing is frozen
-for such an order and no row was judged before the build, so this look is its check. The judge
-on the record is a model. Completion puts each such criterion to the person.
+A row that says the page is as it was also holds `"before": "<absolute path of the before
+image>"`. Every done-when row and every live-site verify check goes in once, and
+`build-record` refuses a record missing one (exit 97). The verdict is what the page showed,
+never what the report claims. Pass the record as `--observed` below. Nothing is frozen for such
+an order and no row was judged before the build, so this look is its check. The judge on the
+record is a model. At review's close, the person answers each such criterion from the
+acceptance verifier's evidence.
 
 ## Record the attempt
 
@@ -294,7 +289,6 @@ Run:
   --report <path to the builder's report> \
   --started-at <the commit the attempt began from> \
   --test-recipe <framework>=<path to the test-execution recipe> \
-  --check-recipe <framework>=<path to the review recipe> \
   [--implement-recipe <framework>=<path to the implement recipe>]... \
   [--observed <path to the observed record>] \
   [--value <name>=<value>]... \
@@ -318,15 +312,20 @@ recorded on any of these.
 
 The commit the attempt began from is `build-brief`'s own `headNow`, read before the implementer
 starts, not after. Without it nothing can tell this order's changes from what was already there.
-Equal to the code repository's own current commit, or not an ancestor of it, refuses (exit 71):
-either makes the range this attempt claims false. The build record keeps this attempt's range
-only. Review and close read the order's range from the freeze, so a second attempt that changes
-one line is reviewed with the code the first attempt wrote.
-One equal commit is not refused. When it is this order's own freeze commit and every frozen test
-locks in, the freeze commit holds the order's work. A tests order whose deliverable is its test
+Not an ancestor of the code repository's current commit (exit 3), it makes the range this attempt
+claims false. Equal to the current commit, the range is empty, and the attempt is recorded: the
+order's tests still run on the tree. From that range the script lists the
+implementer's commits in the build record. It leaves out each commit another order's records
+name, in a build or fix list or as a freeze. The owned-files check reads the files those commits
+change, and no range. The earlier attempts' lists move to `commitsBefore`, which review reads, so a
+second attempt that changes one line is reviewed with the code the first attempt wrote. Commits a
+person kept after a builder's stop go there too. The check also reads each path those commits
+change that still differs, so a stray change nobody reverted still stops the attempt.
+When an equal commit is this order's own freeze commit and every frozen test locks in, the
+freeze commit holds the order's work. A tests order whose deliverable is its test
 file is this case. So is a code order whose tests all pass on the code that is there already, and
-its range then holds its test files alone. The range then starts at the parent of the freeze commit, and review and close
-read it from there.
+its range then holds its test files alone. The range then starts at the parent of the freeze commit, so the
+freeze commit is on the order's list.
 
 **`build-record` refuses when the code repository's tree is not clean.** The implementer commits
 its own work before it returns. A dirty tree means that commit did not happen. This attempt is not
@@ -334,19 +333,18 @@ recorded. Interactive puts that to the person, opening with: "The builder left c
 code that it did not commit, so this attempt cannot be recorded. Only you can say whether they
 are wanted. Commit them and the attempt is recorded and checked. Discard them and the attempt
 starts over." Then name the repository and
-the files git lists. Unattended halts the order with that reason, and
-a person clears it with `clear-halt` once the tree is committed, in `references/finish.md`.
+the files git lists. Unattended stops the order with that reason, and a person goes on once the
+tree is committed, under "Leave a stop" in `references/finish.md`.
 
 **On an order whose proof is `record`, every one of those reads the project folder instead.**
-The range, the empty-range refusal (exit 71), the unchanged refusal (exit 45) and the clean-tree
-refusal (exit 61) all read the project folder's history. That is where the deliverable
+The range and the clean-tree refusal (exit 61) both read the project folder's history. That is where the deliverable
 landed, and the code repository may hold no commit at all for it. The tree read is the owned
 files alone, since this stage keeps the rest of that folder uncommitted until it finishes. A
-project folder with no history refuses (exit 87).
+project folder with no history refuses (exit 3).
 
 **A `record` order's diff is the project folder's.** Its deliverable may sit beside earlier
 reports outside the task folder. So the owned-files check, the review diff and the fix patch
-read `git diff <range>` over the project folder whole. AIDA commits that folder between a
+read the listed commits over the project folder whole. AIDA commits that folder between a
 build brief and its record. A task note commits `tasks/` whole, and another task's stage close
 commits its folder. None of that is the implementer's, so the files AIDA's own scripts write
 are set aside before the owned list is compared. Inside this task's folder those are
@@ -358,33 +356,20 @@ The check's detail says how many were set aside. A person's places are `inputs/`
 aside even when a person wrote it. A file in a person's place is never set aside, so a second
 document there that the order does not own still reads unmet.
 
-`--test-recipe` and `--check-recipe` are paths only, one pair per framework, the same two files
-`references/preconditions.md` already resolved for the baseline. Left out, `--test-recipe` is taken
-from `preconditions.json` and `--check-recipe` from `baseline.json`, here and at `fix-record`. An
+`--test-recipe` is a path only, one per framework, the file `references/preconditions.md` already
+resolved. Left out, it is taken from `preconditions.json`, here and at `fix-record`. No check
+recipe is read here, because no tool row runs. An
 order proved by its own tests with no test recipe on record refuses (exit 3), and no attempt or
-round is spent. With no check recipe on record, the tool rows read undeclared, because no recipe
-names a tool for this task. The script parses `## Test
-commands` and `## Check commands` itself: the suite command, the command that runs this order's
-own frozen tests, and the three tool commands, each with its own argv, `{paths}` placeholder,
-`signal` and `extensions` keys, and which rows a framework declares absent. Nothing here retypes a
-command. A `{paths}` token expands to this order's own owned files, relative to codePath, and never
-reaches a shell. For the three tool rows, the order's own frozen test files come out of that
-expansion first. The implementer may not write them, so the tools judge only what it may write.
-An owned file outside codePath comes out too, because a tool run in the repository cannot see
-it. An owned file the order deleted comes out as well, because the tools refuse a missing path.
-The detail says how many were left out, and a row with nothing left reads undeclared.
-The record names the paths the token expanded to and the frozen tests left out.
+round is spent. The script parses `## Test commands` itself: the command that runs this order's
+own frozen tests, with its argv and its `{paths}` placeholder. Nothing here retypes a command. A
+`{paths}` token expands to this order's own frozen test files, relative to codePath, and never
+reaches a shell. No tool row and no suite runs at this step. Preconditions ran each tool once, and
+review runs them over the whole task, so a tool finding never spends an attempt.
 
-**Two frameworks may not both command one tool.** The same refusal preconditions.md names (exit
-72) applies here: a project whose two frameworks each carry a coding-standards row, say, gives
-nothing here two answers to choose between.
+**Two frameworks that both command one row: the first runs.** The same rule preconditions.md names
+applies here, with the same warning.
 
-**The check recipe must be the one the baseline used.** A check recipe that resolves to a
-different file than the baseline read refuses (exit 73), naming both: a tool's own result is
-compared against the baseline it ran against, and a changed recipe makes that comparison false.
-
-**The record holds exactly eight checks.** Fewer refuses (exit 84), naming the absent check, and
-no attempt is spent.
+**The record holds exactly three checks.** Fewer refuses (exit 3), and no attempt is spent.
 
 Pass `--value <name>=<value>` for a placeholder a command carries, the same as
 `references/preconditions.md` does. A placeholder is a whole token, or part of one, such as
@@ -400,7 +385,7 @@ Pass `--value <name>=<value>` for a placeholder a command carries, the same as
 
 A name with no `--value` is read from the tokens preconditions recorded. It is then read from
 the keys of the task's environment record, such as `project`. A check that reads unknown for a
-placeholder with no value refuses at 3. `build-record`, `build-recheck` and `fix-record` then
+placeholder with no value refuses at 3. `build-record`, `go-on --continue check` and `fix-record` then
 write nothing, and no attempt or round is spent. A `## Configuration gate` line of a `gate` order
 refuses at 3 before any check runs. The message names the token. Supply the value, then run the
 same step again.
@@ -421,7 +406,7 @@ The site must be up before the verify lines run. A site command such as `ddev dr
 stopped site and prints its start-up text. A `stdout empty` line then fails for a reason that is
 not the check. So before any check runs, the script runs the `## Status` line of the task's
 environment recipe in the worktree. It does this when the task records an environment and the
-order has verify run lines or a configuration gate. A non-zero exit refuses (exit 103) in both run
+order has verify run lines or a configuration gate. A non-zero exit refuses (exit 3) in both run
 modes, because `up` is a person's answer. The message quotes the line's first output. No check
 runs and no attempt is spent. Say that the site is down, and show the message. Offer
 `task environment <task-id> up`, then run the same step again. A recipe with no `## Status`
@@ -432,72 +417,29 @@ Pass `--nothing-ran <literal substring>` only when the
 framework's own recipe names no `silent_pass` marker of its own; where it does, the script reads
 that marker and this flag is not read.
 
-## Re-run the checks
+## Run the checks again with no new build
 
-An attempt can fail on the three tool rows alone: coding-standards, static-analysis and
-security. A tool refusing a path it was handed is the plugin's fault, not the implementer's.
-An attempt can also fail on interface-record, alone or with the tool rows. The fix is a line in
-the interface record, which is a record file and not code. Amend the record first, with each
-element the check names. Such an attempt needs no second build. `build-brief` would hand over
-a brief with nothing to build. `build-record` would refuse the empty range (exit 71) or the
-unmoved head (exit 45).
-Run the checks again over the recorded range instead:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh build-recheck "<task_folder>" <order id> \
-  [--interface <path to the interface record>] \
-  [--test-recipe <framework>=<path to the test-execution recipe>]... \
-  [--check-recipe <framework>=<path to the review recipe>]... \
-  [--implement-recipe <framework>=<path to the implement recipe>]... \
-  [--value <name>=<value>]... \
-  [--nothing-ran <literal substring>]
-```
-The recipe flags and `--interface` are `build-record`'s. The range and the report path are read
-from the build record, so neither is passed. A recipe flag left out is taken from its record:
-the test-execution recipe and a gate order's implement recipe from `preconditions.json`, the
-review recipe from `baseline.json`. The `filledFromRecords:` line names each flag taken. A flag
-that names another path than its record refuses (exit 91), and nothing runs. Pass the recorded
-path, or leave the flag out. The interface record is read again from its file,
-so an amended record is what the check reads. No implementer is dispatched and no attempt is
-spent. The `next:` line offers this route beside `build` when the last attempt was stopped by
-the tool rows, owned-files or interface-record alone. When interface-record is among them, the
-line names the record's file to amend first. When owned-files is among them, the line names
-the steps still left before the re-check: `add-owned-file`, design `close` and `start`. It drops
-the steps the design or the snapshot already took after the attempt. The re-check reads the order's owned files
-from the snapshot that `start` refreshed. The same code fails again until the design gives the
-order the file.
+Some rows the same code can answer differently. A test may fail for a reason outside the code, such
+as a broken environment. A file the owned-files check refused may be one the order should own.
+While attempts remain, the next attempt answers a failure. When the last attempt fails, the order
+stops, and its reason allows `go-on --continue check` for any failed row, under "Go on" in
+`references/finish.md`. Repair the cause first, or give the order the file with `--owns`. The check
+runs over the recorded range, dispatches no implementer and spends no attempt. It takes
+`build-record`'s recipe flags and `--interface`. A flag left out is taken from its record, and the
+`filledFromRecords:` line names each one. It rewrites the record with the new checks. The replaced
+checks stay under `checksBefore`, beside `recheckedAt`. When the interface record's text changed,
+the attempt's own text stays under `interfaceRecordBefore`. When the code moved since the record,
+it runs over the range extended to HEAD and writes a warning. It refuses (exit 63) when those
+commits change a frozen test or a file the order does not own. After a fix round it runs that
+round's checks again over the fix record's range, and a pass addresses the round's check finding.
 
-It refuses (exit 88) in five cases, each with its own message. No build record exists for the
-order. The code repository's HEAD is not the record's own commit, because the code moved, and
-the route is `build`. Or a check outside the three tool rows, owned-files and interface-record
-stopped the attempt. A test or a suite that failed is the implementer's work, so a re-check is not a free
-retry, and the route is `build`. Or no check stopped the attempt, so it passed and the order is
-past the build. Or a path the interface check named does not exist at the recorded commit, so
-no amended record can answer it. A halted order refuses (exit 49), and `references/finish.md`
-names the grant. The clean-tree rule applies (exit 61). A missing interface record refuses as at `build-record`
-(exit 44). A person's fix after a finding ruled load-bearing passes the moved HEAD and the passed
-record once, under "Clear any other halt" in `references/finish.md`.
+## Read the three checks to the person
 
-It rewrites the record with the new checks and the interface record's text. When that text
-changed, the attempt's own text stays under `interfaceRecordBefore`. It keeps the attempt, its
-range and its date. The replaced checks stay under `checksBefore`, id and verdict
-only, beside `recheckedAt`. The
-attempt counter does not move. The order goes to `checks-passed` when the checks pass and stays
-at `code-written` otherwise. The summary has `build-record`'s shape plus a `recheck:` line.
+This step runs the three deciding checks. The record holds every one.
 
-After a fix round, it runs that round's seven checks again over the fix record's range.
-`references/review.md` says when. The same refusals apply to the fix record, with owned-files in
-place of interface-record. A test or a suite that failed is the fixer's work, so the route is the
-next round or a ruling. It rewrites the fix record the same way, and the order stays at `fixed`.
-A pass addresses the check finding, open or pending. An order halted only by the unattended fix
-round cap, on check findings alone, is not refused, and a pass clears that halt. A check that
-fails again stays a finding, and the halt stays.
-
-## Read the eight checks to the person
-
-This step runs all eight deciding checks. The record holds every one.
-
-- **order-tests.** Do this order's own frozen tests pass. On an order whose proof is `gate` this
-  slot is `configuration-gate` instead. Does every line pass, run in the worktree. The order's
+- **order-tests.** Do this order's own frozen tests pass. The run is as narrow as the recipe's
+  machine-readable rows allow. On an order whose proof is `gate` this slot is
+  `configuration-gate` instead. Does every line pass, run in the worktree. The order's
   own `verify` run entries run first, then the `## Configuration gate` lines of the implement
   recipe. The worse verdict stands. The first line that does not pass is named, with its
   output. A placeholder given several `--value` entries runs its line once per value. It reads
@@ -510,94 +452,54 @@ This step runs all eight deciding checks. The record holds every one.
   for this check. The section's second `sh` block is the put-back line. It runs after a gate
   that reached its fourth line, whatever the verdict, and never changes the verdict. When it
   fails, the detail starts with its exit. Tell the person to run that line again by hand.
-  On an order whose proof is `record` this slot is `done-when`. It reads the judgement the
-  checkpoint left on the order's done-when row, met when confirmed, naming the judge. Nothing runs.
+  On an order whose proof is `record` this slot is `done-when`. It reads deferred. Nothing runs:
+  the order's reviewer reads the document against its done-when rows, and review checks its
+  criteria.
   On an order whose proof is `observe` this slot is `observed`. It reads the record you wrote
   above, met when every row is met, naming the judge, a model. One unmet row stops the attempt
   the way a failing test does.
   On an order whose proof is `confirm` this slot is `confirm-at-review`. It reads deferred. The task has
   no automated tests, so nothing runs, and the person confirms the order's done-when rows at
-  review. Deferred passes here, in this slot alone. On every kind but `gate`, the order's own
+  review. Deferred passes here, and in `done-when`. On every kind but `gate`, the order's own
   `verify` run entries
   then run in this slot, from the code worktree. The slot is met only when its own answer and
   every line are. The detail names the source.
-- **suite-regression.** Does anything that passed at the baseline now fail. A suite row the
-  recipe costs `end-of-task` does not run here. The check reads `deferred`, and `finish` runs
-  that row once at the final commit. On a Drupal project the row is ten minutes per run. On a
-  `record` order it reads undeclared, and so do the three tool checks. A document in the task
-  folder is nothing a suite or a tool reads, and the detail names the proof kind. On a `confirm`
-  order it reads undeclared too, because the task has no automated tests. The three tool checks
-  run on it as on any code order.
-- **coding-standards.** Does the coding-standards tool raise anything the baseline did not already
-  have.
-- **static-analysis.** Does static analysis raise anything the baseline did not already have.
-- **security.** Does the security tool raise anything the baseline did not already have.
-- **owned-files.** Did the change stay inside the files this order owns. On a `record` order the
-  change is the task folder's diff in the project folder, with the files AIDA's own scripts
-  write there set aside and counted in the detail.
+- **owned-files.** Did the order's own commits stay inside the files this order owns. On a
+  `record` order the change is the task folder's diff in the project folder, with the files AIDA's
+  own scripts write there set aside and counted in the detail.
 - **frozen-tests.** Does every frozen test file still hash to what the freeze recorded. An order
   that froze none reads undeclared, because the row hashed nothing, and the executed count does
   not count it.
-- **interface-record.** Does the interface record name every element the order's own declared
-  interface names in backticks. A shortened name in backticks counts when it ends the declared
-  name after a `.` or `::`, ends no other declared name, and is not itself declared. A path is
-  never shortened. A name ending in lowercase only, such as `a.php`, needs a shortened form that
-  keeps a `.` or `::`. The detail lists each shortened name.
-
-A suite or a tool the baseline recorded red does not fail these checks by itself. The check
-subtracts the baseline's own output from the run now, line by line. Numbers and dots are set
-aside first, so a shifted line number, a count or a duration does not read as new. No new line
-is met. A new line is unmet, and the record lists the first twenty under `newLines` with the
-count. The check reads unknown only when the baseline kept no output or the run printed nothing.
-
-That is enough for a tool, which prints one line per finding. It is not enough for every suite.
-PHPUnit and pytest print a progress line and a summary line that change whenever a test is added
-or fixed. On the whole output, a red baseline on those still reads unmet. A test-execution
-recipe's suite row may declare `failure_line`, a regular expression matching the lines that name
-a failed test. Then only those lines are compared, on both sides, and the record names the
-selector. With the selector, a failure that matches no line reads unknown, because it is not one
-the selector names. A suite row may also declare `warning_line`, the lines that fail no test.
-Only `finish` reads it, and `references/finish.md` says what follows. A record step still reads
-such a failure unknown.
-
-The subtraction holds no parser, so it cannot see four things. A finding whose text changed
-reads as new. A finding fixed and reintroduced reads as old. A new finding worded like an old
-one in another file reads as old. A second copy of an old finding on another line reads as old.
 
 A failed check is not a failed order. It is this attempt's result, and the order has as many
-attempts as its own allowed count says, two unless a person has granted more. The summary prints
-one line per check with its verdict and a one-line reason. Interactive, open with: "This attempt
-at the work failed one of the checks, and another attempt is allowed. Spending it is your
-call, because each attempt costs a dispatch. Say yes and the builder tries again from this
-code. Say no and the work stays where it is until you return." Then say which check failed,
-in plain words, and name the record path that holds what the tool printed. Do not read the
-record here.
+attempts as its own allowed count says, two unless a person's go-on granted more. The summary prints
+one line per check with its verdict and a one-line reason. Say which check failed, in plain words,
+and name the record path that holds what the check printed. Do not read the record here. Then
+brief the next attempt, in both run modes. Do not ask whether to spend it: the attempt cap and the
+run budget bound the attempts, and a person can stop the run at any time.
 
-An unknown on interface-record does not fail the attempt. The declaration named no backticked
-element, so nothing there was countable, and the disagreement goes to the reviewer instead. Every
-other unmet or unknown does. Every attempt counts against the allowed number, whatever the checks
-said.
+Every unmet or unknown fails the attempt. Every attempt counts against the allowed number,
+whatever the checks said.
 
 **order-tests is the floor,** or `configuration-gate` on a `gate` order, or `done-when` on a
-`record` order. Every other check may
-answer undeclared, or deferred on the suite, and still let the order go on
-to `checks-passed`, the same rule step two applies to a precondition nobody declared. order-tests
-may not. It is the one check that says this order's own code does what its tests ask. Undeclared or
-unknown there means nothing here ran, so the order stays at `code-written`, whatever the other
-seven answered.
+`record` order. The other two checks may
+answer undeclared and still let the order go on to `checks-passed`. Step two applies the same rule
+to a precondition nobody declared. order-tests may not. It is the one check that says this order's
+own code does what its tests ask. Undeclared or unknown there means nothing here ran, so the order
+stays at `code-written`, whatever the other two answered.
 
 One order has nothing for this check to run: an order serving only criteria a person verifies.
 Its frozen record carries checklist rows and no test, which design allows. order-tests answers
 met there, with a detail saying so, and review's close confirms the checklists. A machine-verified
 criterion frozen with no test path still reads unknown, and the order stays at `code-written`.
 
-The summary's `executed:` line says how many of the eight actually ran a command, a diff or a
-hash rather than reading undeclared. Say that count to the person: eight checks answering does not
+The summary's `executed:` line says how many of the three actually ran a command, a diff or a
+hash rather than reading undeclared. Say that count to the person: three checks answering does not
 by itself say the code was tested.
 
 The attempt counter lives in the ledger and is incremented here, and the order's state moves with
-it: `checks-passed` when every check but order-tests answered met or undeclared (interface-record's
-own unknown excepted) and order-tests itself answered met, `code-written` otherwise. When the
-failing attempt was the last one allowed, the script writes the halt and its reason into the ledger
-at that moment. It says so. Nothing here un-halts one. Go back to the skill body for what happens
-to the run.
+it: `checks-passed` when the other two checks answered met or undeclared and order-tests itself
+answered met, `code-written` otherwise. When the
+failing attempt was the last one allowed, the script writes the stop and its reason into the
+ledger at that moment. It says so. Nothing here takes the order out of its stop. Go back to the
+skill body for what happens to the run.

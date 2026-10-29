@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AIDA completion record",
-  "description": "On what grounds one task closed, at <task folder>/completion/completed.json (ideal/completion.md, 'The completion record'). One file per task, in its own folder beside review/, because implementation's own `restart` archives implementation/ whole and this record has nothing to do with a build restart. Written once, by `close`, after the pull request body and before the task skill's `complete` writes the state. A record beside a task still in progress is a close that failed at its last step, and running `close` again is the repair. Every field is required, because one action writes them all at once. The task state says closed; this record says on what grounds, by whom, and what was left behind. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
+  "description": "On what grounds one task closed, at <task folder>/completion/completed.json (ideal/completion.md, 'The completion record'). One file per task, in its own folder beside review/, because this record has nothing to do with the build's own records, which a redo or a drop moves aside. Written once, by `close`, after the pull request body and before the task skill's `complete` writes the state. A record beside a task still in progress is a close that failed at its last step, and running `close` again is the repair. Every field is required, because one action writes them all at once. The task state says closed; this record says on what grounds, by whom, and what was left behind. A field present in a real record but absent from this schema's `properties` is a defect in the schema, not a value to silently accept, which is why `additionalProperties` is false.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -13,9 +13,7 @@
     "reason",
     "followUps",
     "capturesOffered",
-    "capturesSkipped",
-    "observedAccepted",
-    "observedSkipped"
+    "capturesSkipped"
   ],
   "properties": {
     "schemaVersion": {
@@ -68,36 +66,9 @@
       "type": "string",
       "enum": ["", "autonomous"],
       "description": "Why no note was offered: `autonomous` when nobody was present to name a play, the empty string when the offer ran. A decision saved mid-stage is only a candidate; a person names the play."
-    },
-    "observedAccepted": {
-      "type": "array",
-      "default": [],
-      "items": { "$ref": "#/$defs/observedAnswer" },
-      "description": "One row per criterion a model observed through a browser, owned by a frozen order whose proof is observe, with the person's answer from --observed-accepted: whether they accept the observation the build recorded (live-run row 104). A no is a reason the close asks for, the way a verdict that did not pass is. Empty when the task had no such criterion, or when nobody was present to answer."
-    },
-    "observedSkipped": {
-      "type": "string",
-      "enum": ["", "autonomous"],
-      "description": "Why no observation was put to a person: `autonomous` when nobody was present, the empty string when the question ran. A model's look is queued for a person the way every model row is, and this field says the queue was not read."
     }
   },
   "$defs": {
-    "observedAnswer": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["criterion", "accepted"],
-      "properties": {
-        "criterion": {
-          "type": "string",
-          "pattern": "^c[1-9][0-9]*$",
-          "description": "The criterion's own id, as the contract carries it."
-        },
-        "accepted": {
-          "type": "boolean",
-          "description": "True when the person accepted what the model saw, false when they did not."
-        }
-      }
-    },
     "followUp": {
       "type": "object",
       "additionalProperties": false,

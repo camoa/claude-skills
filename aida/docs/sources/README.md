@@ -26,4 +26,4 @@ Read them in this order:
 12. [A command as the end to end surface](command-surface.md): for a project with no page to
     drive.
 13. [Surfaces at review](surfaces-at-review.md): what review runs, what it does to the verdict,
-    and the walk.
+    and the verifier's look at each surface.

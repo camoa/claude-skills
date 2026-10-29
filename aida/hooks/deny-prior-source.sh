@@ -11,8 +11,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # is that record's own denyRead (scripts/dispatch-schema.json; deny-frozen-test-writes.sh's header
 # carries the fuller reasoning for the record itself). Two roles reach it today. A test author is
 # denied every work order's owned files, because a test that has read the code describes the code
-# instead of the intent. An implementer is denied every order's but its own, because what another
-# unit exposes is its interface record and never its source. The task folder's own copies of code,
+# instead of the intent. An implementer is denied the files of every order its own does not depend
+# on, because it builds on nothing there (gap row 443). The task folder's own copies of code,
 # such as diffs and set-aside files, are listed one file at a time when the dispatch opens. A file
 # written there after that is in no list, and the read passes (gap row 379).
 #
@@ -59,8 +59,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # one whose codePath holds the payload's working directory, else the one open record naming the
 # agent's type (scripts/lib/paths.sh, dispatch_record_for). With no project for the working
 # directory, the project remembered for it answers the same way, else the one open record naming
-# this plugin's role in any registered project (dispatch_record_resolve). Records open for other trees only: allow, through `systemMessage` naming
-# why. dispatch.json
+# this plugin's role in any registered project (dispatch_record_resolve). Records open for other trees only: allow, silent outside every
+# task's worktree, else through `systemMessage` naming why. dispatch.json
 # unreadable, a record naming no role, an agent whose type is not the role the record names, or a
 # dispatch whose denyRead list is empty:
 # allow, but through `systemMessage`, the one hook-output channel the model sees on exit 0, naming
@@ -121,7 +121,8 @@ CWD="$(jq -r '.cwd // empty' <<<"$INPUT" 2>/dev/null)"
 
 # Each task keeps its own record under its implementation folder (live-run row 139). The one this
 # agent works under is the one whose codePath holds the payload's working directory. A record
-# open for another tree is another task's dispatch, and it says so rather than passing in silence.
+# open for another tree is another task's dispatch. The hook says so only for a read in a task's
+# worktree, and passes any other read in silence.
 # The directory is held in the same canonical form codePath is, so the two compare as strings.
 # The Bash door below resolves a relative operand against it too. A session outside every code
 # path reads the project remembered for its folder, else a role finds its record across the
@@ -135,9 +136,41 @@ case $? in
 esac
 PROJECT_PATH="$DISPATCH_PROJECT"
 DISPATCH_FILE="$DISPATCH_RECORD"
+# The folders the read lands in: the one Read or Grep names, else the shell's folder and each
+# folder a literal cd or git -C moves it to. With no record for the shell's folder, each of them is
+# asked for one, so a role in the main checkout that reads after `cd <worktree>` meets its record
+# while two are open. With none, the note is said only for a read in a task's worktree
+# (scripts/lib/paths.sh, in_task_worktree).
 if [ -z "$DISPATCH_FILE" ]; then
-  [ "$DISPATCH_OPEN_COUNT" -eq 0 ] || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $CWD_CANON, so this read was allowed without being checked"
-  echo '{}'; exit 0
+  READ_DIRS="$(jq -r '.tool_input.file_path // .tool_input.path // empty' <<<"$INPUT" 2>/dev/null)"
+  if [ -n "$READ_DIRS" ]; then
+    READ_DIRS="$(normalize_abs "$(resolve_against "$READ_DIRS" "$CWD_CANON")")"
+    [ -d "$READ_DIRS" ] || READ_DIRS="$(dirname -- "$READ_DIRS")"
+  else
+    READ_DIRS="$CWD_CANON"
+    if [ "$TOOL" = Bash ]; then
+      while IFS= read -r op; do
+        [ -z "$op" ] || READ_DIRS="$READ_DIRS
+$(shell_dir_after "$CWD_CANON" cd "$op")"
+      done < <(cd_operands "$(jq -r '.tool_input.command // empty' <<<"$INPUT" 2>/dev/null)")
+    fi
+  fi
+  while IFS= read -r READ_DIR; do
+    [ -n "$READ_DIR" ] || continue
+    READ_DIR="$(cd "$READ_DIR" 2>/dev/null && pwd -P || printf '%s' "$READ_DIR")"
+    if [ "$READ_DIR" != "$CWD_CANON" ] \
+       && dispatch_record_resolve "$READ_DIR" "$AGENT" "$(jq -r '.session_id // empty' <<<"$INPUT" 2>/dev/null)" \
+       && [ -n "$DISPATCH_RECORD" ]; then
+      PROJECT_PATH="$DISPATCH_PROJECT"; DISPATCH_FILE="$DISPATCH_RECORD"; break
+    fi
+    [ "$DISPATCH_OPEN_COUNT" -gt 0 ] && in_task_worktree "$PROJECT_PATH" "$READ_DIR" \
+      && NOTE_DIR="${NOTE_DIR:-$READ_DIR}"
+  done <<<"$READ_DIRS"
+  if [ -z "$DISPATCH_FILE" ]; then
+    [ -z "${NOTE_DIR:-}" ] \
+      || not_enforced "$DISPATCH_OPEN_COUNT dispatch record(s) are open in ${PROJECT_PATH:-the registered projects for the role $AGENT}, none for a tree holding $NOTE_DIR, so this read was allowed without being checked"
+    echo '{}'; exit 0
+  fi
 fi
 jq empty "$DISPATCH_FILE" >/dev/null 2>&1 \
   || not_enforced "$DISPATCH_FILE could not be read as JSON"

@@ -4,6 +4,127 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.0] - 2026-10-28
+
+A new test path and a lighter set of controls. Tests now mean
+test-driven development, and only for code with logic. Five hard stops
+remain. Most other checks write a warning to the task record and let the
+task go on. Review runs the finished product and keeps the evidence.
+
+### Changed
+
+- Tests mean test-driven development for code with logic. What an order's
+  files are decides whether it gets tests, not a criterion's wording. A
+  document, configuration or layout gets no test, and a person or a
+  reviewer reads it. One page, `skills/implement/references/what-a-test-is.md`,
+  defines a test for every role.
+- End-to-end tests and visual baselines are surfaces that review runs.
+  They are no longer tests that an order writes. Light mode keeps one
+  demo-path script, written once.
+- Scope recommends the kind of a criterion from its outcome. "Test",
+  "check" and "make sure" in a criterion mean that review verifies it.
+- Five hard stops remain: a frozen test, the files an order owns, the
+  trunk, the person's answer, and a test newly broken at finish. The
+  fifth is new. Finish stops on a test that passed at the start of the
+  build and fails at the final commit. It gives each failure to the order
+  that caused it, and `go-on fix` opens a repair round. A failure no order
+  takes goes to the person, who gives it to an order or records it as not
+  caused by this task.
+- Most other controls are warnings in the task record. The step goes on,
+  and review lists every warning. Review fails only on a criterion that
+  is not met. Completion closes without asking only on a passed review
+  with no warning.
+- A stopped work order has three ways out, each behind the person's
+  answer: `go-on` (build, fix, check, close or keep), `redo`, which
+  reverts the order's own commits and builds it again, and `drop`, which
+  ends it without code.
+- Every person step reads the person's answer from one record, filled
+  through a Claude Code permission prompt. Changing the run mode needs an
+  answer too. Approving a contract names the contract that was read.
+- Review's surfaces step is now the acceptance step. A new role, the
+  acceptance verifier, runs the product and records evidence for each
+  criterion and each surface. Close shows that evidence beside each
+  verdict, and the pull request body names it. Completion no longer asks
+  a second time about what the model looked at.
+- When a failed review reopens an order proved by tests, the order's
+  test author writes one failing test of the bug before the fixer runs.
+  The same holds when a build stops on a defect in a closed order, or
+  when a person grants a file a closed order owns.
+- The destructive-command hook asks the person instead of refusing. It
+  asks before a push, a hard reset, `git clean`, a forced branch delete,
+  `gh pr merge`, `gh release create` and `gh release delete`. It asks
+  before a recursive delete of home, the root, the working folder or the
+  scratchpad. Where no prompt can show, these are refused. A dispatched
+  role is always refused and stopped.
+- The build check runs only the order's own proof, its owned files and
+  its frozen tests. Each tool runs once before review, so a tool finding
+  never spends a build attempt.
+- An observe order is looked at once, at the page it builds, at one size.
+  Every surface at every viewport is checked at review.
+- A task's worktree is made when the task starts, from the trunk. Prune
+  removes only the trees of complete tasks, and deletes a branch only
+  when git agrees it is merged.
+- Two frameworks that command the same tool run the first one in
+  `project.json`, with a warning.
+- Each build and fix record lists its own commits, so the review diff
+  holds the order's work and nothing that merged in from the trunk.
+- A manual compaction with unsaved work goes on, and the task record
+  names the unsaved files.
+
+### Added
+
+- Review close takes two new rulings on a finding. `test-wrong` sends
+  the frozen test back to its order's test author through reopen.
+  `contract-wrong:<text>` keeps the corrected wording beside the frozen
+  one, and completion offers it as a follow-up task for scope.
+- `go-on close` closes a stopped order with its open findings ruled
+  deferred, with no further fix round. Finish carries each one to the
+  task review.
+- Completion close takes the task's own site down.
+- `/aida:test-cleanup` reads a project's tests against the test rules
+  and reports what to delete, merge or shrink. A person approves each
+  group. The approved cleanup runs as a light task of tests-only orders.
+- Mutation testing is opt-in: `/aida:project set-mutation <name> on`.
+  It is off by default.
+- `surfaces register` needs a `--reason` for an end-to-end surface.
+  `surfaces unregister` removes one surface.
+- The design check warns on an order with more than eight done-when rows,
+  or more than three for each criterion it owns.
+
+### Removed
+
+- `grant-attempt`, `clear-halt`, `retake-tests`, `restart` and
+  `build-recheck`. Use `go-on`, `redo` or `drop`.
+- `--accept-deviation` (use `go-on --continue keep`), `finish
+  --accept-warnings`, `--observed-accepted`, `--walked`, `update
+  --keep-choices`, `dispose --confirmed` and `tool require --advisory`.
+- The `/etc/claude/allow-push` file. A push now asks the person.
+- The question that put confirmed test rows back to the person after a
+  rejection, and the per-attempt ask.
+- Many refusals that stopped a step with nothing at risk. Design starts
+  without research, and an owned-file overlap, a clean-tree check at
+  surfaces and an unconfirmed reuse decision are warnings.
+
+### Fixed
+
+- Every plugin script parses under bash 3.2, the macOS default, and four
+  run-time breaks are fixed. A spec parses each file with a bash 3.2
+  binary when one is present. Two places no longer
+  depend on GNU grep or GNU awk, and a flag value split no longer depends
+  on GNU sed.
+- Review checks every frozen test again at the final commit. A changed
+  frozen test stops the review and names the file.
+- A turn cap on any role now counts toward the order's attempt limit.
+- A commit made by a stopped or capped builder is kept on the order, so
+  `redo` and `drop` revert it.
+- A test author sent to a reopened order can write only its new test.
+- The task-record guard reads `~/` paths, and covers only a task's own
+  records. A `task.json` in a code tree is no longer refused.
+- A tear-down after a failed bring-up fills the recipe's token values.
+- A failing tool command or data parse is reported, never read as no
+  finding.
+- The frozen-test hook prints its note only in a task's worktree.
+
 ## [6.0.22] - 2026-10-26
 
 Changes from the periplus run, the camoa_skills run on

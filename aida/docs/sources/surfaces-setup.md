@@ -15,7 +15,7 @@ install needs a person.
 
 The install:
 
-- refuses a dirty tree before it writes anything;
+- warns when the tree holds other uncommitted work, and leaves that work out of its commit;
 - runs the recipe's commands in order;
 - writes each file the recipe names when the file is absent, and replaces a file that holds an
   earlier version of the recipe's content;
@@ -26,10 +26,9 @@ Running it again is safe. It keeps your surface file and every file that matches
 
 | What you see | What to do |
 |---|---|
-| The tree is dirty | Commit or move the named paths aside, then run it again. |
 | A step failed, with its first line of output | Do not install by hand. The fix belongs in the recipe or on the machine. |
 | A file is present with content no version of the recipe holds | The install stops before anything runs and names the file. Decide which version is right. |
-| Two frameworks each carry a recipe | AIDA names both and stops. It cannot pick one. |
+| Two frameworks each carry a recipe | AIDA takes the first framework in the project file, and warns naming both. |
 | No framework has a recipe | Nothing is installed and the kind stays off. AIDA names `templates/process-recipe-setup.md` as the shape a recipe follows. |
 
 Scope and design offer the setup without looking the recipe up, so a yes there can end here.
@@ -44,17 +43,32 @@ own list too. A version 5 `registry.yml` offers its ids and URLs as candidates.
 A mask hides an element before capture, such as a date. AIDA proposes one only with the count of
 elements it hides. A mask that hides everything hides the regression too.
 
-For each surface you keep, AIDA asks two things:
+For each surface you keep, AIDA asks these things:
 
 - **The paths that render it**, as globs relative to the code tree. Review runs the surface only
   when a change touches one of them. A surface with no paths runs on every review.
 - **Whether it is critical.** A critical surface runs on every review.
+- **Why, for an end to end surface.** An end to end test is added on purpose. The reason is your
+  words: the core journey it walks, or the behaviour no lower test can reach. `register` refuses
+  an end to end surface with no `--reason`, and the surface file keeps it.
 
 Only a row you confirmed is written, and nothing is enabled unattended. Each registration commits
-the surface file. To add one later, run `/aida:surfaces register` with the id, URL, kinds, paths
+the surface file alone, so other uncommitted work does not stop it. To add one later, run
+`/aida:surfaces register` with the id, URL, kinds, paths, `--reason` for an end to end surface,
 and `--enable`. Without `--enable` the surface is written disabled, and review records it as not
 run. Registering the same id with different fields is refused, naming both. Registering before
 the install is refused.
+
+## Remove a surface
+
+```
+/aida:surfaces unregister <id>
+```
+
+This removes one surface from the surface file and commits the file alone. Run it only when you
+decided the surface goes, such as when a lower test already covers it. A test cleanup task runs it
+for an end to end test you approved for removal. The surface's baselines stay on disk. It refuses
+when no surface has that id, or when there is no surface file.
 
 ## Take the first baselines
 
@@ -72,7 +86,8 @@ frameworks that each carry one, stops the step.
 
 ## Why it works this way
 
-- A dirty tree is refused, so your uncommitted work is never swept into the setup's commit.
+- The commit takes only the files the setup changed, so your uncommitted work is never swept
+  into it and never stops it.
 - Declaring paths is what lets review skip a surface a change cannot reach, which keeps review
   affordable on a large project.
 

@@ -17,7 +17,7 @@ stage treats a failed lookup differently from `no-recipe`, the table says so.
 | `test-execution` | `no-recipe` records the framework `undeclared`, and the build goes on. An unreachable catalog or a failed fetch records `unknown` and stops: a person decides, and an autonomous run halts. |
 | `implement` | No test patterns, so every order proved by tests is blocked at the freeze. A `record` or `observe` order still builds. A `gate` order builds, but its own check reads `unknown`. The build's first step names each blocked order before any order is built. |
 | `test-authoring` | The test author gets no recipe path. |
-| `review` | `no-recipe` reads `undeclared`, which passes and is reported in that word. An unreachable catalog reads `unknown`, which fails the review. |
+| `review` | `no-recipe` reads `undeclared`, which passes and is reported in that word. An unreachable catalog reads `unknown`, a warning at the close. |
 | `e2e-setup`, `visual-regression` | Installs nothing, and the kind stays off. The surfaces skill names `templates/process-recipe-setup.md` as the shape a recipe follows. |
 | `worktree-environment` | The worktree has the branch's files and no site. The task says so once and goes on. |
 

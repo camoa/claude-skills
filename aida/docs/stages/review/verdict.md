@@ -1,30 +1,30 @@
 # The verdict
 
-The verdict is passed or failed. A check that reads unmet or unknown fails the review, and so
-does a criterion that is not met.
+The verdict is passed or failed. Only a criterion that reads unmet fails the review. Every other
+result that is not met is a warning. The record lists it, and the close names it to you.
+Completion closes over a warning only on your reason.
 
 ## The five answers a check gives
 
 | Answer | What happened | Effect on the verdict |
 |---|---|---|
 | met | it looked, and the answer is yes | passes |
-| unmet | it looked, and the answer is no | fails |
-| unknown | it could not look: a tool did not run, a file was missing, a lens never answered | fails |
+| unmet | it looked, and the answer is no | a warning |
+| unknown | it could not look: a tool did not run, a file was missing, a lens never answered | a warning |
 | undeclared | the recipe names no tool for it, marks it absent, or it does not apply to this task | passes, named in its own word |
 | not-needed | no order in this task asked for it | passes, named in its own word |
 
-A criterion answers in three words: met, unmet or unanswered. Unanswered means nobody could
-answer it, and it is never a pass.
+A criterion answers in three words: met, unmet or unanswered. Unmet fails the review.
+Unanswered means nobody could answer it, and it is a warning.
 
 ## The verdict rules
 
-1. A check that reads unmet fails the review.
-2. A check that reads unknown fails the review.
+1. A criterion that reads unmet fails the review. The contract is not met.
+2. A check that reads unmet or unknown, and a criterion that reads unanswered, is a warning.
 3. Met, undeclared and not-needed all pass, and each is reported in its own word.
-4. A criterion that reads unmet or unanswered means no sign off, whatever the checks said.
 
-The report names the check or the criterion that caused a fail. Beside the verdict it names each
-check that reads undeclared or unknown, the count of unanswered criteria, and the count of
+The report names the criterion that caused a fail, and each warning. Beside the verdict it names
+each check that reads undeclared or unknown, the count of unanswered criteria, and the count of
 catalog notes.
 
 ## Catalog notes
@@ -51,7 +51,7 @@ about. You see this list before the verdict word.
 | read | a record decided it, and nothing ran |
 | off | the project turned it off, or the recipe declares the row absent |
 | could-not-look | a recipe, a row, a file or a tool was missing |
-| awaiting-person | the check waits for your answer at the close |
+| awaiting-person | the acceptance verifier read a row not met, and the check waits for your answer at the close |
 
 Then one line per surface, run or not run with the reason, and a line of counts. Completion puts
 the same list in the pull request body.
@@ -59,12 +59,16 @@ the same list in the pull request body.
 ## The one write into the contract
 
 The close writes each criterion's verdict into the contract, `alignment.json`. Nothing else in
-the contract changes. The write halts no order, and the report says that review made it.
+the contract changes. The write stops no order, and the report says that review made it.
 
 ## Why it works this way
 
 - Undeclared passes because the framework has answered: it has no such tool. Blocking there
   would block every project on that framework.
-- Unknown fails because a result nobody could read is never waved through.
+- Unknown is a warning, never a pass, because a result nobody could read is never waved through.
+  It does not fail the review on its own. Every catch on record came from a person who read the
+  finding.
+- A person present reads the warnings at the close. With nobody present, completion stops on
+  them, which is the one place an unattended task stops on the review.
 
 Source: skills/review/SKILL.md, skills/review/references/close.md, skills/review/references/checks.md, skills/review/scripts/review-actions.sh

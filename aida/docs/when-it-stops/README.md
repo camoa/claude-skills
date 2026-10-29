@@ -5,7 +5,7 @@ your situation below. Each page says what you see, what it means, and what to do
 
 Two rules hold on every page. Read the message, because it names the route. And never repeat
 a refused call unchanged: fix the cause, then run the same step again. A refusal changes no
-code. On an unattended run some refusals also record a halt on the work order, and the message
+code. On an unattended run some refusals also record a stop on the work order, and the message
 says so.
 
 An exit code means one thing inside one stage's actions. The same number can mean something else
@@ -34,8 +34,7 @@ in another stage, so read the page for the stage you are in.
 - [A builder stopped, or returned no report](builder-stopped.md): including a test the builder says is wrong.
 - [An attempt failed its checks](checks-failed.md): including an order out of attempts.
 - [The review of one work order stops](order-review.md)
-- [A work order halted](halts.md): which action answers each kind, and when that action refuses.
-- [The build stopped: budget spent](budget.md)
+- [A work order stopped](stopped.md): which way out fits each reason, budget spent included, and when each way out refuses.
 - [Finish refuses](finish-refused.md)
 
 ## After the build
@@ -47,5 +46,5 @@ in another stage, so read the page for the stage you are in.
 
 - [A run with nobody present stops for a person](person-must-answer.md): light and autonomous runs.
 - [The site is down or will not come up](site-down.md)
+- [A command is put to you or refused](destructive-command.md): commands that throw work away or publish it.
 - [A tool or a test harness will not install or run](tool-or-harness.md)
-- [Compaction is refused: unsaved stage work](compact-refused.md)

@@ -13,7 +13,7 @@ Read these pages in order:
 2. [What the checks ask](checks.md): the sixteen checks, and how the tool checks read old findings.
 3. [The verdict](verdict.md): the five answers a check gives, the verdict rules, and the audit list.
 4. [The reviewer](reviewer.md): what the reviewer reads, and what each finding becomes.
-5. [The surfaces at review](surfaces.md): end to end and visual checks, and your walk.
+5. [Verify the task by running it](acceptance.md): the surfaces, the acceptance verifier and its evidence.
 6. [Answer the close](close.md): the questions review asks you, and how to correct an answer.
 7. [After a failed review](failed.md): fix the code and review again, or close without a pass.
 8. [Review with nobody present](autonomous.md): what an autonomous or light run does instead.
@@ -24,4 +24,4 @@ Read these pages in order:
   outside the code finds new things on every pass, so review runs once and stops.
 - Review and completion are two stages, so you can run your own reviews between them.
 
-Source: skills/review/SKILL.md, skills/review/references/checks.md, skills/review/references/reviewer.md, skills/review/references/surfaces.md, skills/review/references/close.md
+Source: skills/review/SKILL.md, skills/review/references/checks.md, skills/review/references/reviewer.md, skills/review/references/acceptance.md, skills/review/references/close.md

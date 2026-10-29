@@ -14,15 +14,15 @@ The reviewer reads wider than the diff on purpose. Duplication against untouched
 across orders cannot be seen inside a diff.
 
 The eight lenses are non-goals, SOLID, DRY, architecture, guides, practices, mutation and purpose.
-Each lens answers one check. A medium or high finding makes its check read unmet. When every
-finding of a lens is low, you decide that check at the [close](close.md).
+Each lens answers one check. A medium or high finding makes its check read unmet, a warning. When
+every finding of a lens is low, its check reads met, and each finding stays a follow up.
 
 ## When no guide is on disk
 
 The guides and practices lenses need something to judge against. When no guide body is on disk,
 review first searches for current practice for your stack, in every run mode. It records each
 result with its source. A practice found with a source becomes what both lenses judge against.
-When the search finds nothing, you answer those two checks at the close.
+When the search finds nothing, those two checks read unknown, a warning at the close.
 
 The practices lens also reads the plays from your playbooks. When the project subscribes to
 playbooks and research never loaded them, the practices check reads unknown. Run
@@ -38,7 +38,7 @@ the diff holds nothing. Review then dispatches no reviewer and tells you why in 
 Some done-when clauses say the change added nothing of a named kind, such as no new dependency.
 No test can be watched failing for such a clause, so the build sends it to the reviewer. The
 reviewer answers each one met, unmet or unknown, and says whether a test could have proved it. A
-clause a test could have proved fails the review, and you see it named.
+clause a test could have proved is a warning, and you see it named.
 
 ## What each finding becomes
 

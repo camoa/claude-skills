@@ -33,7 +33,8 @@ only when the advisor's recommendation is the source.
 
 - A folder and a `task.json` for each child, with the parent's id as its parent.
 - Each child's goal under `## Goal` in its `task.md`, and its criteria under `## Criteria`.
-- A worktree for each child, made the way `create` makes one.
+- No worktree yet. Each child gets its own tree when it starts, so a tree refused for one child
+  never leaves the split half written.
 - Each child takes the parent's `--after` link, so it waits for the same build.
 - The parent lists every child. Nothing moves, and the parent's records stay where they are.
 - One commit for all of it.
@@ -45,7 +46,7 @@ and searches only for what the parent never covered.
 
 Split writes nothing in these cases:
 
-- The parent task does not exist.
+- The parent task does not exist, or a child id is refused.
 - The task already has a parent. Nesting goes two levels deep at most.
 
 A child always lives in the same project as its parent.

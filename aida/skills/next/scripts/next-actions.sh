@@ -52,8 +52,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   3  this script could not do its job (jq missing, a temp file could not be made, and so on).
 # Exit codes for `open`:
 #   0  found, printed.
-#   1  not found, or the target is not a safe task id (a path separator, "." or "..").
-#   3  this script could not do its job.
+#   1  not found.
+#   3  this script could not do its job, or the target is not a safe task id (a path separator,
+#      "." or "..").
 #
 # A reader that cannot read fails loudly: a task folder with no task.json, or one that will not
 # parse as JSON, or one with no id, is named on stderr and skipped, never silently dropped and
@@ -104,7 +105,7 @@ command -v jq >/dev/null 2>&1 || die3 "jq is required and was not found on PATH"
 # shellcheck source=/dev/null
 source "$REGISTRY_LIB"
 # task_stage is the one copy of the stage rule; the session-start hook reads the stage off this
-# script's lines. The library's other functions take die1, die2 and die4 from the caller and are
+# script's lines. The library's other functions take die1 from the caller and are
 # not called here, and task_stage and task_after_state call none of them.
 TASK_HELPERS="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 # shellcheck source=/dev/null
@@ -328,16 +329,14 @@ do_report() {
 # ------------------------------------------------------------------------------------------------
 
 do_open() {
-  local target="${1:?open: a task id is required}"
+  local target="${1:-}"
+  [ -n "$target" ] || die3 "open: a task id is required"
 
   # Refusing a bad name rather than fixing it silently, ideal/task.md "Kept from version 5
   # without change." The concern here is a reader about to build a path from this string: a path
   # separator, or "." or "..", would walk it outside the task folder it is meant to look inside.
   case "$target" in
-    ''|*/*|.|..)
-      echo "REFUSED: '${target}' is not a valid task id." >&2
-      return 1
-      ;;
+    ''|*/*|.|..) die3 "open: '${target}' is not a valid task id" ;;
   esac
 
   if ! resolve_project; then

@@ -10,7 +10,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # line at the top, in plain words: editing it by hand does not change the contract. To change
 # the contract, run the scope skill's own update path.
 #
-# This script does not validate the contract; check-alignment.sh does that. It renders what is
+# This script does not validate the contract; scope-actions.sh validates each field it writes. It renders what is
 # there, using an empty placeholder for anything a criterion or a non-goal is missing, so a
 # still-broken contract still produces a document a person can read and point at while it gets
 # fixed, rather than this script crashing on the first bad entry. A criterion or non-goal entry
@@ -44,7 +44,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      alignment.json does not exist, alignment.json exists but is not readable (a permission
 #      problem, not the same fact as missing or malformed), alignment.json is readable but fails
 #      to parse as JSON or is not a JSON object (missing, unreadable and malformed are three
-#      different facts, reported with different text, the same rule check-alignment.sh states
+#      different facts, reported with different text, the same rule check-research.sh states
 #      in its own header and ideal/scope.md:106-108), or alignment.md could not be written.
 #      Reported to stderr.
 #
@@ -96,7 +96,7 @@ TASK_PATH="$(cd "$TASK_PATH_ARG" 2>/dev/null && pwd)" || \
 
 # ---------------------------------------------------------------------------
 # 2. Read alignment.json. Missing, unreadable and malformed get different text, the same
-#    distinction check-alignment.sh draws, even though all three stop this script the same way.
+#    distinction check-research.sh draws, even though all three stop this script the same way.
 # ---------------------------------------------------------------------------
 
 ALIGNMENT_FILE="$TASK_PATH/alignment.json"
@@ -163,7 +163,7 @@ trap 'rm -f "$TMP_FILE"' EXIT
   # person approves never reads "..entered.."
   jq -j "$RENDER_TEXT_JQ"'
     (.criteria? // []) as $v | ($v | type) as $t
-    | if $t != "array" then "The criteria field could not be read: it is present but is a \($t), not a list. This is not the same as no criteria recorded; run check-alignment.sh against this task before approving this document.\n\n"
+    | if $t != "array" then "The criteria field could not be read: it is present but is a \($t), not a list. This is not the same as no criteria recorded; repair alignment.json before approving this document.\n\n"
       elif ($v | length) == 0 then "No acceptance criteria recorded yet.\n\n"
       else [ $v | to_entries[] | (.key + 1) as $n | .value
              | if type != "object" then "**\($n).** (entry \($n - 1) is not an object, is a \(type): its fields cannot be rendered)\n\n"
@@ -179,7 +179,7 @@ trap 'rm -f "$TMP_FILE"' EXIT
   # Defects 21 and 20, the same distinctions as criteria above.
   jq -j "$RENDER_TEXT_JQ"'
     (.nonGoals? // []) as $v | ($v | type) as $t
-    | if $t != "array" then "The nonGoals field could not be read: it is present but is a \($t), not a list. This is not the same as no non-goals recorded; run check-alignment.sh against this task before approving this document.\n"
+    | if $t != "array" then "The nonGoals field could not be read: it is present but is a \($t), not a list. This is not the same as no non-goals recorded; repair alignment.json before approving this document.\n"
       elif ($v | length) == 0 then "No non-goals recorded yet.\n"
       else [ $v | to_entries[] | .key as $i | .value
              | if type != "object" then "- (entry \($i) is not an object, is a \(type): its fields cannot be rendered)\n"
@@ -191,7 +191,7 @@ trap 'rm -f "$TMP_FILE"' EXIT
   if [ "$DECIDED_TYPE" != "array" ]; then
     # defect 21's distinction again: present and unreadable is not the same fact as empty.
     printf '\n## Decided without a person\n\n'
-    printf 'The decidedWithoutAPerson field could not be read: it is present but is a %s, not a list. This is not the same as no decisions recorded; run check-alignment.sh against this task before approving this document.\n' "$DECIDED_TYPE"
+    printf 'The decidedWithoutAPerson field could not be read: it is present but is a %s, not a list. This is not the same as no decisions recorded; repair alignment.json before approving this document.\n' "$DECIDED_TYPE"
   elif [ "$(jq '(.decidedWithoutAPerson // []) | length' "$ALIGNMENT_FILE")" -gt 0 ]; then
     # An empty list prints nothing at all, the one place this document says less than the others:
     # an attended run always leaves it empty, so a "none" line on every contract is noise.

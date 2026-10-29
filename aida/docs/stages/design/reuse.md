@@ -19,11 +19,12 @@ A fixed table checks each answer:
 
 - A supersede that cites only build cost comes back as extend.
 - A supersede of a candidate that shares only a layer comes back as extend.
-- A supersede that cites no cost at all: interactive, design asks you what it compared, and
-  records nothing until you answer. Autonomous, it comes back as extend.
-- Interactive: a supersede stands only after design asks you. A supersede widens the task and
-  owes a migration.
+- A supersede that cites no cost at all comes back as extend.
+- Interactive: design asks you once before a supersede, because it widens the task and owes a
+  migration.
 - Autonomous: a supersede comes back as extend, with the reason in the order.
+
+Each supersede that comes back as extend is a warning in the task record.
 
 A reuse or an extend stands, whatever its distance and its cost.
 
@@ -41,8 +42,8 @@ Once every answer on an order is recorded, a confirmer reads the written reasoni
 it cites, and nothing else. It agrees, disagrees or downgrades. Design adds its answer to the
 order's reasoning.
 
-The autonomous close refuses while an answer lacks the confirmer's agreement. What clears it is
-in [The design check refuses to close](../../when-it-stops/design-check.md).
+The close writes a warning for each answer that lacks the confirmer's agreement. The builder and
+the architecture reviewer both read the reused code, and both stop on a misfit.
 
 Interactive runs use no confirmer. You read the reasoning yourself.
 

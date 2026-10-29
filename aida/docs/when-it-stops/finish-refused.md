@@ -1,43 +1,49 @@
 # Finish refuses
 
 When every work order is closed, `/aida:implement` runs `finish`. It runs the whole test suite
-once at the final commit, and records the build for review. It refuses when the build is not
-done, or the suite does not pass. The finish step itself is on [finish](../stages/implement/finish.md).
+once at the final commit, and records the build for review. It refuses when the build is not done,
+and when the build broke a test. Everything else it finds is a warning in the task record, which
+review lists. The finish step itself is on [finish](../stages/implement/finish.md).
 
 ## The build is not done (exit 66)
 
-The message names each order that is not closed, each order that carries a halt, and each
-machine-verified criterion that is not confirmed. For an order, close it or answer its halt. See
-[a work order halted](halts.md). For a criterion, the message says which case it is:
+The message names each order that is neither closed nor dropped, and each order that is stopped.
+Close it, drop it, or take its stop's way out. See [a work order stopped](stopped.md).
 
-- **Its orders have not all closed.** Close them.
-- **A checker rejected its test.** The test writer repairs the test, and the tests of that order
-  are frozen again. Clear the order's halt first when it halted on the rejection.
-- **No work order serves or owns it.** Nothing will ever judge it. Close design again with an
-  order behind it, then run `/aida:implement`, whose `start` takes the added order in.
+## A test newly broken at finish (exit 66)
 
-Uncommitted work refuses too (exit 61).
+The message says that tests which passed in the implement-start baseline fail at the final
+commit. No `finished.json` is written, so review cannot start.
 
-## The suite fails (exit 86)
+- **A test an order took.** That order is stopped, with one repair finding per failing test. Go
+  on with `fix`, and the order's fixer repairs it. Finish runs again once the order closes. Redo
+  and drop are the other ways out.
+- **A test no order took.** The message names it. Give it to the closed order that broke it, or
+  record it as not caused by this task, with your reason. Either answer is yours alone, so it
+  refuses until your answer is on record (exit 68). See [the person's answer](../task/person-answer.md).
 
-The failures the suite already had before the build are subtracted first.
+Do not commit a repair by hand. A hand commit is outside every order and the frozen-test hook.
 
-- **`unmet`.** New failures appear. The message names the first twenty new lines, and
-  `implementation/finished-suite.txt` holds the whole output. Commit a fix on the task branch,
-  then run `/aida:implement` again.
-- **`unknown`.** The suite could not answer. The message names why: no baseline to compare with,
-  a value nobody gave, a runner not found, or a run that selected no test.
-- **`warned`.** No test failed, only the runner's warning lines did. Finish never passes on
-  warnings by itself. Accept them with your reason, change the suite command in the project's
-  copy of the test recipe, or repair the settings that raise them. Accepting needs a person
-  (exit 68 otherwise). The three routes, and what to do when the recipe has no `warning_line`,
-  are on [finish](../stages/implement/finish.md).
+## What finish warns on
+
+- **A machine-verified criterion that is not confirmed.** The warning says which case it is: its
+  orders have not all closed, a checker rejected its test, or no work order serves or owns it. A
+  criterion a dropped order served is not asked. Review judges every criterion again.
+- **Uncommitted work.** The commit range holds none of it.
+- **A suite failure that is not new.** The failures the suite already had before the build are
+  subtracted first. A failure you recorded as not caused by this task is a warning too.
+  `implementation/finished-suite.txt` holds the whole output.
+- **A suite that cannot answer.** `unknown` has four causes: no baseline to compare with, a value
+  nobody gave, a runner not found, or a run that selected no test. `warned` means no test
+  failed, only the runner's warning lines did. See [finish](../stages/implement/finish.md).
 
 ## Why it works this way
 
 - **The suite runs once, at the end.** Each order's tests ran during its build. The whole suite at
   the final commit catches what the orders broke together.
+- **A broken test stops the task.** A build that breaks a test that passed before it started is
+  not finished. A failure that was already there is not this task's, so it stays a warning.
 - **Warnings are your project's rule, not AIDA's.** So AIDA never decides alone that a warning is
-  harmless.
+  harmless. It records the warning, and you read it at review.
 
 Source: skills/implement/references/finish.md, skills/implement/scripts/implement-actions.sh

@@ -125,7 +125,8 @@ ordinary mode drafted whole fields and asked what was missing; its one-question 
 Each correction the person gives becomes one write, in the person's words. The goal or the
 expected result they rephrase is `set-goal`; a criterion or non-goal they rephrase is `update`; a
 criterion they add is `add`; one they drop is `remove`; a non-goal they name is `add-non-goal`. A
-criterion the person rephrases or adds is `--author owner` at once, on that same call.
+criterion the person rephrases or adds stays `designer` until `approve` promotes it. An owner
+author on `add` or `update` is a person's answer, as `approve` is, so a correction does not pass it.
 
 Answer a correction with the changed lines: the `UPDATED:`, `ADDED:` or `REMOVED:` line and the
 summary the call printed. Then the turn ends. Do not run `render`, do not show the page, and do
@@ -169,8 +170,8 @@ is a gap: ask for one, with a recommended answer. Then run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode <interactive|autonomous> \
   init "<task_folder>"
 ```
-only on a first run, before anything else is written; it refuses when `alignment.json` already
-exists. When its output holds `environment: none`, put the task skill's site offer to the person
+only on a first run, before anything else is written. On a task that has `alignment.json` already,
+it changes nothing and says so. When its output holds `environment: none`, put the task skill's site offer to the person
 now, or say it waits when it says so. Then, on a first run and on any later correction to either
 sentence, run:
 ```
@@ -197,8 +198,12 @@ into `task.json`'s own `mechanismHints`, never into `alignment.json`.
 
 A criterion is an outcome a person can see when the task is done, phrased like a user story: "An
 admin can download the user list as CSV." It is written from outside the code. It never names a
-class, a file, or a stage. It is not a note about how a stage should work, a reminder to check
-something, or a task for one stage to do.
+class, a file, or a stage. It is not a note about how a stage should work, or a task for one
+stage to do.
+
+A criterion states what must work, in the person's words. Scope does not police those words.
+"Test that the export works", "check" and "make sure" mean that review verifies it: review runs
+the thing and keeps the evidence. They never mean "write an automated test".
 
 For each one, in order, in the draft:
 
@@ -206,8 +211,10 @@ For each one, in order, in the draft:
 2. Draft how it is observed, its verify clause, and whether a machine runs that check or a person
    looks. A clause that only restates the criterion names no signal. A criterion with no
    observable outcome is a gap: ask, one question, with a recommended answer, rather than write
-   the restatement. See "Tests and checks" below for what changes when the project has end to
-   end testing or visual regression on.
+   the restatement. A machine clause names the behaviour a test proves, not a flow to run. A test
+   is what this page defines:
+   `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`. See "Tests and
+   checks" below for what changes when the project has end to end testing on.
 3. Record who asked. `designer` for every line the draft wrote, until `approve` promotes it at
    "Approval". `owner` when a person wrote or corrected this criterion, in this conversation.
    There is no third value, and a missing answer is never `owner`.
@@ -218,13 +225,18 @@ For each one, in order, in the draft:
      --verified-by <machine|person> --author <owner|designer>
    ```
 
-Recommend `machine` whenever a command can read the fact: a test, a linter, or a status call to
-an API. Keep `person` for what only a person judges, such as how a page looks. Some facts exist
-only after a step the task never takes, such as a push behind a sudo gate. No build step runs
-after that step, so write `person`. Say the step in the outcome as the person's action. For such
-a step, name in the verify clause the command that reads the fact, not a page the person opens.
-At review's close, the session runs that command and shows its output. The person answers met or
-unmet; no script runs the clause.
+Recommend the kind from what the outcome is, never from the words that state it. Recommend
+`machine` for a behaviour of code with logic, which a small test or a named command observes. "An
+admin can download the user list as CSV" is `machine` when a test can observe the export. Review
+sees the journey around it. Recommend `person` for anything else: a document, configuration,
+metadata, layout, how a page looks, or a whole journey. A person or a reviewer reads it.
+Design refuses a `machine` criterion that only a document serves.
+
+Some facts exist only after a step the task never takes, such as a push behind a sudo gate. No
+build step runs after that step, so write `person`. Say the step in the outcome as the person's
+action. For such a step, name in the verify clause the command that reads the fact, not a page
+the person opens. At review's close, the session runs that command and shows its output. The
+person answers met or unmet; no script runs the clause.
 
 Never pass a verdict. It starts `unanswered` and stays there until an end of task review runs;
 scope never sets it, on `add` or on `update`.
@@ -287,19 +299,9 @@ skip. Research changes it to yes when the test recipe's own checks find a runner
 Scope sets nothing up. It uses a kind that is already on, and offers the setup once when none is.
 Read `<projectPath>/project.json` once, at the point criteria are being drafted:
 
-- **`surfaces.e2e.enabled` is true.** An end to end test is an acceptance criterion automated: a
-  criterion already phrased as an outcome is already the script. So do not ask a separate
-  question about coverage, and do not ask per criterion whether to automate it. In the whole
-  draft, write each criterion's verify clause (step 2 above) as `machine`, naming the automated
-  test. The person corrects a line back to `person` like any other line, with `update`.
-- **`surfaces.visualRegression.enabled` is true.** Check whether a surface this task changes already
-  has a baseline in the surface file, `.visual-review/surfaces.json` in the tree scope runs from.
-  One that does becomes a criterion whose verify clause names the visual regression check that
-  must pass. One that does not becomes a criterion too, that creating its baseline is this task's
-  own work. Either way this is a criterion scope is proposing, not one the person asked for
-  outright: draft it, show it with a recommended answer, and write it with `add --author
-  designer`, whatever the person says to the draft. It stays `designer` until `approve` promotes
-  it at "Approval" below; a yes on the draft alone does not promote it.
+- **`surfaces.e2e.enabled` is true.** The end to end test is the surface's own check, and review
+  runs it after the build. So do not ask a separate question about coverage, and do not ask per
+  criterion whether to automate it. Recommend each criterion's kind from its outcome, as above.
 - **A kind is off and not declined, or `surfaces` is null.** The decline is that kind's
   `declined` field in `project.json`. Interactive only. Skip a kind that `read` names under
   `surfaces-deferred:`. Look at the goal once, at this same point. Before you ask, run
@@ -311,7 +313,7 @@ Read `<projectPath>/project.json` once, at the point criteria are being drafted:
   three answers per kind: yes, not this task, or no. Say the difference between "not this task"
   and "no" in the ask itself, so the person knows what a "no" silences. A yes on a kind invokes the
   `surfaces` skill through the Skill tool, naming that kind. Do this once per kind said yes to.
-  Then read `project.json` again, so the two bullets above apply to this task. "Not this task" on
+  Then read `project.json` again, so the bullet above applies to this task. "Not this task" on
   a kind runs `"${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/task-actions.sh defer-surface --project
   "<projectPath>" <task-id> <kind>`, and no later stage of this task asks again. A no on a kind
   runs `"${CLAUDE_PLUGIN_ROOT}"/skills/surfaces/scripts/surfaces-actions.sh decline <kind>`,
@@ -333,6 +335,10 @@ The contract is final by then. Then run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   approve "<task_folder>"
 ```
+With no answer recorded, it refuses with exit 70 in every run mode, and prints the
+`person-answer.sh` command. Its words name the contract's hash, so the yes is for the contract as
+it stands. Run that command: Claude Code shows its permission prompt, and the person's yes there is
+the approval. Then run `approve` again. A change after the yes needs a new one (gap row 473).
 It promotes every criterion still `designer` to `owner` and prints `promoted:` with the count.
 It marks each decision an unattended run took as approved by the person, and prints
 `approved-decisions:` with the count. A marked decision is history, not an open question. A
@@ -346,14 +352,15 @@ When `set-goal`, `set-tests`, `update` or `remove` prints `superseded-decisions:
 person which unattended answer their change replaced.
 
 A decision can stop holding after it was approved, or name no field at all. When the person
-says one no longer holds, run:
+says one no longer holds, record their answer with `person-answer.sh`, step `scope retire`, and
+the words `entry <n>: <the person's reason>`. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   retire "<task_folder>" --entry <n> --reason "<the person's reason>"
 ```
 `--entry` counts from 1 in the list. The entry becomes history with the reason. `retire` commits
 nothing, so run the distill check and `approve` again after it. It refuses an entry that does
-not exist, and one already superseded or retired.
+not exist, one already superseded or retired, and a call with no answer recorded.
 
 An earlier version of this skill rendered the whole document after every correction and asked
 for a yes on it, even for one small change. On one task it asked five times in a
@@ -397,27 +404,19 @@ writes `records/scope-distill.json`. Interactive, `approve` reads it. Autonomous
 `distill: deferred to the design close`. Design's close dispatches one distiller over all three
 stages.
 
-Either call prints `standsAlone:` and one `gap:` line per gap, and exits 0 on either value. Show
+Either call prints `standsAlone:` and one `gap:` line per gap, and exits 0 on every value. Show
 each `gap:` line. Acting on one is the relevant step above run again; the check never blocks.
 `standsAlone: stale` means the contract changed after the distiller read it. The call then prints
 a `stale:` line and no gap. Dispatch the distiller again with the same message, then run the
 same call again.
-Exit 2 means the sidecar was not written. Send the same agent one message: write the file and
-read it back. An agent has reported a write it never made. Dispatch a fresh one only when exit 2
-repeats. Then run the same call again. Exit 4 means the sidecar was malformed. The script set it
-aside at the `setAside:` path it printed. Dispatch a fresh distiller, with the rule it broke
-quoted from `agents/distiller.md`. Then run the same call again. A second exit 4 stops for the
-person: show the stderr line and the path set aside.
 
-The third case is a dispatch that ends before the role's first write. The Agent call returns
-with no reply from the role, and no sidecar exists, before `approve` or `distill` runs.
-Re-dispatch once with the same message. When it ends the same way, dispatch once more with
-`model: sonnet` on the Agent call. The distiller's definition keeps `model: opus`, and the
-call's `model` overrides it. The reason: the harness once ended the distiller on opus twice
-before it wrote anything, and the same message on sonnet completed. A rejection tied to one
-model is not tied to the message, so the message stays and the model moves. When the sonnet
-dispatch also ends before its first write, stop: interactive, put it to the person with the
-Agent call's own error; autonomous, halt. The research and design pages refer to this rule.
+`standsAlone: none` means the sidecar is missing or unusable, and the task record holds a warning.
+A malformed sidecar was set aside at the `setAside:` path the call printed. A dispatch that ended
+before the role's first write is the same case. One retry rule covers it, and the distiller, the
+split advisor and the design critics all follow it. Dispatch the role once more, with the same
+message. For a malformed file, quote the rule it broke from the role's agent definition. Then run
+the same call again. A second miss stays a warning, and the stage goes on, in both run modes. The
+research and design pages refer to this rule.
 
 Cancelled at any point, first run or later: stop without running `init`, `set-goal`, `add`,
 `add-non-goal`, `update`, `remove`, `set-tests` or `set-mechanism` again. A drafted line is
@@ -426,11 +425,8 @@ claims nobody's yes.
 A correction is written only after the person (or, in the autonomous branch, the recommended
 answer) has actually given that one change.
 
-Interactive: stop here. Name the next command for the person, `/aida:research <task-id>`, and never
-invoke it yourself. Autonomous: invoke `aida:research` through the Skill tool, once, with the task
-id, and stop if it refuses. Invoke it only when the mode covers research too; otherwise end as
-interactive does, naming the command. Each stage refuses to start without the previous stage's
-record, so a stage cannot run out of order. That is why this chain is safe.
+Then hand off to `research`, as `${CLAUDE_PLUGIN_ROOT}/skills/next/references/handoff.md` says:
+interactive, name `/aida:research <task-id>` and stop; autonomous, invoke it when the run mode covers it.
 
 ## Changing the contract
 
@@ -449,13 +445,15 @@ To edit an existing criterion or non-goal rather than add or remove one:
 ```
 After implementation started, a corrected verify clause reaches the build through design's
 `close` and then implement's `start`. Unattended, run `record-decision --field <id>` with the
-reason first, or the change halts every started order that serves the criterion. The decision
+reason first, or the change stops every started order that serves the criterion. The decision
 spares a change to the verify clause alone. When a started order serves a criterion, a change to
-its text halts every order that serves it, whatever is recorded. Those halts clear when the text
+its text stops every order that serves it, whatever is recorded. Those stops clear when the text
 goes back word for word.
-A non-goal's id only accepts `--text`; the others are a criterion's own fields. `--author owner`
-is for a criterion the person corrected in this conversation; `approve` promotes the rest. Both
-only ever move a criterion from `designer` to `owner`, and the other way round is refused.
+A non-goal's id only accepts `--text`; the others are a criterion's own fields. `approve`
+promotes every `designer` criterion. `--author owner` promotes one, and it is a person's answer:
+record it first with `person-answer.sh`, step `scope update` and the words `<id> author owner`,
+or step `scope add` and the criterion's text. Both only ever move a criterion from `designer` to
+`owner`, and the other way round is refused.
 
 To drop one:
 ```

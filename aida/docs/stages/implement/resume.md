@@ -6,11 +6,11 @@ changes since the snapshot, then reports where each work order stands and goes o
 ## What to read first
 
 The ledger, `implementation/ledger.json` in the task folder, is the state of the build. It holds
-each order's step, its halt reason, its attempts and rounds, each row with who judged it, and the
-commit range of each order. It survives a compaction. After an unattended run, read the halts and
+each order's step, its stop reasons, its attempts and rounds, each row with who judged it, and the
+commit range of each order. It survives a compaction. After an unattended run, read the stops and
 the rows a model judged, to decide where to look.
 
-`start` names the orders in flight, the halted orders with their reasons, and the ready orders.
+`start` names the orders in flight, the stopped orders with their reasons, and the ready orders.
 When a stopped role left files nobody committed, it lists them first. See [Start the
 build](start.md).
 
@@ -34,20 +34,20 @@ same retake. Neither refusal spends an attempt.
 
 Each task has at most one open dispatch. When a role never returned, the next dispatch refuses and
 names the role, the order, and the record's age. A role stopped at its turn limit is resumed once,
-or twice for an order with a large diff budget. One more stop halts the order. Clear the halt,
-run `start` to keep or set aside the role's files, and the role is sent again.
+or twice for an order with a large diff budget. One more stop writes a turn-cap warning into the
+task record, and the role is sent again. A builder's cap spends a build attempt. Any other role's
+caps are counted, and the cap that reaches the order's attempt limit stops the order. The role's
+commits stay on the order's list, unless one breaks the frozen tests or the owned files, which
+stops the order.
 
-## Answer an unattended run without switching it
+## Your answer to a person's call
 
-A light or autonomous run refuses a person's call, such as a grant, a restart, a ruling, a file you
-allow, or accepted warnings. You can set the task interactive. Or tell the main session your
-answer, and it records it in `implementation/person-answer.json`. The run mode stays as it is.
-
-Only the main session, where you type, may write that file, and only with your own words. A hook
-refuses it to every dispatched role. The record names the task, the action, the order and your
-exact answer. The action passes only on a record that matches all four, and removes it once its
-writes are done. The task pages cover the same record for other stages. See [the task
-pages](../../task/).
+A person's call, such as a way out of a stop, a ruling, a file you allow, or accepted warnings,
+refuses until your answer is on record, in every run mode. Claude Code shows you a permission
+prompt, and your yes records the answer in `person-answers.json` in the task folder. The call
+passes only on an unused answer for this step, this order and your exact words, and marks it used.
+A call that refuses for another reason marks the answer refused, so the next attempt asks again.
+See [the person's answer](../../task/person-answer.md).
 
 ## A permission prompt partway through
 

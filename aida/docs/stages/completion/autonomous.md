@@ -7,15 +7,15 @@ interactive.
 | Question | A person is present | Nobody is present |
 |---|---|---|
 | a follow up finding with no task | you accept or decline each one | every one is created and listed |
-| a review that did not pass | you give the reason | the close halts, naming the verdict |
+| a review that did not pass, or passed with warnings | you give the reason | the close halts, naming the verdict and the warnings |
 | a high severity follow up with no task | you create it, or say why not | it already has a task, because every task was created first |
-| a criterion a model observed | you accept or reject the look | nobody is asked; the body says no person accepted it |
 | the summary | you give one or two lines | one line naming the grounds |
 | a saved note | you say yes or no per note | nothing is offered; the record says so |
 
-When the review did not pass, the close halts and writes nothing. See
+When the review did not pass, or passed with warnings, the close halts and writes nothing. That is
+the one place an unattended task stops on the review. See
 [completion refuses](../../when-it-stops/completion-refused.md) for what it names, and
-[answer for a person in an unattended run](../../task/person-answer.md) for how to answer.
+[the person's answer](../../task/person-answer.md) for how to answer.
 
 ## Why it works this way
 

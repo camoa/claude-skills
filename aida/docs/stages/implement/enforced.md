@@ -6,25 +6,28 @@ written down for a later reader. This page says which is which.
 ## Applied by a hook
 
 - **Reads.** The test author and the checker may not read production source. The implementer and
-  the fixer may not read another order's source. The hook covers the Read and Grep tools and the
+  the fixer may not read the source of an order theirs does not depend on. The hook covers the Read and Grep tools and the
   plain shell reads: `cat`, `head`, `tail`, `less`, `more`, `sed`, `awk`, `grep`, `rg` and `nl`.
 - **Runtime forms.** The test author is refused a shell command that names a form on AIDA's list
   of code-reading commands, such as `php:eval` or `ReflectionClass`. A runtime shows the code's
   shape as surely as its source.
 - **Frozen tests.** Every dispatched role is refused a write to a frozen test or support file,
-  except the test author of the order that froze it.
+  except the test author of the order that froze it. The main session is refused too, with or
+  without a dispatch open, for every task in the project that is not complete. To change a frozen
+  test after a build, you rule it wrong and redo the order, and the order's test author writes
+  its tests again.
+  Review hashes every frozen file again at the final commit and stops on a change, exit 124.
 - **Owned files.** The implementer is refused a write in the code outside its order's files. The
   fixer is held to the order's files plus the paths you allowed for the round. A `mkdir` of a
   folder an owned file needs passes.
 - **The main checkout.** Each role works in the task's worktree. While a dispatch is open, the
   hooks refuse it the denied reads and every write in the project's main checkout. That includes
   git run there and a copy in or out.
-- **The stop lines.** An implementer's first return is blocked once when its answers file lacks
-  the stop and deviation lines, or holds a stop line with no cause and reason.
-- **Destructive commands.** For every role and for the main session, a hook refuses any `git push`,
-  a hard reset, `git clean`, `git branch -D`, a checkout or restore of the whole tree, a recursive
-  delete of the home, working or scratchpad folder, `gh pr merge` and `gh repo sync`. A person
-  pushes.
+- **Destructive commands.** A hook stops any `git push`, a hard reset, `git clean`,
+  `git branch -D`, a checkout or restore of the whole tree, a recursive delete of the home, working
+  or scratchpad folder, `gh pr merge`, `gh release create` or `delete`, and `gh repo sync`. A role
+  is refused and stops. The main
+  session gets a permission prompt, or a refusal where no prompt can show. A person pushes.
 
 ## The limits
 
@@ -56,4 +59,4 @@ in a worktree.
 - AIDA says where each hook stops, so nobody reads a recorded rule as an applied one.
 
 Source: skills/implement/SKILL.md, hooks/deny-prior-source.sh, hooks/deny-frozen-test-writes.sh,
-hooks/require-stop-lines.sh, hooks/deny-destructive-commands.sh, scripts/introspection-forms.txt
+hooks/deny-destructive-commands.sh, scripts/introspection-forms.txt

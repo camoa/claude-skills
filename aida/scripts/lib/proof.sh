@@ -3,7 +3,7 @@
 #
 # A work order carries one proof kind: `tests`, `gate`, `record`, `observe` or `confirm`. No check wants the
 # kind itself. Every site that reads `.proof` turns it into one of three questions about the
-# order (gap row 170). The first asks which of the eight deciding checks takes its first slot.
+# order (gap row 170). The first asks which of the three deciding checks takes its first slot.
 # The second asks which repository holds its range. The third asks whether it owns a file in the
 # code path. Each site turned the kind into its question on its own, in its own words. So a fifth
 # kind meant finding twenty-three of them.
@@ -27,7 +27,8 @@
 #
 #   br_order_facts <work order document>   sets BR_ORDER_SLOT, BR_ORDER_RANGE, BR_ORDER_OWNS_CODE
 #   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`,
-#                                          and `confirmCriteria` and `personCriteria` beside it
+#                                          and `textOnly`, `confirmCriteria` and `personCriteria`
+#                                          beside it
 #   BR_HARNESS_JQ                          `noAutomatedTests` and `harnessNeeded` on a snapshot
 #   br_order_needs <work order document>   sets BR_ORDER_ROLES, BR_ORDER_LOOKUPS
 #   br_proof_facts <snapshot>              commits in the code repository, owns a file there
@@ -39,7 +40,7 @@
 # use. They are named globals that share one prefix. They are declared here, so a caller under
 # `set -u` never reads one unset, and reset at the top of the function.
 #
-# BR_ORDER_SLOT is the check that takes the first of the eight deciding checks: `order-tests`,
+# BR_ORDER_SLOT is the check that takes the first of the three deciding checks: `order-tests`,
 # `configuration-gate`, `done-when`, `observed` or `confirm-at-review`. An order freezes and runs
 # a test exactly when its slot is `order-tests`, so that question needs no field of its own.
 # BR_ORDER_RANGE is `code` or `project`, the repository the order's range lives in.
@@ -71,7 +72,19 @@ br_order_facts() {
 # `personCriteria`, on a snapshot document ({alignment, workOrders}), lists every criterion a
 # person answers at review: each one the contract marks person-verified, and each order's
 # confirmCriteria. Review's close and set-run-mode read it, so the two never disagree (gap row 328).
+#
+# `textOnly`, on one work order, is true when the order owns files and each is a document or
+# configuration, read by its extension or, for a dotfile such as .gitignore, its name. CMakeLists.txt
+# holds build logic, so it is code. Such an order holds no logic for a test to prove, so a
+# reading proves it (gap row 461). add-owned-file marks it `confirm`, and the design check refuses
+# it as a `tests` order and refuses a machine criterion it owns. A `gate` order is never text only:
+# a configuration export that tools produce is YAML, and its gate lines prove it.
 BR_ORDER_FACTS_JQ='
+  def textOnly:
+    (.proof // "") != "gate" and ((.ownedFiles // []) | length > 0
+      and all((test("(^|/)CMakeLists\\.txt$") | not)
+        and (test("\\.(md|markdown|rst|adoc|txt|json|ya?ml|toml|ini|cfg|conf|xml|neon|dist)$"; "i")
+             or test("(^|/)\\.[A-Za-z0-9_-]+(\\.(example|sample|dist))?$"))));
   def orderFacts:
     (.proof // "tests") as $p
     | if   $p == "gate"    then {slot: "configuration-gate", range: "code",    ownsCode: true}
@@ -113,16 +126,14 @@ BR_HARNESS_JQ="$BR_ORDER_FACTS_JQ"'
 # A fixer is not listed: an open finding decides it, not a kind. `point: implement` is on every
 # kind, because the tests step takes the oracle globs from it and a gate order runs its
 # `## Configuration gate`. The test author and the row-checker read `point: test-authoring`.
-# The row-checker takes the recipe path on every dispatch (agents/row-checker.md), a record
-# order's done-when row included, so a `record` order asks for it too.
+# The row-checker takes the recipe path only when it judges tests (agents/row-checker.md).
 #
 # Three rules keep roles on these lists. Do not cut them to save a dispatch.
 # - The per-order reviewer is on every kind. A passing check says the order met its own check;
 #   only the reviewer reads the diff against the contract.
-# - The row-checker stays on a `record` order. Its done-when row is that order's only check, so
-#   without the checker nothing judges the deliverable before the build.
-# - The row-checker is on every other kind too. It judges each absence clause the order routes
-#   (gap row 273). Such a dispatch carries no test-authoring recipe, so those kinds do not ask for it.
+# - The row-checker is on every kind. On a kind with no tests it judges each absence clause the
+#   order routes (gap row 273) and each verify-line row. Such a dispatch carries no test-authoring
+#   recipe, so those kinds do not ask for it. A `record` order has no checkpoint (row 464).
 # - No top-tier critic leaves because an order is small. A small diff can still break a criterion,
 #   and a missed defect costs the same whatever the size.
 # shellcheck disable=SC2034 # read by the sourcing script
@@ -133,7 +144,6 @@ br_order_needs() {
   br_order_facts "$1"
   case "$BR_ORDER_SLOT" in
     order-tests) BR_ORDER_ROLES="test-author row-checker implementer reviewer"; BR_ORDER_LOOKUPS="test-authoring implement" ;;
-    done-when)   BR_ORDER_ROLES="row-checker implementer reviewer";             BR_ORDER_LOOKUPS="test-authoring implement" ;;
     *)           BR_ORDER_ROLES="row-checker implementer reviewer";             BR_ORDER_LOOKUPS="implement" ;;
   esac
 }

@@ -11,8 +11,8 @@ the task.
 ```
 
 Then start the run with the command for the stage the task is at, such as `/aida:scope <task-id>`
-for a new task. Each stage then starts the next one. Light takes no `--stage`. The output adds a `path-script:` line, which says whether end to end
-tests are on for this project. Everything on [run modes](run-modes.md) about autonomous runs
+for a new task. Each stage then starts the next one. Light takes no `--stage`. The output adds a `path-script:` line, which says what light does
+about the one script that walks the demo path. Everything on [run modes](run-modes.md) about autonomous runs
 holds for light too.
 
 ## What light skips
@@ -25,7 +25,7 @@ holds for light too.
   version that links the input, the logic and the output along the demo path. Every other order
   comes after it.
 - **Implement** gives each order one fix round. An open low finding waits for you at review. An
-  open medium or high finding halts the order. One repair round can follow, once, for breakage the
+  open medium or high finding stops the order. One repair round can follow, once, for breakage the
   fix round made, and with you present for a few other findings. The builder may build a fake off
   the demo path, marked in the code with `AIDA-FAKE:`.
 - **Review** runs no visual regression.
@@ -36,9 +36,10 @@ holds for light too.
 
 - The code review of each order, and the project's own checks, its security check included.
 - One script that walks the demo path. That is the project's end to end setup for that one path.
-  A person sets it up once with `/aida:surfaces e2e` and registers the demo path as one critical
-  surface. Review fails a light task without it. A project that declined end to end keeps no such
-  script. See [sources](../sources/).
+  With end to end on and no such script registered, `wo1` writes it. Once one is registered, no
+  order writes or extends it. A project that declined end to end keeps no such script. A missing
+  script is not a failure at review: the acceptance verifier's evidence is the task's acceptance.
+  See [sources](../sources/).
 - A budget, when you set one. See [set a budget](budget.md).
 
 ## The compromises log
@@ -62,7 +63,7 @@ a reason.
   line says so.
 - The contract still says the task has no automated tests. The `light-contract:` line names the
   steps to change it: scope's `set-tests --automated yes`, then design's `update --proof tests` on
-  each code order, then implement's `restart`.
+  each code order, then implement's `redo` on each started order.
 
 ## Why it works this way
 

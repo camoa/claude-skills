@@ -49,8 +49,8 @@ and the record does not hold it.
 | Uncommitted work | Look at it before you start anything new. |
 | An error and no findings | The check itself could not run. Read the error text. |
 
-AIDA reads the check's exit code to choose what to tell you. The report still lists every fault. An action that commits its own change does not end on 6 for someone else's uncommitted work.
-It prints a `NOTE:` line that it succeeded and left that work as it was.
+AIDA reads the check's exit code to choose what to tell you. The report still lists every fault. An action that writes the project file never ends on 6: the write landed.
+It prints a `NOTE:` line naming the git state, such as a folder that is no repository yet.
 
 With nobody present, the check asks nothing. When it finds a fault, the report ends with
 "Autonomous run: ... Recorded, not performed."

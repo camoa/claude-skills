@@ -2,14 +2,16 @@
 # The plugin root: the variable when the platform sets it (hooks), else this file's own place.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
-# pre-compact.sh: PreCompact hook. It refuses a manual `/compact` while the active task has
-# stage work newer than its last save. It marks an automatic compaction for the session-start hook.
+# pre-compact.sh: PreCompact hook. A manual `/compact` while the active task has stage work newer
+# than its last save writes a warning into the task record, naming the unsaved files. It marks an
+# automatic compaction for the session-start hook.
 #
 # A compaction with unsaved stage work is how a session forgets what it decided, and the save is
-# one command. The person can still compact: they save first, and nothing here overrides them.
-# An automatic compaction is never refused, because the platform says a refusal can fail the
-# request it was recovering from. It leaves records/compacted.json instead, which
-# session-start.sh names once and removes.
+# one command. The compaction still runs: the refusal this hook made fired falsely twice
+# (live-run rows 263 and 398). Review lists the warning, so the loss is on record. An automatic
+# compaction is never refused, because the platform says a refusal can fail the request it was
+# recovering from. It leaves records/compacted.json instead, which session-start.sh names once and
+# removes.
 #
 # The active task is the one this session works, read off next-actions.sh's report:
 # scripts/lib/paths.sh, session_task, which session-start.sh asks too. No such task: silent, exit 0.
@@ -56,8 +58,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # tests/records-folder-spec.sh holds this rule. tests/records-folder.txt names every file this
 # folder may hold and what makes each one. Its header names what the spec cannot see.
 #
-# Exit 2 refuses, and stderr is shown to the person on a manual compaction (the platform's hooks
-# reference, PreCompact). Nothing is printed on stdout in any case.
+# The hook never refuses, and nothing is printed on stdout in any case: the platform reads a
+# PreCompact hook's stdout as its decision. A warning is shown to the person through exit 1, the
+# non-blocking status: Claude Code shows the first line of stderr, and the compaction runs (the
+# docs mirror, hooks reference, "Other exit codes"). PreCompact discards systemMessage.
 set -uo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 INPUT="$(cat 2>/dev/null)" || exit 0
@@ -86,23 +90,23 @@ if [ -n "$SAVED_AT" ]; then
   # file time holds fractions. A stage file written just before the save, in the same second, would
   # otherwise read as newer (live-run row 263). The rule errs the other way: a file written after
   # the save, in that same second, reads as saved. A stage write after a save is its own command.
-  # A refusal only asks for one more save. So a missed refusal in that one second costs less than a
-  # false refusal after every quick save. touch -t takes YYYYMMDDhhmm.SS, so the stamp is
+  # A warning only asks for one more save. So a missed warning in that one second costs less than a
+  # false warning after every quick save. touch -t takes YYYYMMDDhhmm.SS, so the stamp is
   # reshaped. task.json is excluded because the save writes it a moment after the stamp it holds.
   REF="$(mktemp)"
   TZ=UTC touch -t "$(jq -rn --arg t "$SAVED_AT" '$t | fromdateiso8601 + 1 | strftime("%Y%m%d%H%M.%S")' 2>/dev/null)" "$REF"
-  NEWER="$(find "$TASK_PATH" -type f -newer "$REF" ! -name task.json ! -path '*/notes/*' ! -path '*/inputs/*' ! -path '*/records/*' 2>/dev/null | head -1)"
+  NEWER="$(find "$TASK_PATH" -type f -newer "$REF" ! -name task.json ! -path '*/notes/*' ! -path '*/inputs/*' ! -path '*/records/*' 2>/dev/null)"
   rm -f "$REF"
 elif [ -n "$NOTE" ]; then
   # task.json is excluded here for the reason the branch above gives. The save that wrote this note
   # wrote task.json straight after it. Without this, the note is never the newest file.
-  NEWER="$(find "$TASK_PATH" -type f -newer "$NOTE" ! -name task.json ! -path '*/notes/*' ! -path '*/inputs/*' ! -path '*/records/*' 2>/dev/null | head -1)"
+  NEWER="$(find "$TASK_PATH" -type f -newer "$NOTE" ! -name task.json ! -path '*/notes/*' ! -path '*/inputs/*' ! -path '*/records/*' 2>/dev/null)"
 else
   # A never-saved task holds only task.json, task.md and whatever a version 5 repair kept under
   # a .v5 name (skills/task/scripts/task-actions.sh, keep_v5_files). None of those is a version 6
   # stage record, so this task is unsaved only once a version 6 stage writes something else.
   NEWER="$(find "$TASK_PATH" -type f ! -name task.json ! -name task.md \
-    ! -name '*.v5.md' ! -name '*.v5' ! -path '*/notes/*' ! -path '*/inputs/*' ! -path '*/records/*' ! -path '*.v5/*' 2>/dev/null | head -1)"
+    ! -name '*.v5.md' ! -name '*.v5' ! -path '*/notes/*' ! -path '*/inputs/*' ! -path '*/records/*' ! -path '*.v5/*' 2>/dev/null)"
 fi
 UNSAVED="false"
 [ -z "$NEWER" ] || UNSAVED="true"
@@ -110,9 +114,16 @@ UNSAVED="false"
 case "$TRIGGER" in
   manual)
     [ "$UNSAVED" = "true" ] || exit 0
-    printf 'Task %s has unsaved %s stage work, so run `/aida:task save %s` before compacting.\n' \
-      "$TASK_ID" "$STAGE" "$TASK_ID" >&2
-    exit 2
+    # task_warn writes the warning, the one writer of task warnings, and prints it on one line,
+    # which goes to stderr for the person. Its die3 is this hook's exit 0, and the two exports skip
+    # the version warnings that sourcing it runs.
+    die3() { exit 0; }
+    export AIDA_NEWER_CHECKED=1 AIDA_SESSION_CHECKED=1
+    # shellcheck source=/dev/null
+    source "${PLUGIN_ROOT}/scripts/lib/task-helpers.sh" 2>/dev/null || exit 0
+    task_warn "$TASK_PATH" compact "" "a manual compaction ran with unsaved $STAGE stage work: $(printf '%s\n' "$NEWER" \
+      | sed "s#^$TASK_PATH/##" | paste -sd, - | sed 's/,/, /g'). /aida:task save $TASK_ID keeps that work on record" >&2
+    exit 1
     ;;
   auto)
     mkdir -p "$TASK_PATH/records" 2>/dev/null || exit 0
