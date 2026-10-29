@@ -334,7 +334,7 @@ write_project_field() {
 
 run_check() {
   local project_path="$1"
-  "$CHECK_SCRIPT" "$project_path" "${check_flags[@]}"
+  "$CHECK_SCRIPT" "$project_path" ${check_flags[@]+"${check_flags[@]}"}
   return $?
 }
 

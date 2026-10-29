@@ -1804,7 +1804,7 @@ $capture"
   recipe_changes="$({ printf '%s\n' "$file_list" | cut -f2 | sed "s/^/files$tab/"
       [ -n "$adopt" ] || recipe_precondition_names "$RECIPE" | sed "s/^/named$tab/"; } \
     | while IFS="$tab" read -r kind n; do
-        case "$n" in ''|/*|*..*) continue ;; esac
+        case "$n" in (''|/*|*..*) continue ;; esac
         [ -f "$wt/$n" ] || continue
         git -C "$wt" rev-parse -q --verify "HEAD:$n" >/dev/null 2>&1 \
           || { [ -n "$fork" ] && git -C "$wt" rev-parse -q --verify "$fork:$n" >/dev/null 2>&1; } || continue

@@ -9397,9 +9397,9 @@ rv_read_recipe_answers() {
         [ -n "$p" ] || continue
         is_test="$(printf '%s\n' "$test_globs" | while IFS= read -r g; do
             case "$g" in
-              "") continue ;;
-              */*) tf_path_matches_catalog_glob "$p" "$g" ;;
-              *) tf_path_matches_glob "${p##*/}" "$g" ;;
+              ("") continue ;;
+              (*/*) tf_path_matches_catalog_glob "$p" "$g" ;;
+              (*) tf_path_matches_glob "${p##*/}" "$g" ;;
             esac && { printf 'yes'; break; }
           done)"
         case " $evidence " in

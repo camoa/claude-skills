@@ -48,7 +48,7 @@
 #     refused. Every entry's `detail` is the nearest `description` above that value.
 #     Exits 0 and prints that object on success. Exits 1 and prints nothing on stdout when either
 #     path cannot be read as JSON, or the comparison itself fails to run (a malformed schema
-#     entry); jq's own diagnostic reaches stderr either way. Never exits 0 with empty output.
+#     entry); cat's or jq's own diagnostic reaches stderr. Never exits 0 with empty output.
 #
 #   schema_check_field_named_in <fields_json> <field_name>
 #     $fields_json is a JSON array shaped like `missing` or `unreadable` above (or any array of
@@ -244,12 +244,18 @@ schema_check_compare() {
   # "status" is a reserved, read-only special variable under zsh (a synonym for $?), so a local
   # named "status" fails to assign there with "read-only variable: status" and this function
   # returns nothing on every call, silently, under zsh only. "rc" avoids the collision.
-  local result rc docs_json ref_file
+  local result rc docs_json ref_file data
+
+  # $data_file may be a process substitution (a named pipe) when the caller's data is in memory,
+  # the way check-project.sh supplies the registry's own content. A pipe yields its bytes to one
+  # reader, and bash 3.2 closes a process substitution once the first command in the function
+  # ends. So the data is read here, once, before any other command. cat's own diagnostic reaches
+  # stderr when the path is missing.
+  data="$(cat -- "$data_file")" || return 1
 
   # A `$ref` naming a file beside this schema is read here, since jq opens no file of its own. The
   # grep runs first so a schema with only local pointers, which is 23 of the 24 this plugin ships,
-  # still costs exactly one jq process per comparison. $schema_file is always a regular file, so
-  # reading it twice here is safe; $data_file is the path that may be a pipe.
+  # still costs exactly one jq process per comparison.
   docs_json='{}'
   if grep -q '"\$ref"[[:space:]]*:[[:space:]]*"[^"#]' "$schema_file" 2>/dev/null; then
     while IFS= read -r ref_file; do
@@ -261,13 +267,10 @@ $(jq -r '[paths as $p | select($p[-1] == "$ref") | getpath($p) | split("#")[0] |
 SCHEMA_CHECK_REFS
   fi
 
-  # One jq process, one read of each path. $data_file may be a process substitution (a named
-  # pipe, not a regular file) when the caller's data is already in memory rather than on disk,
-  # the way check-project.sh supplies the registry's own content; a pipe yields its bytes to
-  # exactly one reader, so this function must never read that path more than once. jq's own
-  # --slurpfile already fails the whole call, with its own diagnostic on stderr, when a path is
-  # missing or will not parse as JSON, which is what a caller's `||` branch below reads.
-  result="$(jq -n --argjson docs "$docs_json" --slurpfile schema "$schema_file" --slurpfile data "$data_file" "$SCHEMA_CHECK__COMPARE_JQ")"
+  # One jq process. jq's own --slurpfile fails the whole call, with its own diagnostic on stderr,
+  # when the schema is missing or either input will not parse as JSON, which is what a caller's
+  # `||` branch below reads.
+  result="$(printf '%s\n' "$data" | jq -n --argjson docs "$docs_json" --slurpfile schema "$schema_file" --slurpfile data /dev/stdin "$SCHEMA_CHECK__COMPARE_JQ")"
   rc=$?
   if [ "$rc" -ne 0 ] || [ -z "$result" ]; then
     return 1

@@ -822,7 +822,7 @@ else
     | while IFS="$TAB" read -r REC_ID REC_PATH; do
         while IFS= read -r TEST_GLOB; do
           [ -n "$TEST_GLOB" ] || continue
-          # The file name must match the glob's last segment first. That is one call of the
+          # The file name must match the last segment of the glob first. That is one call of the
           # segment matcher, where the whole-path matcher calls it once per segment.
           if [ "${TEST_GLOB##*/}" != "**" ]; then
             tf_path_matches_glob "${REC_PATH##*/}" "${TEST_GLOB##*/}" || continue
