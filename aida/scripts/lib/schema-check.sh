@@ -269,10 +269,12 @@ SCHEMA_CHECK_REFS
 
   # One jq process. jq's own --slurpfile fails the whole call, with its own diagnostic on stderr,
   # when the schema is missing or either input will not parse as JSON, which is what a caller's
-  # `||` branch below reads.
+  # `||` branch below reads. jq names the data /dev/stdin, so a failure names the data file too.
   result="$(printf '%s\n' "$data" | jq -n --argjson docs "$docs_json" --slurpfile schema "$schema_file" --slurpfile data /dev/stdin "$SCHEMA_CHECK__COMPARE_JQ")"
   rc=$?
   if [ "$rc" -ne 0 ] || [ -z "$result" ]; then
+    printf '%s\n' "$data" | jq -n --slurpfile data /dev/stdin 'empty' 2>/dev/null \
+      || printf 'schema-check: %s will not parse as JSON\n' "$data_file" >&2
     return 1
   fi
   printf '%s\n' "$result"
