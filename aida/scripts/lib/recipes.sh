@@ -1386,7 +1386,13 @@ br_lines_not_in() {
   br_line_keys "$now" >"$now_keys"
   # -a: a byte that is not UTF-8 in a line would otherwise make grep print "binary file matches"
   # and no line number, and the check would read met over a line it never compared.
-  nums="$(grep -a -n -v -x -F -f "$base_keys" "$now_keys" 2>/dev/null | grep -v '^[0-9]*:$' | cut -d: -f1)"
+  # An empty pattern file with -v prints every line under GNU grep and none under busybox grep. So
+  # with no baseline key, every line passes through without that grep.
+  if [ -s "$base_keys" ]; then
+    nums="$(grep -a -n -v -x -F -f "$base_keys" "$now_keys" 2>/dev/null | grep -v '^[0-9]*:$' | cut -d: -f1)"
+  else
+    nums="$(grep -a -n '' "$now_keys" | grep -v '^[0-9]*:$' | cut -d: -f1)"
+  fi
   BR_NEW_COUNT="$(printf '%s\n' "$nums" | grep -c '^[0-9]')"
   picks="$(printf '%s\n' "$nums" | grep '^[0-9]' | head -20 | sed 's/$/p/' | paste -s -d ';' -)"
   : >"$out"

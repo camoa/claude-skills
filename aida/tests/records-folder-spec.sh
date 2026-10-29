@@ -50,7 +50,7 @@ trap 'rm -f "$RAW" "$NAMES" "$KEYS" "$CDS" "$AT"' EXIT
           s = line
           while ((p = index(s, prefix)) > 0) {
             s = substr(s, p + length(prefix))
-            if (match(s, /^[A-Za-z0-9_.\/$%{}<>*+@~-]+/)) {
+            if (match(s, "^[A-Za-z0-9_./$%{}<>*+@~-]+")) {
               n = substr(s, 1, RLENGTH)
               sub(/^\/+/, "", n)
               if (n == "" || n == "*") continue
