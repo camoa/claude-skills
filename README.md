@@ -9,8 +9,8 @@ The flagship, `aida`, run on a single task:
 ```text
 $ /aida:scope rss_feed        # you write the contract: goal, non-goals, the criteria that prove it
 $ /aida:research rss_feed     # finds drupal/views_rss already covers most of it: reuse, do not rebuild
-$ /aida:design rss_feed       # work orders with owned files, a diff budget, and the tests each needs
-$ /aida:implement rss_feed    # tests first, frozen, then the code against them
+$ /aida:design rss_feed       # work orders with owned files, a diff budget, and tests for code with logic
+$ /aida:implement rss_feed    # for code with logic: tests first, frozen, then the code against them
 $ /aida:review rss_feed       # every criterion answered, the checks run from the stack's recipe
 $ /aida:completion rss_feed   # closes on the verdict, writes the pull request body from the records
 ```
