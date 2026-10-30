@@ -80,7 +80,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
 #                            [--regression <order id|not-caused>=<failing line>]...
 #                            [--because <the person's words>] (with --regression alone)
-#   implement-actions.sh reopen <task_folder>
+#   implement-actions.sh reopen <task_folder> [--test <path>::<name>]... [--because <the person's words>]
+#                            (--test and --because together: a person rules a frozen test wrong)
 #   implement-actions.sh go-on <task_folder> <unit_id> --continue <build|fix|check|close|keep>
 #                            --because <the person's words> [--owns <path relative to codePath>]...
 #                            [--interface <path>] [--test-recipe <framework>=<path>]...
@@ -430,10 +431,13 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      and spends no round (gap row 339).
 #  63  commits of this order after its last record change a frozen test, or a file the order does
 #      not own, or the record's commit is not in the history of HEAD. `close`, `review-record`,
-#      `verify-brief` and `go-on --continue check` refuse on it (im_code_moved). No record judged
-#      those commits, and they break the frozen-test or the owned-files guarantee. Commits inside
-#      the order's own files are a warning instead: they join the order's unrecordedCommits, and
-#      the step goes on.
+#      `verify-brief` and `go-on --continue check` refuse on it (im_code_moved), and stop the order
+#      with go-on --owns, redo and drop as the ways out. No record judged those commits, and they
+#      break the frozen-test or the owned-files guarantee. Commits inside the order's own files are
+#      a warning instead: they join the order's unrecordedCommits, and the step goes on. Commits
+#      the upstream of the task's base holds are trunk's, and a merge is judged on its own edits
+#      against the files of every order. Both are set aside with a warning, unless one changes a
+#      frozen test (gap row 476).
 #
 # The exit codes the checkpoint, the finish and the ways out of a stop add.
 #  64  `tests-freeze`'s own `--row` flags and this order's tests do not correspond: a
@@ -462,7 +466,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #  66  `finish` found implementation is not finished for this task: an order that is neither closed
 #      nor dropped, or an order that is stopped whether or not it closed. The message names every
 #      one of them. A machine-verified criterion that is not confirmed is a warning. Or the suite at
-#      the final commit fails on a test that passed in the implement-start baseline (owner,
+#      the final commit fails on a test that did not fail in the implement-start baseline (owner,
 #      2026-10-28). Each such test stops the closed order that owns it, with a repair finding and a
 #      stop that allows fix. A test no order takes is named for the person, who gives it to an order
 #      or records it as not caused by this task with --regression. No finished.json is written.
@@ -684,7 +688,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # 119  `reopen` found no closed task review of this finish, or no finding of it that fails a
 #      criterion in a file a closed order owns, or names a frozen test a person ruled wrong (gap
-#      rows 390 and 449). Nothing is written.
+#      rows 390 and 449). With --test: no frozen record holds the test, its order is not closed, or
+#      a task review of this finish is open (gap row 475). Nothing is written.
 #
 # 120  `build-brief` or `dispatch-open implementer` found `doneWhenGained` on the order's ledger
 #      entry. Design appended done-when rows after the freeze, and the done-when judgement read
@@ -835,7 +840,7 @@ FIX_ROUNDS_ALLOWED=2
 
 # The route for code that came after a fix round was handed to a verifier (gap row 339), said the
 # same way by every step that refuses that code.
-LATE_ROUTE="With a person present, a light order at its cap gets one repair round for a finding read not-addressed. fix-brief begins it at the last record, so it holds the later commits, and a fresh verifier reads them. Unattended, the cap holds. close refuses those commits (exit 63) until a person moves the branch back to the record."
+LATE_ROUTE="With a person present, a light order at its cap gets one repair round for a finding read not-addressed. fix-brief begins it at the last record, so it holds the later commits, and a fresh verifier reads them. Unattended, the cap holds. close refuses those commits (exit 63) and stops the order, and a person takes go-on, redo or drop."
 
 # The fix rounds one order is allowed. A light task gets one. So does an order whose rounds were
 # recorded on a light task: a person who sets the task interactive to rule is then not offered a
@@ -971,22 +976,24 @@ im_listed_commits_in() {
 }
 
 # The commits of order $2 after $4 up to $5 in the repository $3 that no record judged, those no
-# other order's records list. A commit there that changes a frozen test, or a file the order does
-# not own, refuses (exit 63): those are the frozen-test and owned-files guarantees. On an order
-# proved by its record, a commit that changes only files AIDA's own scripts write in the project
-# folder is set aside. Sets IM_MOVED to the commits left, a JSON array. Call after rv_load_state
-# and rv_load_range_repo. $1 the action, $6 what the commits are, for the message. With $7 "stop"
-# a breach refuses nothing: the guard returns 1 with IM_BREACH, its words, and IM_BREACH_ALLOWS, the
-# go-on choices it allows, for the caller's stop.
+# other order's records list and im_aside_commits does not set aside. A commit there that changes
+# a frozen test, or a file the order does not own, is a breach: those are the frozen-test and
+# owned-files guarantees. A merge on that list is judged on its own edits, against the files of the
+# whole task. A commit set aside still breaches when it changes a frozen test, wherever the change
+# came from. On an order proved by its record, a commit that changes only files AIDA's own scripts
+# write in the project folder is set aside. Sets IM_MOVED to the commits left, a JSON array. Call
+# after rv_load_state and rv_load_range_repo. $1 the action, $6 what the commits are, for the
+# message. A breach returns 1 with IM_BREACH, its words, and IM_BREACH_ALLOWS, the go-on choices it
+# allows, for the caller's stop. A range with commits set aside and no breach writes one warning.
 IM_MOVED="[]"; IM_BREACH=""; IM_BREACH_ALLOWS="[]"
 im_moved_guard() {
-  local who="$1" unit_id="$2" repo="$3" from="$4" to="$5" what="$6" paths p c fp f frozen="" hits="" owned outside
+  local who="$1" unit_id="$2" repo="$3" from="$4" to="$5" what="$6" p c aside hits owned merges outside
   local BRC_CODEPATH="$repo"
+  IM_BREACH_ALLOWS="[]"
   if ! git -C "$repo" merge-base --is-ancestor "$from" "$to" 2>/dev/null; then
-    IM_MOVED="[]"; IM_BREACH_ALLOWS="[]"
+    IM_MOVED="[]"
     IM_BREACH="$repo is at $to, and $what $unit_id began at $from, which that history does not hold"
-    [ "${7:-}" = "stop" ] && return 1
-    die 63 "$who: $IM_BREACH. A person moves the branch back to it, or redoes the order."
+    return 1
   fi
   IM_MOVED="$(im_role_commits "$repo" "$from" "$to" "$unit_id")"
   br_order_facts "$RV_UNIT_JSON"
@@ -997,49 +1004,71 @@ im_moved_guard() {
         done
       done | jq -Rsc 'split("\n") | map(select(. != ""))')"
   fi
-  [ "$IM_MOVED" != "[]" ] || return 0
-  paths="$(im_commits_paths "$repo" "$IM_MOVED" "$RV_RANGE_SCOPE")"
-  for f in "$IMPL_DIR"/tests-*.json; do
-    [ -e "$f" ] || continue
-    frozen="$frozen$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$f" 2>/dev/null | while IFS= read -r fp; do
-        [ -z "$fp" ] || normalize_abs "$(resolve_against "$fp" "$RV_CODEPATH")"
-      done)
-"
-  done
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    ! printf '%s\n' "$frozen" | grep -Fqx -- "$(normalize_abs "$(resolve_against "$p" "$repo")")" || hits="$hits$p, "
-  done <<ICM_PATHS
-$paths
-ICM_PATHS
-  IM_BREACH="$what $unit_id at $from change frozen tests: ${hits%, }. Nobody changes a frozen test"
-  IM_BREACH_ALLOWS="[]"
+  aside="$(im_aside_commits "$repo" "$from" "$to")"
+  hits="$(im_frozen_hits "$(im_commits_paths "$repo" "$(printf '%s\n' "$aside" | jq -Rsc --argjson m "$IM_MOVED" \
+    '$m + (split("\n") | map(select(. != "")))')" "$RV_RANGE_SCOPE")" "$repo")"
   if [ -n "$hits" ]; then
-    [ "${7:-}" = "stop" ] && return 1
-    die 63 "$who: $IM_BREACH. A person moves the branch back to $from, or redoes the order."
+    IM_BREACH="$what $unit_id at $from change frozen tests: $hits. Nobody changes a frozen test"
+    return 1
   fi
-  owned="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson o "$(im_owns_of "$unit_id")" '(.ownedFiles // []) + $o')"
-  outside="$(rv_scope_outside "$(printf '%s\n' "$paths" | jq -Rsc 'split("\n") | map(select(. != ""))')" "$owned" "$repo" "$TASK_PATH" \
-    | while IFS= read -r p; do task_env_recipe_change "$TASK_PATH" "$p" "$repo" "$to" || printf '%s, ' "$p"; done)"
-  IM_BREACH="$what $unit_id at $from change files it does not own: ${outside%, }. An order's own commits change only its own files"
-  IM_BREACH_ALLOWS="$(im_dispatch_allows "$RV_LEDGER_DOC" "$unit_id")"
-  if [ -n "$outside" ]; then
-    [ "${7:-}" = "stop" ] && return 1
-    die 63 "$who: $IM_BREACH. A person moves the branch back to $from, or redoes the order."
+  if [ "$IM_MOVED" != "[]" ]; then
+    owned="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson o "$(im_owns_of "$unit_id")" '(.ownedFiles // []) + $o')"
+    merges="$(printf '%s' "$IM_MOVED" | jq -r '.[]' | while IFS= read -r c; do
+        ! git -C "$repo" rev-parse --verify --quiet "$c^2" >/dev/null || printf '%s\n' "$c"
+      done | jq -Rsc 'split("\n") | map(select(. != ""))')"
+    outside="$(im_outside_owned "$(im_commits_paths "$repo" "$(jq -cn --argjson a "$IM_MOVED" --argjson m "$merges" '$a - $m')" "$RV_RANGE_SCOPE")" \
+        "$owned" "$repo" "$to")"
+    outside="$outside${outside:+, }$(im_outside_owned "$(im_commits_paths "$repo" "$merges" "$RV_RANGE_SCOPE")" "$(im_task_owned)" "$repo" "$to")"
+    outside="${outside%, }"
+    if [ -n "$outside" ]; then
+      IM_BREACH="$what $unit_id at $from change files it does not own: $outside. An order's own commits change only its own files"
+      IM_BREACH_ALLOWS="$(im_dispatch_allows "$RV_LEDGER_DOC" "$unit_id")"
+      return 1
+    fi
   fi
   IM_BREACH=""
+  im_aside_warn "$who" "$unit_id" "$repo" "$from" "$to" "$aside"
 }
 
-# Code moved after the last record of order $2, at $4, up to $5 in the repository $3. The guard
-# above refuses what breaks a guarantee. Otherwise the step goes on with a warning, and the commits
-# join the order's unrecordedCommits, so its commit range, redo and drop still hold them. The
-# ledger on disk takes only those commits: a go-on grant the caller holds in RV_LEDGER_DOC is
+# The ways out a person takes from a stop the guard above wrote, as one sentence. A stop that
+# allows go-on takes --owns, which gives the file to the order. A frozen test allows no go-on,
+# because --owns refuses a frozen test. A frozen test of a closed order is answered by reopen.
+# A merge on the stop's commit list stays there, so its breaching edit stays judged. Redo and drop
+# then refuse at 113 until a person reverts the merge, and that revert takes out trunk's changes
+# too. The sentence says so. $1 the order.
+im_breach_route() {
+  local c merges=""
+  for c in $(printf '%s' "$IM_MOVED" | jq -r '.[]' 2>/dev/null); do
+    ! git -C "$RV_RANGE_REPO" rev-parse --verify --quiet "$c^2" >/dev/null || merges="$merges ${c:0:12}"
+  done
+  if [ "$IM_BREACH_ALLOWS" != "[]" ]; then
+    printf '%s' "A person goes on with --owns naming the file, redoes $1, or drops it."
+  else
+    printf '%s' "The stop allows no go-on, so a person redoes $1 or drops it. A frozen test of a closed order is answered by reopen."
+  fi
+  [ -z "$merges" ] \
+    || printf ' %s' "The stop lists the merge$merges. Redo and drop each ask a person to revert it with git revert -m 1, and that revert also takes out trunk's changes.$([ "$IM_BREACH_ALLOWS" = "[]" ] || printf ' %s' "Going on with --owns is the cheaper way out.")"
+}
+
+# Code moved after the last record of order $2, at $4, up to $5 in the repository $3. A breach the
+# guard above finds stops the order, as dispatch-close stops one, and refuses (exit 63). The stop
+# lists the commits on the order's unrecordedCommits, so redo and drop read them. An order already
+# stopped, as at go-on, keeps the stop it has. Otherwise the step goes on with a warning, and the
+# commits join the order's unrecordedCommits, so its commit range, redo and drop still hold them.
+# The ledger on disk takes only those commits: a go-on grant the caller holds in RV_LEDGER_DOC is
 # written only once its check passes. $1 the action.
 im_code_moved() {
   local who="$1" unit_id="$2" repo="$3" from="$4" to="$5" disk
-  im_moved_guard "$who" "$unit_id" "$repo" "$from" "$to" "the commits after the record of"
-  [ "$IM_MOVED" != "[]" ] || return 0
   disk="$(jq -c '.' "$RV_LEDGER_FILE" 2>/dev/null)"
+  if ! im_moved_guard "$who" "$unit_id" "$repo" "$from" "$to" "the commits after the record of"; then
+    if [ -z "$(stop_text "$(printf '%s' "$disk" | jq -c --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0]')")" ]; then
+      disk="$(stop_order_in "$(im_listed_commits_in "$disk" "$unit_id" "$IM_MOVED")" "$unit_id" "$who" "$IM_BREACH" "$IM_BREACH_ALLOWS")"
+      [ -n "$disk" ] || die3 "$who: the stop on $unit_id could not be written."
+      write_atomic "$RV_LEDGER_FILE" "$disk"
+    fi
+    die 63 "$who: $IM_BREACH. $unit_id is stopped. $(im_breach_route "$unit_id")"
+  fi
+  [ "$IM_MOVED" != "[]" ] || return 0
   disk="$(im_listed_commits_in "$disk" "$unit_id" "$IM_MOVED")"
   RV_LEDGER_DOC="$(im_listed_commits_in "$RV_LEDGER_DOC" "$unit_id" "$IM_MOVED")"
   [ -n "$disk" ] && [ -n "$RV_LEDGER_DOC" ] || die3 "$who: the commits after the record of $unit_id could not be written."
@@ -4585,10 +4614,13 @@ TB_OWNED
       --slurpfile review <(cat "$IMPL_DIR/review-$unit_id.json" 2>/dev/null || echo '{}') '
       [ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1] as $r
       | {findings: [ ($review[0].findings // [])[] | select(.id as $i | $r.findings | index($i)) | {id, file, lines, linkedTo, evidence} ],
-         whatToDo: (if ($r.retires // []) == []
+         whatToDo: (if ($r.retiredTests // []) != []
+           then "A person ruled the tests in retiredTests wrong. Remove each one by deleting its lines, and change no other line. Delete a file when every test in it is named. Return each kept test with a locks-in reason naming the code it passes against."
+           elif ($r.retires // []) == []
            then "This closed order holds a bug. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."
            else "A person ruled these frozen tests wrong at the task review. Correct each one in its own file, and change no other test. Return each corrected test with a locks-in reason naming the code it passes against." end)}
-      + (if ($r.retires // []) == [] then {} else {retires: $r.retires} end)')"
+      + (if ($r.retires // []) == [] then {} else {retires: $r.retires} end)
+      + (if ($r.retiredTests // []) == [] then {} else {retiredTests: $r.retiredTests} end)')"
     [ -n "$repair_json" ] || die3 "tests-brief: the repair of $unit_id could not be read from $ledger_file and $IMPL_DIR/review-$unit_id.json."
   fi
 
@@ -5315,13 +5347,15 @@ TF_EOF
   # --- 27 also: a repair's test is a new file, so no earlier freeze of this order holds it ---------
   # The one exception is a test a person ruled wrong at the task review: the repair retires it, and
   # its corrected copy freezes here under the same path (gap row 449).
-  local tf_frozen_before="" tf_refrozen=""
+  local tf_frozen_before="" tf_refrozen="" tf_retires='[]' tf_retired_tests='[]'
   if [ -n "$tf_repair" ]; then
     tf_with_repair_tests "tests-freeze" "$unit_id"
-    tf_frozen_before="$(printf '%s' "$TF_REPAIR_TESTS_DOC" \
-      | jq -r --argjson retired "$(printf '%s' "$tf_prior_ledger" | jq -c --arg id "$unit_id" --argjson n "$tf_repair" \
-          '[ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1].retires // []')" \
-        '[ (.rows // [])[] | (.tests // [])[] | .path ] + [ (.support // [])[] | .path ] | unique | .[]
+    tf_retires="$(printf '%s' "$tf_prior_ledger" | jq -c --arg id "$unit_id" --argjson n "$tf_repair" \
+      '[ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1] | {retires: (.retires // []), retiredTests: (.retiredTests // [])}')"
+    tf_retired_tests="$(printf '%s' "$tf_retires" | jq -c '.retiredTests')"
+    tf_retires="$(printf '%s' "$tf_retires" | jq -c '.retires')"
+    tf_frozen_before="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -r --argjson retired "$tf_retires" '
+        [ (.rows // [])[] | (.tests // [])[] | .path ] + [ (.support // [])[] | .path ] | unique | .[]
          | select(. as $p | $retired | index($p) | not)')"
     while IFS= read -r p; do
       [ -n "$p" ] || continue
@@ -5331,6 +5365,48 @@ $unique_rel_paths
 TF_EOF
     [ -z "$tf_refrozen" ] \
       || die 27 "tests-freeze: the repair's test goes in a new test file, and an earlier freeze of $unit_id holds these: ${tf_refrozen%, }. Nobody changes a frozen test. The test author writes the test into a new file $unit_id owns, and this freeze runs again. Nothing is frozen."
+    # A test a person named at reopen is removed, and nothing else in its file changes (gap row
+    # 475). Each such path holds the earlier names less the named ones, and its diff from the
+    # last freeze of it deletes at least one line and adds none. A changed line is one added and
+    # one deleted, so any edit of a kept test is refused. A path with every name named may be
+    # deleted whole. A retired file with no named test is a row 449 correction, which is never a
+    # deletion.
+    local tf_named_path tf_left tf_now tf_base tf_numstat tf_unnamed=""
+    while IFS= read -r tf_named_path; do
+      [ -n "$tf_named_path" ] && [ ! -e "$codepath_canon/$tf_named_path" ] || continue
+      tf_unnamed="$tf_unnamed$tf_named_path (deleted, though a person named no test in it), "
+    done <<TF_EOF
+$(printf '%s' "$tf_retires" | jq -r --argjson named "$tf_retired_tests" '(. - ($named | map(.path))) | .[]')
+TF_EOF
+    while IFS= read -r tf_named_path; do
+      [ -n "$tf_named_path" ] || continue
+      tf_left="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c --arg p "$tf_named_path" --argjson named "$tf_retired_tests" '
+        [ (.rows // [])[] | (.tests // [])[] | select(.path == $p) | .name ]
+        - [ $named[] | select(.path == $p) | .name ] | unique')"
+      tf_now="$(printf '%s' "$tests_json" | jq -c --arg p "$tf_named_path" '[ .[] | select(.relPath == $p) | .name ] | unique')"
+      if [ ! -e "$codepath_canon/$tf_named_path" ]; then
+        [ "$tf_left" = "[]" ] || tf_unnamed="$tf_unnamed$tf_named_path (deleted, though it held $(printf '%s' "$tf_left" | jq -r 'join(", ")')), "
+        continue
+      fi
+      [ "$tf_now" = "$tf_left" ] \
+        || { tf_unnamed="$tf_unnamed$tf_named_path (its tests are $(printf '%s' "$tf_now" | jq -r 'join(", ")'), not $(printf '%s' "$tf_left" | jq -r 'join(", ")')), "; continue; }
+      tf_base="$(printf '%s' "$TF_REPAIR_PATH_COMMITS" | jq -r --arg p "$tf_named_path" '.[$p] // ""')"
+      tf_numstat="$(git -C "$codepath" diff --numstat "$tf_base" -- "$tf_named_path" 2>/dev/null)" || tf_base=""
+      if [ -z "$tf_base" ]; then
+        tf_unnamed="$tf_unnamed$tf_named_path (git could not compare it with its last freeze), "
+        continue
+      fi
+      tf_numstat="$(printf '%s\n' "$tf_numstat" | awk '{ a += $1; d += $2 } END { print a + 0, d + 0 }')"
+      case "$tf_numstat" in
+        "0 0") tf_unnamed="$tf_unnamed$tf_named_path (it still holds the named tests), " ;;
+        "0 "*) ;;
+        *) tf_unnamed="$tf_unnamed$tf_named_path (it adds ${tf_numstat%% *} lines), " ;;
+      esac
+    done <<TF_EOF
+$(printf '%s' "$tf_retired_tests" | jq -r 'map(.path) | unique | .[]')
+TF_EOF
+    [ -z "$tf_unnamed" ] \
+      || die 27 "tests-freeze: a person named the tests this repair removes, and these files changed beyond them: ${tf_unnamed%, }. The test author deletes the lines of each named test and changes no other line. Nothing is frozen."
   fi
 
   # --- a --support path is a base class or a fixture the author wrote beside the tests -----------
@@ -5509,9 +5585,11 @@ TF_EOF
   # (ideal/implementation.md, "A criterion a person inspects has no tests").
   local rows_expected_json rows_missing rows_unknown rows_person rows_twice
   # A criterion a verify run line proves needs its row too. The checker answers whether that line
-  # passing makes the clause true, as it answers for a test (gap row 370).
+  # passing makes the clause true, as it answers for a test (gap row 370). A repair's record holds
+  # its own tests alone, and the first freeze holds the judgement of those rows (gap row 475).
   rows_expected_json="$(jq -nc --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" \
-      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" --argjson byRun "$tf_by_run" '
+      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" \
+      --argjson byRun "$([ -z "$tf_repair" ] && printf '%s' "$tf_by_run" || echo '[]')" '
       (($tests | map(.criteria) | add // []) + $byRun) as $named
       | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid | select(($named | index($cid)) != null) | $cid ]
         + (if $dw then [$unit] else [] end)
@@ -6106,7 +6184,14 @@ TF_EOF
   rows_json="$(jq -s '.' "$rows_tmp")"
   rm -f "$rows_tmp"
   # --- 74 again: a record with no row proves nothing, the same fact as an order with no criterion --
+  # A repair that deleted every file it retires holds no row, and its record names what it retires
+  # (gap row 475).
+  local tf_gone
+  tf_gone="$(printf '%s' "$tf_retires" | jq -r '.[]' | while IFS= read -r p; do
+    [ -e "$codepath_canon/$p" ] || printf '%s\n' "$p"
+  done)"
   [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
+    || { [ -n "$tf_gone" ] && [ "$(printf '%s\n' "$tf_gone" | grep -c .)" = "$(printf '%s' "$tf_retires" | jq 'length')" ]; } \
     || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, and one --row $unit_id=... judged against the doneWhen text."
 
   # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
@@ -6273,19 +6358,30 @@ TF_EOF
   # The subject carries no AIDA name, because the branch can go upstream as it is. The record says
   # which commit the freeze made, under `freezeCommits`, so no reader rests on the subject (live-run
   # row 374).
-  local tree_left tf_made="" tf_before
-  if [ -n "$frozen_rel_paths" ]; then
+  # A retired file the test author deleted goes in the same commit, so the deletion is the author's
+  # in the history (gap row 475). It is staged again from HEAD first, because a `git rm` already
+  # took it from the index, and a pathspec git add refuses a path neither side holds.
+  local tree_left tf_made="" tf_before tf_commit_paths="$frozen_rel_paths"
+  while IFS= read -r p; do
+    [ -n "$p" ] && git -C "$codepath" cat-file -e "HEAD:./$p" 2>/dev/null || continue
+    git -C "$codepath" reset -q -- "$p" || die3 "tests-freeze: could not stage the deletion of $p in $codepath."
+    tf_commit_paths="$tf_commit_paths${tf_commit_paths:+
+}$p"
+  done <<TF_EOF
+$tf_gone
+TF_EOF
+  if [ -n "$tf_commit_paths" ]; then
     set --
     while IFS= read -r p; do
       [ -n "$p" ] && set -- "$@" "$p"
     done <<TF_EOF
-$frozen_rel_paths
+$tf_commit_paths
 TF_EOF
     if [ -n "$(git -C "$codepath" status --porcelain -- "$@")" ]; then
       tf_before="$current_commit"
       recipe_commit_if_changed "$codepath" tests-freeze "the test files are already in HEAD" \
-        "Add tests: $(printf '%s' "$frozen_rel_paths" | tr '\n' ' ')" \
-        "$frozen_rel_paths"
+        "Add tests: $(printf '%s' "$tf_commit_paths" | tr '\n' ' ')" \
+        "$tf_commit_paths"
       current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
       [ -n "$current_commit" ] \
         || die3 "tests-freeze: could not read the commit just made (git rev-parse HEAD failed in $codepath)."
@@ -6378,10 +6474,11 @@ TF_EOF
   [ -f "$record_file" ] && tf_carried="$(tf_freeze_commits "$record_file")"
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
     --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --arg proof "$tf_proof" --argjson support "$support_json" \
-    --argjson testRecipePath "$test_recipe_paths_json" --argjson carried "$tf_carried" --arg made "$tf_made" \
+    --argjson testRecipePath "$test_recipe_paths_json" --argjson carried "$tf_carried" --arg made "$tf_made" --argjson retires "$tf_retires" \
     '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof, support: $support,
       freezeCommits: ($carried + (if $made == "" then [] else [$made] end) | unique)}
-     + (if $testRecipePath == null then {} else {testRecipePath: $testRecipePath} end)')"
+     + (if $testRecipePath == null then {} else {testRecipePath: $testRecipePath} end)
+     + (if $retires == [] then {} else {retires: $retires} end)')"
 
   # A record that reaches here with different rows is retaken: the order is still at tests-frozen
   # (76 above) and HEAD was the earlier freeze commit (35 above), which is the route for a frozen
@@ -6410,6 +6507,26 @@ TF_EOF
   # the order stays at its fix step, so the fix round opens next.
   if [ -n "$tf_repair" ]; then
     tt_ledger_update "$IMPL_DIR/ledger.json" "$unit_id" '.repairs = [ .repairs[] | del(.testOwed) ]'
+    # A person's ruling can take the last test of a row (gap row 475). The freeze names each machine
+    # criterion this order owns with no test left, and the done-when row when its last test went.
+    # Its judgement on such a criterion goes, so close derives not-judged and review reads it.
+    if [ "$tf_retired_tests" != "[]" ]; then
+      local tf_bare
+      tf_with_repair_tests "tests-freeze" "$unit_id"
+      tf_bare="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c --argjson owned "$owned_ids_json" --argjson criteria "$CRITERIA_JSON" '
+        (.rows // []) as $rows
+        | [ $criteria[] | select(.verifiedBy == "machine") | .id | select(. as $c | $owned | index($c))
+            | select(. as $c | any($rows[]; .criterion == $c)) | select(. as $c | all($rows[] | select(.criterion == $c); (.tests // []) == [])) ]
+          + (if any($rows[]; .provesDoneWhen == true) and all($rows[] | select(.provesDoneWhen == true); (.tests // []) == []) then ["the done-when row"] else [] end)')"
+      if [ "$tf_bare" != "[]" ]; then
+        task_warn "$TASK_PATH" tests-freeze "$unit_id" "a person retired the last frozen test of these, so no test of $unit_id proves them now: $(printf '%s' "$tf_bare" | jq -r 'join(", ")')"
+        tf_bare="$(jq -c --arg u "$unit_id" --argjson bare "$tf_bare" '
+          .criteria = [ (.criteria // [])[] | if (.id as $c | $bare | index($c)) then .judgements = [ (.judgements // [])[] | select(.unit != $u) ] else . end ]' \
+          "$IMPL_DIR/ledger.json")"
+        [ -n "$tf_bare" ] || die3 "tests-freeze: the ledger update that takes back $unit_id's judgements failed."
+        write_atomic "$IMPL_DIR/ledger.json" "$tf_bare"
+      fi
+    fi
   else
     tt_ledger_update "$IMPL_DIR/ledger.json" "$unit_id" '.lastStep = "tests-frozen"'
   fi
@@ -8553,7 +8670,8 @@ do_build_record() {
   # the review reads too. So do the commits a person kept after a builder's stop: they sit after
   # the last record, or the freeze, and before this attempt's start, in no other order's list.
   # Only a commit that changes a file of this order, owned or shared, is kept, read by im_path_claim.
-  # A trunk commit, a merge commit and an unrelated hand commit change none, so they drop out.
+  # Trunk's commits and a merge that passed never reach the list (im_aside_commits). Any other
+  # merge shows no path to diff-tree, and an unrelated hand commit changes none, so both drop out.
   local br_before='[]' br_last br_kept c p
   BRC_COMMITS="$(im_role_commits "$codepath" "$started_at_full" "$current_commit" "$unit_id")"
   br_last="$(jq -r '.commit // ""' "$tests_file" 2>/dev/null)"
@@ -9042,7 +9160,8 @@ im_own_listed() {
 # first. Each build and fix record stores this list, and the owned-files check and the review diff
 # read nothing else. Left out is every commit another order's records name: its build and fix
 # lists, its earlier attempts' lists, and its freezes, which are AIDA's own commits of that order's
-# tests. This order's own freeze stays, since it holds this order's tests. It enters a range only
+# tests. So is every commit im_aside_commits sets aside: trunk's, and a merge that passed.
+# This order's own freeze stays, since it holds this order's tests. It enters a range only
 # when build-record starts the range at its parent because the freeze holds the order's work
 # (live-run row 371). The orders of one task
 # share one worktree, and their builds run one at a time. So another order's commit sits inside
@@ -9050,7 +9169,7 @@ im_own_listed() {
 # which ran before this one, already listed it.
 im_role_commits() {
   local taken c
-  taken="$(im_others_listed "$4" "$1")"
+  taken="$(im_others_listed "$4" "$1"; im_aside_commits "$1" "$2" "$3")"
   git -C "$1" rev-list --reverse "$2..$3" 2>/dev/null | while IFS= read -r c; do
     printf '%s\n' "$taken" | grep -Fqx -- "$c" || printf '%s\n' "$c"
   done | jq -Rsc 'split("\n") | map(select(. != ""))'
@@ -9072,13 +9191,157 @@ im_sorted_commits() {
 # The paths the commits in JSON array $2 change in the repository $1, one per line, sorted.
 # --no-renames: git reads a delete plus an add as one rename by default, and a rename shows only
 # the new path, so a deleted file the order does not own would never appear. $3 a path to scope
-# the read to, or empty. $4 a git --diff-filter value, or nothing for every change.
+# the read to, or empty. $4 a git --diff-filter value, or nothing for every change. A merge commit
+# gives its own edits, from im_merge_own_edits, since diff-tree prints nothing for a merge. Its
+# filter applies to the diff from its first parent.
 im_commits_paths() {
   local c
   printf '%s' "$2" | jq -r '.[]' | while IFS= read -r c; do
-    if [ -n "$3" ]; then git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames ${4:+"--diff-filter=$4"} "$c" -- "$3"
+    if git -C "$1" rev-parse --verify --quiet "$c^2" >/dev/null; then
+      im_merge_own_edits "$1" "$c" "$3" | if [ -n "${4:-}" ]; then
+        grep -Fx -f <(git -C "$1" diff --name-only --no-renames "--diff-filter=$4" "$c^1" "$c" -- ${3:+"$3"})
+      else cat; fi
+    elif [ -n "$3" ]; then git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames ${4:+"--diff-filter=$4"} "$c" -- "$3"
     else git -C "$1" diff-tree --no-commit-id --name-only -r --no-renames ${4:+"--diff-filter=$4"} "$c"; fi
   done | LC_ALL=C sort -u
+}
+
+# The paths merge commit $2 in the repository $1 changes by its own hand, one per line, sorted
+# (gap row 476). A path is trunk's, or the branch's, when the merge holds one parent's version and
+# the other parent holds every merge base's version. A path both parents hold alike is neither.
+# Every other path is the merge's own edit: a conflict resolved, a hand edit, or a side dropped.
+# Versions compare by blob id, and a missing path equals only a missing path. A merge of more than
+# two parents gives every path that differs from its first parent. $3 a path to scope each diff to,
+# or empty. Only rev-parse, diff and merge-base run, which every git has.
+im_merge_own_edits() {
+  local repo="$1" m="$2" scope="$3" bases b n=0
+  if git -C "$repo" rev-parse --verify --quiet "$m^3" >/dev/null; then
+    git -C "$repo" diff --name-only --no-renames "$m^1" "$m" -- ${scope:+"$scope"} | LC_ALL=C sort -u
+    return 0
+  fi
+  bases="$(git -C "$repo" merge-base --all "$m^1" "$m^2" 2>/dev/null)"
+  { git -C "$repo" diff --raw --no-abbrev --no-renames "$m^1" "$m" -- ${scope:+"$scope"} | sed 's/^/P1 /'
+    git -C "$repo" diff --raw --no-abbrev --no-renames "$m^2" "$m" -- ${scope:+"$scope"} | sed 's/^/P2 /'
+    for b in $bases; do
+      n=$((n + 1))
+      git -C "$repo" diff --raw --no-abbrev --no-renames "$b" "$m" -- ${scope:+"$scope"} | sed "s/^/B$n /"
+    done
+  } | awk -F'\t' -v n="$(printf '%s\n' "$bases" | grep -c .)" '
+    { split($1, f, " "); was[f[1], $2] = f[4]; now[$2] = f[5] }
+    END {
+      for (p in now) {
+        m = now[p]; v1 = (("P1", p) in was) ? was["P1", p] : m; v2 = (("P2", p) in was) ? was["P2", p] : m
+        b1 = 1; b2 = 1
+        for (i = 1; i <= n; i++) { b = (("B" i, p) in was) ? was["B" i, p] : m; if (b != v1) b1 = 0; if (b != v2) b2 = 0 }
+        if ((m == v1 && m == v2) || (m == v2 && b1) || (m == v1 && b2)) continue
+        print p
+      }
+    }' | LC_ALL=C sort -u
+}
+
+# The commits after $2 up to $3 in the repository $1 that trunk brought, one per line: those the
+# upstream of the task's base holds (gap row 476). The upstream is a remote-tracking ref. A commit
+# on local trunk alone, or on a side branch, is not one of them, because a role moves a local
+# branch with one command. Nothing is printed outside the code worktree, or with no upstream.
+im_upstream_held() {
+  local up
+  [ "$1" = "$RV_CODEPATH" ] || return 0
+  up="$(task_base_upstream "$TASK_PATH" "$1")"
+  [ -n "$up" ] || return 0
+  git -C "$1" rev-list "$2..$3" 2>/dev/null | grep -Fx -f <(git -C "$1" rev-list "$up" "^$2" 2>/dev/null)
+}
+
+# The commits after $2 up to $3 in the repository $1 that leave every owned-files list, one per
+# line: trunk's commits, from im_upstream_held, and each other merge whose own edits break no
+# guarantee of the task (gap row 476). A merge is the session's act, not a role's commit, so its
+# own edits are judged against every order's files. Nothing is printed outside the code worktree.
+im_aside_commits() {
+  local held m
+  [ "$1" = "$RV_CODEPATH" ] || return 0
+  held="$(im_upstream_held "$1" "$2" "$3")"
+  [ -z "$held" ] || printf '%s\n' "$held"
+  for m in $(git -C "$1" rev-list --merges "$2..$3" 2>/dev/null); do
+    printf '%s\n' "$held" | grep -Fqx -- "$m" && continue
+    [ -n "$(im_merge_breach "$1" "$m")" ] || printf '%s\n' "$m"
+  done
+}
+
+# The own edits of merge commit $2 in the repository $1 that break a guarantee of the task, joined
+# by ", ": a file no order owns, and a frozen test. Nothing when every own edit is in an order's files.
+im_merge_breach() {
+  local own out
+  own="$(im_merge_own_edits "$1" "$2" "")"
+  [ -n "$own" ] || return 0
+  out="$(im_outside_owned "$own" "$(im_task_owned)" "$1" "$2")"
+  out="$out${out:+, }$(im_frozen_hits "$own" "$1")"
+  printf '%s' "${out%, }"
+}
+
+# Every file an order of the task owns, as a JSON array: each snapshot list, and each grant of
+# go-on --owns, read through im_owns_of.
+im_task_owned() {
+  local id
+  { jq -c '[ (.workOrders // [])[] | (.ownedFiles // [])[] ]' "$IMPL_DIR/snapshot.json" 2>/dev/null
+    for id in $(jq -r '(.workOrders // [])[] | .id' "$IMPL_DIR/snapshot.json" 2>/dev/null); do im_owns_of "$id"; done
+  } | jq -sc 'add // []'
+}
+
+# The paths of $1, one per line, that lie outside owned list $2, a JSON array, joined by ", ". A
+# file `task environment up` recorded, still at its recorded content at commit $4 in the repository
+# $3, is not outside.
+im_outside_owned() {
+  local out
+  out="$(rv_scope_outside "$(printf '%s\n' "$1" | jq -Rsc 'split("\n") | map(select(. != ""))')" "$2" "$3" "$TASK_PATH" \
+    | while IFS= read -r p; do task_env_recipe_change "$TASK_PATH" "$p" "$3" "$4" || printf '%s, ' "$p"; done)"
+  printf '%s' "${out%, }"
+}
+
+# The paths of $1, one per line, resolved in the repository $2, that are a frozen test of any
+# order, joined by ", ". The frozen list reads every test record, its tests and its support files.
+im_frozen_hits() {
+  local f fp p frozen="" hits=""
+  for f in "$IMPL_DIR"/tests-*.json; do
+    [ -e "$f" ] || continue
+    frozen="$frozen$(jq -r '(.rows[]?.tests[]?.path // empty), (.support[]?.path // empty)' "$f" 2>/dev/null | while IFS= read -r fp; do
+        [ -z "$fp" ] || normalize_abs "$(resolve_against "$fp" "$RV_CODEPATH")"
+      done)
+"
+  done
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    ! printf '%s\n' "$frozen" | grep -Fqx -- "$(normalize_abs "$(resolve_against "$p" "$2")")" || hits="$hits$p, "
+  done <<IFH_PATHS
+$1
+IFH_PATHS
+  printf '%s' "${hits%, }"
+}
+
+# The one warning for the commits set aside in the range after $4 up to $5 in the repository $3,
+# $6, one per line (gap row 476). It names how many the upstream holds, each merge, and each own
+# edit of a merge with the order that owns it. The words depend only on the range, so a step run
+# again warns once. $1 the action, $2 the order.
+im_aside_warn() {
+  local held m p id owner words="" edits
+  [ -n "$6" ] || return 0
+  held="$(im_upstream_held "$3" "$4" "$5")"
+  for m in $6; do
+    printf '%s\n' "$held" | grep -Fqx -- "$m" && continue
+    edits=""
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      owner=""
+      for id in $(jq -r '(.workOrders // [])[] | .id' "$IMPL_DIR/snapshot.json" 2>/dev/null); do
+        [ -n "$(rv_scope_outside "$(jq -cn --arg p "$p" '[$p]')" "$(jq -c --arg id "$id" --argjson o "$(im_owns_of "$id")" \
+          '[ (.workOrders // [])[] | select(.id == $id) | (.ownedFiles // [])[] ] + $o' "$IMPL_DIR/snapshot.json")" "$3" "$TASK_PATH")" ] \
+          || { owner="$id"; break; }
+      done
+      edits="$edits${edits:+, }$p ($owner)"
+    done <<IAW_EDITS
+$(im_merge_own_edits "$3" "$m" "")
+IAW_EDITS
+    words="$words; merge ${m:0:12} ${edits:+edits }${edits:-has no edit of its own}"
+  done
+  task_warn "$TASK_PATH" "$1" "$2" "trunk came into the range after ${4:0:12}, so it is set aside. Commits the upstream of the task's base holds: $(printf '%s\n' "$held" | grep -c .)$words"
 }
 
 # Writes to file $6 the diff of the commits in JSON array $3, in the repository $2, up to commit
@@ -9131,11 +9394,17 @@ ILD_COMMITS
 }
 
 # Succeeds when there is at least one commit after $2 up to $3 in the repository $1, and another
-# order's records list every one, so HEAD moved for other orders alone (gap row 340). $4 the order.
+# order's records list every one, or im_aside_commits sets it aside, so HEAD moved for other orders
+# and trunk alone (gap rows 340 and 476). It fails when a set-aside commit changes a frozen test.
+# $4 the order.
 im_moved_for_others() {
   local others c n=0
   git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
-  others="$(im_others_listed "$4" "$1")"
+  others="$(im_others_listed "$4" "$1"; im_aside_commits "$1" "$2" "$3")"
+  # A set-aside commit that changes a frozen test is no other order's work: the caller's guard
+  # stops on it.
+  [ -z "$(im_frozen_hits "$(im_commits_paths "$1" "$(im_aside_commits "$1" "$2" "$3" | jq -Rsc 'split("\n") | map(select(. != ""))')" "")" "$1")" ] \
+    || return 1
   for c in $(git -C "$1" rev-list "$2..$3" 2>/dev/null); do
     printf '%s\n' "$others" | grep -Fqx -- "$c" || return 1
     n=$((n + 1))
@@ -10437,14 +10706,25 @@ RV_SCOPE
     || die3 "fix-record: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
   # An already-correct claim on a file unchanged since the review disputes the reviewer, who read
   # that same file. git decides it here, and verify-record sends such a finding to a person rather
-  # than closing it on the verifier's word. A cited file must exist at HEAD (gap row 352).
-  local ac_unchanged="[]" ac_id ac_file ac_rc ac_since
+  # than closing it on the verifier's word. A cited file must exist at HEAD (gap row 352). The one
+  # exception is a test file a freeze of the order held and its merged record no longer holds: a
+  # repair retired it, a person ruled every test in it wrong, and its author deleted it, so it
+  # changed (gap row 475).
+  local ac_unchanged="[]" ac_id ac_file ac_rc ac_since ac_gone='[]'
   ac_since="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '.reviewedAt // ""')"
+  if [ -f "$IMPL_DIR/tests-$unit_id.json" ]; then
+    tf_with_repair_tests "fix-record" "$unit_id"
+    ac_gone="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c --argjson held "$TF_REPAIR_PATH_COMMITS" \
+      '($held | keys) - [ (.rows // [])[] | (.tests // [])[] | .path ] - [ (.support // [])[] | .path ]')"
+  fi
   while IFS= read -r ac_id; do
     [ -n "$ac_id" ] || continue
     ac_file="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$ac_id" '[ .findings[] | select(.id == $id) ][0].file // ""')"
     ac_rc=0
-    if [ -n "$ac_file" ]; then
+    if [ -n "$ac_file" ] && printf '%s' "$ac_gone" | jq -e --arg f "$ac_file" 'index($f)' >/dev/null \
+      && ! git -C "$RV_RANGE_REPO" cat-file -e "HEAD:$ac_file" 2>/dev/null; then
+      ac_rc=1
+    elif [ -n "$ac_file" ]; then
       git -C "$RV_RANGE_REPO" cat-file -e "HEAD:$ac_file" 2>/dev/null \
         || die3 "fix-record: $report_path calls $ac_id already correct, and the file it cites, $ac_file, is not in $RV_RANGE_REPO at HEAD."
       git -C "$RV_RANGE_REPO" diff --quiet "$ac_since" HEAD -- "$ac_file" 2>/dev/null
@@ -11334,11 +11614,14 @@ do_close() {
   # A range holds every commit between its ends. When a commit this order's records do not list
   # sits between two of its attempts, the range starts after the last such commit, so it names
   # none of that work. The earlier commits of this order are printed, not recorded (gap row 222).
-  local close_commits last_other earlier_own="" own c
+  # A commit im_aside_commits sets aside is trunk's, or a merge that passed, and starts nothing.
+  local close_commits last_other earlier_own="" own aside c
   if [ -z "$RV_RANGE_SCOPE" ]; then
     own="$(im_own_listed "$unit_id" "$RV_RANGE_REPO")"
+    aside="$(im_aside_commits "$RV_RANGE_REPO" "$started_at" "$head_now")"
     close_commits="$(for c in $(git -C "$RV_RANGE_REPO" rev-list --reverse "$started_at..$head_now" 2>/dev/null); do
-        if printf '%s\n' "$own" | grep -Fqx -- "$c"; then echo "own $c"; else echo "other $c"; fi
+        if printf '%s\n' "$own" | grep -Fqx -- "$c"; then echo "own $c"
+        elif ! printf '%s\n' "$aside" | grep -Fqx -- "$c"; then echo "other $c"; fi
       done)"
     last_other="$(printf '%s\n' "$close_commits" | sed -n 's/^other //p' | tail -1)"
     if [ -n "$last_other" ]; then
@@ -11678,7 +11961,7 @@ FSN_ITEM
       raw="$(printf '%s' "$unit" | jq -c --arg id "$new_id" --arg head "$head_now" --argjson x "$line" '
         {id: $id, severity: "high", file: "", lines: "",
          linkedTo: (((.criteriaOwned // []) + (.criteriaServed // []))[0] // ""),
-         evidence: ("finish ran the suite at " + $head + ". It passed in the implement-start baseline and fails now: " + $x.text
+         evidence: ("finish ran the suite at " + $head + ". It did not fail in the implement-start baseline and fails now: " + $x.text
                     + (if ($x.detail // "") == "" then "" else ". " + $x.detail end)
                     + (if $x.text != ($x.lines[0] // $x.text) then ". Its new lines: " + ($x.lines | join("; ")) else "" end)),
          fixScope: (.ownedFiles // [])}')"
@@ -11692,14 +11975,14 @@ FSN_TAKEN
     ledger_doc="$(im_reopen_in "$ledger_doc" "$owner" "$(jq -cn --arg r "$range" --argjson f "$ids" --arg at "$(date -u +%Y-%m-%d)" \
       '{finish: $r, findings: $f, at: $at}')")"
     ledger_doc="$(stop_order_in "$ledger_doc" "$owner" finish \
-      "tests that passed in the implement-start baseline fail at $head_now: $(printf '%s' "$taken" | jq -r --arg o "$owner" '.[$o] | map(.text) | join("; ")')" '["fix"]')"
+      "tests that did not fail in the implement-start baseline fail at $head_now: $(printf '%s' "$taken" | jq -r --arg o "$owner" '.[$o] | map(.text) | join("; ")')" '["fix"]')"
     [ -n "$ledger_doc" ] || die3 "finish: the stop on $owner could not be written to the ledger."
   done
   [ "$ledger_doc" = "$FN_LEDGER_DOC" ] || write_atomic "$FN_LEDGER_FILE" "$ledger_doc"
 
   if [ "$taken" != "{}" ] || [ "$left" != "[]" ]; then
     task_answer_consume
-    die 66 "finish: tests that passed in the implement-start baseline fail at $head_now, so implementation is not finished, and no finished.json is written.$(
+    die 66 "finish: tests that did not fail in the implement-start baseline fail at $head_now, so implementation is not finished, and no finished.json is written.$(
       [ "$taken" = "{}" ] || printf ' Each stops the order that owns it, which allows go-on fix, redo or drop: %s.' \
         "$(printf '%s' "$taken" | jq -r 'to_entries | map(.key + " (" + (.value | map(.text) | join("; ")) + ")") | join(", ")')")$(
       [ "$left" = "[]" ] || printf ' No order takes these, so the person answers each: %s. Record the answer with step "implement finish regression", then run finish again with --regression <order id>=<item> to give it to an order, or --regression not-caused=<item> when this task did not cause it, and --because <the person'"'"'s words>. The item is the text named here.' \
@@ -12004,6 +12287,25 @@ FN_RECIPES
   exit 0
 }
 
+# The order whose merged frozen record holds test file $1, its repairs' records applied, so a test
+# a repair retired is not found again (gap row 475). Sets RO_OWNER, or empty, and RO_HELD, the
+# JSON array of {name, criterion} of the tests that record holds in $1.
+RO_OWNER=""; RO_HELD="[]"
+ro_frozen_owner() {
+  local rf
+  RO_OWNER=""; RO_HELD="[]"
+  while IFS= read -r rf; do
+    case "$rf" in ""|*-repair-*.json) continue ;; esac
+    rf="$(basename "$rf" .json)"
+    tf_with_repair_tests "reopen" "${rf#tests-}"
+    RO_HELD="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c --arg p "$1" \
+      '[ (.rows // [])[] | .criterion as $c | (.tests // [])[] | select(.path == $p) | {name, criterion: $c} ]')"
+    [ "$RO_HELD" = "[]" ] || { RO_OWNER="${rf#tests-}"; return 0; }
+  done <<RO_EOF
+$(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort)
+RO_EOF
+}
+
 # reopen: a closed task review's findings go back into the orders that own their files (gap row
 # 390). Each finding the review records as failing a criterion reopens the closed order that owns
 # its file and owns that criterion, then one that serves it, then the one order that owns the file. So the order's own
@@ -12016,28 +12318,63 @@ FN_RECIPES
 # no order takes is named and left. finished.json goes, because finish's condition no longer
 # holds and every field in it is derived. Exit 119 when no closed review covers this finish, or
 # nothing in it can be routed.
+# A person may also rule a frozen test wrong before any review, with --test <path>::<name> and
+# --because (gap row 475). The ruling takes the place of the closed review, through the person's
+# answer, and routes as a finding ruled test-wrong does. The repair names the tests, and their
+# test author removes those tests alone. A closed review of this finish routes in the same call,
+# because the call removes finished.json and a second call would refuse at 66.
 do_reopen() {
-  [ "$#" -eq 1 ] || die3 "reopen: one task folder is required"
-  im_load_task "$1" "reopen"
+  local task_arg="" ruled_raw="" because=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --test)
+        need_value "reopen" "--test" "$#" "${2:-}"
+        ruled_raw="$ruled_raw$2
+"
+        shift 2 ;;
+      --because)
+        need_value "reopen" "--because" "$#" "${2:-}"
+        because="$2"
+        shift 2 ;;
+      -*) die3 "reopen: unrecognized argument: $1" ;;
+      *)
+        [ -z "$task_arg" ] || die3 "reopen: one task folder is required"
+        task_arg="$1"
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ] || die3 "reopen: one task folder is required"
+  [ -n "$ruled_raw" ] || [ -z "$because" ] || die3 "reopen: --because goes with --test, a person's ruling on a frozen test."
+  [ -z "$ruled_raw" ] || [ -n "$because" ] || die3 "reopen: --test needs --because, the person's own words."
+  im_load_task "$task_arg" "reopen"
   fn_load_task_state "reopen"
   rv_load_codepath "reopen"
-  local review_file="$TASK_PATH/review/review.json" finished_range reviewed verdict
+  local review_file="$TASK_PATH/review/review.json" finished_range reviewed verdict review_closed=false
   finished_range="$(jq -r '.commitRange // ""' "$IMPL_DIR/finished.json" 2>/dev/null)"
-  [ -n "$finished_range" ] \
-    || die 66 "reopen: $IMPL_DIR/finished.json is absent or holds no commitRange, so no task review judged a finished build."
   verdict="$(jq -r '.verdict // "none"' "$review_file" 2>/dev/null)"
+  verdict="${verdict:-none}"
   reviewed="$(jq -r '.reviewedRange // ""' "$review_file" 2>/dev/null)"
-  [ "$verdict" != "none" ] && [ "$reviewed" = "$finished_range" ] \
-    || die 119 "reopen: no closed task review covers $finished_range: $review_file reads verdict ${verdict:-none} over ${reviewed:-no range}. Only a closed review of this finish reopens an order."
+  [ -z "$finished_range" ] || [ "$reviewed" != "$finished_range" ] || [ "$verdict" = "none" ] || review_closed=true
+  if [ -z "$ruled_raw" ]; then
+    [ -n "$finished_range" ] \
+      || die 66 "reopen: $IMPL_DIR/finished.json is absent or holds no commitRange, so no task review judged a finished build."
+    [ "$review_closed" = true ] \
+      || die 119 "reopen: no closed task review covers $finished_range: $review_file reads verdict $verdict over ${reviewed:-no range}. Only a closed review of this finish reopens an order."
+  else
+    [ -z "$finished_range" ] || [ "$reviewed" != "$finished_range" ] || [ "$review_closed" = true ] \
+      || die 119 "reopen: the task review of $finished_range in $review_file is open. A person closes it first, and its findings then route in the same call as this ruling."
+  fi
 
-  local alignment findings count i one fid file crit abs rel owners owner owner_glob entry
+  local alignment findings='[]' count i one fid file crit abs rel owners owner owner_glob entry
   local review_doc new_id raw built routed='{}' not_routed="" reopened='[]' ledger_doc order rf retired
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
-  findings="$(jq -c '[ (.findings // [])[] | select((.disposition == "criterion" and (.ruling // "") != "wrong") or .ruling == "test-wrong") ]' "$review_file")"
+  [ "$review_closed" = false ] \
+    || findings="$(jq -c '[ (.findings // [])[] | select((.disposition == "criterion" and (.ruling // "") != "wrong") or .ruling == "test-wrong") ]' "$review_file")"
   # A decision a build left and the person ruled test-wrong at the task review takes the same
   # route as a finding ruled so (gap row 449). Its finding is the order's own, on its review record.
-  local decided
-  decided="$(jq -c '[ (.checks // [])[] | select((.id | startswith("decision-")) and .answer == "test-wrong") | .id ]' "$review_file")"
+  local decided='[]'
+  [ "$review_closed" = false ] \
+    || decided="$(jq -c '[ (.checks // [])[] | select((.id | startswith("decision-")) and .answer == "test-wrong") | .id ]' "$review_file")"
   for one in $(printf '%s' "$decided" | jq -r '.[]'); do
     fid="${one#decision-}"
     findings="$(printf '%s' "$findings" | jq -c --arg id "$one" --arg f "${fid##*-}" \
@@ -12046,6 +12383,43 @@ do_reopen() {
             | {id: $id, severity, file: (.file // ""), lines: (.lines // ""), linkedTo: (.linkedTo // ""),
                lens: "decision", evidence, ruling: "test-wrong"} ]')"
   done
+  # Each test a person ruled wrong is checked whole before anything is written, so the call routes
+  # every ruling or none. Its owner is the order whose merged frozen record holds the test.
+  local ruled r_name r_crit r_step r_n=0
+  while IFS= read -r ruled; do
+    [ -n "$ruled" ] || continue
+    case "$ruled" in *?::?*) ;; *) die3 "reopen: --test takes <path>::<name>, the frozen test's file and its name; got: $ruled" ;; esac
+    r_name="${ruled#*::}"
+    abs="$(normalize_abs "$(resolve_against "${ruled%%::*}" "$RV_CODEPATH")")"
+    rel="${abs#"$RV_CODEPATH"/}"
+    ro_frozen_owner "$rel"
+    [ -n "$RO_OWNER" ] \
+      || die 119 "reopen: no frozen record holds $rel, so no order froze it. Its test author changes a test before tests-freeze. Nothing is written."
+    [ "$(printf '%s' "$RO_HELD" | jq --arg n "$r_name" 'any(.[]; .name == $n)')" = true ] \
+      || die3 "reopen: the frozen record of $RO_OWNER holds no test $r_name in $rel. It holds: $(printf '%s' "$RO_HELD" | jq -r 'map(.name) | join(", ")')."
+    r_crit="$(printf '%s' "$RO_HELD" | jq -r --arg n "$r_name" '[ .[] | select(.name == $n) ][0].criterion // ""')"
+    r_step="$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$RO_OWNER" '.orders[] | select(.id == $id) | .lastStep // "planned"')"
+    case "$r_step" in
+      closed) ;;
+      tests-frozen)
+        [ "$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)" != "$(jq -r '.commit // ""' "$IMPL_DIR/tests-$RO_OWNER.json")" ] \
+          || die 119 "reopen: $RO_OWNER is at tests-frozen, and HEAD is still its freeze commit. Its test author corrects the test, and tests-freeze runs again and replaces the record. Nothing is written."
+        die 119 "reopen: $RO_OWNER is at tests-frozen, and HEAD has moved past its freeze commit. A person runs redo on $RO_OWNER, which takes it back to its tests. Nothing is written." ;;
+      code-written)
+        die 119 "reopen: $RO_OWNER is at code-written, so no build of it has passed. A person runs redo on $RO_OWNER, which takes it back to its tests. Nothing is written." ;;
+      checks-passed|reviewed|fixed)
+        die 119 "reopen: $RO_OWNER is at $r_step. It closes first: its frozen tests still pass, so nothing blocks the close. Then reopen runs again. Nothing is written." ;;
+      *)
+        die 119 "reopen: $RO_OWNER is at $r_step, so it is not closed, and only a closed order takes a repair. Nothing is written." ;;
+    esac
+    r_n=$((r_n + 1))
+    findings="$(printf '%s' "$findings" | jq -c --arg id "p$r_n" --arg f "$rel" --arg n "$r_name" --arg c "$r_crit" --arg b "$because" '
+      . + [{id: $id, severity: "high", file: $f, lines: "", linkedTo: $c, ruling: "test-wrong", retiredTest: {path: $f, name: $n},
+            evidence: ("A person ruled the frozen test " + $n + " in " + $f + " wrong before the task review: " + $b)}]')"
+  done <<RO_RULED
+$ruled_raw
+RO_RULED
+
   count="$(printf '%s' "$findings" | jq 'length')"
   i=0
   while [ "$i" -lt "$count" ]; do
@@ -12062,10 +12436,8 @@ do_reopen() {
     # belongs to the order whose frozen record holds it, whatever its owned files say.
     owner=""; owner_glob=""; retired=""
     if [ "$(printf '%s' "$one" | jq -r '.ruling // ""')" = "test-wrong" ]; then
-      owner="$(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort | while IFS= read -r rf; do
-        jq -e --arg p "$rel" 'any((.rows // [])[] | (.tests // [])[]; .path == $p)' "$rf" >/dev/null 2>&1 \
-          && { rf="$(basename "$rf" .json)"; rf="${rf#tests-}"; printf '%s\n' "${rf%%-repair-*}"; }
-      done | head -1)"
+      ro_frozen_owner "$rel"
+      owner="$RO_OWNER"
       [ -n "$owner" ] || { not_routed="$not_routed $fid (it is ruled test-wrong, and no frozen record holds $rel);"; continue; }
       owners=""; owner_glob="$rel"; retired="$rel"
     fi
@@ -12099,29 +12471,37 @@ RO_ONE
     new_id="f$(printf '%s' "$review_doc" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
     raw="$(printf '%s' "$one" | jq -c --arg id "$new_id" --arg file "$rel" --arg range "$reviewed" '
       {id: $id, severity, file: $file, lines: (.lines // ""), linkedTo,
-       evidence: ("The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence),
+       evidence: (if .retiredTest then .evidence
+                  else "The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence end),
        fixScope: [$file]}')"
     built="$(rv_finding_record "$raw" "$alignment" repair)"
     review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
-    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg rf "$fid" --arg f "$new_id" --argjson doc "$review_doc" '
-      .[$o] = {doc: $doc, reviewFindings: ((.[$o].reviewFindings // []) + [$rf]), findings: ((.[$o].findings // []) + [$f])}')"
+    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --argjson doc "$review_doc" '
+      .[$o] = {doc: $doc, reviewFindings: ((.[$o].reviewFindings // []) + (if $one.retiredTest then [] else [$one.id] end)),
+               findings: ((.[$o].findings // []) + [$f])}
+      + (.[$o] // {} | with_entries(select(.key == "retires" or .key == "retiredTests")))
+      | if $one.retiredTest then .[$o].retiredTests = ((.[$o].retiredTests // []) + [$one.retiredTest]) else . end')"
     routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg r "$retired" 'if $r == "" then . else .[$o].retires = (((.[$o].retires // []) + [$r]) | unique) end')"
-    reopened="$(printf '%s' "$reopened" | jq -c --arg o "$owner" --arg f "$new_id" --arg rf "$fid" --arg c "$crit" --arg file "$rel" \
-      '. + [{order: $o, finding: $f, from: ("task review " + $rf), cites: ("cites " + $c), file: $file}]')"
+    reopened="$(printf '%s' "$reopened" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --arg c "$crit" --arg file "$rel" \
+      '. + [{order: $o, finding: $f, from: (if $one.retiredTest then "a person'"'"'s ruling" else "task review " + $one.id end), cites: ("cites " + $c), file: $file}]')"
   done
   [ "$routed" != "{}" ] \
     || die 119 "reopen: no finding of the review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns, and none names a frozen test a person ruled wrong. A person fixes on the task branch, then runs finish again."
 
   # An order proved by tests owes one failing test of the bug before its fixer runs (owner,
   # 2026-10-28). Any other proof has no logic to test, so its fix round opens at once.
+  # The person's words are each --test value, one per line, then the --because words.
+  [ -z "$ruled_raw" ] || fn_require_answer "reopen" "ruling a frozen test wrong" "" "$ruled_raw$because"
   ledger_doc="$FN_LEDGER_DOC"
   for order in $(printf '%s' "$routed" | jq -r 'keys[]'); do
     br_order_facts "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg o "$order" '[ .workOrders[] | select(.id == $o) ][0]')"
-    rf="$(printf '%s' "$routed" | jq -c --arg o "$order" --arg range "$reviewed" --arg at "$(date -u +%Y-%m-%d)" \
+    rf="$(printf '%s' "$routed" | jq -c --arg o "$order" --arg at "$(date -u +%Y-%m-%d)" --arg because "$because" \
+      --arg range "${finished_range:-$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg o "$order" '.orders[] | select(.id == $o) | .commitRange // ""')}" \
       --argjson owed "$([ "$BR_ORDER_SLOT" = "order-tests" ] && echo true || echo false)" '
       {review: $range, reviewFindings: .[$o].reviewFindings, findings: .[$o].findings, at: $at}
       + (if $owed or .[$o].retires != null then {testOwed: true} else {} end)
-      + (if .[$o].retires == null then {} else {retires: .[$o].retires} end)')"
+      + (if .[$o].retires == null then {} else {retires: .[$o].retires} end)
+      + (if .[$o].retiredTests == null then {} else {retiredTests: .[$o].retiredTests, because: $because} end)')"
     ledger_doc="$(im_reopen_in "$ledger_doc" "$order" "$rf")"
     [ -n "$ledger_doc" ] || die3 "reopen: the repair on $order could not be written to the ledger."
   done
@@ -12130,6 +12510,7 @@ RO_ONE
   done
   write_atomic "$FN_LEDGER_FILE" "$ledger_doc"
   rm -f -- "$IMPL_DIR/finished.json" || die3 "reopen: could not remove $IMPL_DIR/finished.json"
+  task_answer_consume
   im_print_summary "reopen" "$(jq -cn --argjson reopened "$reopened" --arg left "${not_routed%;}" --arg review "$review_file" \
     --arg next "$(im_next_step "$ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     {reopened: $reopened,
@@ -12663,7 +13044,8 @@ do_drop() {
 # a build or fix list, an earlier attempt's list, wherever a redo or a drop moved the record. So
 # does a commit inside a closed order's commitRange, a stopped builder's commit a repair entry
 # names, and a commit a redo or a drop reverted, with its revert. A commit that changes only files
-# `task environment up` recorded is AIDA's own.
+# `task environment up` recorded is AIDA's own. A commit im_aside_commits sets aside is trunk's, or
+# a merge that passed. A merge left is read through its own edits.
 do_unattributed() {
   [ "$#" -eq 1 ] || die3 "unattributed: one task folder is required"
   im_load_task "$1" "unattributed"
@@ -12676,7 +13058,8 @@ do_unattributed() {
     im_others_listed "" "$RV_CODEPATH"
     printf '%s' "$FN_LEDGER_DOC" | jq -r '(.orders // [])[] | (.repairs // [])[] | (.commits // [])[]'
     printf '%s' "$FN_LEDGER_DOC" | jq -r '(.orders // [])[] | select(.lastStep == "closed") | .commitRange // empty' \
-      | while IFS= read -r c; do [ -z "$c" ] || git -C "$RV_CODEPATH" rev-list "$c" 2>/dev/null; done)"
+      | while IFS= read -r c; do [ -z "$c" ] || git -C "$RV_CODEPATH" rev-list "$c" 2>/dev/null; done
+    im_aside_commits "$RV_CODEPATH" "$started" HEAD)"
   for c in $(git -C "$RV_CODEPATH" rev-list --reverse "$started..HEAD" 2>/dev/null); do
     printf '%s\n' "$known" | grep -Fqx -- "$c" && continue
     ours=true
@@ -12684,7 +13067,7 @@ do_unattributed() {
       [ -n "$p" ] || continue
       task_env_recipe_change "$TASK_PATH" "$p" "$RV_CODEPATH" "$c" || ours=false
     done <<UA_PATHS
-$(git -C "$RV_CODEPATH" diff-tree --no-commit-id --name-only -r --no-renames "$c" 2>/dev/null)
+$(im_commits_paths "$RV_CODEPATH" "[\"$c\"]" "")
 UA_PATHS
     [ "$ours" = "false" ] || continue
     found=yes
@@ -13621,14 +14004,12 @@ do_dispatch_close() {
     rv_load_range_repo "dispatch-close" "$RV_UNIT_JSON"
     nr_ledger="$RV_LEDGER_DOC"
     if [ -n "$nr_brief" ] && git -C "$RV_RANGE_REPO" rev-parse --verify --quiet "$nr_head^{commit}" >/dev/null 2>&1; then
-      if ! im_moved_guard "dispatch-close" "$nr_unit" "$RV_RANGE_REPO" "$nr_head" HEAD "the commits the capped ${nr_role##*:} made on" stop; then
+      if ! im_moved_guard "dispatch-close" "$nr_unit" "$RV_RANGE_REPO" "$nr_head" HEAD "the commits the capped ${nr_role##*:} made on"; then
         nr_ledger="$(stop_order_in "$(im_listed_commits_in "$nr_ledger" "$nr_unit" "$IM_MOVED")" "$nr_unit" dispatch-close "$IM_BREACH" "$IM_BREACH_ALLOWS")"
         [ -n "$nr_ledger" ] || die3 "dispatch-close: the stop on $nr_unit could not be written."
         write_atomic "$IMPL_DIR/ledger.json" "$nr_ledger"
         rm -f "$dispatch_file" || die3 "dispatch-close: could not remove $dispatch_file"
-        [ "$IM_BREACH_ALLOWS" = "[]" ] \
-          || die 63 "dispatch-close: $IM_BREACH. $nr_unit is stopped, and the record is removed. A person moves the branch back to $nr_head, goes on with --owns naming the file, redoes the order, or drops it."
-        die 63 "dispatch-close: $IM_BREACH. $nr_unit is stopped, and the record is removed. The stop allows no go-on, so a person redoes the order or drops it."
+        die 63 "dispatch-close: $IM_BREACH. $nr_unit is stopped, and the record is removed. $(im_breach_route "$nr_unit")"
       fi
       nr_ledger="$(im_listed_commits_in "$nr_ledger" "$nr_unit" "$IM_MOVED")"
       [ -n "$nr_ledger" ] || die3 "dispatch-close: the capped ${nr_role##*:}'s commits on $nr_unit could not be written."

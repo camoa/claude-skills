@@ -530,10 +530,11 @@ rw_owned_files() {
   printf '%s' "$RW_SNAPSHOT_DOC" | jq -c '[ (.workOrders // [])[] | (.ownedFiles // [])[] ] | unique'
 }
 
-# Every frozen test row, across every order's own tests-<unit>.json, as one JSON array, and every
-# support file those records froze, with its sha256, as another. Walked with `find` and a while loop rather than a
-# glob, so a task with no frozen record at all reads as an empty list instead of a literal pattern.
-# $1 the action.
+# Every frozen test row, across every order's own tests-<unit>.json merged with its repairs'
+# records, as one JSON array, and every support file those records froze, with its sha256, as
+# another. The merge drops a test a later record replaced or retired, so a retired test no longer
+# counts (gap row 475). Walked with `find` and a while loop rather than a glob, so a task with no
+# frozen record at all reads as an empty list instead of a literal pattern. $1 the action.
 RW_TEST_ROWS="[]"; RW_TEST_SUPPORT="[]"
 rw_load_test_rows() {
   local who="$1" list one doc
@@ -541,9 +542,10 @@ rw_load_test_rows() {
   list="$(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort)"
   while IFS= read -r one; do
     [ -n "$one" ] || continue
-    doc="$(jq -c '.' "$one" 2>/dev/null)"
-    [ -n "$doc" ] \
-      || die 3 "$who: $one exists but could not be read as JSON. Repair or remove it by hand before running this again."
+    case "$one" in *-repair-*.json) continue ;; esac
+    one="$(basename "$one" .json)"
+    tf_with_repair_tests "$who" "${one#tests-}"
+    doc="$TF_REPAIR_TESTS_DOC"
     RW_TEST_ROWS="$(jq -nc --argjson have "$RW_TEST_ROWS" --argjson doc "$doc" \
       '$have + [ ($doc.rows // [])[] | . + {unit: ($doc.unit // "")} ]')"
     RW_TEST_SUPPORT="$(jq -nc --argjson have "$RW_TEST_SUPPORT" --argjson doc "$doc" '$have + [ ($doc.support // [])[] | {path, sha256} ]')"

@@ -255,14 +255,6 @@ no_text_case() (
 )
 expect "contract-wrong with no corrected text is named and dropped" "$(no_text_case)" "0|none|1"
 
-# owed_records: wo1 closed and reopened for a wrong test, tests/a_test.sh frozen and retired.
-owed_records() {
-  task_records branch
-  order_records reviewed
-  tests_record
-  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).repairs = [{review: "r", reviewFindings: ["f1"], findings: ["f1"],
-    at: "2026-10-28", testOwed: true, retires: ["tests/a_test.sh"]}]'
-}
 author_case() (
   source "$HERE/records.bash"
   owed_records
@@ -293,6 +285,7 @@ both_case() (
   write_hook "$(jq -nc --arg c "$1" '{command: $c}')" aida:test-author
 )
 expect "a Bash write to the retired test alone is allowed" "$(both_case 'echo x > tests/a_test.sh')" "allow"
+expect "removing the retired test file through Bash is allowed" "$(both_case 'rm tests/a_test.sh')" "allow"
 expect "a Bash write to the retired test and another frozen test is refused" \
   "$(both_case 'echo x > tests/a_test.sh && echo y > tests/b_test.sh')" "deny"
 expect "an in-place edit of the retired test and another frozen test is refused" \

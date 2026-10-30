@@ -68,6 +68,11 @@ When `repair` also holds `retires`, a person ruled those frozen tests wrong at t
 Correct each one in its own file. You may write those files and no other frozen test. The code
 already exists, so return each corrected test with a locks-in reason that names that code.
 
+When `repair` also holds `retiredTests`, a person named those tests as wrong before the task
+review. Remove each named test by deleting its lines. Do not change, add or move any other line.
+The freeze compares the file with its last freeze and refuses an added line. When a file holds
+only named tests, delete the file. Return each kept test with its locks-in reason.
+
 The dispatch message can name earlier tests. An earlier author wrote them before design reopened,
 and they are not in the tree. Read them. Write into your own test file only the tests the brief
 still asks for, changed where the brief changed. Then run each test and write its red run.
