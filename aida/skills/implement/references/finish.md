@@ -29,7 +29,7 @@ no suite row passes with `undeclared`, and the record says so.
 
 ### A test newly broken at finish
 
-A failing line the subtraction leaves is a test that passed in the implement-start baseline and
+A failing line the subtraction leaves is a test that did not fail in the implement-start baseline and
 fails at the final commit. It stops completion. `finish` turns each framework's red run into items.
 When the suite row declares `failure_line`, each new line it names is one item. Otherwise the
 whole run is one item, `the suite on <framework>`, because a banner or a count is no test. A run

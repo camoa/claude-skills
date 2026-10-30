@@ -796,6 +796,16 @@ task_fork_point() {
   [ -z "$base" ] || git -C "$2" merge-base "${base#commit:}" HEAD 2>/dev/null
 }
 
+# The commit the upstream of worktree.base of the task folder $1 is at in the tree $2, a
+# remote-tracking ref (gap row 476). Prints nothing when the record holds no base, when the base
+# is a commit, or when the base has no upstream.
+task_base_upstream() {
+  local base
+  base="$(jq -r '.worktree.base // empty' "$1/task.json" 2>/dev/null)"
+  case "$base" in ""|commit:*) return 0 ;; esac
+  git -C "$2" rev-parse --verify --quiet "$base@{upstream}^{commit}" 2>/dev/null
+}
+
 # Whether the tree $2 has put back what `task environment up` changed for the task folder $1 (gap
 # row 262). The changed files are those in worktree.recipeChanges whose recorded content differs
 # from the fork point. A changed file is back when HEAD holds it at its fork point content, or

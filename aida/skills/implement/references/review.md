@@ -461,8 +461,10 @@ verified. It also refuses when the code repository's tree is not clean, or when 
 the last record left it. Another order's commits, as review-record reads them, do not count, and
 the range then ends at the last record. Nothing is open then, so no round or ruling can take the
 later commits.
-A person moves the branch back, and that work goes to a follow-up task, or redoes the order. On
-success it writes `lastStep = "closed"` and the commit range the
+A commit after the record that changes a frozen test or a file the order does not own stops the
+order (exit 63). A person goes on with `--owns` naming the file, or redoes or drops the order.
+Trunk's commits, which the upstream of the task's base holds, and a merge whose own edits stay in
+the task's files are set aside with a warning. On success it writes `lastStep = "closed"` and the commit range the
 order produced, from the freeze. When another order's commit sits between two attempts, the range
 starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
 order the tree, HEAD and the range are the project folder's, from the last attempt.

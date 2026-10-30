@@ -30,6 +30,29 @@ refuses when a commit between the two is on no other branch, or when an order ha
 committed. A baseline written by an earlier version of AIDA refuses too, and the message names the
 same retake. Neither refusal spends an attempt.
 
+## Trunk merged into the build
+
+You can merge trunk into the task's branch while orders are open. Nothing is recorded, and no
+flag is needed. Every check reads git again:
+
+- A commit that the upstream of the task's base holds is trunk's. The upstream is your remote's
+  copy, such as `origin/main`. Those commits are set aside, and no order is judged on them.
+- A merge commit is judged on its own edits: a conflict it resolved, a hand edit, or a side it
+  dropped. An edit to any order's file is set aside too. One warning names each merge, its own
+  edits, and the order that owns each file.
+- A merge's own edit to a file no order owns stops the order, with exit 63. Go on with `--owns`
+  naming the file, or redo or drop the order.
+- A change to a frozen test stops the order, whether trunk or the merge made it. Redo the order,
+  or drop it.
+
+A base with no upstream sets nothing aside, so every trunk commit stops the order as a file it
+does not own. Push trunk first, or fetch it, so the remote's copy holds it. A commit on your local
+trunk alone is judged as an order's commit.
+
+The baseline is not retaken. At finish, a test trunk brought that fails stops the task, like any
+test that did not fail in the baseline. Record it with `finish --regression` when this task did
+not cause it.
+
 ## A role that never returned
 
 Each task has at most one open dispatch. When a role never returned, the next dispatch refuses and

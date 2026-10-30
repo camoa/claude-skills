@@ -12,7 +12,7 @@ Close it, drop it, or take its stop's way out. See [a work order stopped](stoppe
 
 ## A test newly broken at finish (exit 66)
 
-The message says that tests which passed in the implement-start baseline fail at the final
+The message says that tests which did not fail in the implement-start baseline fail at the final
 commit. No `finished.json` is written, so review cannot start.
 
 - **A test an order took.** That order is stopped, with one repair finding per failing test. Go
@@ -41,8 +41,9 @@ Do not commit a repair by hand. A hand commit is outside every order and the fro
 
 - **The suite runs once, at the end.** Each order's tests ran during its build. The whole suite at
   the final commit catches what the orders broke together.
-- **A broken test stops the task.** A build that breaks a test that passed before it started is
-  not finished. A failure that was already there is not this task's, so it stays a warning.
+- **A broken test stops the task.** A build that leaves a test failing that did not fail before it
+  started is not finished. A failure that was already there is not this task's, so it stays a
+  warning.
 - **Warnings are your project's rule, not AIDA's.** So AIDA never decides alone that a warning is
   harmless. It records the warning, and you read it at review.
 

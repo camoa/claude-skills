@@ -614,7 +614,7 @@
       "required": ["finish", "findings", "at"],
       "properties": {
         "finish": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$", "description": "The task's range when `finish` ran the suite: the ledger's startedFrom and the head it ran at."},
-        "findings": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^f[1-9][0-9]*$"}, "description": "The findings `finish` added to this order's review record, with origin `repair`, one per test that passed in the baseline and fails at that head."},
+        "findings": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^f[1-9][0-9]*$"}, "description": "The findings `finish` added to this order's review record, with origin `repair`, one per test that did not fail in the baseline and fails at that head."},
         "at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The UTC date the order was reopened. Set by the script, never typed."},
         "closedRange": {"type": "string", "pattern": "^[0-9a-f]{7,40}\\.\\.[0-9a-f]{7,40}$", "description": "The commitRange this order held when `finish` reopened it. `close` writes the range again, so this keeps the first one."}
       }

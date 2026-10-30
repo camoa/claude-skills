@@ -35,7 +35,7 @@ and lists the warning.
 
 ## A test newly broken at finish
 
-A test that passed in the implement-start baseline and fails at the final commit is a hard stop.
+A test that did not fail in the implement-start baseline and fails at the final commit is a hard stop.
 Finish exits 66 and writes no `implementation/finished.json`, so the task cannot reach review.
 
 Finish gives each newly broken test to the order that broke it. That is the order whose frozen
@@ -111,8 +111,8 @@ the files the orders own, or rule it at the next review.
 
 - A suite row marked end-of-task runs only here. On some projects one run takes ten minutes, and
   every attempt would pay for it.
-- A build that breaks a test that passed before it started is not finished. So a newly broken
-  test stops the task, and a failure that was already there stays a warning.
+- A build that leaves a test failing that did not fail before it started is not finished. So a
+  newly broken test stops the task, and a failure that was already there stays a warning.
 - A test written for a bug fails before the fix, so the fix is proved by something other than the
   fixer's word.
 
