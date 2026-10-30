@@ -114,6 +114,15 @@ the same file, and the hook lets it write that file and no other frozen test. Th
 freezes in the repair's own record with a locks-in reason, and every later check holds the file to
 that record's hash. Nobody commits a test correction by hand.
 
+A person can rule a frozen test wrong before any task review. Run
+`reopen <task> --test <path>::<name> --because <the person's words>`, one `--test` per test.
+It needs the person's answer, step `implement reopen`, and no finish or review. A refusal prints
+the answer command. The order whose frozen record holds the test must be closed. The repair
+names the tests under `retiredTests`, and the test author deletes their lines and nothing else.
+A file whose every test is named is deleted. The repair record lists `retires`, so the deleted
+tests stop counting. When that leaves a criterion with no test, the freeze warns and removes the
+order's judgement on it.
+
 An order proved by tests first takes one failing test of the bug. `next:` names the tests step for
 it. Run `tests-brief`, and its brief holds the bug under `repair`. Dispatch the order's test
 author, put the row to the checker, then run `tests-freeze`. The test goes in a new test file the

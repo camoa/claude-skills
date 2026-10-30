@@ -80,7 +80,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   implement-actions.sh finish <task_folder> [--value <name>=<value>]...
 #                            [--regression <order id|not-caused>=<failing line>]...
 #                            [--because <the person's words>] (with --regression alone)
-#   implement-actions.sh reopen <task_folder>
+#   implement-actions.sh reopen <task_folder> [--test <path>::<name>]... [--because <the person's words>]
+#                            (--test and --because together: a person rules a frozen test wrong)
 #   implement-actions.sh go-on <task_folder> <unit_id> --continue <build|fix|check|close|keep>
 #                            --because <the person's words> [--owns <path relative to codePath>]...
 #                            [--interface <path>] [--test-recipe <framework>=<path>]...
@@ -684,7 +685,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # 119  `reopen` found no closed task review of this finish, or no finding of it that fails a
 #      criterion in a file a closed order owns, or names a frozen test a person ruled wrong (gap
-#      rows 390 and 449). Nothing is written.
+#      rows 390 and 449). With --test: no frozen record holds the test, its order is not closed, or
+#      a task review of this finish is open (gap row 475). Nothing is written.
 #
 # 120  `build-brief` or `dispatch-open implementer` found `doneWhenGained` on the order's ledger
 #      entry. Design appended done-when rows after the freeze, and the done-when judgement read
@@ -4585,10 +4587,13 @@ TB_OWNED
       --slurpfile review <(cat "$IMPL_DIR/review-$unit_id.json" 2>/dev/null || echo '{}') '
       [ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1] as $r
       | {findings: [ ($review[0].findings // [])[] | select(.id as $i | $r.findings | index($i)) | {id, file, lines, linkedTo, evidence} ],
-         whatToDo: (if ($r.retires // []) == []
+         whatToDo: (if ($r.retiredTests // []) != []
+           then "A person ruled the tests in retiredTests wrong. Remove each one by deleting its lines, and change no other line. Delete a file when every test in it is named. Return each kept test with a locks-in reason naming the code it passes against."
+           elif ($r.retires // []) == []
            then "This closed order holds a bug. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."
            else "A person ruled these frozen tests wrong at the task review. Correct each one in its own file, and change no other test. Return each corrected test with a locks-in reason naming the code it passes against." end)}
-      + (if ($r.retires // []) == [] then {} else {retires: $r.retires} end)')"
+      + (if ($r.retires // []) == [] then {} else {retires: $r.retires} end)
+      + (if ($r.retiredTests // []) == [] then {} else {retiredTests: $r.retiredTests} end)')"
     [ -n "$repair_json" ] || die3 "tests-brief: the repair of $unit_id could not be read from $ledger_file and $IMPL_DIR/review-$unit_id.json."
   fi
 
@@ -5315,13 +5320,15 @@ TF_EOF
   # --- 27 also: a repair's test is a new file, so no earlier freeze of this order holds it ---------
   # The one exception is a test a person ruled wrong at the task review: the repair retires it, and
   # its corrected copy freezes here under the same path (gap row 449).
-  local tf_frozen_before="" tf_refrozen=""
+  local tf_frozen_before="" tf_refrozen="" tf_retires='[]' tf_retired_tests='[]'
   if [ -n "$tf_repair" ]; then
     tf_with_repair_tests "tests-freeze" "$unit_id"
-    tf_frozen_before="$(printf '%s' "$TF_REPAIR_TESTS_DOC" \
-      | jq -r --argjson retired "$(printf '%s' "$tf_prior_ledger" | jq -c --arg id "$unit_id" --argjson n "$tf_repair" \
-          '[ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1].retires // []')" \
-        '[ (.rows // [])[] | (.tests // [])[] | .path ] + [ (.support // [])[] | .path ] | unique | .[]
+    tf_retires="$(printf '%s' "$tf_prior_ledger" | jq -c --arg id "$unit_id" --argjson n "$tf_repair" \
+      '[ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1] | {retires: (.retires // []), retiredTests: (.retiredTests // [])}')"
+    tf_retired_tests="$(printf '%s' "$tf_retires" | jq -c '.retiredTests')"
+    tf_retires="$(printf '%s' "$tf_retires" | jq -c '.retires')"
+    tf_frozen_before="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -r --argjson retired "$tf_retires" '
+        [ (.rows // [])[] | (.tests // [])[] | .path ] + [ (.support // [])[] | .path ] | unique | .[]
          | select(. as $p | $retired | index($p) | not)')"
     while IFS= read -r p; do
       [ -n "$p" ] || continue
@@ -5331,6 +5338,31 @@ $unique_rel_paths
 TF_EOF
     [ -z "$tf_refrozen" ] \
       || die 27 "tests-freeze: the repair's test goes in a new test file, and an earlier freeze of $unit_id holds these: ${tf_refrozen%, }. Nobody changes a frozen test. The test author writes the test into a new file $unit_id owns, and this freeze runs again. Nothing is frozen."
+    # A test a person named at reopen is removed, and nothing else in its file changes (gap row
+    # 475). Each such path holds the earlier names less the named ones, and its diff from the
+    # last freeze of it adds no line. A changed line is one added and one deleted, so any edit of
+    # a kept test is refused. A path with every name named may be deleted whole.
+    local tf_named_path tf_left tf_now tf_added tf_unnamed=""
+    while IFS= read -r tf_named_path; do
+      [ -n "$tf_named_path" ] || continue
+      tf_left="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c --arg p "$tf_named_path" --argjson named "$tf_retired_tests" '
+        [ (.rows // [])[] | (.tests // [])[] | select(.path == $p) | .name ]
+        - [ $named[] | select(.path == $p) | .name ] | unique')"
+      tf_now="$(printf '%s' "$tests_json" | jq -c --arg p "$tf_named_path" '[ .[] | select(.relPath == $p) | .name ] | unique')"
+      if [ ! -e "$codepath_canon/$tf_named_path" ]; then
+        [ "$tf_left" = "[]" ] || tf_unnamed="$tf_unnamed$tf_named_path (deleted, though it held $(printf '%s' "$tf_left" | jq -r 'join(", ")')), "
+        continue
+      fi
+      [ "$tf_now" = "$tf_left" ] \
+        || { tf_unnamed="$tf_unnamed$tf_named_path (its tests are $(printf '%s' "$tf_now" | jq -r 'join(", ")'), not $(printf '%s' "$tf_left" | jq -r 'join(", ")')), "; continue; }
+      tf_added="$(git -C "$codepath" diff --numstat "$(printf '%s' "$TF_REPAIR_PATH_COMMITS" | jq -r --arg p "$tf_named_path" '.[$p] // "HEAD"')" \
+        -- "$tf_named_path" 2>/dev/null | awk '{ s += $1 } END { print s + 0 }')"
+      [ "$tf_added" = "0" ] || tf_unnamed="$tf_unnamed$tf_named_path (it adds $tf_added lines), "
+    done <<TF_EOF
+$(printf '%s' "$tf_retired_tests" | jq -r 'map(.path) | unique | .[]')
+TF_EOF
+    [ -z "$tf_unnamed" ] \
+      || die 27 "tests-freeze: a person named the tests this repair removes, and these files changed beyond them: ${tf_unnamed%, }. The test author deletes the lines of each named test and changes no other line. Nothing is frozen."
   fi
 
   # --- a --support path is a base class or a fixture the author wrote beside the tests -----------
@@ -5509,9 +5541,11 @@ TF_EOF
   # (ideal/implementation.md, "A criterion a person inspects has no tests").
   local rows_expected_json rows_missing rows_unknown rows_person rows_twice
   # A criterion a verify run line proves needs its row too. The checker answers whether that line
-  # passing makes the clause true, as it answers for a test (gap row 370).
+  # passing makes the clause true, as it answers for a test (gap row 370). A repair's record holds
+  # its own tests alone, and the first freeze holds the judgement of those rows (gap row 475).
   rows_expected_json="$(jq -nc --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" \
-      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" --argjson byRun "$tf_by_run" '
+      --arg unit "$unit_id" --argjson dw "$has_done_when_tests" \
+      --argjson byRun "$([ -z "$tf_repair" ] && printf '%s' "$tf_by_run" || echo '[]')" '
       (($tests | map(.criteria) | add // []) + $byRun) as $named
       | [ $criteria[] | select(.verifiedBy == "machine") | .id as $cid | select(($named | index($cid)) != null) | $cid ]
         + (if $dw then [$unit] else [] end)
@@ -6106,7 +6140,14 @@ TF_EOF
   rows_json="$(jq -s '.' "$rows_tmp")"
   rm -f "$rows_tmp"
   # --- 74 again: a record with no row proves nothing, the same fact as an order with no criterion --
+  # A repair that deleted every file it retires holds no row, and its record names what it retires
+  # (gap row 475).
+  local tf_gone
+  tf_gone="$(printf '%s' "$tf_retires" | jq -r '.[]' | while IFS= read -r p; do
+    [ -e "$codepath_canon/$p" ] || printf '%s\n' "$p"
+  done)"
   [ "$(printf '%s' "$rows_json" | jq 'length')" -gt 0 ] || [ "$BR_ORDER_SLOT" != "order-tests" ] \
+    || { [ -n "$tf_gone" ] && [ "$(printf '%s\n' "$tf_gone" | grep -c .)" = "$(printf '%s' "$tf_retires" | jq 'length')" ]; } \
     || die 74 "tests-freeze: $unit_id named no test, no doneWhen test and no checklist, so the record would hold no row and freeze a reference that proves nothing. A serving order freezes its tests against its own doneWhen: --test <path>::<name>=$unit_id, and one --row $unit_id=... judged against the doneWhen text."
 
   # --- 35: a record already frozen is unchanged when its rows are the same, whatever HEAD is now ---
@@ -6273,19 +6314,30 @@ TF_EOF
   # The subject carries no AIDA name, because the branch can go upstream as it is. The record says
   # which commit the freeze made, under `freezeCommits`, so no reader rests on the subject (live-run
   # row 374).
-  local tree_left tf_made="" tf_before
-  if [ -n "$frozen_rel_paths" ]; then
+  # A retired file the test author deleted goes in the same commit, so the deletion is the author's
+  # in the history (gap row 475). It is staged again from HEAD first, because a `git rm` already
+  # took it from the index, and a pathspec git add refuses a path neither side holds.
+  local tree_left tf_made="" tf_before tf_commit_paths="$frozen_rel_paths"
+  while IFS= read -r p; do
+    [ -n "$p" ] && git -C "$codepath" cat-file -e "HEAD:./$p" 2>/dev/null || continue
+    git -C "$codepath" reset -q -- "$p" || die3 "tests-freeze: could not stage the deletion of $p in $codepath."
+    tf_commit_paths="$tf_commit_paths${tf_commit_paths:+
+}$p"
+  done <<TF_EOF
+$tf_gone
+TF_EOF
+  if [ -n "$tf_commit_paths" ]; then
     set --
     while IFS= read -r p; do
       [ -n "$p" ] && set -- "$@" "$p"
     done <<TF_EOF
-$frozen_rel_paths
+$tf_commit_paths
 TF_EOF
     if [ -n "$(git -C "$codepath" status --porcelain -- "$@")" ]; then
       tf_before="$current_commit"
       recipe_commit_if_changed "$codepath" tests-freeze "the test files are already in HEAD" \
-        "Add tests: $(printf '%s' "$frozen_rel_paths" | tr '\n' ' ')" \
-        "$frozen_rel_paths"
+        "Add tests: $(printf '%s' "$tf_commit_paths" | tr '\n' ' ')" \
+        "$tf_commit_paths"
       current_commit="$(git -C "$codepath" rev-parse HEAD 2>/dev/null)"
       [ -n "$current_commit" ] \
         || die3 "tests-freeze: could not read the commit just made (git rev-parse HEAD failed in $codepath)."
@@ -6378,10 +6430,11 @@ TF_EOF
   [ -f "$record_file" ] && tf_carried="$(tf_freeze_commits "$record_file")"
   record_json="$(jq -n --arg takenAt "$today" --arg unit "$unit_id" --arg commit "$current_commit" \
     --argjson testGlobs "$test_globs_json" --argjson rows "$rows_json" --arg proof "$tf_proof" --argjson support "$support_json" \
-    --argjson testRecipePath "$test_recipe_paths_json" --argjson carried "$tf_carried" --arg made "$tf_made" \
+    --argjson testRecipePath "$test_recipe_paths_json" --argjson carried "$tf_carried" --arg made "$tf_made" --argjson retires "$tf_retires" \
     '{schemaVersion: 1, takenAt: $takenAt, unit: $unit, commit: $commit, testGlobs: $testGlobs, rows: $rows, proof: $proof, support: $support,
       freezeCommits: ($carried + (if $made == "" then [] else [$made] end) | unique)}
-     + (if $testRecipePath == null then {} else {testRecipePath: $testRecipePath} end)')"
+     + (if $testRecipePath == null then {} else {testRecipePath: $testRecipePath} end)
+     + (if $retires == [] then {} else {retires: $retires} end)')"
 
   # A record that reaches here with different rows is retaken: the order is still at tests-frozen
   # (76 above) and HEAD was the earlier freeze commit (35 above), which is the route for a frozen
@@ -6410,6 +6463,26 @@ TF_EOF
   # the order stays at its fix step, so the fix round opens next.
   if [ -n "$tf_repair" ]; then
     tt_ledger_update "$IMPL_DIR/ledger.json" "$unit_id" '.repairs = [ .repairs[] | del(.testOwed) ]'
+    # A person's ruling can take the last test of a row (gap row 475). The freeze names each machine
+    # criterion this order owns with no test left, and the done-when row when its last test went.
+    # Its judgement on such a criterion goes, so close derives not-judged and review reads it.
+    if [ "$tf_retired_tests" != "[]" ]; then
+      local tf_bare
+      tf_with_repair_tests "tests-freeze" "$unit_id"
+      tf_bare="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c --argjson owned "$owned_ids_json" --argjson criteria "$CRITERIA_JSON" '
+        (.rows // []) as $rows
+        | [ $criteria[] | select(.verifiedBy == "machine") | .id | select(. as $c | $owned | index($c))
+            | select(. as $c | any($rows[]; .criterion == $c)) | select(. as $c | all($rows[] | select(.criterion == $c); (.tests // []) == [])) ]
+          + (if any($rows[]; .provesDoneWhen == true) and all($rows[] | select(.provesDoneWhen == true); (.tests // []) == []) then ["the done-when row"] else [] end)')"
+      if [ "$tf_bare" != "[]" ]; then
+        task_warn "$TASK_PATH" tests-freeze "$unit_id" "a person retired the last frozen test of these, so no test of $unit_id proves them now: $(printf '%s' "$tf_bare" | jq -r 'join(", ")')"
+        tf_bare="$(jq -c --arg u "$unit_id" --argjson bare "$tf_bare" '
+          .criteria = [ (.criteria // [])[] | if (.id as $c | $bare | index($c)) then .judgements = [ (.judgements // [])[] | select(.unit != $u) ] else . end ]' \
+          "$IMPL_DIR/ledger.json")"
+        [ -n "$tf_bare" ] || die3 "tests-freeze: the ledger update that takes back $unit_id's judgements failed."
+        write_atomic "$IMPL_DIR/ledger.json" "$tf_bare"
+      fi
+    fi
   else
     tt_ledger_update "$IMPL_DIR/ledger.json" "$unit_id" '.lastStep = "tests-frozen"'
   fi
@@ -10437,14 +10510,22 @@ RV_SCOPE
     || die3 "fix-record: could not capture the current commit (git rev-parse HEAD failed in $RV_RANGE_REPO)."
   # An already-correct claim on a file unchanged since the review disputes the reviewer, who read
   # that same file. git decides it here, and verify-record sends such a finding to a person rather
-  # than closing it on the verifier's word. A cited file must exist at HEAD (gap row 352).
-  local ac_unchanged="[]" ac_id ac_file ac_rc ac_since
+  # than closing it on the verifier's word. A cited file must exist at HEAD (gap row 352). The one
+  # exception is a test file the order's latest repair record retires and holds no row for: a
+  # person ruled every test in it wrong and its test author deleted it, so it changed (gap row 475).
+  local ac_unchanged="[]" ac_id ac_file ac_rc ac_since ac_gone='[]' ac_repair
   ac_since="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '.reviewedAt // ""')"
+  ac_repair="$(find "$IMPL_DIR" -maxdepth 1 -type f -name "tests-$unit_id-repair-*.json" 2>/dev/null | sort | tail -n 1)"
+  [ -z "$ac_repair" ] || ac_gone="$(jq -c '(.retires // []) - [ (.rows // [])[] | (.tests // [])[] | .path ]' "$ac_repair" 2>/dev/null)"
+  [ -n "$ac_gone" ] || die3 "fix-record: $ac_repair could not be read as JSON, so the files $unit_id's repair retires are unknown."
   while IFS= read -r ac_id; do
     [ -n "$ac_id" ] || continue
     ac_file="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$ac_id" '[ .findings[] | select(.id == $id) ][0].file // ""')"
     ac_rc=0
-    if [ -n "$ac_file" ]; then
+    if [ -n "$ac_file" ] && printf '%s' "$ac_gone" | jq -e --arg f "$ac_file" 'index($f)' >/dev/null \
+      && ! git -C "$RV_RANGE_REPO" cat-file -e "HEAD:$ac_file" 2>/dev/null; then
+      ac_rc=1
+    elif [ -n "$ac_file" ]; then
       git -C "$RV_RANGE_REPO" cat-file -e "HEAD:$ac_file" 2>/dev/null \
         || die3 "fix-record: $report_path calls $ac_id already correct, and the file it cites, $ac_file, is not in $RV_RANGE_REPO at HEAD."
       git -C "$RV_RANGE_REPO" diff --quiet "$ac_since" HEAD -- "$ac_file" 2>/dev/null
@@ -12004,6 +12085,25 @@ FN_RECIPES
   exit 0
 }
 
+# The order whose merged frozen record holds test file $1, its repairs' records applied, so a test
+# a repair retired is not found again (gap row 475). Sets RO_OWNER, or empty, and RO_HELD, the
+# JSON array of {name, criterion} of the tests that record holds in $1.
+RO_OWNER=""; RO_HELD="[]"
+ro_frozen_owner() {
+  local rf
+  RO_OWNER=""; RO_HELD="[]"
+  while IFS= read -r rf; do
+    case "$rf" in ""|*-repair-*.json) continue ;; esac
+    rf="$(basename "$rf" .json)"
+    tf_with_repair_tests "reopen" "${rf#tests-}"
+    RO_HELD="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c --arg p "$1" \
+      '[ (.rows // [])[] | .criterion as $c | (.tests // [])[] | select(.path == $p) | {name, criterion: $c} ]')"
+    [ "$RO_HELD" = "[]" ] || { RO_OWNER="${rf#tests-}"; return 0; }
+  done <<RO_EOF
+$(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort)
+RO_EOF
+}
+
 # reopen: a closed task review's findings go back into the orders that own their files (gap row
 # 390). Each finding the review records as failing a criterion reopens the closed order that owns
 # its file and owns that criterion, then one that serves it, then the one order that owns the file. So the order's own
@@ -12016,28 +12116,63 @@ FN_RECIPES
 # no order takes is named and left. finished.json goes, because finish's condition no longer
 # holds and every field in it is derived. Exit 119 when no closed review covers this finish, or
 # nothing in it can be routed.
+# A person may also rule a frozen test wrong before any review, with --test <path>::<name> and
+# --because (gap row 475). The ruling takes the place of the closed review, through the person's
+# answer, and routes as a finding ruled test-wrong does. The repair names the tests, and their
+# test author removes those tests alone. A closed review of this finish routes in the same call,
+# because the call removes finished.json and a second call would refuse at 66.
 do_reopen() {
-  [ "$#" -eq 1 ] || die3 "reopen: one task folder is required"
-  im_load_task "$1" "reopen"
+  local task_arg="" ruled_raw="" because=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --test)
+        need_value "reopen" "--test" "$#" "${2:-}"
+        ruled_raw="$ruled_raw$2
+"
+        shift 2 ;;
+      --because)
+        need_value "reopen" "--because" "$#" "${2:-}"
+        because="$2"
+        shift 2 ;;
+      -*) die3 "reopen: unrecognized argument: $1" ;;
+      *)
+        [ -z "$task_arg" ] || die3 "reopen: one task folder is required"
+        task_arg="$1"
+        shift ;;
+    esac
+  done
+  [ -n "$task_arg" ] || die3 "reopen: one task folder is required"
+  [ -n "$ruled_raw" ] || [ -z "$because" ] || die3 "reopen: --because goes with --test, a person's ruling on a frozen test."
+  [ -z "$ruled_raw" ] || [ -n "$because" ] || die3 "reopen: --test needs --because, the person's own words."
+  im_load_task "$task_arg" "reopen"
   fn_load_task_state "reopen"
   rv_load_codepath "reopen"
-  local review_file="$TASK_PATH/review/review.json" finished_range reviewed verdict
+  local review_file="$TASK_PATH/review/review.json" finished_range reviewed verdict review_closed=false
   finished_range="$(jq -r '.commitRange // ""' "$IMPL_DIR/finished.json" 2>/dev/null)"
-  [ -n "$finished_range" ] \
-    || die 66 "reopen: $IMPL_DIR/finished.json is absent or holds no commitRange, so no task review judged a finished build."
   verdict="$(jq -r '.verdict // "none"' "$review_file" 2>/dev/null)"
+  verdict="${verdict:-none}"
   reviewed="$(jq -r '.reviewedRange // ""' "$review_file" 2>/dev/null)"
-  [ "$verdict" != "none" ] && [ "$reviewed" = "$finished_range" ] \
-    || die 119 "reopen: no closed task review covers $finished_range: $review_file reads verdict ${verdict:-none} over ${reviewed:-no range}. Only a closed review of this finish reopens an order."
+  [ -z "$finished_range" ] || [ "$reviewed" != "$finished_range" ] || [ "$verdict" = "none" ] || review_closed=true
+  if [ -z "$ruled_raw" ]; then
+    [ -n "$finished_range" ] \
+      || die 66 "reopen: $IMPL_DIR/finished.json is absent or holds no commitRange, so no task review judged a finished build."
+    [ "$review_closed" = true ] \
+      || die 119 "reopen: no closed task review covers $finished_range: $review_file reads verdict $verdict over ${reviewed:-no range}. Only a closed review of this finish reopens an order."
+  else
+    [ -z "$finished_range" ] || [ "$reviewed" != "$finished_range" ] || [ "$review_closed" = true ] \
+      || die 119 "reopen: the task review of $finished_range in $review_file is open. A person closes it first, and its findings then route in the same call as this ruling."
+  fi
 
-  local alignment findings count i one fid file crit abs rel owners owner owner_glob entry
+  local alignment findings='[]' count i one fid file crit abs rel owners owner owner_glob entry
   local review_doc new_id raw built routed='{}' not_routed="" reopened='[]' ledger_doc order rf retired
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
-  findings="$(jq -c '[ (.findings // [])[] | select((.disposition == "criterion" and (.ruling // "") != "wrong") or .ruling == "test-wrong") ]' "$review_file")"
+  [ "$review_closed" = false ] \
+    || findings="$(jq -c '[ (.findings // [])[] | select((.disposition == "criterion" and (.ruling // "") != "wrong") or .ruling == "test-wrong") ]' "$review_file")"
   # A decision a build left and the person ruled test-wrong at the task review takes the same
   # route as a finding ruled so (gap row 449). Its finding is the order's own, on its review record.
-  local decided
-  decided="$(jq -c '[ (.checks // [])[] | select((.id | startswith("decision-")) and .answer == "test-wrong") | .id ]' "$review_file")"
+  local decided='[]'
+  [ "$review_closed" = false ] \
+    || decided="$(jq -c '[ (.checks // [])[] | select((.id | startswith("decision-")) and .answer == "test-wrong") | .id ]' "$review_file")"
   for one in $(printf '%s' "$decided" | jq -r '.[]'); do
     fid="${one#decision-}"
     findings="$(printf '%s' "$findings" | jq -c --arg id "$one" --arg f "${fid##*-}" \
@@ -12046,6 +12181,43 @@ do_reopen() {
             | {id: $id, severity, file: (.file // ""), lines: (.lines // ""), linkedTo: (.linkedTo // ""),
                lens: "decision", evidence, ruling: "test-wrong"} ]')"
   done
+  # Each test a person ruled wrong is checked whole before anything is written, so the call routes
+  # every ruling or none. Its owner is the order whose merged frozen record holds the test.
+  local ruled r_name r_crit r_step r_n=0
+  while IFS= read -r ruled; do
+    [ -n "$ruled" ] || continue
+    case "$ruled" in *?::?*) ;; *) die3 "reopen: --test takes <path>::<name>, the frozen test's file and its name; got: $ruled" ;; esac
+    r_name="${ruled#*::}"
+    abs="$(normalize_abs "$(resolve_against "${ruled%%::*}" "$RV_CODEPATH")")"
+    rel="${abs#"$RV_CODEPATH"/}"
+    ro_frozen_owner "$rel"
+    [ -n "$RO_OWNER" ] \
+      || die 119 "reopen: no frozen record holds $rel, so no order froze it. Its test author changes a test before tests-freeze. Nothing is written."
+    [ "$(printf '%s' "$RO_HELD" | jq --arg n "$r_name" 'any(.[]; .name == $n)')" = true ] \
+      || die3 "reopen: the frozen record of $RO_OWNER holds no test $r_name in $rel. It holds: $(printf '%s' "$RO_HELD" | jq -r 'map(.name) | join(", ")')."
+    r_crit="$(printf '%s' "$RO_HELD" | jq -r --arg n "$r_name" '[ .[] | select(.name == $n) ][0].criterion // ""')"
+    r_step="$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$RO_OWNER" '.orders[] | select(.id == $id) | .lastStep // "planned"')"
+    case "$r_step" in
+      closed) ;;
+      tests-frozen)
+        [ "$(git -C "$RV_CODEPATH" rev-parse HEAD 2>/dev/null)" != "$(jq -r '.commit // ""' "$IMPL_DIR/tests-$RO_OWNER.json")" ] \
+          || die 119 "reopen: $RO_OWNER is at tests-frozen, and HEAD is still its freeze commit. Its test author corrects the test, and tests-freeze runs again and replaces the record. Nothing is written."
+        die 119 "reopen: $RO_OWNER is at tests-frozen, and HEAD has moved past its freeze commit. A person runs redo on $RO_OWNER, which takes it back to its tests. Nothing is written." ;;
+      code-written)
+        die 119 "reopen: $RO_OWNER is at code-written, so no build of it has passed. A person runs redo on $RO_OWNER, which takes it back to its tests. Nothing is written." ;;
+      checks-passed|reviewed|fixed)
+        die 119 "reopen: $RO_OWNER is at $r_step. It closes first: its frozen tests still pass, so nothing blocks the close. Then reopen runs again. Nothing is written." ;;
+      *)
+        die 119 "reopen: $RO_OWNER is at $r_step, so it is not closed, and only a closed order takes a repair. Nothing is written." ;;
+    esac
+    r_n=$((r_n + 1))
+    findings="$(printf '%s' "$findings" | jq -c --arg id "p$r_n" --arg f "$rel" --arg n "$r_name" --arg c "$r_crit" --arg b "$because" '
+      . + [{id: $id, severity: "high", file: $f, lines: "", linkedTo: $c, ruling: "test-wrong", retiredTest: {path: $f, name: $n},
+            evidence: ("A person ruled the frozen test " + $n + " in " + $f + " wrong before the task review: " + $b)}]')"
+  done <<RO_RULED
+$ruled_raw
+RO_RULED
+
   count="$(printf '%s' "$findings" | jq 'length')"
   i=0
   while [ "$i" -lt "$count" ]; do
@@ -12062,10 +12234,8 @@ do_reopen() {
     # belongs to the order whose frozen record holds it, whatever its owned files say.
     owner=""; owner_glob=""; retired=""
     if [ "$(printf '%s' "$one" | jq -r '.ruling // ""')" = "test-wrong" ]; then
-      owner="$(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort | while IFS= read -r rf; do
-        jq -e --arg p "$rel" 'any((.rows // [])[] | (.tests // [])[]; .path == $p)' "$rf" >/dev/null 2>&1 \
-          && { rf="$(basename "$rf" .json)"; rf="${rf#tests-}"; printf '%s\n' "${rf%%-repair-*}"; }
-      done | head -1)"
+      ro_frozen_owner "$rel"
+      owner="$RO_OWNER"
       [ -n "$owner" ] || { not_routed="$not_routed $fid (it is ruled test-wrong, and no frozen record holds $rel);"; continue; }
       owners=""; owner_glob="$rel"; retired="$rel"
     fi
@@ -12099,29 +12269,37 @@ RO_ONE
     new_id="f$(printf '%s' "$review_doc" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
     raw="$(printf '%s' "$one" | jq -c --arg id "$new_id" --arg file "$rel" --arg range "$reviewed" '
       {id: $id, severity, file: $file, lines: (.lines // ""), linkedTo,
-       evidence: ("The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence),
+       evidence: (if .retiredTest then .evidence
+                  else "The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence end),
        fixScope: [$file]}')"
     built="$(rv_finding_record "$raw" "$alignment" repair)"
     review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
-    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg rf "$fid" --arg f "$new_id" --argjson doc "$review_doc" '
-      .[$o] = {doc: $doc, reviewFindings: ((.[$o].reviewFindings // []) + [$rf]), findings: ((.[$o].findings // []) + [$f])}')"
+    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --argjson doc "$review_doc" '
+      .[$o] = {doc: $doc, reviewFindings: ((.[$o].reviewFindings // []) + (if $one.retiredTest then [] else [$one.id] end)),
+               findings: ((.[$o].findings // []) + [$f])}
+      + (.[$o] // {} | with_entries(select(.key == "retires" or .key == "retiredTests")))
+      | if $one.retiredTest then .[$o].retiredTests = ((.[$o].retiredTests // []) + [$one.retiredTest]) else . end')"
     routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg r "$retired" 'if $r == "" then . else .[$o].retires = (((.[$o].retires // []) + [$r]) | unique) end')"
-    reopened="$(printf '%s' "$reopened" | jq -c --arg o "$owner" --arg f "$new_id" --arg rf "$fid" --arg c "$crit" --arg file "$rel" \
-      '. + [{order: $o, finding: $f, from: ("task review " + $rf), cites: ("cites " + $c), file: $file}]')"
+    reopened="$(printf '%s' "$reopened" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --arg c "$crit" --arg file "$rel" \
+      '. + [{order: $o, finding: $f, from: (if $one.retiredTest then "a person'"'"'s ruling" else "task review " + $one.id end), cites: ("cites " + $c), file: $file}]')"
   done
   [ "$routed" != "{}" ] \
     || die 119 "reopen: no finding of the review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns, and none names a frozen test a person ruled wrong. A person fixes on the task branch, then runs finish again."
 
   # An order proved by tests owes one failing test of the bug before its fixer runs (owner,
   # 2026-10-28). Any other proof has no logic to test, so its fix round opens at once.
+  # The person's words are each --test value, one per line, then the --because words.
+  [ -z "$ruled_raw" ] || fn_require_answer "reopen" "ruling a frozen test wrong" "" "$ruled_raw$because"
   ledger_doc="$FN_LEDGER_DOC"
   for order in $(printf '%s' "$routed" | jq -r 'keys[]'); do
     br_order_facts "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg o "$order" '[ .workOrders[] | select(.id == $o) ][0]')"
-    rf="$(printf '%s' "$routed" | jq -c --arg o "$order" --arg range "$reviewed" --arg at "$(date -u +%Y-%m-%d)" \
+    rf="$(printf '%s' "$routed" | jq -c --arg o "$order" --arg at "$(date -u +%Y-%m-%d)" --arg because "$because" \
+      --arg range "${finished_range:-$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg o "$order" '.orders[] | select(.id == $o) | .commitRange // ""')}" \
       --argjson owed "$([ "$BR_ORDER_SLOT" = "order-tests" ] && echo true || echo false)" '
       {review: $range, reviewFindings: .[$o].reviewFindings, findings: .[$o].findings, at: $at}
       + (if $owed or .[$o].retires != null then {testOwed: true} else {} end)
-      + (if .[$o].retires == null then {} else {retires: .[$o].retires} end)')"
+      + (if .[$o].retires == null then {} else {retires: .[$o].retires} end)
+      + (if .[$o].retiredTests == null then {} else {retiredTests: .[$o].retiredTests, because: $because} end)')"
     ledger_doc="$(im_reopen_in "$ledger_doc" "$order" "$rf")"
     [ -n "$ledger_doc" ] || die3 "reopen: the repair on $order could not be written to the ledger."
   done
@@ -12130,6 +12308,7 @@ RO_ONE
   done
   write_atomic "$FN_LEDGER_FILE" "$ledger_doc"
   rm -f -- "$IMPL_DIR/finished.json" || die3 "reopen: could not remove $IMPL_DIR/finished.json"
+  task_answer_consume
   im_print_summary "reopen" "$(jq -cn --argjson reopened "$reopened" --arg left "${not_routed%;}" --arg review "$review_file" \
     --arg next "$(im_next_step "$ledger_doc" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
     {reopened: $reopened,

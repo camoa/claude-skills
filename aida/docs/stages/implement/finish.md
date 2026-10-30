@@ -97,6 +97,13 @@ A finding you ruled `test-wrong` names a frozen test. It goes to the order whose
 holds that test, and that order's test author corrects it. The correction freezes as a new
 record, and the first record is never edited. Nobody corrects a frozen test by hand.
 
+**You can rule a frozen test wrong before the task review.** Name each test as
+`--test <path>::<name>`, with your reason in `--because`, on `reopen`. AIDA asks for your answer
+first. The order that froze the test must be closed. Its test author deletes the lines of each
+named test and changes nothing else, and deletes a file whose every test you named. The repair's
+record names what it retires, so those tests stop counting. A criterion left with no test is a
+warning at the freeze, and review reads it as unproved. After the fix round, finish runs again.
+
 A finding no order can take is named, with the reason. Commit its fix on the task branch, inside
 the files the orders own, or rule it at the next review.
 
