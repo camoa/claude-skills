@@ -47,6 +47,15 @@ merge_main() {
   git -C "$WT" commit -qm "merge trunk" --no-edit >/dev/null
 }
 
+# frozen_merges: two pushed trunk commits that change wo1's frozen test, merged cleanly. The first
+# writes the test as frozen, so the second merges without a conflict.
+frozen_merges() {
+  trunk tests/a_test.sh "$(cat "$WT/tests/a_test.sh")" push
+  merge_main
+  trunk tests/a_test.sh "exit 0" push
+  merge_main
+}
+
 stops() { jq -c '[ .orders[] | select(.id == "wo1") | (.stopped // [])[] | .allows ]' "$IMPL/ledger.json"; }
 unrecorded() { jq -c '[ .orders[] | select(.id == "wo1") | (.unrecordedCommits // [])[] ] | length' "$IMPL/ledger.json"; }
 
@@ -94,9 +103,9 @@ no_upstream_case() (
   trunk c.php c push
   merge_main
   review
-  echo "$RC"
+  printf '%s|%s\n' "$RC" "$(stops)"
 )
-expect "a base with no upstream sets nothing aside" "$(no_upstream_case)" "63"
+expect "a base with no upstream sets nothing aside" "$(no_upstream_case)" '63|[["build"]]'
 
 local_case() (
   source "$HERE/records.bash"
@@ -104,9 +113,9 @@ local_case() (
   trunk c.php c
   merge_main
   review
-  echo "$RC"
+  printf '%s|%s\n' "$RC" "$(stops)"
 )
-expect "a commit on local main that origin/main does not hold stays on the order's list" "$(local_case)" "63"
+expect "a commit on local main that origin/main does not hold stays on the order's list" "$(local_case)" '63|[["build"]]'
 
 side_case() (
   source "$HERE/records.bash"
@@ -117,9 +126,9 @@ side_case() (
   git -C "$CODE" checkout -q --detach
   MERGE_FROM=side merge_main
   review
-  echo "$RC"
+  printf '%s|%s\n' "$RC" "$(stops)"
 )
-expect "a merge from a side branch keeps the side branch's commits on the order's list" "$(side_case)" "63"
+expect "a merge from a side branch keeps the side branch's commits on the order's list" "$(side_case)" '63|[["build"]]'
 
 trunk_side_case() (
   source "$HERE/records.bash"
@@ -192,9 +201,9 @@ kept_case() (
   git -C "$WT" checkout -q HEAD -- c.php
   git -C "$WT" commit -qm "merge trunk" --no-edit >/dev/null
   review
-  echo "$RC"
+  printf '%s|%s\n' "$RC" "$(stops)"
 )
-expect "a merge that keeps the branch side of a file only trunk changed is an own edit" "$(kept_case)" "63"
+expect "a merge that keeps the branch side of a file only trunk changed is an own edit" "$(kept_case)" '63|[["build"]]'
 
 deleted_case() (
   source "$HERE/records.bash"
@@ -204,9 +213,9 @@ deleted_case() (
   git -C "$WT" rm -qf c.php
   git -C "$WT" commit -qm "merge trunk" --no-edit >/dev/null
   review
-  echo "$RC"
+  printf '%s|%s\n' "$RC" "$(stops)"
 )
-expect "a merge that deletes a file trunk added is an own edit" "$(deleted_case)" "63"
+expect "a merge that deletes a file trunk added is an own edit" "$(deleted_case)" '63|[["build"]]'
 
 taken_case() (
   source "$HERE/records.bash"
@@ -224,14 +233,32 @@ echo "--- a frozen test trunk changed"
 frozen_case() (
   source "$HERE/records.bash"
   build_records upstream
-  trunk tests/a_test.sh "$(cat "$WT/tests/a_test.sh")" push
-  merge_main
-  trunk tests/a_test.sh "exit 0" push
-  merge_main
+  frozen_merges
   review
   printf '%s|%s\n' "$RC" "$(stops)"
 )
 expect "trunk's change to wo1's frozen test stops wo1, and the stop allows no go-on" "$(frozen_case)" '63|[[]]'
+
+frozen_close_case() (
+  source "$HERE/records.bash"
+  build_records upstream
+  review
+  frozen_merges
+  run "$IMPLEMENT" close "$TASK" wo1
+  printf '%s|%s|%s\n' "$RC" "$(ledger '.lastStep')" "$(stops)"
+)
+expect "close after trunk changed wo1's frozen test stops wo1, and wo1 does not close" "$(frozen_close_case)" '63|reviewed|[[]]'
+
+frozen_go_on_case() (
+  source "$HERE/records.bash"
+  build_records upstream
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).stopped = [{step: "build-record", reason: "a stop", allows: ["check"]}]'
+  frozen_merges
+  answer "implement go-on check" wo1 "check wo1 again"
+  run "$IMPLEMENT" go-on "$TASK" wo1 --continue check --because "check wo1 again"
+  printf '%s|%s\n' "$RC" "$(ledger '.stopped | length')"
+)
+expect "go-on check after trunk changed wo1's frozen test refuses, and the stop stays" "$(frozen_go_on_case)" '63|1'
 
 echo "--- the readers of the range"
 unattributed_case() (

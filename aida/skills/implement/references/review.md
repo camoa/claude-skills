@@ -463,11 +463,12 @@ the range then ends at the last record. Nothing is open then, so no round or rul
 later commits.
 A commit after the record that changes a frozen test or a file the order does not own stops the
 order (exit 63). A person goes on with `--owns` naming the file, or redoes or drops the order.
-Trunk's commits, which the upstream of the task's base holds, and a merge whose own edits stay in
-the task's files are set aside with a warning. On success it writes `lastStep = "closed"` and the commit range the
-order produced, from the freeze. When another order's commit sits between two attempts, the range
-starts after it, and close prints this order's earlier commits as `earlierCommits`. On a `record`
-order the tree, HEAD and the range are the project folder's, from the last attempt.
+Trunk's commits are those the upstream of the task's base holds. They are set aside with a
+warning. So is a merge whose own edits stay in the task's files. On success it writes
+`lastStep = "closed"` and the commit range the order produced, from the freeze. When another
+order's commit sits between two attempts, the range starts after it, and close prints this order's
+earlier commits as `earlierCommits`. On a `record` order the tree, HEAD and the range are the
+project folder's, from the last attempt.
 
 **Close also decides the criteria this order serves or owns.** A machine-verified criterion reads
 confirmed once every order serving it is closed and every judgement on it reads confirmed.

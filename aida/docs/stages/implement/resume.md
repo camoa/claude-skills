@@ -42,6 +42,9 @@ flag is needed. Every check reads git again:
   edits, and the order that owns each file.
 - A merge's own edit to a file no order owns stops the order, with exit 63. Go on with `--owns`
   naming the file, or redo or drop the order.
+- A stopped order keeps the merge on its commit list, so its edit stays judged. Redo and drop then
+  ask you to revert the merge with `git revert -m 1`. That revert also takes out trunk's changes,
+  so `--owns` is the cheaper way out where the stop allows it.
 - A change to a frozen test stops the order, whether trunk or the merge made it. Redo the order,
   or drop it.
 

@@ -1033,13 +1033,21 @@ im_moved_guard() {
 # The ways out a person takes from a stop the guard above wrote, as one sentence. A stop that
 # allows go-on takes --owns, which gives the file to the order. A frozen test allows no go-on,
 # because --owns refuses a frozen test. A frozen test of a closed order is answered by reopen.
-# $1 the order.
+# A merge on the stop's commit list stays there, so its breaching edit stays judged. Redo and drop
+# then refuse at 113 until a person reverts the merge, and that revert takes out trunk's changes
+# too. The sentence says so. $1 the order.
 im_breach_route() {
+  local c merges=""
+  for c in $(printf '%s' "$IM_MOVED" | jq -r '.[]' 2>/dev/null); do
+    ! git -C "$RV_RANGE_REPO" rev-parse --verify --quiet "$c^2" >/dev/null || merges="$merges ${c:0:12}"
+  done
   if [ "$IM_BREACH_ALLOWS" != "[]" ]; then
     printf '%s' "A person goes on with --owns naming the file, redoes $1, or drops it."
   else
     printf '%s' "The stop allows no go-on, so a person redoes $1 or drops it. A frozen test of a closed order is answered by reopen."
   fi
+  [ -z "$merges" ] \
+    || printf ' %s' "The stop lists the merge$merges. Redo and drop each ask a person to revert it with git revert -m 1, and that revert also takes out trunk's changes.$([ "$IM_BREACH_ALLOWS" = "[]" ] || printf ' %s' "Going on with --owns is the cheaper way out.")"
 }
 
 # Code moved after the last record of order $2, at $4, up to $5 in the repository $3. A breach the
@@ -9387,11 +9395,16 @@ ILD_COMMITS
 
 # Succeeds when there is at least one commit after $2 up to $3 in the repository $1, and another
 # order's records list every one, or im_aside_commits sets it aside, so HEAD moved for other orders
-# and trunk alone (gap rows 340 and 476). $4 the order.
+# and trunk alone (gap rows 340 and 476). It fails when a set-aside commit changes a frozen test.
+# $4 the order.
 im_moved_for_others() {
   local others c n=0
   git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
   others="$(im_others_listed "$4" "$1"; im_aside_commits "$1" "$2" "$3")"
+  # A set-aside commit that changes a frozen test is no other order's work: the caller's guard
+  # stops on it.
+  [ -z "$(im_frozen_hits "$(im_commits_paths "$1" "$(im_aside_commits "$1" "$2" "$3" | jq -Rsc 'split("\n") | map(select(. != ""))')" "")" "$1")" ] \
+    || return 1
   for c in $(git -C "$1" rev-list "$2..$3" 2>/dev/null); do
     printf '%s\n' "$others" | grep -Fqx -- "$c" || return 1
     n=$((n + 1))
