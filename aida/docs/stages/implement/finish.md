@@ -9,7 +9,9 @@ that this build broke stops the task before review.
 Close refuses when a finding is still open, or when the last fix round was never verified. A dirty
 tree is a warning, because no commit range holds it. Commits after the last record in the order's own files are a warning: they join
 the order's range, and review lists the warning. Commits that change a frozen test or a file the
-order does not own refuse (exit 63). Move the branch back, or redo the order.
+order does not own refuse (exit 63) and stop the order. Go on with `--owns` naming the file, or
+redo or drop the order. Trunk's commits and a merge that keeps to the task's files are set aside
+with a warning; see [come back to a build](resume.md).
 
 Close records the commit range the order produced. It also decides each criterion the order serves
 or owns. A criterion a machine verifies reads `confirmed` once every order serving it has closed
