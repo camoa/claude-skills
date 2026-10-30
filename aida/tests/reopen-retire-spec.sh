@@ -108,14 +108,32 @@ no_review_case() (
 )
 expect "a finish with no task review routes the ruling" "$(no_review_case)" "0|1|removed"
 
+# An unknown name is an argument fault, and the same task then takes the ruling on a name its
+# record holds, so the fault was the name.
 unknown_name_case() (
   source "$HERE/records.bash"
   closed_records
   answered "tests/a_test.sh::a says c"
   retire "tests/a_test.sh::a says c"
+  printf '%s|%s|' "$RC" "$(ledger '.repairs // [] | length')"
+  answered
+  retire
   printf '%s\n' "$RC"
 )
-expect "a test name the frozen record does not hold is an argument fault" "$(unknown_name_case)" "3"
+expect "a test name the frozen record does not hold is an argument fault" "$(unknown_name_case)" "3|0|0"
+
+two_rulings_case() (
+  source "$HERE/records.bash"
+  closed_records
+  edit "$IMPL/tests-wo1.json" '.rows[0].tests += [{path: "tests/c_test.sh", name: "c", sha256: "0", red: "x", redSignal: "unchecked"}]'
+  answer "implement reopen" "" "$RULING
+tests/c_test.sh::c
+$BECAUSE"
+  run "$IMPLEMENT" reopen "$TASK" --test "$RULING" --test "tests/c_test.sh::c" --because "$BECAUSE"
+  printf '%s|%s|%s\n' "$RC" "$(ledger '.repairs | length')" "$(ledger '.repairs[0] | (.retires | join(",")) + " " + (.retiredTests | length | tostring)')"
+)
+expect "two rulings on one order make one repair that keeps both" "$(two_rulings_case)" \
+  "0|1|tests/a_test.sh,tests/c_test.sh 2"
 
 echo "--- the repair freeze removes the named tests and nothing else"
 # three_records: wo1 owes the test round for the person's ruling on "a says b", in a file of three
@@ -159,6 +177,14 @@ lost_case() (
 )
 expect "a kept file that also lost a test nobody named is refused" "$(lost_case)" "27|none"
 
+left_case() (
+  source "$HERE/records.bash"
+  three_records
+  refreeze "a is short" "a is lower"
+  printf '%s|%s\n' "$RC" "$([ -f "$IMPL/tests-wo1-repair-1.json" ] && echo written || echo none)"
+)
+expect "a named test left in its file is refused" "$(left_case)" "27|none"
+
 edited_case() (
   source "$HERE/records.bash"
   three_records
@@ -189,6 +215,16 @@ deleted_case() (
 )
 expect "a file whose every test is named is deleted in the freeze commit, and review reads it" "$(deleted_case)" \
   '0|[[],["tests/a_test.sh"]]|absent|head|0'
+
+correction_deleted_case() (
+  source "$HERE/records.bash"
+  owed_records
+  suite_records ""
+  rm "$WT/tests/a_test.sh"
+  run "$IMPLEMENT" tests-freeze "$TASK" wo1 --test-glob 'tests/*_test.sh'
+  printf '%s|%s\n' "$RC" "$([ -f "$IMPL/tests-wo1-repair-1.json" ] && echo written || echo none)"
+)
+expect "a correction of a test ruled wrong at the task review may not delete its file" "$(correction_deleted_case)" "27|none"
 
 already_correct_case() (
   source "$HERE/records.bash"

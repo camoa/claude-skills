@@ -5340,9 +5340,17 @@ TF_EOF
       || die 27 "tests-freeze: the repair's test goes in a new test file, and an earlier freeze of $unit_id holds these: ${tf_refrozen%, }. Nobody changes a frozen test. The test author writes the test into a new file $unit_id owns, and this freeze runs again. Nothing is frozen."
     # A test a person named at reopen is removed, and nothing else in its file changes (gap row
     # 475). Each such path holds the earlier names less the named ones, and its diff from the
-    # last freeze of it adds no line. A changed line is one added and one deleted, so any edit of
-    # a kept test is refused. A path with every name named may be deleted whole.
-    local tf_named_path tf_left tf_now tf_added tf_unnamed=""
+    # last freeze of it deletes at least one line and adds none. A changed line is one added and
+    # one deleted, so any edit of a kept test is refused. A path with every name named may be
+    # deleted whole. A retired file with no named test is a row 449 correction, which is never a
+    # deletion.
+    local tf_named_path tf_left tf_now tf_base tf_numstat tf_unnamed=""
+    while IFS= read -r tf_named_path; do
+      [ -n "$tf_named_path" ] && [ ! -e "$codepath_canon/$tf_named_path" ] || continue
+      tf_unnamed="$tf_unnamed$tf_named_path (deleted, though a person named no test in it), "
+    done <<TF_EOF
+$(printf '%s' "$tf_retires" | jq -r --argjson named "$tf_retired_tests" '(. - ($named | map(.path))) | .[]')
+TF_EOF
     while IFS= read -r tf_named_path; do
       [ -n "$tf_named_path" ] || continue
       tf_left="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c --arg p "$tf_named_path" --argjson named "$tf_retired_tests" '
@@ -5355,9 +5363,18 @@ TF_EOF
       fi
       [ "$tf_now" = "$tf_left" ] \
         || { tf_unnamed="$tf_unnamed$tf_named_path (its tests are $(printf '%s' "$tf_now" | jq -r 'join(", ")'), not $(printf '%s' "$tf_left" | jq -r 'join(", ")')), "; continue; }
-      tf_added="$(git -C "$codepath" diff --numstat "$(printf '%s' "$TF_REPAIR_PATH_COMMITS" | jq -r --arg p "$tf_named_path" '.[$p] // "HEAD"')" \
-        -- "$tf_named_path" 2>/dev/null | awk '{ s += $1 } END { print s + 0 }')"
-      [ "$tf_added" = "0" ] || tf_unnamed="$tf_unnamed$tf_named_path (it adds $tf_added lines), "
+      tf_base="$(printf '%s' "$TF_REPAIR_PATH_COMMITS" | jq -r --arg p "$tf_named_path" '.[$p] // ""')"
+      tf_numstat="$(git -C "$codepath" diff --numstat "$tf_base" -- "$tf_named_path" 2>/dev/null)" || tf_base=""
+      if [ -z "$tf_base" ]; then
+        tf_unnamed="$tf_unnamed$tf_named_path (git could not compare it with its last freeze), "
+        continue
+      fi
+      tf_numstat="$(printf '%s\n' "$tf_numstat" | awk '{ a += $1; d += $2 } END { print a + 0, d + 0 }')"
+      case "$tf_numstat" in
+        "0 0") tf_unnamed="$tf_unnamed$tf_named_path (it still holds the named tests), " ;;
+        "0 "*) ;;
+        *) tf_unnamed="$tf_unnamed$tf_named_path (it adds ${tf_numstat%% *} lines), " ;;
+      esac
     done <<TF_EOF
 $(printf '%s' "$tf_retired_tests" | jq -r 'map(.path) | unique | .[]')
 TF_EOF
@@ -10511,13 +10528,16 @@ RV_SCOPE
   # An already-correct claim on a file unchanged since the review disputes the reviewer, who read
   # that same file. git decides it here, and verify-record sends such a finding to a person rather
   # than closing it on the verifier's word. A cited file must exist at HEAD (gap row 352). The one
-  # exception is a test file the order's latest repair record retires and holds no row for: a
-  # person ruled every test in it wrong and its test author deleted it, so it changed (gap row 475).
-  local ac_unchanged="[]" ac_id ac_file ac_rc ac_since ac_gone='[]' ac_repair
+  # exception is a test file a freeze of the order held and its merged record no longer holds: a
+  # repair retired it, a person ruled every test in it wrong, and its author deleted it, so it
+  # changed (gap row 475).
+  local ac_unchanged="[]" ac_id ac_file ac_rc ac_since ac_gone='[]'
   ac_since="$(printf '%s' "$RV_REVIEW_DOC" | jq -r '.reviewedAt // ""')"
-  ac_repair="$(find "$IMPL_DIR" -maxdepth 1 -type f -name "tests-$unit_id-repair-*.json" 2>/dev/null | sort | tail -n 1)"
-  [ -z "$ac_repair" ] || ac_gone="$(jq -c '(.retires // []) - [ (.rows // [])[] | (.tests // [])[] | .path ]' "$ac_repair" 2>/dev/null)"
-  [ -n "$ac_gone" ] || die3 "fix-record: $ac_repair could not be read as JSON, so the files $unit_id's repair retires are unknown."
+  if [ -f "$IMPL_DIR/tests-$unit_id.json" ]; then
+    tf_with_repair_tests "fix-record" "$unit_id"
+    ac_gone="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c --argjson held "$TF_REPAIR_PATH_COMMITS" \
+      '($held | keys) - [ (.rows // [])[] | (.tests // [])[] | .path ] - [ (.support // [])[] | .path ]')"
+  fi
   while IFS= read -r ac_id; do
     [ -n "$ac_id" ] || continue
     ac_file="$(printf '%s' "$RV_REVIEW_DOC" | jq -r --arg id "$ac_id" '[ .findings[] | select(.id == $id) ][0].file // ""')"
