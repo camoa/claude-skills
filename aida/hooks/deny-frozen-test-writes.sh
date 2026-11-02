@@ -640,11 +640,13 @@ OWNER_ABS=""
 owner_of_arg() {
   local arg="$1" cand u
   # The acceptance verifier's own test: a target outside its records is a hit. /dev is not a file.
-  # A mkdir of review/evidence itself makes the folder its files go in (gap row 477).
+  # A mkdir of review/evidence itself makes the folder its files go in, and a copy names it as the
+  # folder its files land in (gap row 477). ln is left out, because normalize_abs does not resolve
+  # a link, so a link there leads out of the folder.
   if [ "$VERIFIER" = true ]; then
     cand="$(normalize_abs "$(resolve_against "$arg" "$RUN_DIR")")"
     case "$cand" in /dev/*) return 1 ;; esac
-    [ "$VIA" != mkdir ] || case "$cand" in */review/evidence) return 1 ;; esac
+    case "$VIA" in mkdir|cp|mv|install|rsync) case "$cand" in */review/evidence) return 1 ;; esac ;; esac
     [ "$(own_record_owner "$cand")" != acceptance-verifier ] || return 1
     OWNER_UNIT=""; OWNER_ABS="$cand"; return 0
   fi

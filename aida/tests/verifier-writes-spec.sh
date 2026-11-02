@@ -17,6 +17,8 @@ expect "a redirect into review/evidence/ passes" \
   "$(write_hook "$(cmd "curl -s localhost > $TASK/review/evidence/home.html")" aida:acceptance-verifier)" allow
 expect "a mkdir of review/evidence itself passes" \
   "$(write_hook "$(cmd "cd $TASK && mkdir -p review/evidence")" aida:acceptance-verifier)" allow
+expect "a copy into review/evidence/ named as the folder passes" \
+  "$(write_hook "$(cmd "cd $TASK && cp $WT/a review/evidence/")" aida:acceptance-verifier)" allow
 expect "a touch of review/evidence itself is refused" \
   "$(write_hook "$(cmd "touch $TASK/review/evidence")" aida:acceptance-verifier)" deny
 expect "a run with its output sent to /dev/null passes" \
