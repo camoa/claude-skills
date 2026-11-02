@@ -4,6 +4,52 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.1] - 2026-10-30
+
+Two fixes from a live run. A person can retire a frozen test before the
+task review. A build that pauses while trunk moves can take trunk in by
+a merge and go on.
+
+### Added
+
+- `reopen --test <path>::<name> --because <words>` retires a frozen test
+  that a person rules wrong, before the task review. Only a person can
+  run it, because the script needs the person's answer. The order that
+  froze the test must be closed. The order's test author removes the
+  test, and the removal freezes as a new repair record. The first freeze
+  record is never edited. Every check that counts tests skips a retired
+  test. The freeze refuses when the author drops a test nobody named,
+  keeps a named test, adds a line to its file, or deletes a file that
+  holds a test nobody named. A criterion left with no test gets a
+  warning at the freeze, and review lists it as not proved.
+
+### Changed
+
+- A merge of trunk into a task branch no longer stops every later step.
+  Implement sets aside the commits that the merge brought, when the base
+  branch's remote-tracking branch holds them. A commit made only on the
+  local trunk is still checked against the order's files. A project with
+  no remote sets aside no trunk commit.
+- An edit made inside a merge commit, such as a conflict resolved by
+  hand, is checked against the files that every order owns. Before, an
+  edit inside any merge escaped the owned-files check.
+- A trunk change to a frozen test still stops the order, at `close` and
+  `go-on` too.
+- The stop at finish now says what the code always did. A test that
+  fails at the final commit and did not fail in the baseline stops the
+  task. A test absent from the baseline, such as an order's new test or
+  one that a trunk merge brought, also stops.
+- A refusal for code outside an order's files no longer suggests moving
+  the branch back. It stops the order with the usual ways out. After a
+  merge, it says that `redo` and `drop` ask a person to revert the
+  merge, which also reverts trunk's changes, and that `go-on --owns`
+  costs less.
+
+### Fixed
+
+- When two test-wrong findings reached one order, `reopen` kept the
+  retired paths of the last finding only.
+
 ## [6.1.0] - 2026-10-28
 
 A new test path and a lighter set of controls. Tests now mean

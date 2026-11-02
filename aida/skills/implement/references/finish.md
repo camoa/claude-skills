@@ -29,7 +29,7 @@ no suite row passes with `undeclared`, and the record says so.
 
 ### A test newly broken at finish
 
-A failing line the subtraction leaves is a test that passed in the implement-start baseline and
+A failing line the subtraction leaves is a test that did not fail in the implement-start baseline and
 fails at the final commit. It stops completion. `finish` turns each framework's red run into items.
 When the suite row declares `failure_line`, each new line it names is one item. Otherwise the
 whole run is one item, `the suite on <framework>`, because a banner or a count is no test. A run
@@ -113,6 +113,15 @@ record holds that test, and the repair retires the file. That order's test autho
 the same file, and the hook lets it write that file and no other frozen test. The corrected test
 freezes in the repair's own record with a locks-in reason, and every later check holds the file to
 that record's hash. Nobody commits a test correction by hand.
+
+A person can rule a frozen test wrong before any task review. Run
+`reopen <task> --test <path>::<name> --because <the person's words>`, one `--test` per test.
+It needs the person's answer, step `implement reopen`, and no finish or review. A refusal prints
+the answer command. The order whose frozen record holds the test must be closed. The repair
+names the tests under `retiredTests`, and the test author deletes their lines and nothing else.
+A file whose every test is named is deleted. The repair record lists `retires`, so the deleted
+tests stop counting. When that leaves a criterion with no test, the freeze warns and removes the
+order's judgement on it.
 
 An order proved by tests first takes one failing test of the bug. `next:` names the tests step for
 it. Run `tests-brief`, and its brief holds the bug under `repair`. Dispatch the order's test

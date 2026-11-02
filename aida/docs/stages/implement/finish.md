@@ -9,7 +9,9 @@ that this build broke stops the task before review.
 Close refuses when a finding is still open, or when the last fix round was never verified. A dirty
 tree is a warning, because no commit range holds it. Commits after the last record in the order's own files are a warning: they join
 the order's range, and review lists the warning. Commits that change a frozen test or a file the
-order does not own refuse (exit 63). Move the branch back, or redo the order.
+order does not own refuse (exit 63) and stop the order. Go on with `--owns` naming the file, or
+redo or drop the order. Trunk's commits and a merge that keeps to the task's files are set aside
+with a warning; see [come back to a build](resume.md).
 
 Close records the commit range the order produced. It also decides each criterion the order serves
 or owns. A criterion a machine verifies reads `confirmed` once every order serving it has closed
@@ -35,7 +37,7 @@ and lists the warning.
 
 ## A test newly broken at finish
 
-A test that passed in the implement-start baseline and fails at the final commit is a hard stop.
+A test that did not fail in the implement-start baseline and fails at the final commit is a hard stop.
 Finish exits 66 and writes no `implementation/finished.json`, so the task cannot reach review.
 
 Finish gives each newly broken test to the order that broke it. That is the order whose frozen
@@ -97,6 +99,13 @@ A finding you ruled `test-wrong` names a frozen test. It goes to the order whose
 holds that test, and that order's test author corrects it. The correction freezes as a new
 record, and the first record is never edited. Nobody corrects a frozen test by hand.
 
+**You can rule a frozen test wrong before the task review.** Name each test as
+`--test <path>::<name>`, with your reason in `--because`, on `reopen`. AIDA asks for your answer
+first. The order that froze the test must be closed. Its test author deletes the lines of each
+named test and changes nothing else, and deletes a file whose every test you named. The repair's
+record names what it retires, so those tests stop counting. A criterion left with no test is a
+warning at the freeze, and review reads it as unproved. After the fix round, finish runs again.
+
 A finding no order can take is named, with the reason. Commit its fix on the task branch, inside
 the files the orders own, or rule it at the next review.
 
@@ -104,8 +113,8 @@ the files the orders own, or rule it at the next review.
 
 - A suite row marked end-of-task runs only here. On some projects one run takes ten minutes, and
   every attempt would pay for it.
-- A build that breaks a test that passed before it started is not finished. So a newly broken
-  test stops the task, and a failure that was already there stays a warning.
+- A build that leaves a test failing that did not fail before it started is not finished. So a
+  newly broken test stops the task, and a failure that was already there stays a warning.
 - A test written for a bug fails before the fix, so the fix is proved by something other than the
   fixer's word.
 

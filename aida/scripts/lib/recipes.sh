@@ -45,6 +45,7 @@
 #   cr_require_baseline_recipes <action> <baseline file>  exit 73 on a changed check recipe
 #   tf_sha256_of <file>                       the sha256 of that file, lowercase hex
 #   tf_with_repair_tests <action> <order>     the order's frozen record with its repairs', into TF_REPAIR_TESTS_DOC
+#                                             and the commit that last froze each path, into TF_REPAIR_PATH_COMMITS
 #   tf_path_matches_glob <path> <glob>        one segment against one glob segment
 #   tf_path_matches_catalog_glob <path> <glob>  a whole path against a catalog glob, or its file name when the glob has no /
 #   tests_only_order <task folder> <order>    true when the order deletes test files of the one cleanup run its goal names
@@ -965,29 +966,35 @@ tf_frozen_changed() {
 # record appended. A repair's record, tests-<order>-repair-<n>.json, holds the failing test of a bug
 # a task review found, or the corrected copy of a test a person ruled wrong (gap row 449). A path a
 # later record holds is held to that record's hash, so the earlier entry for it is dropped, and the
-# first record is never rewritten. Sets TF_REPAIR_TESTS_DOC. Refuses at 3, naming the file, when a
-# record does not parse: the files the freezes hold are then unknown. $1 the action. Call it as a
-# plain statement, never in $(...).
-TF_REPAIR_TESTS_DOC=""
+# first record is never rewritten. A path a record retires is dropped too, so a test a person ruled
+# wrong and its author removed no longer counts (gap row 475). Sets TF_REPAIR_TESTS_DOC, and
+# TF_REPAIR_PATH_COMMITS, a JSON map from each path to the commit of the last record that holds it.
+# Refuses at 3, naming the file, when a record does not parse: the files the freezes hold are then
+# unknown. $1 the action. Call it as a plain statement, never in $(...).
+TF_REPAIR_TESTS_DOC=""; TF_REPAIR_PATH_COMMITS="{}"
 tf_with_repair_tests() {
-  local f doc
+  local f doc commits held='.commit as $c | [ ([ (.rows // [])[] | (.tests // [])[] | .path ] + [ (.support // [])[] | .path ])[] | {key: ., value: $c} ] | from_entries'
   doc="$(jq -c '.' "$IMPL_DIR/tests-$2.json" 2>/dev/null)"
   [ -n "$doc" ] \
     || die 3 "$1: $IMPL_DIR/tests-$2.json could not be read as JSON, so the files the freezes of $2 hold are unknown. Repair or remove it by hand before running this again."
+  commits="$(printf '%s' "$doc" | jq -c "$held")"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     doc="$(printf '%s' "$doc" | jq -c --slurpfile r "$f" '
-      ([ ($r[0].rows // [])[] | (.tests // [])[] | .path ] + [ ($r[0].support // [])[] | .path ]) as $now
+      ([ ($r[0].rows // [])[] | (.tests // [])[] | .path ] + [ ($r[0].support // [])[] | .path ] + ($r[0].retires // [])) as $now
       | .rows = ([ (.rows // [])[] | .tests = [ (.tests // [])[] | select(.path as $p | $now | index($p) | not) ] ]
                  + ($r[0].rows // []))
       | .support = ([ (.support // [])[] | select(.path as $p | $now | index($p) | not) ] + ($r[0].support // []))' 2>/dev/null)"
     [ -n "$doc" ] \
       || die 3 "$1: $f could not be read as JSON, so the files the freezes of $2 hold are unknown. Repair or remove it by hand before running this again."
+    commits="$(jq -c --argjson have "$commits" "\$have + ($held)" "$f")"
   done <<TWR_EOF
 $(find "$IMPL_DIR" -maxdepth 1 -type f -name "tests-$2-repair-*.json" 2>/dev/null | sort)
 TWR_EOF
   # shellcheck disable=SC2034 # read by the sourcing script
   TF_REPAIR_TESTS_DOC="$doc"
+  # shellcheck disable=SC2034 # read by the sourcing script
+  TF_REPAIR_PATH_COMMITS="$commits"
 }
 
 # True when path $1 matches the glob $2 (a real catalog example is `*Test.php`, so the star must

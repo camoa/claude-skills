@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# finish-stop-spec.sh: the fifth hard stop. At finish, a test that passed in the implement-start
-# baseline and fails at the final commit stops completion. A failure already in the baseline is a
-# warning. A regression no order takes is recorded as not caused by this task only by the person.
+# finish-stop-spec.sh: the fifth hard stop. At finish, a test that did not fail in the
+# implement-start baseline and fails at the final commit stops completion. A failure already in the
+# baseline is a warning. A regression no order takes is recorded as not caused by this task only by
+# the person.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash

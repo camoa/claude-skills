@@ -271,3 +271,12 @@ edit() {
   shift 2
   jq "$@" "$filter" "$f" >"$ROOT/edit.json" && mv "$ROOT/edit.json" "$f"
 }
+
+# owed_records: wo1 closed and reopened for a wrong test, tests/a_test.sh frozen and retired.
+owed_records() {
+  task_records branch
+  order_records reviewed
+  tests_record
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).repairs = [{review: "r", reviewFindings: ["f1"], findings: ["f1"],
+    at: "2026-10-28", testOwed: true, retires: ["tests/a_test.sh"]}]'
+}

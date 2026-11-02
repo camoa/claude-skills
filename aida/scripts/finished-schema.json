@@ -45,7 +45,7 @@
     },
     "suite": {
       "$ref": "#/$defs/suiteResult",
-      "description": "The whole suite, run once at the final commit by `finish` through the same check the record steps run and the same baseline subtraction (nyc defect 18). The record steps run no suite, so this run decides it. A test that passed in the implement-start baseline and fails here stops `finish`, and no record is written, unless a person recorded it as not caused by this task (notCaused). A verdict other than met, undeclared or not-needed is also a warning in the task record, and so is a met suite that still fails on baseline failures. The output is never inline; outputFile names the sidecar."
+      "description": "The whole suite, run once at the final commit by `finish` through the same check the record steps run and the same baseline subtraction (nyc defect 18). The record steps run no suite, so this run decides it. A test that did not fail in the implement-start baseline and fails here stops `finish`, and no record is written, unless a person recorded it as not caused by this task (notCaused). A verdict other than met, undeclared or not-needed is also a warning in the task record, and so is a met suite that still fails on baseline failures. The output is never inline; outputFile names the sidecar."
     },
     "orders": {
       "type": "array",
@@ -200,7 +200,7 @@
               "because": { "type": "string", "minLength": 1, "description": "The person's words, as the ledger's notCaused entry holds them." }
             }
           },
-          "description": "The tests that passed in the implement-start baseline and fail at the final commit, which a person recorded as not caused by this task with `finish --regression not-caused=<item>`. An item is a failing line, or `the suite on <framework>` for a run whose suite row declares no failure_line or that printed no new line. Each is also a warning in the task record. Review lists the warning, and the pull request body names each line."
+          "description": "The tests that did not fail in the implement-start baseline and fail at the final commit, which a person recorded as not caused by this task with `finish --regression not-caused=<item>`. An item is a failing line, or `the suite on <framework>` for a run whose suite row declares no failure_line or that printed no new line. Each is also a warning in the task record. Review lists the warning, and the pull request body names each line."
         },
         "outputFile": {
           "type": "string",

@@ -31,10 +31,14 @@ When AIDA cannot work out the trunk, it says so and goes on. See
 - **In the task review.** The code changed after `checks` ran. With you present it is a warning;
   an unattended run refuses at exit 51. Run `checks` again.
 - **In a work order, exit 63.** Commits landed after the order's last record, and they change a
-  frozen test or a file the order does not own. No record judged them. Move the branch back to the
-  commit the message names, or redo the order. See [a work order stopped](stopped.md). Commits
-  inside the order's own files do not stop the build: AIDA writes a warning into the task record,
-  keeps them on the order's commit list, and goes on. Review lists the warning.
+  frozen test or a file the order does not own. No record judged them, so the order is stopped. For
+  a file the order does not own, go on with `--owns` naming the file. For a frozen test, redo the
+  order. Drop is open in both cases. See [a work order stopped](stopped.md). Commits inside the
+  order's own files do not stop the build: AIDA writes a warning into the task record, keeps them
+  on the order's commit list, and goes on. Review lists the warning.
+- **Trunk merged into the branch.** Commits your remote's copy of the task's base holds are set
+  aside with a warning. A merge's own edits stop the order only outside every order's files, or on
+  a frozen test. See [come back to a build](../stages/implement/resume.md).
 
 ## The branch was rewritten
 
