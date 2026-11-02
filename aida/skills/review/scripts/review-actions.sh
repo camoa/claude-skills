@@ -2720,7 +2720,7 @@ rw_surface_extra_rows() {
 # code path. Reads SF_SURFACES and the viewports in $1.
 RW_EVIDENCE="[]"
 rw_load_evidence() {
-  local viewports="$1" bad missing one abs resolved='[]' evidence_dir="$REVIEW_DIR/evidence"
+  local viewports="$1" bad missing one abs i resolved='[]' evidence_dir="$REVIEW_DIR/evidence"
   [ "$(json_file_state "$EVIDENCE_FILE")" = "ok" ] \
     || die 52 "acceptance: --evidence reads $EVIDENCE_FILE, and it is $(json_file_state "$EVIDENCE_FILE"). The acceptance verifier writes it. Dispatch the verifier, then run this again."
   RW_EVIDENCE="$(jq -c '.rows' "$EVIDENCE_FILE")"
@@ -2743,7 +2743,9 @@ rw_load_evidence() {
   [ -z "$bad" ] \
     || die 52 "acceptance: $EVIDENCE_FILE holds rows that are not evidence rows (scripts/review-schema.json, evidenceRow). Or they name a criterion, surface or viewport this task does not hold: $bad. Nothing was written."
   bad=""
-  while IFS= read -r one; do
+  # Each path is read by its index: a list read through $(...) loses an empty last path.
+  for i in $(printf '%s' "$RW_EVIDENCE" | jq -r 'keys[]'); do
+    one="$(printf '%s' "$RW_EVIDENCE" | jq -r --argjson i "$i" '.[$i].path')"
     abs=""
     if [ -n "$one" ]; then
       abs="$(normalize_abs "$(resolve_against "$one" "$evidence_dir")")"
@@ -2751,9 +2753,7 @@ rw_load_evidence() {
       [ -e "$abs" ] || bad="$bad $one (not on disk)"
     fi
     resolved="$(jq -nc --argjson have "$resolved" --arg p "$abs" '$have + [$p]')"
-  done <<RW_EVIDENCE_PATHS
-$(printf '%s' "$RW_EVIDENCE" | jq -r '.[].path')
-RW_EVIDENCE_PATHS
+  done
   while IFS= read -r one; do
     [ -z "$one" ] || [ -e "$(resolve_against "$one" "$RV_CODEPATH")" ] || bad="$bad $one (no such code file)"
   done <<RW_EVIDENCE_FILES
