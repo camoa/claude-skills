@@ -3088,10 +3088,20 @@ do_close() {
   rulable_findings="$(printf '%s' "$RW_RECORD_DOC" | jq -c --arg lenses "$LENS_WORDS" '[ (.findings // [])[]
     | . as $f | select(.disposition == "criterion" or has("ruling")
                        or (($lenses | split(" ") | index($f.lens)) != null)) | .id ]')"
-  local in_frozen_tests
+  # A finding's file is resolved against the code path, as reopen resolves it, so a ./ or an
+  # absolute path names the same frozen test.
+  local in_frozen_tests='[]' frozen_paths f_id f_file f_abs
   rw_load_test_rows "close"
-  in_frozen_tests="$(printf '%s' "$RW_RECORD_DOC" | jq -c --argjson rows "$RW_TEST_ROWS" '
-    [ $rows[] | (.tests // [])[] | .path ] as $frozen | [ (.findings // [])[] | select(.file as $p | $frozen | index($p)) | .id ]')"
+  frozen_paths="$(printf '%s' "$RW_TEST_ROWS" | jq -c '[ .[] | (.tests // [])[] | .path ]')"
+  while IFS='	' read -r f_id f_file; do
+    [ -n "$f_file" ] || continue
+    f_abs="$(normalize_abs "$(resolve_against "$f_file" "$RV_CODEPATH")")"
+    if [ "$(printf '%s' "$frozen_paths" | jq --arg p "${f_abs#"$RV_CODEPATH"/}" 'index($p) != null')" = true ]; then
+      in_frozen_tests="$(printf '%s' "$in_frozen_tests" | jq -c --arg i "$f_id" '. + [$i]')"
+    fi
+  done <<RW_FINDING_FILES
+$(printf '%s' "$RW_RECORD_DOC" | jq -r '(.findings // [])[] | .id + "\t" + (.file // "")')
+RW_FINDING_FILES
   # The criteria a person answers, personCriteria in scripts/lib/proof.sh: each person-verified
   # one, and each one an order proved by confirm puts to the person. The person answers each with
   # --row, from the checklist rows `finish` wrote (gap row 196).

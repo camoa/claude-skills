@@ -191,10 +191,11 @@ fix_case() (
 expect "a low finding ruled fix fails its criterion, reopen sends it to its order, and completion offers no task" \
   "$(fix_case)" "0|fix|criterion|unmet|failed|false|finish: reopen|0|0|f1"
 
-# split_case <word>: f1, low, in the frozen test, and f2, medium, in a.php, both ruled <word>.
+# split_case <word> [<path>]: f1, low, in the frozen test, named by <path>, default
+# tests/a_test.sh, and f2, medium, in a.php, both ruled <word>.
 split_case() (
   source "$HERE/records.bash"
-  fix_record "$(printf '%s' "$low_dry" | jq -c '.file = "tests/a_test.sh"')" \
+  fix_record "$(printf '%s' "$low_dry" | jq -c --arg p "${2:-tests/a_test.sh}" '.file = $p')" \
     "$(printf '%s' "$low_dry" | jq -c '.id = "f2" | .severity = "medium" | .linkedTo = ""')"
   tests_record
   closed_with --row c1=met --row "f1=$1" --row "f2=$1"
@@ -203,6 +204,7 @@ split_case() (
 expect "fix on a finding in a frozen test is dropped, and fix in a.php is taken" "$(split_case fix)" "none|fix"
 expect "test-wrong on a finding in a frozen test is taken, and test-wrong in a.php is dropped" \
   "$(split_case test-wrong)" "test-wrong|none"
+expect "a frozen test named with ./ is the same frozen test" "$(split_case test-wrong ./tests/a_test.sh)" "test-wrong|none"
 
 nolink_case() (
   source "$HERE/records.bash"

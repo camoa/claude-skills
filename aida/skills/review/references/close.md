@@ -63,10 +63,13 @@ a ruled finding with its ruling beside it. The five words:
   record keeps the corrected text beside the frozen one, and the criterion reads its own answer.
   Completion offers a follow up task that changes the criterion through scope.
 - `fix`: the person wants the finding fixed in this task. Any finding a reviewer lens raised takes
-  it, a low one too. The finding then fails the criterion it cites, and the review fails. The
+  it, a low one too. The finding then fails the criterion it cites, and the review fails. A finding
+  that cites no criterion keeps its lens check unmet instead, a warning, so the review can pass. The
   implement skill's `reopen` sends it to the fixer of the order that owns its file. Completion
   offers no follow up task for it. A finding in a frozen test takes `test-wrong` and not `fix`.
   A finding in any other file takes `fix` and not `test-wrong`.
+
+A low finding may take `wrong` or `deferred` too.
 
 A finding keeps its id from one review pass to the next while its lens, file, lines and evidence
 stay the same. A new finding takes an id no earlier pass used, so a row prepared from an earlier
