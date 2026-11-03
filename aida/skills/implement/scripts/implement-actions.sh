@@ -6370,6 +6370,31 @@ TF_EOF
   done <<TF_EOF
 $tf_gone
 TF_EOF
+  # A tracked test file the order owns and the author changed rides in the same commit, though it
+  # holds no frozen test, so the build never starts beside it (gap row 480). It is not recorded as
+  # support: --support refuses a test path, and a support row would make a re-freeze read changed.
+  local tf_m tf_g tf_owned
+  while IFS= read -r tf_m; do
+    case "$tf_m" in M?' '*|?M' '*) tf_m="${tf_m#???}" ;; *) continue ;; esac
+    printf '%s\n' "$tf_commit_paths" | grep -qxF -- "$tf_m" && continue
+    tf_owned=false
+    while IFS= read -r o; do
+      [ -n "$o" ] && tf_path_matches_catalog_glob "$tf_m" "$o" && { tf_owned=true; break; }
+    done <<TF_EOF
+$owned_list
+TF_EOF
+    [ "$tf_owned" = "true" ] || continue
+    while IFS= read -r tf_g; do
+      [ -n "$tf_g" ] && tf_path_matches_catalog_glob "$tf_m" "$tf_g" || continue
+      tf_commit_paths="$tf_commit_paths${tf_commit_paths:+
+}$tf_m"
+      break
+    done <<TF_EOF
+$(printf '%s' "$test_globs_json" | jq -r '.[]')
+TF_EOF
+  done <<TF_EOF
+$(git -C "$codepath" status --porcelain 2>/dev/null)
+TF_EOF
   if [ -n "$tf_commit_paths" ]; then
     set --
     while IFS= read -r p; do

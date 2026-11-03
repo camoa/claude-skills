@@ -561,10 +561,11 @@ which owns the file, may rewrite the setup the tests stand on and the frozen-tes
 met. The freeze refuses a support path that does not exist (exit 3). It also refuses one a test
 glob matches (exit 3), because that file is a test: pass it as `--test`.
 
-Then it commits the test files it hashed, and the support files, on the task branch, and only
-those paths. The implementer starts from a tree that already holds the tests, and the record's
-commit is the one they are in. Work beside them stays uncommitted, and the freeze says so in one
-line. A commit that fails, for want of a git identity or any other reason, refuses before the
+Then it commits the test files it hashed, and the support files, on the task branch. It also
+commits each test file the order owns that the author changed, though that file holds no frozen
+test. It commits no other path. The implementer starts from a tree that already holds the tests,
+and the record's commit is the one they are in. Work beside them stays uncommitted, and the
+freeze says so in one line. A commit that fails, for want of a git identity or any other reason, refuses before the
 record is written, with git's own message.
 
 A person is not a role, and is not refused. A freeze is not a lock: it exists so a change is
