@@ -21,6 +21,8 @@ expect "a mkdir of review/evidence with a mode passes (row 486)" \
   "$(write_hook "$(cmd "mkdir -p -m 755 $TASK/review/evidence")" aida:acceptance-verifier)" allow
 expect "a mkdir with a mode is still refused outside review/evidence" \
   "$(write_hook "$(cmd "mkdir -m 755 $WT/src")" aida:acceptance-verifier)" deny
+expect "a mode word that starts with a dash is still the mode" \
+  "$(write_hook "$(cmd "mkdir -m -w $WT/src")" aida:acceptance-verifier)" deny
 expect "a tee into review/evidence/ passes" \
   "$(write_hook "$(cmd "curl -s localhost | tee $TASK/review/evidence/home.html")" aida:acceptance-verifier)" allow
 expect "a copy into review/evidence/ named as the folder passes" \

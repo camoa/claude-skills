@@ -934,11 +934,13 @@ case "$TOOL" in
       case "${w[0]}" in
         rm|touch|truncate|chmod|mkdir|rmdir|tee|unlink)
           # chmod's first operand is its mode, never a path; rule two would refuse it as one. The
-          # word after mkdir's -m is its mode too (gap row 486).
+          # word after mkdir's -m is its mode too, whatever it starts with (gap row 486).
           mode_skip=false; [ "${w[0]}" = chmod ] && mode_skip=true
+          mode_next=false
           VIA="${w[0]}"
           for t in "${w[@]:1}"; do
-            case "${w[0]}:$t" in mkdir:-m|mkdir:-[!-]*m|mkdir:--mode) mode_skip=true; continue ;; esac
+            if [ "$mode_next" = true ]; then mode_next=false; continue; fi
+            case "${w[0]}:$t" in mkdir:-m|mkdir:-[!-]*m|mkdir:--mode) mode_next=true; continue ;; esac
             case "$t" in -*|*'>'*|*'<'*) continue ;; esac
             if [ "$mode_skip" = true ]; then mode_skip=false; continue; fi
             if owner_of_arg "$t" && take_hit "$t"; then break; fi

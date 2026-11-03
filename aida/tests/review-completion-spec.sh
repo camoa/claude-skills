@@ -333,9 +333,10 @@ low_wrong_case() (
   closed_with --row c1=met --row f1=test-wrong --row f2=test-wrong
   printf '%s|' "$(jq -r '.verdict' "$TASK/review/review.json")"
   run "$IMPLEMENT" reopen "$TASK"
-  printf '%s|%s|%s\n' "$RC" "$(ledger '(.repairs[0].retires // []) | join(",")')" "$(ledger '.repairs[0].findings | length')"
+  printf '%s|%s|%s|%s\n' "$RC" "$(ledger '(.repairs[0].retires // []) | join(",")')" "$(ledger '.repairs[0].findings | length')" \
+    "$(ledger '.repairs[0].testOwed')"
 )
-expect "two low findings ruled test-wrong on a passed review reopen their order once" "$(low_wrong_case)" "passed|0|tests/a_test.sh|2"
+expect "two low findings ruled test-wrong on a passed review reopen their order once" "$(low_wrong_case)" "passed|0|tests/a_test.sh|2|true"
 
 no_text_case() (
   source "$HERE/records.bash"
