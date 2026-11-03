@@ -98,9 +98,11 @@ expect "start exits 0 and records a warning when the task check reports a findin
 
 # prune_case <state>: task n1 in <state>, never started, with a tree cut from t1's branch, which
 # holds a commit the trunk does not, as completion cut follow-up trees before. Prints prune's exit,
-# whether the tree is on disk, and whether its branch is.
+# whether the tree is on disk, and whether its branch is. With UNATTENDED set, the session does not
+# report itself attended.
 prune_case() (
   source "$HERE/records.bash"
+  [ -z "${UNATTENDED:-}" ] || unset CLAUDE_CODE_SESSION_ATTENDED
   task_records branch
   printf 'b\n' >"$WT/a.php"; git -C "$WT" commit -qam "t1 work"
   local tree="$ROOT/code.worktrees/code-n1"
@@ -114,6 +116,7 @@ prune_case() (
 )
 expect "prune keeps the tree of a task nobody started while it is open" "$(prune_case new)" '3|yes|yes'
 expect "prune removes a closed task's tree and keeps its unmerged branch" "$(prune_case complete)" '0|no|yes'
+expect "in a session nobody attends, prune refuses and removes nothing" "$(UNATTENDED=1 prune_case complete)" '70|yes|yes'
 
 # prune_list_case: the listing leaves out the tree a plain create just made.
 prune_list_case() (

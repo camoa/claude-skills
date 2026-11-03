@@ -130,11 +130,22 @@ expect "set-run-mode refuses with no answer, runs with one, and refuses when tha
   "$(run_mode_case)" "70:interactive|0:autonomous|70:light"
 
 # person_step_case [<agent type>] [<agent id>]: the hook's decision on implement drop, a person-only
-# step, from the main session, a role, or a session with an agent type and no agent id.
+# step, from the main session, a role, or a session with an agent type and no agent id. With
+# STEP set, the step is that implement call instead.
 person_step_case() (
   source "$HERE/records.bash"
   task_records branch
-  write_hook "$(jq -nc --arg c "$IMPLEMENT drop $TASK wo1 --because 'not needed'" '{command: $c}')" "$@"
+  write_hook "$(jq -nc --arg c "$IMPLEMENT ${STEP:-drop $TASK wo1 --because 'not needed'}" '{command: $c}')" "$@"
+)
+# unknown_stage_case: drop's exit on a task whose run mode names a stage that matches none, with
+# no answer, in an attended session.
+unknown_stage_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records code-written '[]'
+  edit "$TASK/task.json" '.runMode = "autonomous" | .runModeStages = ["implment"]'
+  run "$IMPLEMENT" drop "$TASK" wo1 --because "not needed"
+  printf '%s|%s\n' "$RC" "$(ledger '.lastStep')"
 )
 # unattended_drop_case: drop's exit and wo1's step, on an interactive task, with no answer, in a
 # session that does not report itself attended.
@@ -178,6 +189,10 @@ expect "a role running implement drop is refused" "$(person_step_case aida:imple
 expect "the main session running implement drop is allowed" "$(person_step_case)" allow
 expect "a session with an agent type and no agent id is asked" "$(person_step_case helper "")" ask
 expect "an interactive task in a session nobody attends refuses drop with no answer" "$(unattended_drop_case)" "68|code-written"
+expect "a run mode naming an unknown stage takes no chat answer" "$(unknown_stage_case)" "68|code-written"
+expect "a role's plain finish is not refused by the person rule" "$(STEP="finish $TASK" person_step_case aida:implementer)" allow
+expect "a role's finish --regression is refused" \
+  "$(STEP="finish $TASK --regression wo1=x --because y" person_step_case aida:implementer)" deny
 expect "no agent or template names an action the hook refuses whole to a role" "$(whole_action_names)" none
 expect "a checkout of an older copy of the task folder is refused" "$(checkout_case tasks/t1)" deny
 expect "a checkout of an older copy of the tasks folder is refused" "$(checkout_case tasks)" deny

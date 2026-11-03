@@ -65,6 +65,8 @@ expect "go-on build, attended, clears the stop with no recorded answer" \
   "$(LOOK='.stopped // "none"' way_case go-on "one more attempt" --continue build)" "0|changed|none|b"
 expect "go-on build, autonomous, refuses with no answer and writes nothing" \
   "$(AUTO=1 LOOK='.stopped | length' way_case go-on "one more attempt" --continue build)" "68|same|1|b"
+expect "go-on --owns, attended, still refuses with no answer and writes nothing" \
+  "$(LOOK='.stopped | length' way_case go-on "give b.php" --continue build --owns b.php)" "68|same|1|b"
 expect "go-on close, attended, still refuses with no answer and writes nothing" \
   "$(ALLOWS='["close"]' LOOK='.stopped | length' way_case go-on "close it" --continue close)" "68|same|1|b"
 

@@ -96,8 +96,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      malformed argument, a contract or task.json that does not parse, a render that failed, or a
 #      write that failed. Nothing was written.
 #   70  `approve`, `retire`, `update --author owner` or `add --author owner` found no person's
-#      answer for it. The person answers through person-answer.sh, which shows Claude Code's
-#      permission prompt, in every run mode: step `scope <action>`, and the words the refusal names.
+#      answer for it. `approve` needs the recorded answer in every run mode. The other three take
+#      the chat answer when the session is attended and the stage runs interactive. Otherwise the
+#      person answers through person-answer.sh, which shows Claude Code's permission prompt: step
+#      `scope <action>`, and the words the refusal names.
 #   79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
 #
 # Portability: bash 3.2+ and zsh. No mapfile, no associative arrays, no GNU-only flag, no regular

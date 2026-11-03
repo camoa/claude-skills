@@ -437,6 +437,22 @@ expect "an addressed verdict citing no listed file reads not addressed" \
 expect "an addressed verdict naming a file it could not read reads not addressed" \
   "$(verified '{"id": "f1", "verdict": "addressed", "file": "a.php", "lines": "1", "couldNotRead": ["hooks/h.sh"], "evidence": "fine"}')" "a.php|open"
 
+# Attended at an interactive stage, a ruling still needs the recorded answer: with none,
+# verify-record refuses and f1 stays open.
+ruling_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records fixed
+  order_commit
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")) |= (.roundsUsed = 1 | del(.unrecordedCommits))'
+  jq -n --arg h "$(git -C "$WT" rev-parse HEAD)" '{schemaVersion: 1, takenAt: "2026-10-28", unit: "wo1", reviewedAt: $h,
+    findingsPath: "x", rounds: [], findings: [{id: "f1", severity: "high", file: "a.php", lines: "1", linkedTo: "c1",
+    evidence: "a says a", actionable: true, status: "open", origin: "review", fixScope: ["a.php"]}]}' >"$IMPL/review-wo1.json"
+  run "$IMPLEMENT" verify-record "$TASK" wo1 --ruling "f1=deferred:later"
+  printf '%s|%s\n' "$RC" "$(jq -r '.findings[] | select(.id == "f1") | .status' "$IMPL/review-wo1.json")"
+)
+expect "an attended ruling with no recorded answer refuses" "$(ruling_case)" "55|open"
+
 echo "--- completion: the one unattended stop"
 stop_case() (
   source "$HERE/records.bash"

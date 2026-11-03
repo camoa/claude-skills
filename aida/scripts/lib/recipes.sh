@@ -79,7 +79,7 @@
 #   sw_source_lines <project file> <kind>     the sources providing that kind, in precedence order
 #   sw_probe <project file> <kind> <folder> <framework> <leaf> <asks the catalog>  one folder source's file
 #   sw_list <project file> <kind> <folder> <framework>  every name the folder sources hold
-#   cr_require_person <flag> <what it says> [<task> <words>]  exit 70 when RUN_MODE is autonomous
+#   cr_require_person <flag> <what it says> [<task> <words>]  exit 70 unless a person is taken to be present
 #   cr_resolve_recipe <recipe flags>...       one recipe for KIND across FRAMEWORKS, into RECIPE
 #   fenced_blocks_under <recipe> <heading> <tag> [<n>]  the lines of every block with that tag, or of block n
 #   sh_blocks_under <recipe> <heading> [<n>]  the same, for blocks tagged sh: one command per line
@@ -1876,20 +1876,25 @@ SW_LINES
 : "${RECIPE:=}"; : "${RECIPE_FW:=}"; : "${VIEWPORTS_ARG:=}"
 
 # Exit 70. $1 the flag, $2 what it says a person did. A caller with a task passes $3 the task
-# folder and $4 the person's words the call carries. Then the task's own run mode for implement
-# also counts, so a call that leaves out --run-mode is not interactive by that alone; the site
-# serves the build. And a person's answer in the task's answer record, step "task $ACTION $1",
-# passes the refusal without a change of mode (task_answer_find). Only the task script passes a
-# task. The caller marks the answer used with task_answer_consume once it wrote.
+# folder and $4 the person's words the call carries. Then the gate is task_require_person in
+# task-helpers.sh, for stage implement, since the site serves the build; a caller that says
+# --run-mode autonomous needs the recorded answer, step "task $ACTION $1". Only the task script
+# passes a task, and it marks the answer used with task_answer_consume once it wrote. With no task,
+# no answer can be recorded, so the call passes only when the caller runs interactive and the
+# session reports itself attended.
 cr_require_person() {
-  local mode="$RUN_MODE" route=""
-  [ -z "${3:-}" ] || [ "$(task_run_mode "$3" implement)" != "autonomous" ] || mode="autonomous"
-  [ "$mode" = "autonomous" ] || return 0
   if [ -n "${3:-}" ]; then
-    task_answer_find "$3" "task $ACTION $1" "" "$4" && return 0
-    route="$(task_answer_route "$3" "task $ACTION $1" "" "$4")"
+    local stage=implement
+    [ "$RUN_MODE" != "autonomous" ] || stage=""
+    task_require_person 70 "$ACTION" "$1, which says $2," "$3" "$stage" "task $ACTION $1" "" "$4"
+    return 0
   fi
-  die 70 "$ACTION: $1 says $2, and this run is autonomous. No person is here to answer, so nothing is written.$route"
+  if ! command -v session_attended >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "${PLUGIN_ROOT}/scripts/lib/session.sh" || die 70 "$ACTION: the library failed to load: session.sh"
+  fi
+  [ "$RUN_MODE" = "autonomous" ] || ! session_attended || return 0
+  die 70 "$ACTION: $1 says $2, and no person is taken to be present: the run is autonomous, or the session does not report itself attended. Nothing is written."
 }
 
 # One recipe per kind, or a lookup that failed, per framework. Sets RECIPE and RECIPE_FW, or ends

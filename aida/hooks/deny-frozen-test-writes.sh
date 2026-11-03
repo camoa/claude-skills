@@ -204,16 +204,21 @@ write_signal() {
 # script, its action as an extended regex, then the words that make the call a person's. A line
 # with no words refuses the action itself. Since gap row 481 the list holds every person-only
 # action that cannot be undone, because most of them pass on the chat answer when attended: the
-# script cannot tell a role from the main session, and only this hook reads agent_id. The
-# implement line refuses its actions whole, so tests-freeze is held though its person form sits
-# inside a --row value. No agent or template runs a stage script. A step that can be undone is left
-# out: environment up and not-applicable, surfaces --viewport and --enable, tool install. prune's
-# regex also reads its operands, because only a task id or --all removes a tree; the form with
-# --project alone only lists.
+# script cannot tell a role from the main session, and only this hook reads agent_id. Each implement
+# line names the person's form alone, so a role may still run plain finish or fix-brief. go-on,
+# redo and drop are person-only in every form. tests-freeze is refused whole: its person form sits
+# inside a --row value, which can come from an @/<file> the command text never shows. No agent or
+# template runs tests-freeze. A step that can be undone is left out: environment up and
+# not-applicable, surfaces --viewport and --enable, tool install. prune's regex also reads its
+# operands, because only a task id or --all removes a tree; the form with --project alone only lists.
 PERSON_ACTIONS='task-actions.sh set-budget|decline-recipe|defer-surface|set-run-mode
 task-actions.sh prune([[:space:]]+--project[[:space:]=]+[^[:space:]]+)*[[:space:]]+([^-[:space:]][^[:space:]]*|--all)
-implement-actions.sh start --leftovers
-implement-actions.sh tests-freeze|fix-brief|verify-record|finish|reopen|go-on|redo|drop
+implement-actions.sh start --leftovers[[:space:]=]+.?keep
+implement-actions.sh tests-freeze|go-on|redo|drop
+implement-actions.sh fix-brief --allow
+implement-actions.sh verify-record --ruling
+implement-actions.sh finish --regression
+implement-actions.sh reopen --test
 scope-actions.sh approve|retire
 scope-actions.sh add|update --author
 design-actions.sh close --approve-runs

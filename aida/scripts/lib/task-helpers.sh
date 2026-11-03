@@ -509,8 +509,8 @@ say_once() {
 # mode is autonomous for a stage when the task's runMode is autonomous and runModeStages is absent
 # or names that stage; every other case is interactive, the safe assumption (foundations.md, Run
 # mode). This is the one reader of those two fields: a stage that read runMode alone would run a
-# stage the person kept for themselves without asking. An unreadable file answers interactive.
-# A light task reads autonomous for every stage, so it runs on the autonomous machinery (gap row
+# stage the person kept for themselves without asking. An unreadable file answers interactive,
+# and returns 1. A light task reads autonomous for every stage, so it runs on the autonomous machinery (gap row
 # 197). What light skips on top of that is behind task_is_light.
 #
 # A name in runModeStages that is not one of the six matches no stage, so the mode reads
@@ -519,7 +519,8 @@ say_once() {
 # task, and it runs from `task start` alone, which a task already in progress never reaches. This
 # is the reader every stage goes through, so it is where the word is said. Nothing dies here: a
 # stage stopping mid-task over a field whose only effect is to ask a person more often would cost
-# more than the defect.
+# more than the defect. Such a name returns 1 too. Interactive is safe where it asks a person, and
+# unsafe where it lets a chat answer pass, so task_attended reads the status and fails closed.
 # $1 the canonical task folder, $2 the stage name as the skills spell it.
 task_run_mode() {
   local read_out answer unknown
@@ -537,6 +538,7 @@ task_run_mode() {
   [ -z "$unknown" ] \
     || printf 'task-helpers: %s/task.json names a run-mode stage that matches no stage: %s. The six are scope, research, design, implement, review and completion. A name outside them reads interactive for ever. Repair it with `task set-run-mode`.\n' "$1" "$unknown" >&2
   if [ "$answer" = "autonomous" ]; then printf 'autonomous'; else printf 'interactive'; fi
+  [ -n "$answer" ] && [ -z "$unknown" ]
 }
 
 # The person's answers, <task>/person-answers.json: a JSON array that
@@ -605,13 +607,19 @@ task_require_person() {
 }
 
 # True when a person is taken to be present for a step of stage $2 of task $1: the session reports
-# itself attended, and both stage $2 and the stage the task stands at read interactive. The second
-# stage keeps a scope step taken during an autonomous build on the recorded answer. Claude Code sets
-# CLAUDE_CODE_SESSION_ATTENDED but does not document it, so any value other than 1 reads unattended.
+# itself attended (session_attended, scripts/lib/session.sh), and both stage $2 and the stage the
+# task stands at read interactive. The second stage keeps a scope step taken during an autonomous
+# build on the recorded answer. A task.json that will not read, or that names an unknown stage,
+# reads unattended.
 task_attended() {
-  [ "${CLAUDE_CODE_SESSION_ATTENDED:-}" = 1 ] || return 1
-  [ "$(task_run_mode "$1" "$2")" = interactive ] || return 1
-  [ "$(task_run_mode "$1" "$(task_stage "$1" "$(task_review_word "$1")")")" = interactive ]
+  local mode
+  if ! command -v session_attended >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "${PLUGIN_ROOT}/scripts/lib/session.sh" || return 1
+  fi
+  session_attended || return 1
+  mode="$(task_run_mode "$1" "$2")" && [ "$mode" = interactive ] || return 1
+  mode="$(task_run_mode "$1" "$(task_stage "$1" "$(task_review_word "$1")")")" && [ "$mode" = interactive ]
 }
 
 # Marks the held entry refused, with the exit code, so an answer for an attempt that refused cannot

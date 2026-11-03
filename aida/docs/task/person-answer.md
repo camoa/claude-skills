@@ -1,7 +1,7 @@
 # The person's answer
 
 Some steps are yours alone: a way out of a stop, a ruling, a kept deviation, the run-mode switch.
-Some of them take your answer from the chat. The others refuse until your answer is on record:
+Some of them take your answer from the chat. The others refuse until your answer is on record.
 AIDA records it through one script, and Claude Code shows you its permission prompt before the
 script runs. This page says which steps take which, what that guarantees, and what it does not.
 
@@ -11,10 +11,13 @@ script runs. This page says which steps take which, what that guarantees, and wh
 - In scope: `approve`. The prompt shows the rendered contract, `alignment.md`, and your yes is
   for that page. A change to the contract after your yes needs a new one.
 - In design: `close --approve-runs`. The prompt shows the exact command lines.
-- The five ways past another hard stop: `reopen --test` rules a frozen test wrong,
-  `fix-brief --allow` grants a file outside the order, `go-on --owns` gives an order a new file,
-  `go-on --continue close` closes an order past its open findings, `verify-record --ruling` rules
-  on an open finding, and `finish --regression` places a test newly broken at finish.
+- The five ways past another hard stop:
+  - `reopen --test` rules a frozen test wrong.
+  - `fix-brief --allow` grants a file outside the order.
+  - `go-on --owns` gives an order a new file, and `go-on --continue close` closes an order past
+    its open findings.
+  - `verify-record --ruling` rules on an open finding.
+  - `finish --regression` places a test newly broken at finish.
 
 ## The steps that take your answer from the chat when attended
 
@@ -24,13 +27,13 @@ script runs. This page says which steps take which, what that guarantees, and wh
 - In review: `close --row` and `acceptance --accept-baseline`.
 - In completion: `close` with `--reason`, `--leave` or `--captures-offered`.
 
-Each of these takes the chat answer only when three things hold: the session reports itself
-attended, the step's own stage runs interactive, and the stage the task stands at runs
-interactive. Otherwise it needs your answer on record, the same as the steps above.
+Each of these takes the chat answer only when three things hold. The session reports itself
+attended. The step's own stage runs interactive. The stage the task stands at runs interactive, and
+`task.json` reads cleanly. Otherwise it needs your answer on record, the same as the steps above.
 `acceptance --accept-baseline` then refuses outright, because no recorded answer stands in for it.
 
-In the task skill, a second `environment down` on an adopted site, when no status line can tell
-whether it is gone, needs your answer only in an unattended run.
+The task skill's recipe steps follow the same three conditions, for the implement stage. One is a
+second `environment down` on an adopted site, when no status line can tell whether it is gone.
 
 ## What a chat answer rests on
 
@@ -45,8 +48,9 @@ eight steps in the first list always need it. None of the chat steps is a way pa
 stop.
 
 AIDA reads "attended" from `CLAUDE_CODE_SESSION_ATTENDED`, a variable Claude Code sets but does
-not document. A value of `1` allows the chat answer. Any other value, or none, keeps the prompt. So
-if the variable goes away, every step asks again; it never asks less. Cases where nobody may be
+not document. A value of `1` allows the chat answer. Any other value, or none, needs the recorded
+answer. A step with no task to record it in, such as a project or tool step, then refuses. So if
+the variable goes away, every step asks again; it never asks less. Cases where nobody may be
 present: `claude -p`, a run started by `/loop` or a scheduled task, a background session, Remote
 Control. In `claude -p` the variable reads `0`. The others are not checked yet.
 
@@ -97,10 +101,13 @@ The cases where something other than you can answer:
   working on what it can.
 - **A session that works around the hook.** The hook reads the command text. A file name built at
   run time, a glob such as `person-answe?.json`, or a relative name after a `cd` through a variable
-  passes it. The hook stops the plain forms, including a checkout or restore from git of the record,
-  of `task.json`, or of the task folder that holds them. It is not a wall.
-- **A dispatched agent that disguises a step.** For the chat steps, the hook is now the one guard
-  between a dispatched agent and the step. It reads the command text, so a step name built at run
+  passes it. The hook stops the plain forms. These include a checkout or restore from git of the
+  record, of `task.json`, of a task folder, or of the `tasks` folder. It is not a wall.
+- **Git on the whole project.** A checkout of `.` from the project folder, a stash or a reset can
+  bring back an older `task.json`. That restores an older run mode with no prompt. The hook does
+  not stop these.
+- **A dispatched agent that disguises a step.** For the chat steps, one guard stands between a
+  dispatched agent and the step: the hook. It reads the command text, so a step name built at run
   time passes it.
 
 The prompt carries a yes or a no on words Claude wrote. For a reason sentence, the prompt shows the
