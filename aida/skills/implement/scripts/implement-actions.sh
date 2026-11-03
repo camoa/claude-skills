@@ -12532,7 +12532,7 @@ RO_ONE
     fi
     if [ -z "$owner" ]; then
       if [ -z "$owners" ]; then not_routed="$not_routed $fid (no order owns $file);"
-      else not_routed="$not_routed $fid ($(printf '%s' "$owners" | cut -f1 | sort -u | paste -sd, -) own $file, and none serves $crit);"; fi
+      else not_routed="$not_routed $fid ($(printf '%s' "$owners" | cut -f1 | sort -u | paste -sd, -) own $file, and none serves $(printf '%s' "$one" | jq -r '.linkedTo // ""'));"; fi
       continue
     fi
     [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$owner" '.orders[] | select(.id == $id) | .lastStep // ""')" = "closed" ] \
@@ -12550,8 +12550,9 @@ RO_ONE
     new_id="f$(printf '%s' "$review_doc" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
     raw="$(printf '%s' "$one" | jq -c --arg id "$new_id" --arg file "$rel" --arg range "$reviewed" --arg crit "$crit" '
       {id: $id, severity, file: $file, lines: (.lines // ""), linkedTo: $crit,
-       evidence: (if .retiredTest then .evidence
-                  else "The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence end),
+       evidence: ((if .retiredTest then .evidence
+                   else "The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence end)
+                  + (if (.linkedTo // "") == "" or .linkedTo == $crit then "" else ", citing " + .linkedTo end)),
        fixScope: [$file]}')"
     built="$(rv_finding_record "$raw" "$alignment" repair)"
     [ -z "$linked_by" ] || built="$(printf '%s' "$built" | jq -c --arg w "$linked_by" '.actionableBecause += $w')"

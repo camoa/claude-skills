@@ -22,8 +22,8 @@ its file. A test ruled wrong goes to the order whose frozen record holds it. Tha
 author corrects it, and the correction freezes as a new record. You never correct a frozen test by
 hand. `reopen` names each finding it could not send, with the reason. The finding names no file,
 or no order owns the file. Or two orders own it and neither serves the criterion, or the owning
-order is not closed. Or the finding fails no criterion and you did not rule it. When it can send
-none, it refuses and keeps the build record.
+order is not closed. Or the finding fails no criterion and you did not rule it. Rule it `fix` at
+the [close](close.md). When it can send none, it refuses and keeps the build record.
 
 `reopen` never takes these, and never names them:
 

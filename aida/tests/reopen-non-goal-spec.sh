@@ -7,17 +7,19 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
 source "$HERE/records.bash"
 
-# reopened <findings JSON>: wo1 closed over its build, proved by observation, under a contract with
+# reopened <findings JSON>: wo1 closed over its build, proved by tests, under a contract with
 # non-goal n1, and a failed task review of the finish that holds <findings>. Then reopen.
 reopened() {
   task_records branch
   jq '.nonGoals = [{id: "n1", text: "no map is refused"}] | .nextNonGoalId = 2' "$TASK/alignment.json" >"$ROOT/a.json" \
     && mv "$ROOT/a.json" "$TASK/alignment.json"
-  jq '.proof = "observe"' "$TASK/design/wo1.json" >"$ROOT/w.json" && mv "$ROOT/w.json" "$TASK/design/wo1.json"
+  jq '.proof = "tests" | .ownedFiles = ["a.php", "tests/*_test.sh"]' "$TASK/design/wo1.json" >"$ROOT/w.json" && mv "$ROOT/w.json" "$TASK/design/wo1.json"
   jq --arg h "$(records_hash_for "$TASK")" '.hash = $h' "$TASK/design-closed.json" >"$ROOT/d.json" \
     && mv "$ROOT/d.json" "$TASK/design-closed.json"
-  git -C "$PROJECT" commit -qam "a non-goal, and wo1 proved by observation"
+  git -C "$PROJECT" commit -qam "a non-goal, and wo1 owns its tests folder"
   order_records closed
+  suite_records ""
+  tests_record
   local range
   range="$(jq -r '.startedFrom' "$IMPL/ledger.json")..$(git -C "$WT" rev-parse HEAD)"
   jq -n '{schemaVersion: 1, unit: "wo1", findings: []}' >"$IMPL/review-wo1.json"
@@ -29,14 +31,17 @@ reopened() {
   run "$IMPLEMENT" reopen "$TASK"
 }
 
-# A finding a person ruled fix that cites n1 reopens wo1, and its repair cites c1, wo1's first
-# criterion, so a repair freeze can key a test to it.
+# A logic finding a person ruled fix that cites n1 reopens wo1, and wo1 owes a test of it. The
+# test brief's repair cites c1, a criterion wo1 serves, so the repair test can freeze under it,
+# and its evidence keeps the n1 link.
 fixed_case() (
   source "$HERE/records.bash"
   reopened '[{"id": "f1", "linkedTo": "n1", "disposition": "criterion", "ruling": "fix"}]'
-  printf '%s|%s\n' "$RC" "$(jq -r '[ .findings[] | .linkedTo ] | join(",")' "$IMPL/review-wo1.json")"
+  run "$IMPLEMENT" tests-brief "$TASK" wo1
+  printf '%s|%s\n' "$RC" "$(jq -r '[ .repair.findings[] | .linkedTo, (.evidence | endswith("citing n1")) ] | join(",")' \
+    "$IMPL/brief-wo1-tests.json" 2>/dev/null)"
 )
-expect "a fix ruling on a non-goal finding reopens its order under the order's first criterion" "$(fixed_case)" '0|c1'
+expect "a fix ruling on a non-goal finding reopens its order under the order's first criterion" "$(fixed_case)" '0|c1,true'
 
 # Beside a routed finding, an unruled one that cites n1 is named among the findings left. One a
 # person ruled deferred has its route already, so it is not named.
