@@ -12380,8 +12380,8 @@ RO_EOF
 # froze that file, and the repair retires the file, so that order's test author writes the
 # corrected copy and freezes it as the repair's own record (gap row 449).
 # A finding a person ruled fix at review close carries disposition criterion, so it routes the
-# same way. One that cites no criterion goes to the one order that owns its file, and takes that
-# order's first criterion (gap row 479).
+# same way. One that cites no criterion, or cites a non-goal, goes to the one order that owns its
+# file, and takes that order's first criterion (gap rows 479 and 482).
 # One repair entry per order, so one fix round is added however many findings it takes. A finding
 # no order takes is named and left. finished.json goes, because finish's condition no longer
 # holds and every field in it is derived. Exit 119 when no closed review covers this finish, or
@@ -12438,6 +12438,10 @@ do_reopen() {
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
   [ "$review_closed" = false ] \
     || findings="$(jq -c '[ (.findings // [])[] | select((.disposition == "criterion" and (.ruling // "") != "wrong") or .ruling == "test-wrong") ]' "$review_file")"
+  # A finding left out with no ruling is named, so the person sees it waits (gap row 482).
+  [ "$review_closed" = false ] \
+    || not_routed="$(jq -r '[ (.findings // [])[] | select(.disposition != "criterion" and (.ruling // "") == "")
+         | " " + .id + " (it fails no criterion, and no person ruled it fix);" ] | join("")' "$review_file")"
   # A decision a build left and the person ruled test-wrong at the task review takes the same
   # route as a finding ruled so (gap row 449). Its finding is the order's own, on its review record.
   local decided='[]'
@@ -12495,7 +12499,9 @@ RO_RULED
     i=$((i + 1))
     fid="$(printf '%s' "$one" | jq -r '.id')"
     file="$(printf '%s' "$one" | jq -r '.file // ""')"
-    crit="$(printf '%s' "$one" | jq -r '.linkedTo // ""')"
+    # A link to a non-goal cites no criterion, so the repair takes the owner's first one (gap row 482).
+    crit="$(printf '%s' "$one" | jq -r --argjson a "$alignment" \
+      '(.linkedTo // "") as $l | if any(($a.criteria // [])[]; .id == $l) then $l else "" end')"
     if [ -z "$file" ]; then not_routed="$not_routed $fid (it names no file);"; continue; fi
     abs="$(normalize_abs "$(resolve_against "$file" "$RV_CODEPATH")")"
     rel="${abs#"$RV_CODEPATH"/}"

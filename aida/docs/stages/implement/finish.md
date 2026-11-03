@@ -98,7 +98,8 @@ A departure you ruled `rebuild` at the task review goes through `redo` on that c
 redo builds the order again and removes the build record, so finish and review run again.
 
 A finding you ruled `fix` at the task review goes to the order that owns its file, like a finding
-that fails a criterion. One that cites no criterion takes that order's first criterion.
+that fails a criterion. One that cites no criterion, or cites a non-goal, takes that order's first
+criterion.
 
 A finding you ruled `test-wrong` names a frozen test. It goes to the order whose frozen record
 holds that test, and that order's test author corrects it. The correction freezes as a new

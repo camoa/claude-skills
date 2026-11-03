@@ -106,7 +106,7 @@ person ruled a frozen test wrong or a finding `fix` there, `next:` names `reopen
 It takes each review finding that fails a criterion, unless the person ruled it wrong. The finding
 goes to the closed order that owns its file and owns that criterion, else to one that serves it.
 When no such order exists, it goes to the one order that owns the file. A finding the person ruled
-`fix` that cites no criterion goes to that one order, and takes its first criterion. That order gets one finding with origin `repair` per
+`fix` that cites no criterion, or cites a non-goal, goes to that one order, and takes its first criterion. That order gets one finding with origin `repair` per
 review finding, scoped to the file, and one more fix round. It goes back to its fix step.
 
 A finding the person ruled `test-wrong` names a frozen test. It goes to the order whose frozen
@@ -141,7 +141,8 @@ head, and review runs from its first step. `reopen` removes `finished.json`, bec
 open again.
 
 The summary names each finding no order takes, with the reason. One reason is two orders that own
-the file when neither serves the criterion. Another is a file no order owns. That finding waits
+the file when neither serves the criterion. Another is a file no order owns. Another is a finding
+that fails no criterion and that the person did not rule. That finding waits
 for the person. The person commits the fix on the task branch before this step runs again,
 or rules it at the next review. Keep that fix inside the files the orders own. A file no order
 owns reads unmet at review's check that every change serves a criterion.
