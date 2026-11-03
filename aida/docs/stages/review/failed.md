@@ -16,7 +16,8 @@ A bug in an order proved by tests gets a failing test first. That order's test a
 test that fails on the bug, and it freezes as a new record. Then the fixer makes it pass. See
 [finish](../implement/finish.md).
 
-`reopen` takes findings that fail a criterion, and findings you ruled `test-wrong`. A test ruled
+`reopen` takes findings that fail a criterion, and findings you ruled `test-wrong` or `fix`. A
+finding ruled `fix` that cites no criterion goes to the one order that owns its file. A test ruled
 wrong goes to the order whose frozen record holds it. That order's test author corrects it, and
 the correction freezes as a new record. You never correct a frozen test by hand. `reopen` names
 each finding it could not send, with the reason. The finding names no file, or no order owns the
@@ -26,7 +27,7 @@ When it can send none, it refuses and keeps the build record.
 `reopen` never takes these, and never names them:
 
 - a failed check that cites no finding;
-- a medium or high finding that cites no criterion, unless you ruled it `test-wrong`. Rule it at
+- a finding that cites no criterion, unless you ruled it `test-wrong` or `fix`. Rule it at
   the [close](close.md), or fix it yourself;
 - a decision you ruled `load-bearing`. A decision you ruled `rebuild` goes through `redo`. A decision you ruled `test-wrong` goes to
   its order's test author, like a finding.

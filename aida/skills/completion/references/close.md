@@ -34,6 +34,9 @@ record keeps the reason. A finding below high severity may be left with no reaso
 
 A finding that fails a criterion is no follow up, so a `--leave` for it decides nothing and is
 named as a warning. The person rules it at review close instead, as review's close step says.
+A finding the person ruled `fix` there is no follow up either. It waits for its repair through the
+implement skill's `reopen`. A close on `--reason` before that repair lands leaves a warning in the
+task record that names the finding.
 
 A finding ruled `contract-wrong` at review close is a follow up. Its task's goal names the
 criterion and the corrected text, so that task changes the criterion through scope.

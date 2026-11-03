@@ -1386,13 +1386,13 @@ im_next_step() {
     return 0
   fi
   if [ "$finished" = "true" ]; then
-    # A failed task review of this finish, or one holding a test ruled wrong, sends its findings
-    # back into the orders (gap rows 390 and 449).
+    # A failed task review of this finish, or one holding a test ruled wrong or a finding ruled
+    # fix, sends its findings back into the orders (gap rows 390, 449 and 479).
     if [ "$(jq -r --arg r "$(jq -r '.commitRange // ""' "$impl/finished.json" 2>/dev/null)" \
-      '(.verdict == "failed" or any((.findings // [])[]; .ruling == "test-wrong")
+      '(.verdict == "failed" or any((.findings // [])[]; .ruling == "test-wrong" or .ruling == "fix")
         or any((.checks // [])[]; (.id | startswith("decision-")) and .answer == "test-wrong")) and .reviewedRange == $r' \
       "$impl/../review/review.json" 2>/dev/null)" = "true" ]; then
-      printf 'finish: reopen, the task review of this finish failed or ruled a test wrong, and its findings go back to the orders that own their files'
+      printf 'finish: reopen, the task review of this finish failed, ruled a test wrong or ruled a finding fix, and its findings go back to the orders that own their files'
     else
       printf 'none: implementation is finished, the review stage is next, and a failed review takes a fix and a second finish'
     fi
@@ -8278,6 +8278,9 @@ im_reopen_in() {
       else . end))'
 }
 
+# What a repair finding's actionableBecause adds when it took the owner's first criterion.
+IM_POSITION_LINK="; the repair took the owner's first criterion by position, and nobody judged the link"
+
 # The review record of closed order $2 with one repair finding added on its file $3, with evidence
 # $4. The finding cites the owner's first criterion. $1 the action's own name. Sets IM_REPAIR_DOC,
 # IM_REPAIR_ID, IM_REPAIR_LINKED, and IM_REPAIR_OWED, true when tests prove the owner, so its test
@@ -8286,8 +8289,8 @@ im_reopen_in() {
 IM_REPAIR_DOC=""; IM_REPAIR_ID=""; IM_REPAIR_LINKED=""; IM_REPAIR_OWED=false
 im_repair_finding() {
   local built
-  IM_REPAIR_LINKED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" \
-    '[ .workOrders[] | select(.id == $id) | (.criteriaOwned // []) + (.criteriaServed // []) | .[] ][0] // ""')"
+  IM_REPAIR_LINKED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" "$BR_ORDER_FACTS_JQ"'
+    [ .workOrders[] | select(.id == $id) ][0] | firstCriterion')"
   IM_REPAIR_DOC="$(jq -c '.' "$IMPL_DIR/review-$2.json" 2>/dev/null)"
   [ -n "$IM_REPAIR_DOC" ] \
     || die3 "$1: $IMPL_DIR/review-$2.json is missing or not JSON, though the ledger records $2 as closed."
@@ -8296,7 +8299,7 @@ im_repair_finding() {
     '{id: $id, severity: "high", file: $file, lines: "", linkedTo: $linked, evidence: $evidence, fixScope: [$file]}')" \
     "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')" repair)"
   [ "$(printf '%s' "$built" | jq -r '.actionable')" = "true" ] || return 1
-  built="$(printf '%s' "$built" | jq -c '.actionableBecause += "; the repair took the owner'"'"'s first criterion by position, and nobody judged the link"')"
+  built="$(printf '%s' "$built" | jq -c --arg w "$IM_POSITION_LINK" '.actionableBecause += $w')"
   IM_REPAIR_DOC="$(printf '%s' "$IM_REPAIR_DOC" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
   [ -n "$IM_REPAIR_DOC" ] || die3 "$1: the repair finding on $2 could not be written."
   IM_REPAIR_OWED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" "$BR_ORDER_FACTS_JQ"'
@@ -12314,6 +12317,9 @@ RO_EOF
 # A finding a person ruled test-wrong names a frozen test file. It reopens the order whose record
 # froze that file, and the repair retires the file, so that order's test author writes the
 # corrected copy and freezes it as the repair's own record (gap row 449).
+# A finding a person ruled fix at review close carries disposition criterion, so it routes the
+# same way. One that cites no criterion goes to the one order that owns its file, and takes that
+# order's first criterion (gap row 479).
 # One repair entry per order, so one fix round is added however many findings it takes. A finding
 # no order takes is named and left. finished.json goes, because finish's condition no longer
 # holds and every field in it is derived. Exit 119 when no closed review covers this finish, or
@@ -12365,7 +12371,7 @@ do_reopen() {
       || die 119 "reopen: the task review of $finished_range in $review_file is open. A person closes it first, and its findings then route in the same call as this ruling."
   fi
 
-  local alignment findings='[]' count i one fid file crit abs rel owners owner owner_glob entry
+  local alignment findings='[]' count i one fid file crit abs rel owners owner owner_glob entry linked_by
   local review_doc new_id raw built routed='{}' not_routed="" reopened='[]' ledger_doc order rf retired
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
   [ "$review_closed" = false ] \
@@ -12464,24 +12470,32 @@ RO_ONE
     [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$owner" '.orders[] | select(.id == $id) | .lastStep // ""')" = "closed" ] \
       || { not_routed="$not_routed $fid ($owner owns $file and is not closed);"; continue; }
     case "$owner_glob" in /*) rel="$abs" ;; esac
+    linked_by=""
+    if [ -z "$crit" ]; then
+      crit="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg o "$owner" "$BR_ORDER_FACTS_JQ"'[ .workOrders[] | select(.id == $o) ][0] | firstCriterion')"
+      linked_by="$IM_POSITION_LINK"
+    fi
     review_doc="$(printf '%s' "$routed" | jq -c --arg o "$owner" '.[$o].doc // empty')"
     [ -n "$review_doc" ] || review_doc="$(jq -c '.' "$IMPL_DIR/review-$owner.json" 2>/dev/null)"
     [ -n "$review_doc" ] \
       || die3 "reopen: $IMPL_DIR/review-$owner.json is missing or not JSON, though the ledger records $owner as closed."
     new_id="f$(printf '%s' "$review_doc" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
-    raw="$(printf '%s' "$one" | jq -c --arg id "$new_id" --arg file "$rel" --arg range "$reviewed" '
-      {id: $id, severity, file: $file, lines: (.lines // ""), linkedTo,
+    raw="$(printf '%s' "$one" | jq -c --arg id "$new_id" --arg file "$rel" --arg range "$reviewed" --arg crit "$crit" '
+      {id: $id, severity, file: $file, lines: (.lines // ""), linkedTo: $crit,
        evidence: (if .retiredTest then .evidence
                   else "The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence end),
        fixScope: [$file]}')"
     built="$(rv_finding_record "$raw" "$alignment" repair)"
+    [ -z "$linked_by" ] || built="$(printf '%s' "$built" | jq -c --arg w "$linked_by" '.actionableBecause += $w')"
     review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
-    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --argjson doc "$review_doc" '
+    # logic: some finding on this order holds logic, so its repair owes a failing test first.
+    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --argjson doc "$review_doc" "$BR_ORDER_FACTS_JQ"'
       .[$o] = {doc: $doc, reviewFindings: ((.[$o].reviewFindings // []) + (if $one.retiredTest then [] else [$one.id] end)),
-               findings: ((.[$o].findings // []) + [$f])}
+               findings: ((.[$o].findings // []) + [$f]), logic: ((.[$o].logic // false) or ($one | logicFinding))}
       + (.[$o] // {} | with_entries(select(.key == "retires" or .key == "retiredTests")))
       | if $one.retiredTest then .[$o].retiredTests = ((.[$o].retiredTests // []) + [$one.retiredTest]) else . end')"
     routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg r "$retired" 'if $r == "" then . else .[$o].retires = (((.[$o].retires // []) + [$r]) | unique) end')"
+    [ -n "$routed" ] || die3 "reopen: the repair of finding $fid on $owner could not be built. Nothing is written."
     reopened="$(printf '%s' "$reopened" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --arg c "$crit" --arg file "$rel" \
       '. + [{order: $o, finding: $f, from: (if $one.retiredTest then "a person'"'"'s ruling" else "task review " + $one.id end), cites: ("cites " + $c), file: $file}]')"
   done
@@ -12489,7 +12503,8 @@ RO_ONE
     || die 119 "reopen: no finding of the review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns, and none names a frozen test a person ruled wrong. A person fixes on the task branch, then runs finish again."
 
   # An order proved by tests owes one failing test of the bug before its fixer runs (owner,
-  # 2026-10-28). Any other proof has no logic to test, so its fix round opens at once.
+  # 2026-10-28), when a finding on it holds logic (logicFinding in scripts/lib/proof.sh). Any
+  # other proof, or a repair of text files or code shape alone, opens its fix round at once.
   # The person's words are each --test value, one per line, then the --because words.
   [ -z "$ruled_raw" ] || fn_require_answer "reopen" "ruling a frozen test wrong" "" "$ruled_raw$because"
   ledger_doc="$FN_LEDGER_DOC"
@@ -12499,7 +12514,7 @@ RO_ONE
       --arg range "${finished_range:-$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg o "$order" '.orders[] | select(.id == $o) | .commitRange // ""')}" \
       --argjson owed "$([ "$BR_ORDER_SLOT" = "order-tests" ] && echo true || echo false)" '
       {review: $range, reviewFindings: .[$o].reviewFindings, findings: .[$o].findings, at: $at}
-      + (if $owed or .[$o].retires != null then {testOwed: true} else {} end)
+      + (if ($owed and .[$o].logic) or .[$o].retires != null then {testOwed: true} else {} end)
       + (if .[$o].retires == null then {} else {retires: .[$o].retires} end)
       + (if .[$o].retiredTests == null then {} else {retiredTests: .[$o].retiredTests, because: $because} end)')"
     ledger_doc="$(im_reopen_in "$ledger_doc" "$order" "$rf")"

@@ -27,7 +27,8 @@
 #
 #   br_order_facts <work order document>   sets BR_ORDER_SLOT, BR_ORDER_RANGE, BR_ORDER_OWNS_CODE
 #   BR_ORDER_FACTS_JQ                      the same classification as a jq definition, `orderFacts`,
-#                                          and `textOnly`, `confirmCriteria` and `personCriteria`
+#                                          and `textFile`, `textOnly`, `logicFinding`,
+#                                          `firstCriterion`, `confirmCriteria` and `personCriteria`
 #                                          beside it
 #   BR_HARNESS_JQ                          `noAutomatedTests` and `harnessNeeded` on a snapshot
 #   br_order_needs <work order document>   sets BR_ORDER_ROLES, BR_ORDER_LOOKUPS
@@ -73,18 +74,32 @@ br_order_facts() {
 # person answers at review: each one the contract marks person-verified, and each order's
 # confirmCriteria. Review's close and set-run-mode read it, so the two never disagree (gap row 328).
 #
-# `textOnly`, on one work order, is true when the order owns files and each is a document or
-# configuration, read by its extension or, for a dotfile such as .gitignore, its name. CMakeLists.txt
-# holds build logic, so it is code. Such an order holds no logic for a test to prove, so a
-# reading proves it (gap row 461). add-owned-file marks it `confirm`, and the design check refuses
-# it as a `tests` order and refuses a machine criterion it owns. A `gate` order is never text only:
-# a configuration export that tools produce is YAML, and its gate lines prove it.
+# `textFile`, on one path, is true when the file is a document or configuration, read by its
+# extension or, for a dotfile such as .gitignore, its name. CMakeLists.txt holds build logic, so it
+# is code. `textOnly`, on one work order, is true when the order owns files and each is a text
+# file. Such an order holds no logic for a test to prove, so a reading proves it (gap row 461).
+# add-owned-file marks it `confirm`, and the design check refuses it as a `tests` order and refuses
+# a machine criterion it owns. A `gate` order is never text only: a configuration export that
+# tools produce is YAML, and its gate lines prove it.
+#
+# `logicFinding`, on one review finding, is true unless its file is a text file or its lens judges
+# the shape of code and not its output. A repair of such a finding owes no failing test, because
+# no test can watch it fail (gap row 479). A guides, practices or non-goals finding can name
+# behaviour, so it still owes one.
+#
+# `firstCriterion`, on one work order, is the first criterion it owns, else the first it serves,
+# else "". A repair finding that cites no criterion takes it, and nobody judges that link.
 BR_ORDER_FACTS_JQ='
+  def textFile:
+    (test("(^|/)CMakeLists\\.txt$") | not)
+    and (test("\\.(md|markdown|rst|adoc|txt|json|ya?ml|toml|ini|cfg|conf|xml|neon|dist)$"; "i")
+         or test("(^|/)\\.[A-Za-z0-9_-]+(\\.(example|sample|dist))?$"));
   def textOnly:
-    (.proof // "") != "gate" and ((.ownedFiles // []) | length > 0
-      and all((test("(^|/)CMakeLists\\.txt$") | not)
-        and (test("\\.(md|markdown|rst|adoc|txt|json|ya?ml|toml|ini|cfg|conf|xml|neon|dist)$"; "i")
-             or test("(^|/)\\.[A-Za-z0-9_-]+(\\.(example|sample|dist))?$"))));
+    (.proof // "") != "gate" and ((.ownedFiles // []) | length > 0 and all(textFile));
+  def logicFinding:
+    (.lens // "") as $l
+    | ((.file // "") | textFile | not) and ((["dry", "solid", "architecture"] | index($l)) == null);
+  def firstCriterion: [ (.criteriaOwned // []) + (.criteriaServed // []) | .[] ][0] // "";
   def orderFacts:
     (.proof // "tests") as $p
     | if   $p == "gate"    then {slot: "configuration-gate", range: "code",    ownsCode: true}

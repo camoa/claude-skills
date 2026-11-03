@@ -7,11 +7,12 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
 source "$HERE/records.bash"
 
-# reopened <proof>: wo1, proved by <proof> and owning tests/*_test.sh, closed with its tests
-# frozen, and a failed task review of the finish whose one finding fails c1 in a.php. Then reopen.
+# reopened <proof> [<fields JSON>]: wo1, proved by <proof> and owning README.md and tests/*_test.sh,
+# closed with its tests frozen, and a failed task review of the finish whose one finding fails c1
+# in a.php. The fields replace the finding's own. Then reopen.
 reopened() {
   task_records branch
-  jq --arg p "$1" '.proof = $p | .ownedFiles = ["a.php", "tests/*_test.sh"]' \
+  jq --arg p "$1" '.proof = $p | .ownedFiles = ["a.php", "README.md", "tests/*_test.sh"]' \
     "$TASK/design/wo1.json" >"$ROOT/w.json" && mv "$ROOT/w.json" "$TASK/design/wo1.json"
   jq --arg h "$(records_hash_for "$TASK")" '.hash = $h' "$TASK/design-closed.json" >"$ROOT/d.json" \
     && mv "$ROOT/d.json" "$TASK/design-closed.json"
@@ -24,9 +25,9 @@ reopened() {
   jq -n '{schemaVersion: 1, unit: "wo1", findings: []}' >"$IMPL/review-wo1.json"
   jq -n --arg r "$range" '{schemaVersion: 1, commitRange: $r}' >"$IMPL/finished.json"
   mkdir -p "$TASK/review"
-  jq -n --arg r "$range" '{verdict: "failed", reviewedRange: $r,
+  jq -n --arg r "$range" --argjson f "${2:-null}" '{verdict: "failed", reviewedRange: $r,
       findings: [{id: "f1", disposition: "criterion", severity: "high", file: "a.php", lines: "",
-        linkedTo: "c1", lens: "correctness", evidence: "a.php still says a"}]}' >"$TASK/review/review.json"
+        linkedTo: "c1", lens: "correctness", evidence: "a.php still says a"} + $f]}' >"$TASK/review/review.json"
   run "$IMPLEMENT" reopen "$TASK"
 }
 
@@ -64,6 +65,25 @@ observe_case() (
   printf '%s|%s\n' "$(sed -n 's/^next: //p' "$OUT" | cut -d: -f1)" "$(ledger '[.repairs[] | has("testOwed")] | any')"
 )
 expect "reopen on an observe order opens the fix round directly" "$(observe_case)" 'review wo1|false'
+
+# A finding whose lens judges the shape of code, or whose file is a document, holds no logic for a
+# test to prove, so its repair opens the fix round at once (row 479).
+# shape_case <fields JSON>
+shape_case() (
+  source "$HERE/records.bash"
+  reopened tests "$1"
+  printf '%s|%s\n' "$(sed -n 's/^next: //p' "$OUT" | cut -d: -f1)" "$(ledger '[.repairs[] | has("testOwed")] | any')"
+)
+expect "a dry finding on a tests order owes no test" "$(shape_case '{"lens": "dry"}')" 'review wo1|false'
+expect "a correctness finding in a document owes no test" "$(shape_case '{"file": "README.md"}')" 'review wo1|false'
+
+# A finding reopen cannot write refuses, and finished.json stays, so nothing is lost.
+broken_case() (
+  source "$HERE/records.bash"
+  reopened tests '{"evidence": 5}'
+  printf '%s|%s\n' "$RC" "$([ -f "$IMPL/finished.json" ] && echo finished || echo removed)"
+)
+expect "reopen refuses when it cannot write a repair finding" "$(broken_case)" '3|finished'
 
 # The repair's test author writes its new test file, and the hook refuses its write, by Write or by
 # Bash, to the order's first frozen test.

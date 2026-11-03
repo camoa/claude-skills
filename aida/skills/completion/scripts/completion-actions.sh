@@ -286,7 +286,7 @@ cp_load() {
   lens_findings="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.disposition == "follow-up" and .severity != "low"
     and (.linkedTo // "") == "" and .lens != "frozen-tests" and (.ruling // "") == "") | .id ] | join(", ")' 2>/dev/null)"
   [ -z "$failing_findings" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
-    || CP_FINDING_ROUTE="These findings fail a criterion, so none is a follow up and none takes --leave: $failing_findings. The person rules each at review close with --row <finding>=deferred, which makes it a follow up, wrong, which says the reviewer was mistaken, test-wrong, which reopen sends to the test author, or contract-wrong:<corrected text>."
+    || CP_FINDING_ROUTE="These findings fail a criterion, so none is a follow up and none takes --leave: $failing_findings. The person rules each at review close with --row <finding>=deferred, which makes it a follow up, wrong, which says the reviewer was mistaken, test-wrong, which reopen sends to the test author, or contract-wrong:<corrected text>. A finding ruled fix waits for its repair: the implement skill's reopen sends it to the order that owns its file."
   [ -z "$lens_findings" ] || [ "$CP_REVIEW_VERDICT" = "none" ] \
     || CP_FINDING_ROUTE="${CP_FINDING_ROUTE:+$CP_FINDING_ROUTE }These findings cite no criterion and fail their lens check until the person rules each at review close with --row <finding>=deferred or --row <finding>=wrong: $lens_findings."
   cp_load_children "$who"
@@ -767,6 +767,14 @@ CP_LEAVES2
   blocking="$(printf '%s' "$rows" | jq -r '[ .[] | select(.severity == "high" and .task == null and .reason == "") | .finding ] | join(", ")')"
   [ -z "$blocking" ] \
     || task_warn "$TASK_PATH" "completion close" "" "the high severity follow up finding $blocking has no task and no --leave reason, so it ships unfixed"
+  # A fix the person asked for at review close that did not land closes only on --reason. The task
+  # record keeps that fact beside the reason (gap row 479). A review of an earlier build is no
+  # review of this one, so its rulings say nothing here.
+  local unfixed=""
+  [ "$CP_REVIEW_VERDICT" = "none" ] \
+    || unfixed="$(printf '%s' "$CP_REVIEW_DOC" | jq -r '[ (.findings // [])[] | select(.ruling == "fix") | .id ] | join(", ")')"
+  [ -z "$unfixed" ] \
+    || task_warn "$TASK_PATH" "completion close" "" "the person ruled $unfixed fix, and the task closed before they were fixed"
   CP_FOLLOW_UPS="$rows"
   # Last, because it takes the site down and commits. A site no restore took down goes down here,
   # unless it was adopted, which stays up by design, or a tear-down could reach the main checkout.

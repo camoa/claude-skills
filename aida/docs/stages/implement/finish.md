@@ -90,10 +90,15 @@ one test that fails on the bug. It goes in a new test file the order owns. The c
 it, and it freezes in a record of its own, `tests-<order>-repair-<n>.json`. The order's first
 frozen record is never rewritten. The fixer then makes the new test pass with the order's other
 tests. The fix brief refuses (exit 121) until the new test is frozen. An order proved another way
-has no logic to test, so its fix round opens at once.
+has no logic to test, so its fix round opens at once. So does a repair whose every finding is in a
+document or configuration file, or comes from the `dry`, `solid` or `architecture` lens. No test
+can watch such a finding fail.
 
 A departure you ruled `rebuild` at the task review goes through `redo` on that closed order. The
 redo builds the order again and removes the build record, so finish and review run again.
+
+A finding you ruled `fix` at the task review goes to the order that owns its file, like a finding
+that fails a criterion. One that cites no criterion takes that order's first criterion.
 
 A finding you ruled `test-wrong` names a frozen test. It goes to the order whose frozen record
 holds that test, and that order's test author corrects it. The correction freezes as a new

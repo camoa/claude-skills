@@ -51,7 +51,7 @@ nobody answers, so the review has no verdict and completion's halt names each de
 
 A finding the summary prints under `disposition(criterion)` fails the criterion it cites, whatever
 that criterion's own answer says. Ask the person to rule each unruled one once. The summary prints
-a ruled finding with its ruling beside it. The four words:
+a ruled finding with its ruling beside it. The five words:
 
 - `wrong`: the reviewer was mistaken, so the criterion reads its own answer.
 - `deferred`: the finding is real and waits. Completion offers it as a follow up task, and the
@@ -62,13 +62,19 @@ a ruled finding with its ruling beside it. The four words:
 - `contract-wrong:<corrected text>`: the code is right, and the criterion's wording is wrong. The
   record keeps the corrected text beside the frozen one, and the criterion reads its own answer.
   Completion offers a follow up task that changes the criterion through scope.
+- `fix`: the person wants the finding fixed in this task. Any finding a reviewer lens raised takes
+  it, a low one too. The finding then fails the criterion it cites, and the review fails. The
+  implement skill's `reopen` sends it to the fixer of the order that owns its file. Completion
+  offers no follow up task for it. A finding in a frozen test takes `test-wrong` and not `fix`.
+  A finding in any other file takes `fix` and not `test-wrong`.
 
 A finding keeps its id from one review pass to the next while its lens, file, lines and evidence
 stay the same. A new finding takes an id no earlier pass used, so a row prepared from an earlier
 pass never rules another finding. With no ruling, the finding still fails its criterion. The record keeps the finding and the
 person's word. A medium or high finding that cites no criterion fails its lens check, which is a
 warning. The person may rule it the same way. A lens check whose medium and high findings are all
-ruled reads met.
+ruled reads met. A finding ruled `fix` keeps its lens check unmet, whatever its severity. When the
+next pass raises the same finding again, it keeps the `fix` ruling.
 
 The person answers met or unmet per criterion, from its rows and its evidence. `close` prints each
 criterion's `evidence(<criterion>)` lines under its own line: the acceptance verifier's verdict,
@@ -103,7 +109,7 @@ finding the person ruled:
 "${CLAUDE_PLUGIN_ROOT}"/skills/review/scripts/review-actions.sh close "<task_folder>" \
   --row <criterion>=met|unmet --row <check id>=met|unmet \
   --row <decision id>=wrong|deferred|load-bearing|test-wrong|keep|rebuild|accept|reject \
-  --row <finding id>=wrong|deferred|test-wrong --row "<finding id>=contract-wrong:<corrected text>"
+  --row <finding id>=wrong|deferred|test-wrong|fix --row "<finding id>=contract-wrong:<corrected text>"
 ```
 A close with no row prints every row that waits and the words each takes. Ask the person those
 rows in one go. A row nobody asked, or a word its row does not take, decides nothing. `close` names
@@ -133,7 +139,8 @@ The verdict is two words, `passed` and `failed`.
 Name the criterion that caused a fail, and every warning. Then hand the record to the person. No
 fixer starts and no second pass runs, per SKILL.md. Completion closes over a fail or a warning
 only on the person's reason, and an unattended completion stops there. A finding that fails a
-criterion, or a test ruled wrong, goes back to its order through the implement skill's `reopen`.
+criterion, a test ruled wrong, or a finding ruled `fix`, goes back to its order through the
+implement skill's `reopen`.
 Its `next:` line names it, per "Finish runs again after a failed review" in
 `skills/implement/references/finish.md`.
 

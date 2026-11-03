@@ -99,13 +99,14 @@ stage next, which reads `finished.json`. Review's close, not this step, confirms
 person verifies by checklist.
 
 **Finish runs again after a failed review.** When the task review of this finish failed, or a
-person ruled a frozen test wrong there, `next:` names `reopen`. Run:
+person ruled a frozen test wrong or a finding `fix` there, `next:` names `reopen`. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh reopen "<task_folder>"
 ```
 It takes each review finding that fails a criterion, unless the person ruled it wrong. The finding
 goes to the closed order that owns its file and owns that criterion, else to one that serves it.
-When no such order exists, it goes to the one order that owns the file. That order gets one finding with origin `repair` per
+When no such order exists, it goes to the one order that owns the file. A finding the person ruled
+`fix` that cites no criterion goes to that one order, and takes its first criterion. That order gets one finding with origin `repair` per
 review finding, scoped to the file, and one more fix round. It goes back to its fix step.
 
 A finding the person ruled `test-wrong` names a frozen test. It goes to the order whose frozen
@@ -128,7 +129,9 @@ it. Run `tests-brief`, and its brief holds the bug under `repair`. Dispatch the 
 author, put the row to the checker, then run `tests-freeze`. The test goes in a new test file the
 order owns. It freezes as a record of its own, `tests-<order>-repair-<n>.json`, and the order's
 first record is never rewritten. `fix-brief` refuses until then (exit 121). An order proved
-another way has no logic to test, so its fix round opens at once.
+another way has no logic to test, so its fix round opens at once. So does a repair whose every
+finding is in a document or configuration file, or comes from the `dry`, `solid` or `architecture`
+lens. Those findings judge text or the shape of code, so no test can watch them fail.
 
 The order's own fixer repairs it under a dispatch record, its owned files and the frozen-test
 hook. It makes the repair's test pass with the order's other tests. A fresh
