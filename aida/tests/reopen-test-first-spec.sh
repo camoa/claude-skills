@@ -7,12 +7,12 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
 source "$HERE/records.bash"
 
-# reopened <proof> [<fields JSON>]: wo1, proved by <proof> and owning README.md and tests/*_test.sh,
+# reopened <proof> [<fields JSON>]: wo1, proved by <proof> and owning README.md and tests/*_test.sh, or $OWNED,
 # closed with its tests frozen, and a failed task review of the finish whose one finding fails c1
 # in a.php. The fields replace the finding's own. Then reopen.
 reopened() {
   task_records branch
-  jq --arg p "$1" '.proof = $p | .ownedFiles = ["a.php", "README.md", "tests/*_test.sh"]' \
+  jq --arg p "$1" --argjson o "${OWNED:-[\"a.php\", \"README.md\", \"tests/*_test.sh\"]}" '.proof = $p | .ownedFiles = $o' \
     "$TASK/design/wo1.json" >"$ROOT/w.json" && mv "$ROOT/w.json" "$TASK/design/wo1.json"
   jq --arg h "$(records_hash_for "$TASK")" '.hash = $h' "$TASK/design-closed.json" >"$ROOT/d.json" \
     && mv "$ROOT/d.json" "$TASK/design-closed.json"
@@ -97,26 +97,32 @@ author_case() (
 )
 expect "the repair's test author may write only its new test file" "$(author_case)" 'deny|deny|allow'
 
-# The repair's test author writes a new test file no order owns. A person adds it to wo1, with
-# each owned file named, and closes design. The start that takes it in keeps that file in the tree
-# and sets aside a stray one. With the test round closed, the file goes aside too (row 484). Prints
-# start's exit, then where each file is.
+# The repair's test author writes a new test file no order owns. A person adds it to wo1, as
+# add-owned-file does, with a production file a stopped role left, and closes design. The start that
+# takes them in keeps the test file and sets aside the production file and a stray one. With the
+# test round closed, the test file goes aside too (row 484). Prints start's exit, where each file
+# is, and the kept line.
 # added_case [closed]
 added_case() (
   source "$HERE/records.bash"
-  reopened tests
+  OWNED='["a.php", "tests/a_test.sh"]' reopened tests
   [ -z "${1:-}" ] || edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).repairs |= map(del(.testOwed))'
-  printf 'exit 1\n' >"$WT/tests/navigate_damaged.sh"
+  mkdir -p "$WT/src"
+  printf 'exit 1\n' >"$WT/tests/navigate_damaged_test.sh"
+  printf 'x\n' >"$WT/src/new.php"
   printf 'x\n' >"$WT/stray.txt"
-  edit "$TASK/design/wo1.json" '.ownedFiles = ["a.php", "README.md", "tests/a_test.sh", "tests/navigate_damaged.sh"]'
+  edit "$TASK/design/wo1.json" '.ownedFiles += ["tests/navigate_damaged_test.sh", "src/new.php"]'
   edit "$TASK/design-closed.json" '.hash = $h' --arg h "$(records_hash_for "$TASK")"
   git -C "$PROJECT" commit -qam "wo1 owns the repair's new test"
   run "$IMPLEMENT" start "$TASK"
-  printf '%s|%s|%s\n' "$RC" "$([ -f "$WT/tests/navigate_damaged.sh" ] && echo kept || echo aside)" \
-    "$([ -f "$WT/stray.txt" ] && echo kept || echo aside)"
+  local f where=""
+  for f in tests/navigate_damaged_test.sh src/new.php stray.txt; do
+    if [ -f "$WT/$f" ]; then where="$where|kept"; else where="$where|aside"; fi
+  done
+  printf '%s%s|%s\n' "$RC" "$where" "$(grep -c 'navigate_damaged_test.sh (wo1, kept' "$OUT")"
 )
-expect "start keeps the open repair's new test file and sets aside a stray one" "$(added_case)" '0|kept|aside'
-expect "start sets aside an owned new file once the test round is closed" "$(added_case closed)" '0|aside|aside'
+expect "start keeps the open repair's new test file and sets aside the rest" "$(added_case)" '0|kept|aside|aside|1'
+expect "start sets aside an owned new test file once the test round is closed" "$(added_case closed)" '0|aside|aside|aside|0'
 
 # A repair's record names the order it repairs, so design and start read no other order from it.
 started_case() (

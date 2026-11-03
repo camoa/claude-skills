@@ -1862,19 +1862,35 @@ do_start() {
   # and the set-aside deletes nothing. Only an untracked or a modified file can move. Any other
   # change stays in the tree, and a warning names it.
   # An order whose repair owes its test has a test author at work, not a stopped role. So a new file
-  # the order owns stays in the tree (gap row 484). The closed design names it, not the snapshot,
-  # because add-owned-file gives the author's file to the order before this start takes it in.
-  local lo_xy lo_rel lo_tab lo_tracked leftovers_json lo_defaulted="" lo_owed_json lo_kept_json='[]'
+  # that the order owns and its test globs match stays in the tree (gap row 484). The closed design
+  # names it, not the snapshot, because add-owned-file gives the file to the order before this start
+  # takes it in. A design changed since its close keeps nothing.
+  local lo_xy lo_rel lo_tab lo_tracked leftovers_json lo_defaulted="" lo_owed_json='[]' lo_kept_json='[]' lo_ids lo_id lo_glob
   lo_tab="$(printf '\t')"
-  lo_owed_json="$(jq -c --argjson w "$live_workorders_json" '[ (.orders // [])[]
-    | select(any((.repairs // [])[]; .testOwed == true)) | .id ] as $ids | [ $w[] | select(.id | IN($ids[])) ]' \
-    "$LEDGER_FILE" 2>/dev/null)"
+  if [ "$(design_closed_state)" = "ok" ] && [ "$(design_closed_hash)" = "$live_hash" ]; then
+    lo_owed_json="$(jq -c --argjson w "$live_workorders_json" '[ (.orders // [])[]
+      | select(any((.repairs // [])[]; .testOwed == true)) | .id ] as $ids | [ $w[] | select(.id | IN($ids[])) ]' \
+      "$LEDGER_FILE" 2>/dev/null)"
+  fi
   if [ -n "$lo_owed_json" ] && [ "$lo_owed_json" != "[]" ]; then
     im_scan_leftovers "$code_path" "$lo_owed_json"
-    lo_kept_json="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -c '[ .[] | select(.status == "??" and (.orders | length) > 0) | .path ]')"
+    while IFS="$lo_tab" read -r lo_rel lo_ids; do
+      [ -n "$lo_rel" ] || continue
+      for lo_id in $lo_ids; do
+        while IFS= read -r lo_glob; do
+          [ -n "$lo_glob" ] && tf_path_matches_catalog_glob "$lo_rel" "$lo_glob" || continue
+          lo_kept_json="$(printf '%s' "$lo_kept_json" | jq -c --arg p "$lo_rel" --arg o "$lo_id" '. + [{path: $p, orders: [$o]}]')"
+          break 2
+        done <<LO_GLOBS
+$(jq -r '(.testGlobs // [])[]' "$IMPL_DIR/tests-$lo_id.json" 2>/dev/null)
+LO_GLOBS
+      done
+    done <<LO_OWED
+$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -r '.[] | select(.status == "??") | .path + "\t" + (.orders | join(" "))')
+LO_OWED
   fi
   im_scan_leftovers "$code_path" "$( { jq -ce '.workOrders' "$SNAPSHOT_FILE" 2>/dev/null || printf '%s' "$live_workorders_json"; } )"
-  leftovers_json="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -c --argjson k "$lo_kept_json" 'map(select(.path | IN($k[]) | not))')"
+  leftovers_json="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -c --argjson k "$lo_kept_json" 'map(select(.path | IN($k[].path) | not))')"
   lo_tracked="$LO_TRACKED"
   if [ "$leftovers_json" != "[]" ]; then
     [ -n "$leftovers_choice" ] || { leftovers_choice="set-aside"; lo_defaulted=yes; }
@@ -2675,7 +2691,7 @@ ST_CHANGES
     --argjson removed "$removed_ids_json" \
     --argjson added "$added_ids_json" \
     --arg finished "$st_unfinished" \
-    --argjson leftovers "$(printf '%s' "$leftovers_json" | jq -c "[ $LO_TEXT_JQ ]")" \
+    --argjson leftovers "$(printf '%s' "$leftovers_json" | jq -c --argjson k "$lo_kept_json" "[ $LO_TEXT_JQ ] + [ \$k[] | .path + \" (\" + .orders[0] + \", kept for its repair test)\" ]")" \
     --arg setAside "$set_aside_dir" \
     --argjson stopped "$stopped_orders_json" \
     --argjson inFlight "$(printf '%s' "$in_flight_json" | jq -c '[ .[] | {id, lastStep, attempts: ("attempts=" + (.attemptsUsed | tostring)), rounds: ("rounds=" + (.roundsUsed | tostring))} ]')" \

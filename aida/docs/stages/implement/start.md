@@ -32,8 +32,8 @@ changed file is copied there, and its committed version comes back. Nothing is d
 file or a staged new file cannot be set aside, so it stays in the tree, and a warning names it.
 Commit it or undo it by hand.
 
-One kind of new file stays: a file owned by an order whose repair still owes its failing test.
-That order's test author wrote it, and you gave the file to the order in design.
+One kind of new file stays: a test file of an order whose repair still owes its failing test.
+The order must own it in a design closed since your last change. That order's test author wrote it.
 
 The usual first-run case is `package-lock.json`, changed when `task environment up` installed a
 test harness. Commit it.
