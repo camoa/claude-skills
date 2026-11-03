@@ -326,7 +326,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      A test written outside the framework's own pattern is not protected by anything later.
 #      Or its path is not a file the order owns (gap row 249); the refusal names the owned one.
 #      Or an untracked file lies under a path the order owns, which the freeze would leave out of
-#      its commit: it reaches the build unprotected. The message names each one.
+#      its commit: it reaches the build unprotected. The message names each one. Or the author
+#      changed a test file an order's frozen record holds, which no freeze commits (gap row 480).
 #  28  retired on 2026-10-19 (live-run row 374). `tests-freeze` refused a test name that did not
 #      end in the criterion id or the order id it claimed. The --test flag already names that id,
 #      the record keeps it, and every reader joins on the recorded name. The test-authoring recipe
@@ -6373,9 +6374,11 @@ TF_EOF
   # A tracked test file the order owns and the author changed rides in the same commit, though it
   # holds no frozen test, so the build never starts beside it (gap row 480). It is not recorded as
   # support: --support refuses a test path, and a support row would make a re-freeze read changed.
-  local tf_m tf_g tf_owned
+  # A file an order's frozen record holds is refused instead: ownedFiles may share it, and a repair
+  # freeze may leave an earlier frozen file out of --test. Nobody changes a frozen test.
+  local tf_m tf_g tf_owned tf_held_frozen=""
   while IFS= read -r tf_m; do
-    case "$tf_m" in M?' '*|?M' '*) tf_m="${tf_m#???}" ;; *) continue ;; esac
+    case "$tf_m" in M?' '*|?M' '*|A?' '*) tf_m="${tf_m#???}" ;; *) continue ;; esac
     printf '%s\n' "$tf_commit_paths" | grep -qxF -- "$tf_m" && continue
     tf_owned=false
     while IFS= read -r o; do
@@ -6386,8 +6389,13 @@ TF_EOF
     [ "$tf_owned" = "true" ] || continue
     while IFS= read -r tf_g; do
       [ -n "$tf_g" ] && tf_path_matches_catalog_glob "$tf_m" "$tf_g" || continue
-      tf_commit_paths="$tf_commit_paths${tf_commit_paths:+
+      ro_frozen_owner "$tf_m"
+      if [ -n "$RO_OWNER" ]; then
+        tf_held_frozen="$tf_held_frozen$tf_m ($RO_OWNER), "
+      else
+        tf_commit_paths="$tf_commit_paths${tf_commit_paths:+
 }$tf_m"
+      fi
       break
     done <<TF_EOF
 $(printf '%s' "$test_globs_json" | jq -r '.[]')
@@ -6395,6 +6403,8 @@ TF_EOF
   done <<TF_EOF
 $(git -C "$codepath" status --porcelain 2>/dev/null)
 TF_EOF
+  [ -z "$tf_held_frozen" ] \
+    || die 27 "tests-freeze: the test author changed these files, and a frozen record holds tests in each: ${tf_held_frozen%, }. Nobody changes a frozen test. The test author restores each file, and this freeze runs again. Nothing is frozen."
   if [ -n "$tf_commit_paths" ]; then
     set --
     while IFS= read -r p; do
@@ -6480,6 +6490,8 @@ TF_EOF
     || printf 'rowsCarried: %s\n' "$(printf '%s' "$tf_carried" | jq -r 'map(.criterion) | join(", ")')"
 
   if [ -n "$tf_unchanged_at" ]; then
+    [ -z "$tf_made" ] || write_atomic "$record_file" "$(jq --argjson fc "$(tf_freeze_commits "$record_file")" --arg m "$tf_made" \
+      '.freezeCommits = ($fc + [$m])' "$record_file")"
     echo "TESTS-FREEZE: unchanged (already frozen at commit $tf_unchanged_at with the same tests)"
     printf '%s\n' "$record_file"
     exit 0

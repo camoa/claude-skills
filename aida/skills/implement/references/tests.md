@@ -562,8 +562,9 @@ met. The freeze refuses a support path that does not exist (exit 3). It also ref
 glob matches (exit 3), because that file is a test: pass it as `--test`.
 
 Then it commits the test files it hashed, and the support files, on the task branch. It also
-commits each test file the order owns that the author changed, though that file holds no frozen
-test. It commits no other path. The implementer starts from a tree that already holds the tests,
+commits each test file the order owns that the author changed or staged, though that file holds no
+frozen test. When an order's frozen record holds tests in such a file, it refuses (exit 27) and
+freezes nothing. It commits no other path. The implementer starts from a tree that already holds the tests,
 and the record's commit is the one they are in. Work beside them stays uncommitted, and the
 freeze says so in one line. A commit that fails, for want of a git identity or any other reason, refuses before the
 record is written, with git's own message.
