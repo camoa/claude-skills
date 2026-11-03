@@ -10287,15 +10287,21 @@ do_review_record() {
 # finding").
 # ------------------------------------------------------------------------------------------------
 
-# The order's live reasoning paragraphs that the last build brief did not carry. An owner's ruling
-# added with `update --append-reasoning` after the build reaches the fixer this way (gap row 485).
-# The paragraphs come from the build brief's own reader, so a struck one stays out.
+# The order's reasoning paragraphs that the last build brief did not carry. An owner's ruling added
+# with `update --append-reasoning` after the build reaches the fixer this way (gap row 485). That
+# update writes only design/<order>.json, so the live text is read there, but only when it starts
+# with the frozen text: an edit to earlier text stays unfrozen and never reaches a fixer. A struck
+# paragraph stays out, as in the build brief.
 fb_new_reasoning() {
-  local built=""
+  local built="" live="null"
   [ ! -f "$IMPL_DIR/brief-$1-build.json" ] \
     || built="$(jq -r '.unit.reasoning // ""' "$IMPL_DIR/brief-$1-build.json" 2>/dev/null)"
-  printf '%s' "$RV_UNIT_JSON" | jq -r --arg built "$built" "$REASONING_JQ"'
-    ($built | split("\n\n")) as $had
+  [ ! -f "$TASK_PATH/design/$1.json" ] \
+    || live="$(jq -c '{reasoning: (.reasoning // "")}' "$TASK_PATH/design/$1.json" 2>/dev/null || echo null)"
+  printf '%s' "$RV_UNIT_JSON" | jq -r --arg built "$built" --argjson live "${live:-null}" "$REASONING_JQ"'
+    (.reasoning // "") as $frozen
+    | (if $live != null and ($live.reasoning | startswith($frozen)) then .reasoning = $live.reasoning else . end)
+    | ($built | split("\n\n")) as $had
     | liveReasoning | split("\n\n") | map(select(. != "" and (. as $p | $had | index($p) | not))) | join("\n\n")'
 }
 
