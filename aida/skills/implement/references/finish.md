@@ -127,7 +127,8 @@ order's judgement on it.
 An order proved by tests first takes one failing test of the bug. `next:` names the tests step for
 it. Run `tests-brief`, and its brief holds the bug under `repair`. Dispatch the order's test
 author, put the row to the checker, then run `tests-freeze`. The test goes in a new test file the
-order owns. It freezes as a record of its own, `tests-<order>-repair-<n>.json`, and the order's
+order owns. The test and its row may name the criterion the finding cites, even one the order does
+not serve. It freezes as a record of its own, `tests-<order>-repair-<n>.json`, and the order's
 first record is never rewritten. `fix-brief` refuses until then (exit 121). An order proved
 another way has no logic to test, so its fix round opens at once. So does a repair whose every
 finding is in a document or configuration file, or comes from the `dry`, `solid` or `architecture`

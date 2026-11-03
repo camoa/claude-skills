@@ -5222,6 +5222,20 @@ do_tests_freeze() {
       tf_prior_stop="$(stop_text "$(printf '%s' "$tf_prior_ledger" | jq -c --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0] // {}')")"
     fi
   fi
+  # `reopen` sends a finding to the one order that owns its file, which may not serve the criterion
+  # the finding cites (gap row 483). So a repair's test and row may also name that criterion.
+  local tf_cited
+  if [ -n "$tf_repair" ]; then
+    tf_cited="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson l "$tf_prior_ledger" --arg id "$unit_id" \
+      --argjson n "$tf_repair" --argjson have "$CRITERIA_IDS_JSON" \
+      --slurpfile review <(cat "$IMPL_DIR/review-$unit_id.json" 2>/dev/null || echo '{}') '
+      ([ $l.orders[] | select(.id == $id) ][0].repairs[$n - 1].findings // []) as $f
+      | [ ($review[0].findings // [])[] | select(.id as $i | $f | index($i)) | .linkedTo ] as $cited
+      | [ (.alignment.criteria // [])[] | select(.id as $c | ($cited | index($c)) and ($have | index($c) | not)) ]')"
+    [ -n "$tf_cited" ] || die3 "tests-freeze: the criteria the repair of $unit_id cites could not be read from $IMPL_DIR/review-$unit_id.json."
+    CRITERIA_JSON="$(printf '%s' "$CRITERIA_JSON" | jq -c --argjson c "$tf_cited" '. + $c')"
+    CRITERIA_IDS_JSON="$(printf '%s' "$CRITERIA_IDS_JSON" | jq -c --argjson c "$tf_cited" '. + ($c | map(.id))')"
+  fi
 
   # --- turn every raw --flag value into JSON, through temporary files beside the implementation dir
   local tests_tmp reds_tmp checklists_tmp goa_tmp rows_meta_tmp locks_tmp

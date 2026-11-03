@@ -7,11 +7,12 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
 source "$HERE/records.bash"
 
-# reopened <proof> [<fields JSON>]: wo1, proved by <proof> and owning README.md and tests/*_test.sh, or $OWNED,
-# closed with its tests frozen, and a failed task review of the finish whose one finding fails c1
-# in a.php. The fields replace the finding's own. Then reopen.
+# reopened <proof> [<fields JSON>] [wo2]: wo1, proved by <proof> and owning README.md and
+# tests/*_test.sh, or $OWNED, closed with its tests frozen, and a failed task review of the finish
+# whose one finding fails c1 in a.php. The fields replace the finding's own. With wo2, wo2 serves
+# c2. Then reopen.
 reopened() {
-  task_records branch
+  task_records branch ${3:+"$3"}
   jq --arg p "$1" --argjson o "${OWNED:-[\"a.php\", \"README.md\", \"tests/*_test.sh\"]}" '.proof = $p | .ownedFiles = $o' \
     "$TASK/design/wo1.json" >"$ROOT/w.json" && mv "$ROOT/w.json" "$TASK/design/wo1.json"
   jq --arg h "$(records_hash_for "$TASK")" '.hash = $h' "$TASK/design-closed.json" >"$ROOT/d.json" \
@@ -57,6 +58,22 @@ freeze_case() (
 )
 expect "the repair's test freezes as a new record, and the original record is unchanged" "$(freeze_case)" \
   '0|wo1 tests/a_bug_test.sh|unchanged|reviewed'
+
+# A finding on c2, which wo1 neither serves nor owns, goes to wo1 because wo1 alone owns a.php. Its
+# repair test freezes keyed to c2, the finding's criterion (row 483). A criterion that is neither the
+# order's nor the finding's is still refused. Prints the freeze's exit and the repair row's criterion.
+# foreign_case <criterion of the finding> <criterion the test and its row name>
+foreign_case() (
+  source "$HERE/records.bash"
+  reopened tests "$(jq -nc --arg c "$1" '{linkedTo: $c}')" wo2
+  printf 'echo a still says a\nexit 1\n' >"$WT/tests/a_bug_test.sh"
+  printf 'a still says a\n' >"$IMPL/red-bug.txt"
+  run "$IMPLEMENT" tests-freeze "$TASK" wo1 --test-glob 'tests/*_test.sh' --test-recipe "fake=$RECIPE" \
+    --test "tests/a_bug_test.sh::bug=$2" --red "bug=$IMPL/red-bug.txt" --row "$2=confirmed::model::observes the bug"
+  printf '%s|%s\n' "$RC" "$(jq -r '.rows[0].criterion' "$IMPL/tests-wo1-repair-1.json" 2>/dev/null)"
+)
+expect "a repair freezes its test keyed to the finding's criterion, which the order does not serve" "$(foreign_case c2 c2)" '0|c2'
+expect "a repair freeze refuses a criterion that is neither the order's nor the finding's" "$(foreign_case c1 c2)" '3|'
 
 # An order proved by observation has no test author, so its fix round opens at once.
 observe_case() (
