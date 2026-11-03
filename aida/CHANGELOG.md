@@ -4,6 +4,45 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.2] - 2026-11-03
+
+Four fixes from a live run. A person can send a review finding back to
+its order's fixer. The acceptance verifier can write its evidence
+folder, and the freeze commits every test file the author changed.
+
+### Added
+
+- A person can rule a review finding `fix` at review close, with
+  `--row <finding>=fix`. A finding that cites a criterion then fails it,
+  so the review fails. A finding that cites no criterion leaves its lens
+  check unmet, a warning. Either way, `reopen` sends the finding to the
+  fixer of the order that owns its file. An uncited finding takes that
+  order's first criterion. Completion offers no follow-up task for it.
+  The ruling stays when the next pass raises the same finding. A close
+  on `--reason` before the repair lands leaves a warning. A finding of
+  any reviewer lens may take a ruling, a low one too. A finding in a
+  frozen test file takes `test-wrong` and not `fix`.
+
+### Changed
+
+- A repair owes a failing test first only when one of its findings
+  holds logic. A finding in a document or configuration file, or one
+  from the duplication, design-principle or architecture lens, holds
+  none.
+- `tests-freeze` commits a test file that the order owns and the test
+  author changed or staged, though it holds no test of the order. It
+  refuses, and freezes nothing, when a frozen record holds tests in
+  that file.
+
+### Fixed
+
+- The acceptance verifier's write hook refused `mkdir -p review/evidence`
+  and a copy into that folder, although the folder is its own.
+- `acceptance --evidence` lost an empty path on the last evidence row,
+  so a task with no surfaces could not record its evidence.
+- When `reopen` could not build a repair, it exited 0 and removed the
+  finished record. It now refuses first.
+
 ## [6.1.1] - 2026-10-30
 
 Two fixes from a live run. A person can retire a frozen test before the
