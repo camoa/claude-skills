@@ -6,9 +6,10 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.1.2] - 2026-11-03
 
-Four fixes from a live run. A person can send a review finding back to
-its order's fixer. The acceptance verifier can write its evidence
-folder, and the freeze commits every test file the author changed.
+Fewer permission prompts in attended sessions, and four fixes from a
+live run. A person can send a review finding back to its order's
+fixer. The acceptance verifier can write its evidence folder, and the
+freeze commits every test file the author changed.
 
 ### Added
 
@@ -25,6 +26,27 @@ folder, and the freeze commits every test file the author changed.
 
 ### Changed
 
+- In an attended session, at a stage the task runs interactive, most
+  person-only steps take the person's answer from the chat. No
+  permission prompt shows for them. Eight steps still show the prompt
+  in every run mode. These are the run-mode switch, the contract's
+  approval and the approval of a design's commands. The other five are
+  the ways past another hard stop: `reopen --test`, `fix-brief --allow`,
+  `go-on --owns` or `--continue close`, `verify-record --ruling` and
+  `finish --regression`. A light task always shows the prompt. A chat
+  answer is what the main session reports, and nothing records or
+  proves it.
+- A chat answer counts only when Claude Code reports an attended
+  session. In `claude -p`, or when the task's mode cannot be read, the
+  recorded answer is required. A recipe step with no task, such as
+  `surfaces decline` or `tool install`, now refuses in `claude -p`.
+- The contract's approval prompt now shows the rendered contract, up to
+  20,000 bytes.
+- The hook refuses a dispatched agent every person-only step that
+  cannot be undone. A session with an agent type and no agent id, such
+  as `claude --agent`, gets the prompt for them instead. Every session
+  is refused a git checkout or restore of a task folder.
+- A child task that a split makes keeps its parent's run mode.
 - A repair owes a failing test first only when one of its findings
   holds logic. A finding in a document or configuration file, or one
   from the duplication, design-principle or architecture lens, holds
