@@ -1469,6 +1469,15 @@ im_repair_owed() {
     | [ (.repairs // []) | to_entries[] | select(.value.testOwed == true) | .key + 1 ][0] // empty' 2>/dev/null
 }
 
+# The findings of repair $3 on order $2, from the order's review record, as one JSON list. $1 the
+# ledger document. Prints nothing when either record cannot be read.
+im_repair_findings() {
+  printf '%s' "$1" | jq -c --arg id "$2" --argjson n "$3" \
+    --slurpfile review <(cat "$IMPL_DIR/review-$2.json" 2>/dev/null || echo '{}') '
+    ([ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1].findings // []) as $f
+    | [ ($review[0].findings // [])[] | select(.id as $i | $f | index($i)) ]' 2>/dev/null
+}
+
 # The orders in ledger document $1 that are neither closed nor dropped and hold a repair order $2
 # opened, comma separated, or nothing. Order $2 waits on each (gap rows 286 and 433).
 im_repairing() {
@@ -4639,10 +4648,14 @@ TB_OWNED
   local repair_json=null repair_at
   repair_at="$(im_repair_owed "$ledger_doc" "$unit_id")"
   if [ -n "$repair_at" ]; then
-    repair_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --argjson n "$repair_at" \
-      --slurpfile review <(cat "$IMPL_DIR/review-$unit_id.json" 2>/dev/null || echo '{}') '
+    # citedCriteria carries the text of each criterion a finding cites. The order may not serve it,
+    # and its test and row may still name it (gap row 483).
+    repair_json="$(im_repair_findings "$ledger_doc" "$unit_id" "$repair_at")"
+    [ -n "$repair_json" ] && repair_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --argjson n "$repair_at" \
+      --argjson found "$repair_json" --argjson criteria "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment.criteria // []')" '
       [ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1] as $r
-      | {findings: [ ($review[0].findings // [])[] | select(.id as $i | $r.findings | index($i)) | {id, file, lines, linkedTo, evidence} ],
+      | {findings: [ $found[] | {id, file, lines, linkedTo, evidence} ],
+         citedCriteria: [ $criteria[] | select(.id as $c | any($found[]; .linkedTo == $c)) | {id, text, verification} ],
          whatToDo: (if ($r.retiredTests // []) != []
            then "A person ruled the tests in retiredTests wrong. Remove each one by deleting its lines, and change no other line. Delete a file when every test in it is named. Return each kept test with a locks-in reason naming the code it passes against."
            elif ($r.retires // []) == []
@@ -5226,12 +5239,9 @@ do_tests_freeze() {
   # the finding cites (gap row 483). So a repair's test and row may also name that criterion.
   local tf_cited
   if [ -n "$tf_repair" ]; then
-    tf_cited="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson l "$tf_prior_ledger" --arg id "$unit_id" \
-      --argjson n "$tf_repair" --argjson have "$CRITERIA_IDS_JSON" \
-      --slurpfile review <(cat "$IMPL_DIR/review-$unit_id.json" 2>/dev/null || echo '{}') '
-      ([ $l.orders[] | select(.id == $id) ][0].repairs[$n - 1].findings // []) as $f
-      | [ ($review[0].findings // [])[] | select(.id as $i | $f | index($i)) | .linkedTo ] as $cited
-      | [ (.alignment.criteria // [])[] | select(.id as $c | ($cited | index($c)) and ($have | index($c) | not)) ]')"
+    tf_cited="$(im_repair_findings "$tf_prior_ledger" "$unit_id" "$tf_repair")"
+    [ -z "$tf_cited" ] || tf_cited="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson found "$tf_cited" --argjson have "$CRITERIA_IDS_JSON" '
+      [ (.alignment.criteria // [])[] | select(.id as $c | any($found[]; .linkedTo == $c) and ($have | index($c) | not)) ]')"
     [ -n "$tf_cited" ] || die3 "tests-freeze: the criteria the repair of $unit_id cites could not be read from $IMPL_DIR/review-$unit_id.json."
     CRITERIA_JSON="$(printf '%s' "$CRITERIA_JSON" | jq -c --argjson c "$tf_cited" '. + $c')"
     CRITERIA_IDS_JSON="$(printf '%s' "$CRITERIA_IDS_JSON" | jq -c --argjson c "$tf_cited" '. + ($c | map(.id))')"

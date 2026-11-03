@@ -75,6 +75,16 @@ foreign_case() (
 expect "a repair freezes its test keyed to the finding's criterion, which the order does not serve" "$(foreign_case c2 c2)" '0|c2'
 expect "a repair freeze refuses a criterion that is neither the order's nor the finding's" "$(foreign_case c1 c2)" '3|'
 
+# The repair's tests brief carries the text of the criterion the finding cites, so the author and
+# the row checker can key a test to it.
+cited_case() (
+  source "$HERE/records.bash"
+  reopened tests '{"linkedTo": "c2"}' wo2
+  run "$IMPLEMENT" tests-brief "$TASK" wo1
+  jq -r '.repair.citedCriteria | map(.id + " " + .text) | join(",")' "$IMPL/brief-wo1-tests.json" 2>/dev/null
+)
+expect "the repair's tests brief carries the cited criterion's text" "$(cited_case)" 'c2 b.php exists'
+
 # An order proved by observation has no test author, so its fix round opens at once.
 observe_case() (
   source "$HERE/records.bash"
