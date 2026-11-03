@@ -440,7 +440,9 @@ preconditions has run, it says that preconditions will check them. Read both to 
 
 ## `person-answer.sh <task-id> --step <step> [--order <id>] -- <words>`
 
-Some steps are a person's decision only. Each one refuses until the person's answer is on record.
+Some steps are a person's decision only. Some take the person's answer from the chat when the
+session is attended and the stage runs interactive: ask in the chat, and run the step only on the
+person's answer, with their words. Every other one refuses until the person's answer is on record.
 The refusal prints this command with the step, the order and the words to use. Run it:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/task/scripts/person-answer.sh --project "<projectPath>" "<task-id>" \

@@ -33,6 +33,17 @@ split_case() (
 )
 expect "a split writes every child and no tree, so a child's tree never leaves a split half written" "$(split_case)" '0|yes|none|none'
 
+# split_mode_case: t1 runs autonomous for implement only, and splits into a and b. The run mode
+# child a records.
+split_mode_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  edit "$TASK/task.json" '.runMode = "autonomous" | .runModeStages = ["implement"]'
+  run "$TASK_ACTIONS" split --project "$PROJECT" t1 --child a --goal "do a" --child b --goal "do b"
+  printf '%s|%s\n' "$RC" "$(jq -c '[.runMode, .runModeStages]' "$PROJECT/tasks/a/task.json")"
+)
+expect "a split child keeps its parent's run mode" "$(split_mode_case)" '0|["autonomous",["implement"]]'
+
 # follow_up_case: completion creates the task for follow-up finding f1 of t1. Its tree.
 follow_up_case() (
   source "$HERE/records.bash"

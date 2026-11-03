@@ -32,8 +32,8 @@ The usual first-run case is `package-lock.json`, changed by a surfaces harness i
 
 With no `--leftovers`, the script sets such files aside itself, in both run modes, and writes a
 warning. Read the paths to the person. To keep a file next time, the person commits it first. Or
-run start with `--leftovers keep` to leave it as it is, for that run only. `--leftovers keep`
-refuses without the person's answer on record (exit 68).
+run start with `--leftovers keep` to leave it as it is, for that run only. `--leftovers keep` is a
+person's answer: from the chat when attended at an interactive stage, else on record (exit 68).
 
 Set aside moves each untracked file to `<task_folder>/implementation/set-aside/<time>/`, under its
 own path. A modified file is copied there, and its committed version comes back. Nothing is

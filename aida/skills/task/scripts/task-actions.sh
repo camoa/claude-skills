@@ -865,8 +865,10 @@ do_split() {
     mkdir -p "$cdir" || die3 "split: cannot create $cdir"
     set -- "$@" "tasks/$cid"
 
-    # A child builds on what its parent builds on, so it waits for the same build (gap row 291).
-    jq -n --arg id "$cid" --arg parent "$parent_id" --arg after "$(jq -r '.after // empty' "$parent_json_file")" '{
+    # A child builds on what its parent builds on, so it waits for the same build (gap row 291). It
+    # runs in its parent's run mode, so a person gate reads the mode the person set (gap row 481).
+    jq -n --arg id "$cid" --arg parent "$parent_id" --arg after "$(jq -r '.after // empty' "$parent_json_file")" \
+      --slurpfile p "$parent_json_file" '{
         schemaVersion: 1,
         id: $id,
         state: "new",
@@ -874,7 +876,8 @@ do_split() {
         children: [],
         mechanismHints: [],
         externalIds: {}
-      } + (if $after == "" then {} else {after: $after} end)' > "$cdir/task.json" \
+      } + (if $after == "" then {} else {after: $after} end)
+        + ($p[0] | with_entries(select(.key == "runMode" or .key == "runModeStages")))' > "$cdir/task.json" \
       || die3 "split: could not write $cdir/task.json"
 
     {
@@ -979,7 +982,7 @@ do_set_run_mode() {
   local was_light=no words
   ! task_is_light "$task_dir" || was_light=yes
   words="$value$(printf '%s' "$stages_json" | jq -r '.[] | " " + .' | tr -d '\n')"
-  task_require_answer 70 set-run-mode "the run mode" "$task_dir" "task set-run-mode" "" "$words"
+  task_require_person 70 set-run-mode "the run mode" "$task_dir" "" "task set-run-mode" "" "$words"
 
   local tmp
   tmp="$(mktemp)" || die3 "set-run-mode: cannot create a temp file"

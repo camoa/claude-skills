@@ -102,8 +102,10 @@ role left uncommitted (`references/start.md`). Take the next ready order and app
 only when nothing is ready.
 
 Then report each stop, with the reasons the ledger holds, and what is waiting on it. A person
-leaves a stop one of three ways, and each one is a person's answer, recorded through
-`person-answer.sh` (`references/finish.md`, "Leave a stop"):
+leaves a stop one of three ways, and each one is a person's answer. Attended at an interactive
+stage, ask in the chat and run it on the answer. Otherwise, and always for `go-on --owns` and
+`go-on --continue close`, record it through `person-answer.sh` (`references/finish.md`, "A
+person's answer"):
 
 - **Go on**, saying what continues. That is one more build attempt or one more fix round. It can
   also be the checks run again with no new build, or a close with the open findings listed. It may

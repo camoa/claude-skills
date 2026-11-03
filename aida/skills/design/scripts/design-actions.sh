@@ -2089,7 +2089,7 @@ $(printf '%s\n' "$unaccounted" | sed 's/^/a research finding is in no work order
           jq -r '(.verify // [])[] | select(has("run") and .binding == false and (has("approved") | not)) | .run' "$wo_file"
         done)"
     [ -z "$to_stamp" ] \
-      || task_require_answer 70 close "--approve-runs, a yes to the commands research wrote," "$TASK_PATH" "design close" "" "$to_stamp"
+      || task_require_person 70 close "--approve-runs, a yes to the commands research wrote," "$TASK_PATH" "" "design close" "" "$to_stamp"
   fi
   if [ "$approve_runs" = true ]; then
     while IFS= read -r wo_file; do

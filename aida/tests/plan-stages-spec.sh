@@ -84,44 +84,52 @@ start_case() (
 )
 expect "design starts when research has not closed, with a warning" "$(start_case)" "0|1"
 
-# approve_answer: the person's answer to approve, with the words approve's own refusal names. They
-# name the contract as it is now.
+# approve_answer: the person's answer to approve. Its words are the page approve's own refusal
+# rendered, so they name the contract as it is now.
 approve_answer() {
   run "$SCOPE" approve "$TASK"
-  answer "scope approve" "" "$(sed -n "s/.* -- '\(approve [^']*\)'.*/\1/p" "$OUT")"
+  answer "scope approve" "" "@$TASK/alignment.md"
 }
 
 # scope_case <answered> <action> [<args>...]: the action's exit, c1's author and whether the answer is
-# used. c1 starts as designer. With answered, the person answered the action's step first.
+# used. c1 starts as designer. With answered, the person answered the action's step first. With
+# STAGE set, the task runs autonomous for implement only, and stands at STAGE, scope or implement.
 scope_case() (
   source "$HERE/records.bash"
   task_records branch
   jq '.criteria[0].author = "designer"' "$TASK/alignment.json" >"$ROOT/a" && mv "$ROOT/a" "$TASK/alignment.json"
+  [ -z "${STAGE:-}" ] || edit "$TASK/task.json" '.runMode = "autonomous" | .runModeStages = ["implement"]'
+  [ "${STAGE:-}" != implement ] || edit "$TASK/alignment.json" '.pluginVersion = "6.1.2"'
   local how="$1" action="$2"; shift 2
   case "$how:$action" in
     answered:approve) approve_answer ;;
-    answered:update) answer "scope update" "" "c1 author owner" ;;
   esac
   run "$SCOPE" "$action" "$TASK" "$@"
   printf '%s|%s|%s\n' "$RC" "$(jq -r '.criteria[0].author' "$TASK/alignment.json")" \
     "$(jq -r 'map(select(.usedAt != null)) | length' "$TASK/person-answers.json" 2>/dev/null || echo 0)"
 )
 expect "an attended approve with no person's answer promotes nothing" "$(scope_case none approve)" "70|designer|0"
-expect "approve with the person's answer promotes, and uses the answer" "$(scope_case answered approve)" "0|owner|1"
-expect "update --author owner with no person's answer promotes nothing" "$(scope_case none update --id c1 --author owner)" "70|designer|0"
-expect "update --author owner with the person's answer promotes" "$(scope_case answered update --id c1 --author owner)" "0|owner|1"
+expect "approve with the person's answer to the rendered page promotes, and uses the answer" "$(scope_case answered approve)" "0|owner|1"
+expect "attended, update --author owner promotes with no recorded answer" "$(scope_case none update --id c1 --author owner)" "0|owner|0"
+expect "autonomous for implement only, at scope, update --author owner promotes with no recorded answer" \
+  "$(STAGE=scope scope_case none update --id c1 --author owner)" "0|owner|0"
+expect "autonomous for implement only, at implement, update --author owner refuses with no answer" \
+  "$(STAGE=implement scope_case none update --id c1 --author owner)" "70|designer|0"
 
-# Gap row 473: the person's yes is for the contract they saw. A change after it needs a new yes.
+# Gap row 473: the person's yes is for the contract they saw. A change after it needs a new yes,
+# through update or straight to the file.
 changed_case() (
   source "$HERE/records.bash"
   task_records branch
   jq '.criteria[0].author = "designer"' "$TASK/alignment.json" >"$ROOT/a" && mv "$ROOT/a" "$TASK/alignment.json"
   approve_answer
-  run "$SCOPE" update "$TASK" --id c1 --text "a.php says c"
+  if [ "${1:-}" = file ]; then edit "$TASK/alignment.json" '.criteria[0].text = "a.php says c"'
+  else run "$SCOPE" update "$TASK" --id c1 --text "a.php says c"; fi
   run "$SCOPE" approve "$TASK"
   printf '%s|%s\n' "$RC" "$(jq -r '.criteria[0].author' "$TASK/alignment.json")"
 )
 expect "an answer given before a change does not approve the changed contract" "$(changed_case)" "70|designer"
+expect "an answer given before a change to the file does not approve the changed contract" "$(changed_case file)" "70|designer"
 
 # A scope close with no distiller sidecar goes on, with a warning. The task's design is closed and
 # it has no research check, so its stage reads past scope and past research.

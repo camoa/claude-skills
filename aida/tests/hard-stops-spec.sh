@@ -129,4 +129,58 @@ expect "from a dispatched role, both are refused" "$(answer_hook_case aida:imple
 expect "set-run-mode refuses with no answer, runs with one, and refuses when that one is used" \
   "$(run_mode_case)" "70:interactive|0:autonomous|70:light"
 
+# person_step_case [<agent type>] [<agent id>]: the hook's decision on implement drop, a person-only
+# step, from the main session, a role, or a session with an agent type and no agent id.
+person_step_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  write_hook "$(jq -nc --arg c "$IMPLEMENT drop $TASK wo1 --because 'not needed'" '{command: $c}')" "$@"
+)
+# unattended_drop_case: drop's exit and wo1's step, on an interactive task, with no answer, in a
+# session that does not report itself attended.
+unattended_drop_case() (
+  source "$HERE/records.bash"
+  unset CLAUDE_CODE_SESSION_ATTENDED
+  task_records branch
+  order_records code-written '[]'
+  run "$IMPLEMENT" drop "$TASK" wo1 --because "not needed"
+  printf '%s|%s\n' "$RC" "$(ledger '.lastStep')"
+)
+# checkout_case <path>: the hook's decision on a checkout of an older copy of <path> in the project.
+checkout_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  write_hook "$(jq -nc --arg c "git -C $PROJECT checkout HEAD~1 -- $1" '{command: $c}')"
+)
+# long_answer_case: whether the prompt for person-answer.sh shows a mark at byte 15,000 of its words
+# file, and one past byte 20,000.
+long_answer_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  { head -c 15000 /dev/zero | tr '\0' x; printf 'MARKONE'; head -c 10000 /dev/zero | tr '\0' y; printf 'MARKTWO'; } >"$ROOT/words.txt"
+  write_hook "$(jq -nc --arg c "$PLUGIN/skills/task/scripts/person-answer.sh --project $PROJECT t1 --step 'scope approve' -- @$ROOT/words.txt" '{command: $c}')" >/dev/null
+  printf '%s|%s\n' "$(grep -c MARKONE "$ROOT/hook.json")" "$(grep -c MARKTWO "$ROOT/hook.json")"
+)
+# whole_action_names: the agent and template files that name an action the hook refuses whole to a
+# role, or none.
+whole_action_names() {
+  local script acts rest named=""
+  while read -r script acts rest; do
+    [ -n "$acts" ] && [ -z "$rest" ] || continue
+    named="$named$(grep -rlE "$(printf '%s' "$script" | sed 's/\./\\./g')[\"']?([[:space:]]+--[a-z-]+[[:space:]=]+[^[:space:]]+)*[[:space:]]+[\"']?($acts)([\"'[:space:]]|$)" \
+      "$PLUGIN/agents" "$PLUGIN/templates" 2>/dev/null)"
+  done < <(sed -n "/^PERSON_ACTIONS='/,/'\$/p" "$PLUGIN/hooks/deny-frozen-test-writes.sh" | sed "s/^PERSON_ACTIONS='//; s/'\$//")
+  printf '%s\n' "${named:-none}"
+}
+
+echo "--- person steps: a role cannot take one, and an unattended session needs the recorded answer"
+expect "a role running implement drop is refused" "$(person_step_case aida:implementer)" deny
+expect "the main session running implement drop is allowed" "$(person_step_case)" allow
+expect "a session with an agent type and no agent id is asked" "$(person_step_case helper "")" ask
+expect "an interactive task in a session nobody attends refuses drop with no answer" "$(unattended_drop_case)" "68|code-written"
+expect "no agent or template names an action the hook refuses whole to a role" "$(whole_action_names)" none
+expect "a checkout of an older copy of the task folder is refused" "$(checkout_case tasks/t1)" deny
+expect "a checkout of an older copy of the tasks folder is refused" "$(checkout_case tasks)" deny
+expect "the prompt shows the words file past 2,000 bytes, and stops at 20,000" "$(long_answer_case)" "1|0"
+
 finish

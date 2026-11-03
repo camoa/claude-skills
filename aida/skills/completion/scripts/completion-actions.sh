@@ -359,17 +359,6 @@ cp_refuse_complete() {
   [ "$CP_STATE" != "complete" ] || die 1 "$1: $CP_TASK_ID is already complete. Nothing is left to close, and the record at $RECORD_FILE says on what grounds."
 }
 
-# Exit 70. A person's answer is accepted only when a person is present. Review and tests-freeze
-# apply the same rule under the same number. A person's answer in the task's answer record, step
-# "completion $1", passes it too, without a change of mode (task_answer_find). One answer covers the
-# whole call. $1 the action, $2 the flag, $3 what the flag would have decided, $4 every person's
-# flag of the call, one "<flag> <value>" per line.
-cp_require_person() {
-  local who="$1" flag="$2" what="$3"
-  [ "$CP_RUN_MODE" = "autonomous" ] || return 0
-  task_answer_find "$TASK_PATH" "completion $who" "" "$4" && return 0
-  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written.$(task_answer_route "$TASK_PATH" "completion $who" "" "$4")"
-}
 
 # The one follow up row for finding $1, or nothing when the review holds no follow up finding of
 # that id.
@@ -707,9 +696,10 @@ do_close() {
   cp_paths "close" "$task_arg"
   cp_load "close"
   cp_refuse_complete "close"
-  [ -z "$reason" ] || cp_require_person "close" "--reason" "a person decided to close without a passed review" "$person_words"
-  [ -z "$leaves" ] || cp_require_person "close" "--leave" "a person decided to leave a finding without a task" "$person_words"
-  [ -z "$captures_offered" ] || cp_require_person "close" "--captures-offered" "a person was offered the notes as plays" "$person_words"
+  # One answer covers the whole call: its words are every person's flag, one "<flag> <value>" per line.
+  [ -z "$reason" ] || task_require_person 70 close "--reason, a person's decision to close without a passed review," "$TASK_PATH" completion "completion close" "" "$person_words"
+  [ -z "$leaves" ] || task_require_person 70 close "--leave, a person's decision to leave a finding without a task," "$TASK_PATH" completion "completion close" "" "$person_words"
+  [ -z "$captures_offered" ] || task_require_person 70 close "--captures-offered, a person's word that the notes were offered as plays," "$TASK_PATH" completion "completion close" "" "$person_words"
   # Unattended with no answer record, nothing is offered and the record says why; a person names a
   # play, a script never does.
   [ "$CP_RUN_MODE" != "autonomous" ] || [ -n "$captures_offered" ] || captures_skipped="autonomous"

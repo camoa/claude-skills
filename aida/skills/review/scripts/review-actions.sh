@@ -460,19 +460,6 @@ rw_refuse_moved_code() {
     || rw_pass_moved "$who" "the working tree at $RV_CODEPATH is dirty, and the reviewer may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
 }
 
-# Exit 70. A person's answer is accepted only when a person is present, which is the rule
-# tests-freeze already applies to its own rows and the number it already uses. A person's answer in
-# the task's answer record, step "review $1", passes it too, without a change of mode
-# (task_answer_find). $1 the action, $2 the flag, $3 what the flag would have decided, $4 the
-# flag's values, one per line, or empty where no answer may stand in.
-rw_require_person() {
-  local who="$1" flag="$2" what="$3" route=""
-  [ "$RW_RUN_MODE" = "autonomous" ] || return 0
-  task_answer_find "$TASK_PATH" "review $who" "" "${4:-}" && return 0
-  [ -z "${4:-}" ] || route="$(task_answer_route "$TASK_PATH" "review $who" "" "$4")"
-  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written.$route"
-}
-
 # The rows a close still waits on, each with the words it takes, in one line (live-run row 430).
 # $1 the review record, $2 the person criteria that wait, as a JSON list of ids, $3 the findings a
 # person may rule, as a JSON list of ids. A finding already ruled and a check already answered do
@@ -2836,7 +2823,7 @@ do_acceptance() {
   [ -z "$evidence_given" ] || [ -z "$(pc_trim "$accepted")" ] \
     || die 3 "acceptance: --evidence records the verifier's rows over the run already recorded, and --accept-baseline runs the surfaces again. Run them one at a time."
   [ -z "$(pc_trim "$accepted")" ] \
-    || rw_require_person "acceptance" "--accept-baseline" "a person accepted a new baseline for a surface"
+    || task_require_person 70 acceptance "--accept-baseline, a person's acceptance of a new baseline for a surface," "$TASK_PATH" review "review acceptance" "" ""
 
   RW_CATALOG_NOTES="$(printf '%s' "$RW_RECORD_DOC" | jq -c '.catalogNotes // []')"
   RW_ACCEPTED_DONE=""; RW_ACCEPTED_ROWS=""
@@ -3069,7 +3056,7 @@ do_close() {
         | {id: (.id | ltrimstr("decision-") | rtrimstr("-non-goal")), frozen: .frozenText, live: .liveText} ]
         | sort_by(.id)')" = "$(rw_non_goal_changes | jq -c 'sort_by(.id)')" ] \
     || rw_pass_moved "close" "$ALIGNMENT_FILE changed a non-goal since brief ran, so the reviewer judged another text."
-  [ -z "$rows" ] || rw_require_person "close" "--row" "a person read a checklist row and judged it" "$rows_raw"
+  [ -z "$rows" ] || task_require_person 70 close "--row, a person's judgement of a checklist row," "$TASK_PATH" review "review close" "" "$rows_raw"
 
   # A person rules a finding that fails a criterion (gap row 329). wrong: the reviewer was mistaken,
   # so the criterion reads its own answer. deferred: the finding is real and waits, so it becomes

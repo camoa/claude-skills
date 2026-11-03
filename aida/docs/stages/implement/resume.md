@@ -68,9 +68,10 @@ stops the order.
 
 ## Your answer to a person's call
 
-A person's call, such as a way out of a stop, a ruling, a file you allow, or accepted warnings,
-refuses until your answer is on record, in every run mode. Claude Code shows you a permission
-prompt, and your yes records the answer in `person-answers.json` in the task folder. The call
+A ruling, a file you allow, a regression you place, a frozen test you rule wrong, and `go-on --owns`
+or `--continue close` refuse until your answer is on record, in every run mode. Another way out of
+a stop takes your answer from the chat in an attended interactive build, and otherwise refuses the
+same way. Claude Code shows you a permission prompt, and your yes records the answer in `person-answers.json` in the task folder. The call
 passes only on an unused answer for this step, this order and your exact words, and marks it used.
 A call that refuses for another reason marks the answer refused, so the next attempt asks again.
 See [the person's answer](../../task/person-answer.md).

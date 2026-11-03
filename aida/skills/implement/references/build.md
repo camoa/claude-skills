@@ -205,8 +205,8 @@ reads `Stop: row-wrong: <row number>: <the evidence>`. `build-record` stops as a
 (exit 105), and its message quotes that row from the snapshot. The person rules on the row. A
 wrong row is reworded in design, and design closes again. Then `start` names the change on the
 order, and a redo answers it. A row that stands goes back to the builder.
-The order stops in both run modes, and the stop reason quotes the row. Each way out refuses without the
-person's answer on record (exit 68), as "A person's answer" in `references/finish.md` says.
+The order stops in both run modes, and the stop reason quotes the row. Each way out needs the
+person's answer (exit 68), as "A person's answer" in `references/finish.md` says.
 
 A deviation is a stop even when it departs from a play and not from the design. The line has no
 kind that a script can read, so a person sees each one. The order stops in both run modes. The person may keep a deviation with

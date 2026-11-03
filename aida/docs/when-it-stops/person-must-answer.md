@@ -10,10 +10,12 @@ goes on.
   reason, the forgetting of an adopted site, a test confirmation, a tool install, or a project
   write such as the task rule.
 - **Exit 68.** A person's judgement in the build: the three ways out of a stop, `go-on`, `redo`
-  and `drop`, and `start --leftovers keep`. These
-  refuse in every run mode until your answer is on record.
+  and `drop`, and `start --leftovers keep`. These refuse until your answer is on record.
+  `go-on --owns`, `go-on --continue close`, `reopen --test` and `finish --regression` refuse
+  so in every run mode, attended sessions included.
 - **Exit 55 or 100.** A ruling on a finding, or an `--allow` for a fix round, in every run mode.
-- **Exit 70 from `set-run-mode`.** A change of run mode needs your answer, in every run mode.
+- **Exit 70 from `set-run-mode` or `scope approve`.** A change of run mode, or the contract's
+  approval, needs your answer on record, in every run mode.
 - **A stop.** The order stops with its reasons, and the run ends with a report.
 - **"The offer waits for a person".** A site offer, a project setup, a split or a recipe offer
   that nobody was there to answer. Nothing is recorded, so it comes back.

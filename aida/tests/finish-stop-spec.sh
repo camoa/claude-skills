@@ -92,17 +92,19 @@ run_item_case() (
 expect "a run with no failure_line is one item, and not caused by this task makes it met" "$(run_item_case)" '0|met met'
 
 # The person gives a regression no rule assigns to wo1: wo1 stops for fix, and go-on fix opens its round.
+# With AUTO set, implement runs autonomous by then, and go-on fix with no answer refuses.
 assign_case() (
   source "$HERE/records.bash"
   closed_task "" "FAIL tests/old_test.sh"
   answer "implement finish regression" "" "wo1 broke it"
   run "$IMPLEMENT" finish "$TASK" --regression "wo1=the suite on fake" --because "wo1 broke it"
   printf '%s|%s|' "$RC" "$(ledger '[.stopped[]? | .step + " " + (.allows | join(","))] | join(";")')"
-  answer "implement go-on fix" wo1 "fix it"
+  [ -z "${AUTO:-}" ] || edit "$TASK/task.json" '.runMode = "autonomous"'
   run "$IMPLEMENT" go-on "$TASK" wo1 --continue fix --because "fix it"
-  sed -n 's/^next: //p' "$OUT" | cut -d: -f1
+  printf '%s:%s\n' "$RC" "$(sed -n 's/^next: //p' "$OUT" | cut -d: -f1)"
 )
-expect "a regression the person gives to an order stops it, and go-on fix opens the round" "$(assign_case)" '66|finish fix|review wo1'
+expect "a regression the person gives to an order stops it, and go-on fix opens the round" "$(assign_case)" '66|finish fix|0:review wo1'
+expect "autonomous, go-on fix after that stop refuses with no answer" "$(AUTO=1 assign_case)" '66|finish fix|68:'
 
 # Twenty-one new lines, the first twenty recorded not caused by this task: the twenty-first still stops finish.
 many_case() (

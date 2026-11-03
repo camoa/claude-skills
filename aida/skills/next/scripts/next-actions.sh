@@ -17,7 +17,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #
 # Depends on, shipped by other builders of this same part and never edited here:
 #   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/registry.sh   (sourced, never executed)
-#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh (sourced, for task_stage and task_after_state)
+#   ${CLAUDE_PLUGIN_ROOT}/scripts/lib/task-helpers.sh (sourced, for task_stage, task_review_word and task_after_state)
 #
 # Usage:
 #   next-actions.sh [--run-mode <interactive|autonomous>] report
@@ -106,7 +106,7 @@ command -v jq >/dev/null 2>&1 || die3 "jq is required and was not found on PATH"
 source "$REGISTRY_LIB"
 # task_stage is the one copy of the stage rule; the session-start hook reads the stage off this
 # script's lines. The library's other functions take die1 from the caller and are
-# not called here, and task_stage and task_after_state call none of them.
+# not called here, and task_stage, task_review_word and task_after_state call none of them.
 TASK_HELPERS="${PLUGIN_ROOT}/scripts/lib/task-helpers.sh"
 # shellcheck source=/dev/null
 source "$TASK_HELPERS" || die3 "the library failed to load: $TASK_HELPERS"
@@ -180,23 +180,6 @@ sort_key() {
 # New-format tasks: <project>/tasks/<id>/task.json, read whole, filtered to not-complete.
 # ------------------------------------------------------------------------------------------------
 
-# What the task's review record says, in one of four words: passed or failed from its verdict,
-# unfinished for a record with no verdict yet, none when there is no record. An open task that
-# review has closed shows as reviewed here, so a person knows it is ready for completion. A record
-# that will not read is named on stderr and reads none; a reviewed task is then listed, never
-# dropped. $1 the task folder.
-review_verdict_of() {
-  local rj="$1/review/review.json"
-  [ -e "$rj" ] || { printf 'none'; return; }
-  if [ ! -r "$rj" ] || ! jq empty "$rj" >/dev/null 2>&1; then
-    printf 'next-actions: %s could not be read as JSON; the review verdict reads none.\n' "$rj" >&2
-    WARNED=1
-    printf 'none'
-    return
-  fi
-  jq -r '.verdict // "unfinished"' "$rj"
-}
-
 # The stages whose version 5 file the repair kept under a .v5 name and whose version 6 record is
 # absent, in stage order: a moved task's contract, research and architecture, which version 6
 # never reads back on its own. The first run of each stage reads the .v5 file as its input and
@@ -234,7 +217,7 @@ gather_new_tasks() {
     fi
     task_is_open "$tj" || continue
     key="$(sort_key "$project_path" "$d")"
-    review="$(review_verdict_of "$d")"
+    review="$(task_review_word "$d")"
     # The newest note under <task>/notes, by its dated file name, or none. The listing is read,
     # never the prose (ideal/task.md, "A save before the window closes").
     notes="$(find "$d/notes" -maxdepth 1 -name '[0-9-]*.md' 2>/dev/null | sed 's|.*/||' | sort | tail -1)"
@@ -373,7 +356,7 @@ do_open() {
       if [ -d "$wtp" ]; then echo "worktree-on-disk: yes"; else echo "worktree-on-disk: no"; fi
     fi
     local review
-    review="$(review_verdict_of "$project_path/tasks/$target")"
+    review="$(task_review_word "$project_path/tasks/$target")"
     local outdated
     outdated="$(task_review_outdated "$project_path/tasks/$target")"
     echo "review: $review${outdated:+, outdated: $outdated, so the review stage runs again}"

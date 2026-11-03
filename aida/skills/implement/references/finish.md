@@ -292,10 +292,19 @@ is not raised again.
 ## A person's answer
 
 Some calls are a person's decision only. In implement they are `go-on`, `redo`, `drop`,
-`start --leftovers keep` and `finish --regression` (exit 68). They are also `verify-record --ruling` (exit 55),
-`fix-brief --allow` (exit 100), and `tests-freeze` with a row a person judged (exit 70). Each one
-refuses without the person's answer on record, in every run mode. The run mode does not decide
-whether a person answered.
+`start --leftovers keep`, `reopen --test` and `finish --regression` (exit 68). They are also
+`verify-record --ruling` (exit 55), `fix-brief --allow` (exit 100), and `tests-freeze` with a row a
+person judged (exit 70).
+
+Five of them are the only ways past another hard stop: `reopen --test`, `fix-brief --allow`,
+`go-on --owns` or `go-on --continue close`, `verify-record --ruling` and `finish --regression`.
+Each refuses without the person's answer on record, in every run mode.
+
+The others take the person's answer from the chat when the session is attended and both
+implement and the task's own stage run interactive (`task_require_person` in
+`scripts/lib/task-helpers.sh`). Ask the person in the chat. Run the call only on their answer, with
+their words. If the call refuses for the answer, record it as below. A dispatched agent never takes
+either kind: a hook refuses every such call to it.
 
 Record the answer with the task skill's `person-answer.sh`, before the call:
 ```
@@ -316,11 +325,11 @@ does not count. Each refusal prints the command with the words to use.
 Each answer is one entry in `person-answers.json` in the task folder. An entry serves one attempt.
 The call marks it used once its own writes are done. A call that refuses after it found the entry
 marks it refused, so the next attempt needs a new answer. An argument fault (exit 3) keeps it. No
-entry is removed, so review can count every answer. A hook refuses every other write of this file,
-and of `task.json`, from any session.
+entry is removed. A call that took the chat answer writes no entry. A hook refuses every other
+write of this file, and of `task.json`, from any session.
 
-Three other stages still refuse only on an unattended stage (exit 70): review's `close --row`,
-completion's `close` flags, and the task skill's `environment` calls. There the same action records
+Review's `close --row` and completion's `close` flags follow the same chat rule, with exit 70. The
+task skill's `environment` calls still refuse only on an unattended stage. There the same action records
 the answer, with step `review close`, `completion close` or `task environment <up|down|not-applicable>`.
 For completion's `close`, the words are one `<flag> <value>` line per person's flag, in the call's
 order. For `environment`, the words are the reason for `not-applicable`, and `yes` for the other

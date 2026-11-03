@@ -89,8 +89,8 @@ Autonomous, there is nobody to ask: with no recorded answer, each such criterion
 unanswered, and the task gets no sign off. A run with nobody present and no recorded answer
 cannot sign off a task carrying one person verified criterion. `close` names each one and its
 route. When the person answers, `close` runs again at the same commit with the rows.
-On a light or autonomous run, a row passes only through the person's recorded answer, step
-`review close`. The task skill's `person-answer.sh` records it, after Claude Code asks.
+On a light or autonomous run, or in a session that does not report itself attended, a row passes
+only through the person's recorded answer, step `review close`. The task skill's `person-answer.sh` records it, after Claude Code asks.
 
 ## Check 1 joins on the test name
 

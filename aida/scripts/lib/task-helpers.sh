@@ -77,6 +77,8 @@
 #   task_worktree <folder> <action>       prints the task's worktree path, making the tree first
 #                                         when task.json does not record one
 #   task_stage <folder> <review-word>     prints the stage the task stands at, from its records
+#   task_review_word <folder>             prints the review word task_stage reads: passed, failed,
+#                                         unfinished or none
 #   task_is_open <task.json>              true unless the task's state reads complete (task-state.sh)
 #   task_review_outdated <folder>         true, and prints both ranges, when the review covers
 #                                         a commit range the finished build no longer ends at
@@ -544,7 +546,8 @@ task_run_mode() {
 # its permission prompt for that script, and refuses every other write of this file, so an entry is a
 # yes that whoever answers prompts in the session gave. An entry is never removed: the step that
 # used it marks it usedAt, and a step that refused after it found the entry marks it refusedAt, so
-# review can count every answer and an answer serves one attempt.
+# an answer serves one attempt. A step that passes on the chat answer (task_require_person) writes
+# no entry here.
 TASK_ANSWER_HELD=""
 task_answer_file() { printf '%s/person-answers.json' "$1"; }
 
@@ -567,29 +570,48 @@ task_answer_find() {
 
 # The end of a refusal that an answer passes: the command that records the person's answer, with
 # its words in single quotes, or in a file when they run over one line. $1 the task folder, $2 the
-# step, $3 the order or empty, $4 the words.
+# step, $3 the order or empty, $4 the words, $5 a file that holds exactly the words, or empty.
 task_answer_route() {
   local order="" words="$4"
   [ -z "$3" ] || order=" --order $3"
   while [ "${words%"
 "}" != "$words" ]; do words="${words%"
 "}"; done
-  case "$words" in
-    *"
+  if [ -n "${5:-}" ]; then words="@$5"
+  else
+    case "$words" in
+      *"
 "*) words="@/<a file holding these lines>:
 $words" ;;
-    *) words="'$(printf '%s' "$words" | sed "s/'/'\\\\''/g")'" ;;
-  esac
+      *) words="'$(printf '%s' "$words" | sed "s/'/'\\\\''/g")'" ;;
+    esac
+  fi
   printf " A person answers through person-answer.sh, which shows Claude Code's permission prompt: %s/skills/task/scripts/person-answer.sh --project %s %s --step '%s'%s -- %s" "$PLUGIN_ROOT" \
     "$(dirname -- "$(dirname -- "$1")")" "$(basename -- "$1")" "$2" "$order" "$words"
 }
 
-# Refuses with exit $1 unless the task holds an unused answer for this call. $2 the action's own
-# name, $3 what a person decides, $4 the task folder, $5 the step, $6 the order or empty, $7 the
-# words the call carries.
-task_require_answer() {
-  task_answer_find "$4" "$5" "$6" "$7" && return 0
-  die "$1" "$2: $3 is a person's answer, and $(task_answer_file "$4") holds no unused answer for step $5${6:+, order $6}, with these words. Nothing is written.$(task_answer_route "$4" "$5" "$6" "$7")"
+# The gate of every step only a person decides. It passes on the person's chat answer when $5 is
+# set and task_attended holds. Otherwise it needs an unused answer for this call in the task's
+# answer record, and refuses with exit $1. $2 the action's own name, $3 what a person decides, $4
+# the task folder, $5 the step's own stage, or empty for a step that needs the recorded answer in
+# every run mode, $6 the step, $7 the order or empty, $8 the words the call carries, $9 a file that
+# holds exactly those words, or empty. Empty words match no answer, so that refusal names no route.
+task_require_person() {
+  [ -n "$5" ] && task_attended "$4" "$5" && return 0
+  task_answer_find "$4" "$6" "$7" "$8" && return 0
+  local route=""
+  [ -z "$8" ] || route="$(task_answer_route "$4" "$6" "$7" "$8" "${9:-}")"
+  die "$1" "$2: $3 is a person's answer, and $(task_answer_file "$4") holds no unused answer for step $6${7:+, order $7}, with these words. Nothing is written.$route"
+}
+
+# True when a person is taken to be present for a step of stage $2 of task $1: the session reports
+# itself attended, and both stage $2 and the stage the task stands at read interactive. The second
+# stage keeps a scope step taken during an autonomous build on the recorded answer. Claude Code sets
+# CLAUDE_CODE_SESSION_ATTENDED but does not document it, so any value other than 1 reads unattended.
+task_attended() {
+  [ "${CLAUDE_CODE_SESSION_ATTENDED:-}" = 1 ] || return 1
+  [ "$(task_run_mode "$1" "$2")" = interactive ] || return 1
+  [ "$(task_run_mode "$1" "$(task_stage "$1" "$(task_review_word "$1")")")" = interactive ]
 }
 
 # Marks the held entry refused, with the exit code, so an answer for an attempt that refused cannot
@@ -1100,7 +1122,7 @@ source "${PLUGIN_ROOT}/scripts/lib/task-state.sh"
 # pluginVersion that only the scope close writes into alignment.json; init writes alignment.json
 # itself, at the stage's start. Research is optional: a task whose design has started is past it.
 # This is the one copy of that rule; the session-start hook and the next skill's report both
-# print what it says. $1 the task folder, $2 the review word next-actions.sh derives from
+# print what it says. $1 the task folder, $2 the review word task_review_word derives from
 # review/review.json (passed, failed, unfinished or none). Calls no die function.
 task_stage() {
   local task_folder="$1" review="$2"
@@ -1118,6 +1140,21 @@ task_stage() {
   else
     echo "completion"
   fi
+}
+
+# What the task's review record says, in one of four words: passed or failed from its verdict,
+# unfinished for a record with no verdict yet, none when there is no record. A record that will not
+# read is named on stderr and reads none, so a reviewed task is never taken for an unreviewed one
+# without a word. $1 the task folder.
+task_review_word() {
+  local rj="$1/review/review.json"
+  [ -e "$rj" ] || { printf 'none'; return; }
+  if [ ! -r "$rj" ] || ! jq empty "$rj" >/dev/null 2>&1; then
+    printf 'task-helpers: %s could not be read as JSON; the review verdict reads none.\n' "$rj" >&2
+    printf 'none'
+    return
+  fi
+  jq -r '.verdict // "unfinished"' "$rj"
 }
 
 # A review judged the commit range finished.json held when it ran. A later finish, after a fix or

@@ -477,13 +477,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      so drop is the route. Nothing is written. An order that is not stopped, or is closed or
 #      dropped, has nothing to leave, so the way out exits 0 and names the next step.
 #  68  `go-on`, `redo`, `drop`, `start --leftovers keep` or `finish --regression` was called
-#      with no matching answer in the task's answer record. Each is a person's judgement, in every
-#      run mode. The step of a go-on names its choice, `implement go-on <choice>`, so a yes to one
-#      choice passes no other. One number, because it is one fact. Keeping a builder's deviation or
+#      with no matching answer in the task's answer record. Each is a person's judgement. Attended
+#      at an interactive stage, the chat answer passes all but `finish --regression`, `go-on --owns`
+#      and `go-on --continue close`, which need the recorded answer in every run mode. The step of a
+#      go-on names its choice, `implement go-on <choice>`, so a yes to one choice passes no other. One number, because it is one fact. Keeping a builder's deviation or
 #      a reviewer's departure is `go-on --continue keep` (gap rows 224 and 266). A person answers through
 #      skills/task/scripts/person-answer.sh, which shows Claude Code's permission prompt.
 #  70  `tests-freeze` was given a `--row` judged by a person with no matching answer in the task's
-#      answer record, in any run mode. Without it, `person` is a claim nobody made. Nothing is
+#      answer record, unattended or at a stage that runs autonomous. Without it, `person` is a claim
+#      nobody made. Nothing is
 #      written. `model` is accepted on both runs. The row-checker judges every row in both modes,
 #      and a person answers only a row it rejected (live-run row 70).
 #
@@ -1867,7 +1869,7 @@ do_start() {
   if [ "$leftovers_json" != "[]" ]; then
     [ -n "$leftovers_choice" ] || { leftovers_choice="set-aside"; lo_defaulted=yes; }
     [ "$leftovers_choice" != "keep" ] \
-      || task_require_answer 68 start "--leftovers keep, the files a stopped role left," "$TASK_PATH" "implement start" "" keep
+      || task_require_person 68 start "--leftovers keep, the files a stopped role left," "$TASK_PATH" implement "implement start" "" keep
   fi
 
   # --- step 8: look for an existing snapshot: absent, present-readable, or present-unreadable ----
@@ -5540,13 +5542,14 @@ TF_EOF
   # --- 70: a person's row is a claim only a person's answer makes -----------------------------------
   # A model's row is accepted on both runs. The row-checker judges every row in both modes, and the
   # person answers only a row it rejected. So `model` is the common case, not a checker standing in
-  # for a person (live-run row 70). A row judged by a person needs the person's answer, in every run
-  # mode: those --row values, one per line, are its words.
+  # for a person (live-run row 70). A row judged by a person needs the person's answer: from the chat
+  # when attended at an interactive stage, else on record, with those --row values, one per line, as
+  # its words.
   local person_rows
   person_rows="$(printf '%s' "$rows_meta_json" | jq -r '
       [ .[] | select(.judgedBy == "person") | .criterion + "=" + .verdict + "::person::" + .note ] | join("\n")')"
   [ -z "$person_rows" ] \
-    || task_require_answer 70 tests-freeze "a row a person judged" "$TASK_PATH" "implement tests-freeze" "$unit_id" "$person_rows"
+    || task_require_person 70 tests-freeze "a row a person judged" "$TASK_PATH" implement "implement tests-freeze" "$unit_id" "$person_rows"
 
   # --- 64: a model's confirmation stands on the checker's verdict file (gap row 373) ---------------
   # Only a checker writes it, and checkAgain puts every rejected row back to the next one, so a
@@ -10394,13 +10397,14 @@ do_fix_brief() {
   rv_load_range_repo "fix-brief" "$RV_UNIT_JSON"
 
   # Live-run row 116. A fixScope path outside the order's ownedFiles is withheld from the fixer
-  # unless a person allows it here. An allow is a person's grant, so unattended refuses it
-  # (exit 100). A path already owned needs no grant. A frozen test or a support file may never
-  # be granted. An unowned path no open finding names is a grant for nothing (exit 3, each). A
-  # person's answer record naming the --allow values, one per line, passes it (gap row 357).
+  # unless a person allows it here. An allow is a person's grant past the owned-files stop, so it
+  # needs the person's answer on record in every run mode, with the --allow values, one per line,
+  # as its words (gap rows 357, 481); without it, exit 100. A path already owned needs no grant. A
+  # frozen test or a support file may never be granted. An unowned path no open finding names is a
+  # grant for nothing (exit 3, each).
   local allowed_json='[]' granted_json='[]' ap ap_abs ap_owned other tf fp frozen_list frozen_hit named closed_grant=""
   [ -z "$allow_raw" ] \
-    || task_require_answer 100 fix-brief "--allow, a path outside $unit_id's own files," "$TASK_PATH" "implement fix-brief" "$unit_id" "$allow_raw"
+    || task_require_person 100 fix-brief "--allow, a path outside $unit_id's own files," "$TASK_PATH" "" "implement fix-brief" "$unit_id" "$allow_raw"
   # Every frozen test and support path of the task, the list the write hook reads.
   frozen_list=""
   for tf in "$IMPL_DIR"/tests-*.json; do
@@ -11136,12 +11140,12 @@ do_verify_record() {
   [ "$rounds_used" -gt 0 ] 2>/dev/null || [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep')" = "reviewed" ] \
     || die3 "verify-record: $unit_id records no fix round, though the ledger records it as fixed."
 
-  # Exit 55: a ruling is a person's judgement. An unattended run has none to offer, so it refuses
-  # the flag outright rather than recording a model's own word as a person's (decision 12). Read
-  # before the round is looked up, so a ruling on a round already recorded meets the same refusal.
-  # A person's answer record naming these rulings, one per line, passes it (gap row 357).
+  # Exit 55: a ruling is a person's judgement past an open finding, so it needs the person's answer
+  # on record in every run mode, with these rulings, one per line, as its words (decision 12, gap
+  # rows 357, 481). A model's own word is never recorded as a person's. Read before the round is
+  # looked up, so a ruling on a round already recorded meets the same refusal.
   [ -z "$rulings_raw" ] \
-    || task_require_answer 55 verify-record "a ruling on an open finding" "$TASK_PATH" "implement verify-record" "$unit_id" "$rulings_raw"
+    || task_require_person 55 verify-record "a ruling on an open finding" "$TASK_PATH" "" "implement verify-record" "$unit_id" "$rulings_raw"
 
   # A round is verified once. A second verification of the same round would record a
   # second set of verdicts over findings the first set already closed.
@@ -11830,11 +11834,12 @@ fn_load_task_state() {
   FN_LEDGER_DOC="$STARTED_LEDGER_DOC"
 }
 
-# Exit 68. The three ways out of a stop and the warnings finish accepts are a person's judgement, in
-# every run mode, so each refuses without a person's answer in the task's answer record, step "implement
-# $1" (task_require_answer). The run mode does not decide whether a person answered. The summary
-# printer marks the answer used. $1 the action's own name, $2 what the caller would have been
-# deciding, $3 the order or empty for a task-wide action, $4 the person's words the call carries.
+# Exit 68. The three ways out of a stop and finish's regressions are a person's judgement, step
+# "implement $1" (task_require_person). Stage $5 is implement for a step that takes the person's
+# answer from the chat when attended at an interactive stage. It is empty for a way past another hard
+# stop, which needs the answer on record in every run mode. The summary printer marks a recorded
+# answer used. $1 the action's own name, $2 what the caller would have been deciding, $3 the order
+# or empty for a task-wide action, $4 the person's words the call carries.
 # Uncommitted changes at a step that does not record the order's work are a warning, not a stop.
 # $1 the step, $2 the repository, $3 the order or empty, $4 pathspecs, one per line, or empty for
 # the whole tree. The paths go to standard error.
@@ -11847,7 +11852,7 @@ im_warn_dirty_tree() {
 }
 
 fn_require_answer() {
-  task_require_answer 68 "$1" "$2" "$TASK_PATH" "implement $1" "$3" "$4"
+  task_require_person 68 "$1" "$2" "$TASK_PATH" "$5" "implement $1" "$3" "$4"
 }
 
 # The JSON array of lines $1 as the subtraction keys them (br_line_keys), in the same order, so a
@@ -12079,7 +12084,7 @@ do_finish() {
 
   fn_load_task_state "finish"
   [ "$regressions" = "[]" ] \
-    || fn_require_answer "finish regression" "giving a test newly broken at finish to an order, or recording it as not caused by this task" "" "$because"
+    || fn_require_answer "finish regression" "giving a test newly broken at finish to an order, or recording it as not caused by this task" "" "$because" ""
   for to in $(printf '%s' "$regressions" | jq -r '.[].to | select(. != "not-caused")'); do
     [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$to" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""')" = "closed" ] \
       || die3 "finish: --regression gives a test to $to, which is not a closed order in the ledger. Give it to a closed order, or to not-caused."
@@ -12543,7 +12548,7 @@ RO_ONE
   # 2026-10-28), when a finding on it holds logic (logicFinding in scripts/lib/proof.sh). Any
   # other proof, or a repair of text files or code shape alone, opens its fix round at once.
   # The person's words are each --test value, one per line, then the --because words.
-  [ -z "$ruled_raw" ] || fn_require_answer "reopen" "ruling a frozen test wrong" "" "$ruled_raw$because"
+  [ -z "$ruled_raw" ] || fn_require_answer "reopen" "ruling a frozen test wrong" "" "$ruled_raw$because" ""
   ledger_doc="$FN_LEDGER_DOC"
   for order in $(printf '%s' "$routed" | jq -r 'keys[]'); do
     br_order_facts "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg o "$order" '[ .workOrders[] | select(.id == $o) ][0]')"
@@ -12574,11 +12579,12 @@ RO_ONE
 }
 
 # ------------------------------------------------------------------------------------------------
-# The three ways out of a stop: go-on, redo and drop. Each is a person's answer, in every run mode,
-# through the task's answer record, step "implement go-on <choice>", "implement redo" or
-# "implement drop" (fn_require_answer). Every separate route out of a stop that came before them,
-# each added for one gap, made new gaps of its own (row 437 came from one of them), so these three
-# are the only ones.
+# The three ways out of a stop: go-on, redo and drop. Each is a person's answer, step "implement
+# go-on <choice>", "implement redo" or "implement drop" (fn_require_answer). Attended at an
+# interactive stage it comes from the chat, except go-on --owns and go-on close, which pass the
+# owned-files stop and open findings and need it on record. Every separate route out of a stop that
+# came before them, each added for one gap, made new gaps of its own (row 437 came from one of
+# them), so these three are the only ones.
 # ------------------------------------------------------------------------------------------------
 
 # Reverts every commit order $1 made in repository $2, newest first, one revert commit each, so
@@ -12799,7 +12805,11 @@ do_go_on() {
     "") die3 "go-on: --continue is required: build, fix, check, close or keep." ;;
     *) die3 "go-on: --continue takes build, fix, check, close or keep; got: $choice" ;;
   esac
-  fn_require_answer "go-on $choice" "going on with $choice on one order" "$WAY_UNIT" "$WAY_BECAUSE"
+  # --owns passes the owned-files stop and close passes open findings, so both need the recorded
+  # answer in every run mode (gap row 481).
+  local answer_stage=implement
+  [ "$owns_json" = '[]' ] && [ "$choice" != close ] || answer_stage=""
+  fn_require_answer "go-on $choice" "going on with $choice on one order" "$WAY_UNIT" "$WAY_BECAUSE" "$answer_stage"
 
   # --- exit 67: every reason the order is stopped for, or warned of, allows this choice -----------
   # An attended change mid-build leaves the order going on with a `changed` list, which go-on keep
@@ -12970,7 +12980,7 @@ GO_OWNS
 # new order design added enters at that next start, as before. Every other order keeps its work.
 do_redo() {
   im_way_plain_args "redo" "$@"
-  fn_require_answer "redo" "redoing one order" "$WAY_UNIT" "$WAY_BECAUSE"
+  fn_require_answer "redo" "redoing one order" "$WAY_UNIT" "$WAY_BECAUSE" implement
 
   ALIGNMENT_FILE="$TASK_PATH/alignment.json"
   DESIGN_DIR="$TASK_PATH/design"
@@ -13047,7 +13057,7 @@ do_redo() {
 # the task review reads each such criterion unanswered.
 do_drop() {
   im_way_plain_args "drop" "$@"
-  fn_require_answer "drop" "dropping one order" "$WAY_UNIT" "$WAY_BECAUSE"
+  fn_require_answer "drop" "dropping one order" "$WAY_UNIT" "$WAY_BECAUSE" implement
 
   rv_load_codepath "drop"
   rv_load_range_repo "drop" "$RV_UNIT_JSON"

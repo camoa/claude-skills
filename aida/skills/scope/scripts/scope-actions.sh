@@ -472,7 +472,7 @@ do_add() {
   fi
 
   require_alignment_exists "add"
-  [ "$author" != owner ] || task_require_answer 70 add "--author owner, a criterion the owner wrote," "$TASK_PATH" "scope add" "" "$text"
+  [ "$author" != owner ] || task_require_person 70 add "--author owner, a criterion the owner wrote," "$TASK_PATH" scope "scope add" "" "$text"
 
   local next_id id present updated
   next_id="$(jq -r '.nextCriterionId // empty' "$ALIGNMENT_FILE")"
@@ -612,7 +612,7 @@ do_update() {
   present="$(jq -r --arg arr "$arrfield" --arg id "$id" \
       '([ (.[$arr] // [])[]?.id? ] | index($id)) != null' "$ALIGNMENT_FILE")"
   [ "$present" = "true" ] || die3 "update: no $kind with id $id in $ALIGNMENT_FILE"
-  [ "$set_author" -eq 0 ] || task_require_answer 70 update "--author owner, the owner's word on $id," "$TASK_PATH" "scope update" "" "$id author owner"
+  [ "$set_author" -eq 0 ] || task_require_person 70 update "--author owner, the owner's word on $id," "$TASK_PATH" scope "scope update" "" "$id author owner"
 
   local set_text_json set_verification_json set_verified_by_json set_author_json updated
   if [ "$set_text" -eq 1 ]; then set_text_json=true; else set_text_json=false; fi
@@ -856,11 +856,12 @@ close_scope() {
 do_approve() {
   [ "$#" -eq 0 ] || die3 "approve: unrecognized argument: $1"
   require_alignment_exists "approve"
-  # The yes is for the contract as it stands, named by its hash, so a change after the answer needs
-  # a new one (gap row 473). The refusal prints the words.
-  local seen
-  seen="$(distill_sha256 <"$ALIGNMENT_FILE")" || exit $?
-  task_require_answer 70 approve "the contract's approval" "$TASK_PATH" "scope approve" "" "approve ${seen:0:12}"
+  # The yes is for the contract as the person reads it, so its words are the page rendered now, and
+  # a change after the answer needs a new one (gap row 473). The page is rendered before the gate, so
+  # Claude Code's prompt shows it whole. It needs the recorded answer in every run mode (gap row 481).
+  render_alignment
+  task_require_person 70 approve "the contract's approval" "$TASK_PATH" "" "scope approve" "" \
+    "$(cat -- "$TASK_PATH/alignment.md")" "$TASK_PATH/alignment.md"
 
   local ids count updated marked stale
   stale="$(distill_stale "$TASK_PATH" scope)" || exit $?
@@ -919,7 +920,7 @@ do_retire() {
   is_blank "$reason" && die3 "retire: --reason is required and must not be blank"
 
   require_alignment_exists "retire"
-  task_require_answer 70 retire "retiring a decision" "$TASK_PATH" "scope retire" "" "entry $entry: $reason"
+  task_require_person 70 retire "retiring a decision" "$TASK_PATH" scope "scope retire" "" "entry $entry: $reason"
 
   local state updated
   state="$(jq -r --argjson i "$((entry - 1))" "$DECIDED_JQ"' (.decidedWithoutAPerson // [])[$i] // empty

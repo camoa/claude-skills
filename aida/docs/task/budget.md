@@ -35,7 +35,8 @@ Do these two steps in this order:
 The reverse sequence does not work. Going on before the raise brings the stop straight back,
 because the spend is counted again at the next dispatch.
 
-`go-on` is a person's call, in every run mode. See [the person's answer](person-answer.md).
+`go-on` is a person's call. In an attended interactive build it takes your answer from the chat,
+and otherwise it needs your answer on record. See [the person's answer](person-answer.md).
 
 ## Why it works this way
 

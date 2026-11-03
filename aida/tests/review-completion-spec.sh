@@ -387,8 +387,8 @@ supersede_case() (
 expect "a repair's record holds a retired test to its new hash" "$(supersede_case)" "0"
 
 # redo_rebuild_case <answer>: wo1 closed with one commit, finished, and a closed task review over
-# that finish whose decision-wo1-departure the person answered <answer>. Then redo, with the
-# person's answer. Prints wo1's lastStep, a.php's text, and whether finished.json stays.
+# that finish whose decision-wo1-departure the person answered <answer>. Then redo, attended, or
+# autonomous with AUTO set. Prints wo1's lastStep, a.php's text, and whether finished.json stays.
 redo_rebuild_case() (
   source "$HERE/records.bash"
   task_records branch
@@ -401,13 +401,14 @@ redo_rebuild_case() (
   jq -n --arg r "$range" --arg a "$1" '{verdict: "passed", reviewedRange: $r, findings: [],
     checks: [{id: "decision-wo1-departure", verdict: "unmet", answeredBy: "person", answer: $a, detail: "wo1 departs"}]}' \
     >"$TASK/review/review.json"
-  answer "implement redo" wo1 "rebuild it to the design"
+  [ -z "${AUTO:-}" ] || edit "$TASK/task.json" '.runMode = "autonomous"'
   run "$IMPLEMENT" redo "$TASK" wo1 --because "rebuild it to the design"
   printf '%s|%s|%s\n' "$(ledger '.lastStep')" "$(cat "$WT/a.php")" "$([ -f "$IMPL/finished.json" ] && echo finished || echo open)"
 )
 expect "redo takes a closed order whose departure the person ruled rebuild at the task review" \
   "$(redo_rebuild_case rebuild)" "null|a|open"
 expect "a closed order with no rebuild ruling is still left as it is" "$(redo_rebuild_case keep)" "closed|b|finished"
+expect "an autonomous redo of a closed order with no answer leaves it as it is" "$(AUTO=1 redo_rebuild_case rebuild)" "closed|b|finished"
 
 echo "--- the fix verifier cites the files the fix rests on (row 445)"
 # verified <verdict JSON>: wo1 fixed in one round over a.php, verify-brief run, and verify-record
