@@ -1861,10 +1861,20 @@ do_start() {
   # im_scan_leftovers names them. They are set aside unless a person chose keep, in both run modes,
   # and the set-aside deletes nothing. Only an untracked or a modified file can move. Any other
   # change stays in the tree, and a warning names it.
-  local lo_xy lo_rel lo_tab lo_tracked leftovers_json lo_defaulted=""
+  # An order whose repair owes its test has a test author at work, not a stopped role. So a new file
+  # the order owns stays in the tree (gap row 484). The closed design names it, not the snapshot,
+  # because add-owned-file gives the author's file to the order before this start takes it in.
+  local lo_xy lo_rel lo_tab lo_tracked leftovers_json lo_defaulted="" lo_owed_json lo_kept_json='[]'
   lo_tab="$(printf '\t')"
+  lo_owed_json="$(jq -c --argjson w "$live_workorders_json" '[ (.orders // [])[]
+    | select(any((.repairs // [])[]; .testOwed == true)) | .id ] as $ids | [ $w[] | select(.id | IN($ids[])) ]' \
+    "$LEDGER_FILE" 2>/dev/null)"
+  if [ -n "$lo_owed_json" ] && [ "$lo_owed_json" != "[]" ]; then
+    im_scan_leftovers "$code_path" "$lo_owed_json"
+    lo_kept_json="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -c '[ .[] | select(.status == "??" and (.orders | length) > 0) | .path ]')"
+  fi
   im_scan_leftovers "$code_path" "$( { jq -ce '.workOrders' "$SNAPSHOT_FILE" 2>/dev/null || printf '%s' "$live_workorders_json"; } )"
-  leftovers_json="$LO_LEFTOVERS_JSON"
+  leftovers_json="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -c --argjson k "$lo_kept_json" 'map(select(.path | IN($k[]) | not))')"
   lo_tracked="$LO_TRACKED"
   if [ "$leftovers_json" != "[]" ]; then
     [ -n "$leftovers_choice" ] || { leftovers_choice="set-aside"; lo_defaulted=yes; }

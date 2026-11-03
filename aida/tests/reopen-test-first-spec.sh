@@ -97,6 +97,27 @@ author_case() (
 )
 expect "the repair's test author may write only its new test file" "$(author_case)" 'deny|deny|allow'
 
+# The repair's test author writes a new test file no order owns. A person adds it to wo1, with
+# each owned file named, and closes design. The start that takes it in keeps that file in the tree
+# and sets aside a stray one. With the test round closed, the file goes aside too (row 484). Prints
+# start's exit, then where each file is.
+# added_case [closed]
+added_case() (
+  source "$HERE/records.bash"
+  reopened tests
+  [ -z "${1:-}" ] || edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).repairs |= map(del(.testOwed))'
+  printf 'exit 1\n' >"$WT/tests/navigate_damaged.sh"
+  printf 'x\n' >"$WT/stray.txt"
+  edit "$TASK/design/wo1.json" '.ownedFiles = ["a.php", "README.md", "tests/a_test.sh", "tests/navigate_damaged.sh"]'
+  edit "$TASK/design-closed.json" '.hash = $h' --arg h "$(records_hash_for "$TASK")"
+  git -C "$PROJECT" commit -qam "wo1 owns the repair's new test"
+  run "$IMPLEMENT" start "$TASK"
+  printf '%s|%s|%s\n' "$RC" "$([ -f "$WT/tests/navigate_damaged.sh" ] && echo kept || echo aside)" \
+    "$([ -f "$WT/stray.txt" ] && echo kept || echo aside)"
+)
+expect "start keeps the open repair's new test file and sets aside a stray one" "$(added_case)" '0|kept|aside'
+expect "start sets aside an owned new file once the test round is closed" "$(added_case closed)" '0|aside|aside'
+
 # A repair's record names the order it repairs, so design and start read no other order from it.
 started_case() (
   source "$HERE/records.bash"

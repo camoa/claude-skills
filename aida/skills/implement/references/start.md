@@ -44,6 +44,8 @@ so give the person that path. The `leftovers:` line names each file that was kep
 Unattended, a start after a design reopen sets aside the tests an author has not frozen yet. Do
 not copy them back by hand. The next fresh `dispatch-open` of a test author names the latest copy
 of each test file that order owns. Put its `earlier tests:` paths in the dispatch message.
+An order whose repair still owes its test is the one exception. A new file that order owns in the
+closed design stays in the tree, because that order's test author wrote it.
 
 The freeze keeps its own warning about uncommitted files. It names a file that the test author
 made during its own run, after this check. An untracked file under a path the order owns, which the
