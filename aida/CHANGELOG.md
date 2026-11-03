@@ -6,7 +6,7 @@ All notable changes to this plugin are recorded here. The format follows
 
 ## [6.1.2] - 2026-11-03
 
-Fewer permission prompts in attended sessions, and eight fixes from a
+Fewer permission prompts in attended sessions, and nine fixes from a
 live run. A person can send a review finding back to its order's
 fixer. The acceptance verifier can write its evidence folder, and the
 freeze commits every test file the author changed.
@@ -71,8 +71,11 @@ freeze commits every test file the author changed.
 
 ### Fixed
 
-- The acceptance verifier's write hook refused `mkdir -p review/evidence`
-  and a copy into that folder, although the folder is its own.
+- The acceptance verifier's write hook refused `mkdir -p review/evidence`,
+  a `mkdir` with a mode, and a copy into that folder, although the folder
+  is its own. The verifier's definition now says to give the full
+  path of `review/evidence/`. A relative path lands in the code path,
+  and the hook allows it.
 - `acceptance --evidence` lost an empty path on the last evidence row,
   so a task with no surfaces could not record its evidence.
 - When `reopen` could not build a repair, it exited 0 and removed the
