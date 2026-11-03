@@ -10287,6 +10287,18 @@ do_review_record() {
 # finding").
 # ------------------------------------------------------------------------------------------------
 
+# The order's live reasoning paragraphs that the last build brief did not carry. An owner's ruling
+# added with `update --append-reasoning` after the build reaches the fixer this way (gap row 485).
+# The paragraphs come from the build brief's own reader, so a struck one stays out.
+fb_new_reasoning() {
+  local built=""
+  [ ! -f "$IMPL_DIR/brief-$1-build.json" ] \
+    || built="$(jq -r '.unit.reasoning // ""' "$IMPL_DIR/brief-$1-build.json" 2>/dev/null)"
+  printf '%s' "$RV_UNIT_JSON" | jq -r --arg built "$built" "$REASONING_JQ"'
+    ($built | split("\n\n")) as $had
+    | liveReasoning | split("\n\n") | map(select(. != "" and (. as $p | $had | index($p) | not))) | join("\n\n")'
+}
+
 do_fix_brief() {
   local task_arg="" unit_id="" allow_raw=""
   while [ "$#" -gt 0 ]; do
@@ -10576,11 +10588,13 @@ FB_CLOSED
     --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
     --argjson roundsUsed "$rounds_used" --argjson roundsAllowed "$FIX_ROUNDS_ALLOWED" \
     --argjson round "$((rounds_used + 1))" --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
-    --arg worktree "$RV_CODEPATH" '
+    --arg worktree "$RV_CODEPATH" \
+    --arg newReasoning "$(fb_new_reasoning "$unit_id")" '
     {
       unit: $unit,
       worktree: $worktree,
       round: $round,
+      newReasoning: $newReasoning,
       roundsUsed: $roundsUsed,
       roundsAllowed: $roundsAllowed,
       findings: $findings,

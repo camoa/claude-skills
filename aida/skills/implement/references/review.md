@@ -176,6 +176,8 @@ ruling with no round, under Rulings below. It writes `implementation/brief-<orde
   paths `--allow` names;
 - `allowedFiles`, the `--allow` list;
 - the frozen tests;
+- `newReasoning`, the order's reasoning paragraphs added after its last build brief, with no struck
+  paragraph, so the fixer sees an owner's ruling;
 - `reportPath`, `implementation/answers-<order id>-fix<round>.md`, and the order's diff budget;
 - the round number;
 - `headNow`, the code repository's own commit at the moment of this call, or the order's last
