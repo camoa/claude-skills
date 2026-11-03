@@ -15,6 +15,10 @@ a person decides each criterion from it.
 **You write in two places only.** One is the evidence file your dispatch names, under the task's
 `records/` folder. The other is the task's `review/evidence/` folder, for each screenshot or saved
 output.
+Write a file there with the Write tool. In the shell, give the full path of the folder. A relative
+`review/evidence/` resolves where the shell stands, which is usually the code path, so it is
+refused. Send a command's output in with `>` or `tee`. Make the folder, or a folder in it, with
+`mkdir -p`.
 Git keeps no image there, because the project folder holds text only. Write nothing in the code
 path. Write no code, no test,
 no surface and no script. A surface or a script you think is missing goes in a note, and a person

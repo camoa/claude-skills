@@ -324,6 +324,19 @@ lens_wrong_case() (
 )
 expect "a test ruled wrong on a finding with no criterion warns, and reopen routes it" "$(lens_wrong_case)" "f1|0|tests/a_test.sh"
 
+# Two low findings in the frozen test, both ruled test-wrong, leave the review passed (row 486).
+low_wrong_case() (
+  source "$HERE/records.bash"
+  fix_record "$(printf '%s' "$low_dry" | jq -c '.file = "tests/a_test.sh"')" \
+    "$(printf '%s' "$low_dry" | jq -c '.id = "f2" | .file = "tests/a_test.sh" | .linkedTo = ""')"
+  tests_record
+  closed_with --row c1=met --row f1=test-wrong --row f2=test-wrong
+  printf '%s|' "$(jq -r '.verdict' "$TASK/review/review.json")"
+  run "$IMPLEMENT" reopen "$TASK"
+  printf '%s|%s|%s\n' "$RC" "$(ledger '(.repairs[0].retires // []) | join(",")')" "$(ledger '.repairs[0].findings | length')"
+)
+expect "two low findings ruled test-wrong on a passed review reopen their order once" "$(low_wrong_case)" "passed|0|tests/a_test.sh|2"
+
 no_text_case() (
   source "$HERE/records.bash"
   review_records "" closed
