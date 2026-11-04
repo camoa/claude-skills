@@ -4,6 +4,49 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.4] - 2026-11-04
+
+Fixes from a live run. A person can take an order review's information
+row into that order's fix. A test file belongs to one order's freeze.
+
+### Added
+
+- `fix-brief <task> <order> --take <id> --because <words>` takes an
+  information row of an open order's review into that order's fix. It
+  also takes an open finding that cites no criterion. Each taken row
+  becomes a repair finding on the order's first criterion, with the
+  row's file as its fix scope. When the order's tests prove it and the
+  file holds logic, one failing test comes first. Otherwise the fix
+  round runs. A take is refused while an open actionable finding
+  remains. It is also refused on a file the order does not own, a
+  frozen test, or a row that departs from the design. In an attended
+  session it takes the person's answer from the chat. A dispatched
+  agent is refused.
+
+### Changed
+
+- `tests-freeze` refuses a test file that another order froze, and a
+  support file that another order froze at a different content. Put the
+  new test in a new file. Restore a changed support file. Or run
+  `reopen --test` on the other order.
+- `reopen` names each finding a person ruled `wrong`. When nothing
+  routes, its refusal names each unmet criterion and what failed it,
+  and says to run `redo` on the owning order or to fix the task branch
+  and run `finish` again.
+- A repair owes a failing test first only when the file it changes
+  holds logic. This now holds for a `fix-brief --allow` grant and for a
+  builder that stops on a closed order's file.
+
+### Fixed
+
+- `tests-freeze` refused at exit 3 a rejected order row when no test
+  claimed the order, so the rejection never reached the next test
+  author. The freeze now stops at exit 65 and records the row under
+  `rowsRejected`.
+- An empty folder at a task's recorded tree path made every stage
+  refuse. It now counts as no tree, and the next action that needs the
+  code cuts the tree there. A folder that holds files is still refused.
+
 ## [6.1.3] - 2026-11-04
 
 One fix for bash 5.3, which CI's runner image now uses.
