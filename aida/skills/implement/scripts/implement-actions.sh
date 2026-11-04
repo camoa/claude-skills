@@ -251,8 +251,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #        option as its value, a path that does not exist or lies outside the code root, a test
 #        name no --test row carries, a --locks-in commit id that is not hexadecimal or is shorter
 #        than seven characters, a --row that names a person-verified criterion, a criterion no
-#        --test claims, or one criterion twice, an --absence clause that is not verbatim a
-#        doneWhen entry, a --started-at that is not a commit or not an ancestor of HEAD.
+#        --test claims (a rejected order row goes to 65 instead), or one criterion twice, an
+#        --absence clause that is not verbatim a doneWhen entry, a --started-at that is not a commit or not an ancestor of HEAD.
 #      - The task: a folder that holds no task.json, no contract or one that cannot be used, a
 #        criterion whose verifiedBy is neither machine nor person, no work orders under design/,
 #        a project.json that records no framework, a framework no recipe was answered for.

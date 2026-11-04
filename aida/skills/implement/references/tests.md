@@ -548,10 +548,9 @@ checklist instead, never a row: it has no judgement, and review's close is what 
 anything no test of this order claims refuses the freeze, the same way a missing row does. A
 rejected done-when row is the exception, because the missing test is what the checker rejected. It
 refuses at exit 65 and lands under `rowsRejected`. A row for a criterion a person verifies also
-refuses the freeze. Every accepted criterion row is appended to that
-criterion's own record in the ledger, and the done-when row to this order's own entry. `close` is
-what decides a criterion from its rows, once every order serving it has closed and its owner has
-judged it.
+refuses the freeze. Every accepted criterion row is appended to that criterion's own record in the
+ledger, and the done-when row to this order's own entry. `close` is what decides a criterion from
+its rows, once every order serving it has closed and its owner has judged it.
 
 Then it records a hash for each test file. That hash is the freeze. From here a hook refuses a
 write to one of those files from every dispatched role except the test author of the order that
