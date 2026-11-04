@@ -10439,6 +10439,10 @@ fb_take() {
   done <<FB_TAKE
 $take_raw
 FB_TAKE
+  # The criterion im_repair_finding cites, read before the gate so this refusal holds no answer.
+  [ -n "$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$unit_id" "$BR_ORDER_FACTS_JQ"'
+    [ .workOrders[] | select(.id == $id) ][0] | firstCriterion')" ] \
+    || die3 "fix-brief: $unit_id serves no criterion, so no fixer could act on a repair finding. Nothing is written."
   task_require_person 100 fix-brief "--take, a review row taken into $unit_id's fix," "$TASK_PATH" implement \
     "implement fix-brief" "$unit_id" "$take_raw$because"
   # The helper reads the review record from disk, so each row's finding is written before the next.
@@ -10518,7 +10522,7 @@ do_fix_brief() {
   [ -z "$repairing" ] \
     || die 40 "fix-brief: $unit_id waits on the repair a person granted it on $repairing. Its next round opens once $repairing closes again. Nothing is written."
   [ -z "$(im_repair_owed "$RV_LEDGER_DOC" "$unit_id")" ] \
-    || die 121 "fix-brief: $unit_id owes the test of the task review's repair first. Run tests-brief on $unit_id, dispatch its test author, put the row to the checker, and run tests-freeze. Nothing is written."
+    || die 121 "fix-brief: $unit_id owes the test of its repair first. Run tests-brief on $unit_id, dispatch its test author, put the row to the checker, and run tests-freeze. Nothing is written."
   rv_load_review_record "fix-brief" "$unit_id"
   [ -z "$take_raw" ] || fb_take "$unit_id" "$take_raw" "$because"
 

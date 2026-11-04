@@ -168,8 +168,9 @@ take_uncited_case() (
 )
 expect "a finding that cites nothing is taken into a new repair finding" "$(take_uncited_case)" '0|f2 c2 true|false f2'
 
-# take_refused_case <kind>: the take refuses (exit 3), and the review record and the ledger stay
-# as they were.
+# take_refused_case <kind> <phrase>: the take refuses (exit 3) with the guard's own phrase, and the
+# review record and the ledger stay as they were. The phrase is the output under test: an unknown
+# flag also exits 3.
 take_refused_case() (
   source "$HERE/records.bash"
   local args="--take i1" before
@@ -188,11 +189,20 @@ take_refused_case() (
   before="$(cat "$IMPL/review-wo2.json" "$IMPL/ledger.json" | cksum)"
   # shellcheck disable=SC2086 # the flags split on purpose
   run "$IMPLEMENT" fix-brief "$TASK" wo2 $args --because "fix it here"
-  printf '%s|%s\n' "$RC" "$([ "$(cat "$IMPL/review-wo2.json" "$IMPL/ledger.json" | cksum)" = "$before" ] && echo same || echo changed)"
+  printf '%s|%s|%s\n' "$RC" "$([ "$(cat "$IMPL/review-wo2.json" "$IMPL/ledger.json" | cksum)" = "$before" ] && echo same || echo changed)" \
+    "$(grep -qF -- "$2" "$OUT" && echo named || echo unnamed)"
 )
-for kind in open unknown taken departs other frozen allow; do
-  expect "a take refuses: $kind" "$(take_refused_case "$kind")" '3|same'
-done
+while IFS='|' read -r kind phrase; do
+  expect "a take refuses: $kind" "$(take_refused_case "$kind" "$phrase")" '3|same|named'
+done <<'REFUSALS'
+open|has an open actionable finding
+unknown|names no information item
+taken|was taken already
+departs|departs from the design
+other|does not own
+frozen|a frozen test
+allow|--take and --allow go in two calls
+REFUSALS
 
 # Unattended, the take needs the person's recorded answer: the take values one per line, then the
 # words.
