@@ -11,6 +11,8 @@ The freeze refuses, and freezes nothing, when one of these is true:
 - A test sits in a file the order does not own, or outside the test pattern. The test author is
   resumed and moves the tests into the file design chose.
 - An untracked file lies under a path the order owns, and the freeze would leave it out.
+- Another order's freeze holds a test file this freeze names. A test file belongs to one order's
+  freeze, so the new test goes in a new file. To change the other order's test, run `reopen --test`.
 - The freeze runs the tests with the build's own test command, and the tests with a red run do
   not fail. Or the run fails and shows none of the failing runs.
 - The order has already left its tests step. A changed design or a wrong test takes a redo

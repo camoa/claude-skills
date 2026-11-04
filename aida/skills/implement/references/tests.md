@@ -484,6 +484,8 @@ this order goes forward from here, not back.
 The script refuses a test file that does not exist, sits outside the code repository, or misses
 the framework's own declared pattern. It refuses one in a file the order does not own (exit 27). It
 refuses an untracked file under a path the order owns, which the freeze would leave out (exit 27).
+A test file belongs to one order's freeze, so it refuses a test file another order's record holds
+(exit 27). Put the new test in a new file. To change the other order's test, use `reopen --test`.
 It refuses
 a record that would hold no row (exit 74). The checks below each write a warning into the task
 record and let the freeze go on. Report every warning to the person when you report this step.

@@ -5462,6 +5462,21 @@ TF_EOF
       || die 27 "tests-freeze: a person named the tests this repair removes, and these files changed beyond them: ${tf_unnamed%, }. The test author deletes the lines of each named test and changes no other line. Nothing is frozen."
   fi
 
+  # --- 27 also: a test file belongs to one order's freeze ------------------------------------------
+  # Review hashes each frozen file against every order's record. A second order's freeze of the
+  # same file changes it under the first order's hash, and no framework-neutral rule tells an added
+  # test from an edit of an earlier one (gap row 489).
+  local tf_shared=""
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    ro_frozen_owner "$p" "$unit_id"
+    [ -z "$RO_OWNER" ] || tf_shared="$tf_shared$p ($RO_OWNER), "
+  done <<TF_EOF
+$unique_rel_paths
+TF_EOF
+  [ -z "$tf_shared" ] \
+    || die 27 "tests-freeze: another order's frozen record holds these --test files: ${tf_shared%, }. A test file belongs to one order's freeze. The test author puts the new test in a new file $unit_id owns, and this freeze runs again. If the other order's test must change, run reopen --test on that order. Nothing is frozen."
+
   # --- a --support path is a base class or a fixture the author wrote beside the tests -----------
   # It is resolved, checked and hashed the way a --test path is, and refused when it is missing
   # or when a test glob matches it: such a file is a test and belongs on --test (live-run row 90).
@@ -12407,7 +12422,8 @@ FN_RECIPES
 
 # The order whose merged frozen record holds test file $1, its repairs' records applied, so a test
 # a repair retired is not found again (gap row 475). Sets RO_OWNER, or empty, and RO_HELD, the
-# JSON array of {name, criterion} of the tests that record holds in $1.
+# JSON array of {name, criterion} of the tests that record holds in $1. With $2, order $2's own
+# record is passed over.
 RO_OWNER=""; RO_HELD="[]"
 ro_frozen_owner() {
   local rf
@@ -12415,6 +12431,7 @@ ro_frozen_owner() {
   while IFS= read -r rf; do
     case "$rf" in ""|*-repair-*.json) continue ;; esac
     rf="$(basename "$rf" .json)"
+    [ "${rf#tests-}" != "${2:-}" ] || continue
     tf_with_repair_tests "reopen" "${rf#tests-}"
     RO_HELD="$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -c --arg p "$1" \
       '[ (.rows // [])[] | .criterion as $c | (.tests // [])[] | select(.path == $p) | {name, criterion: $c} ]')"
