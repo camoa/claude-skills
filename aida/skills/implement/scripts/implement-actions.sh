@@ -12631,7 +12631,7 @@ RO_ONE
       | ([ ($r.findings // [])[] | select(.disposition == "criterion" and .linkedTo == $c and .ruling != "wrong") | .id ] | join(", ")) as $f
       | " " + $c + " reads unmet through " + (if $f != "" then "finding " + $f elif .answeredBy == "person" then "the person'"'"'s answer"
                                               elif .answeredBy == "script" then "a script row" else "no answer" end) + ";" ] | join("")' "$review_file")"
-    die 119 "reopen: no finding of the review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns, and none names a frozen test a person ruled wrong.${unmet:+ Unmet:${unmet%;}. Only a finding reaches an order. A person runs redo on the order that owns each of these, or fixes it on the task branch and runs finish again.}${unmet:- A person fixes on the task branch, then runs finish again.}"
+    die 119 "reopen: no finding of the review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns, and none names a frozen test a person ruled wrong.${unmet:+ Unmet:${unmet%;}. Only a finding reaches an order. A person runs redo on the order that owns each of these, or fixes it on the task branch and runs finish again.}$([ -n "$unmet" ] || echo " A person fixes on the task branch, then runs finish again.")"
   fi
 
   # An order proved by tests owes one failing test of the bug before its fixer runs (owner,

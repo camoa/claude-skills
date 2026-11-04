@@ -71,7 +71,7 @@ answer_case() (
   source "$HERE/records.bash"
   reopened '[{"id": "f1", "linkedTo": "c1", "disposition": "criterion", "ruling": "wrong"}]' \
     '[{"id": "c1", "verifiedBy": "person", "verdict": "unmet", "answeredBy": "person"}]'
-  printf '%s|%s\n' "$RC" "$(grep -c "c1 reads unmet through the person's answer" "$OUT")"
+  printf '%s|%s\n' "$RC" "$(grep -o "c1 reads unmet through the person's answer" "$OUT" | wc -l | tr -d ' ')"
 )
 expect "reopen names a criterion that failed through the person's answer" "$(answer_case)" '119|1'
 copy_case() (
