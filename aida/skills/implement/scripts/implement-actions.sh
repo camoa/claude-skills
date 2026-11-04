@@ -328,6 +328,9 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      Or an untracked file lies under a path the order owns, which the freeze would leave out of
 #      its commit: it reaches the build unprotected. The message names each one. Or the author
 #      changed a test file an order's frozen record holds, which no freeze commits (gap row 480).
+#      Or a --test file is one another order's frozen record holds: a test file belongs to one
+#      order's freeze. Or a --support file another order froze has a different hash now. Review
+#      would stop at 124 on either (gap row 489).
 #  28  retired on 2026-10-19 (live-run row 374). `tests-freeze` refused a test name that did not
 #      end in the criterion id or the order id it claimed. The --test flag already names that id,
 #      the record keeps it, and every reader joins on the recorded name. The test-authoring recipe
@@ -5534,6 +5537,23 @@ TF_EOF
   local support_json
   support_json="$(jq -s 'unique_by(.path)' "$support_tmp")"
   rm -f "$support_tmp"
+
+  # --- 27 also: a support file another order froze stays as that freeze holds it -------------------
+  # Review hashes it against that order's record, so a changed copy stops review at 124. An
+  # unchanged one may be shared (gap row 489).
+  local tf_rf tf_support_held=""
+  while IFS= read -r tf_rf; do
+    case "$tf_rf" in ""|*-repair-*.json) continue ;; esac
+    tf_rf="$(basename "$tf_rf" .json)"
+    [ "${tf_rf#tests-}" != "$unit_id" ] || continue
+    tf_with_repair_tests "tests-freeze" "${tf_rf#tests-}"
+    tf_support_held="$tf_support_held$(printf '%s' "$TF_REPAIR_TESTS_DOC" | jq -r --argjson now "$support_json" --arg o "${tf_rf#tests-}" '
+      [ (.support // [])[] | . as $s | select(any($now[]; .path == $s.path and .sha256 != $s.sha256)) | "\(.path) (\($o)), " ] | join("")')"
+  done <<TF_EOF
+$(find "$IMPL_DIR" -maxdepth 1 -type f -name 'tests-*.json' 2>/dev/null | sort)
+TF_EOF
+  [ -z "$tf_support_held" ] \
+    || die 27 "tests-freeze: another order's frozen record holds these --support files at a different hash: ${tf_support_held%, }. Nobody changes a frozen file. The test author restores each file, or writes a new support file $unit_id owns, and this freeze runs again. If the other order's file must change, run reopen --test on that order. Nothing is frozen."
 
   # --- every machine-verified criterion the unit owns needs a --test row, or a warning -------------
   # Owns, not serves. Exactly one order owns a criterion and most own none (ideal/design.md), and

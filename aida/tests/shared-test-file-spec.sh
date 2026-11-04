@@ -44,6 +44,27 @@ new_case() (
 )
 expect "a later freeze in a new file freezes" "$(new_case)" "0|record|moved"
 
+# support_case <line>: wo1 froze tests/helper as support. <line>, when given, is added to it. Then
+# wo2 freezes tests/b_test.sh with tests/helper as its support.
+support_case() (
+  source "$HERE/records.bash"
+  later_records
+  printf 'true\n' >"$WT/tests/helper"
+  git -C "$WT" add tests/helper && git -C "$WT" commit -qm "helper"
+  HEAD0="$(git -C "$WT" rev-parse HEAD)"
+  edit "$IMPL/tests-wo1.json" '.support = [{path: "tests/helper", sha256: $sha}]' \
+    --arg sha "$("${RECORDS_HASH_SHA256_CMD[@]}" "$WT/tests/helper" | cut -d' ' -f1)"
+  [ -z "$1" ] || printf '%s\n' "$1" >>"$WT/tests/helper"
+  printf 'echo b is missing\nexit 1\n' >"$WT/tests/b_test.sh"
+  (cd "$WT" && sh tests/b_test.sh) >"$ROOT/red.txt" 2>&1
+  run "$IMPLEMENT" tests-freeze "$TASK" wo2 --test "tests/b_test.sh::b exists=c2" --red "b exists=$ROOT/red.txt" \
+    --support tests/helper --test-glob 'tests/*_test.sh' --test-recipe "fake=$RECIPE" --row "c2=confirmed::model::it proves c2"
+  printf '%s|%s|%s\n' "$RC" "$([ -f "$IMPL/tests-wo2.json" ] && echo record || echo none)" \
+    "$([ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD0" ] && echo still || echo moved)"
+)
+expect "a later freeze naming a changed support file another order froze is refused" "$(support_case 'exit 0')" "27|none|still"
+expect "a later freeze may share an unchanged support file" "$(support_case '')" "0|record|moved"
+
 # A file wo1 froze gains lines after its freeze, and wo2's hand-written record holds the new hash.
 edited_case() (
   source "$HERE/records.bash"
