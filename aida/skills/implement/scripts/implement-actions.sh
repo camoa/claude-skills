@@ -12495,7 +12495,7 @@ do_reopen() {
   # wrong is named too, because that ruling is why it routes nowhere (gap row 490).
   [ "$review_closed" = false ] \
     || not_routed="$(jq -r '[ (.findings // [])[]
-         | if .ruling == "wrong" then " " + .id + " (a person ruled it wrong at close, so it fails no criterion);"
+         | if .ruling == "wrong" then " " + .id + " (a person ruled it wrong at close, and the ruling took it out of every route);"
            elif .disposition != "criterion" and (.ruling // "") == "" then " " + .id + " (it fails no criterion, and no person ruled it fix);"
            else empty end ] | join("")' "$review_file")"
   # A decision a build left and the person ruled test-wrong at the task review takes the same
@@ -12624,8 +12624,15 @@ RO_ONE
     reopened="$(printf '%s' "$reopened" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --arg c "$crit" --arg file "$rel" \
       '. + [{order: $o, finding: $f, from: (if $one.retiredTest then "a person'"'"'s ruling" else "task review " + $one.id end), cites: ("cites " + $c), file: $file}]')"
   done
-  [ "$routed" != "{}" ] \
-    || die 119 "reopen: no finding of the review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns, and none names a frozen test a person ruled wrong. A person fixes on the task branch, then runs finish again."
+  if [ "$routed" = "{}" ]; then
+    # Each unmet criterion is named with what failed it, so a person sees why no order takes it (gap row 490).
+    local unmet
+    unmet="$(jq -r '. as $r | [ (.criteria // [])[] | select(.verdict == "unmet") | .id as $c
+      | ([ ($r.findings // [])[] | select(.disposition == "criterion" and .linkedTo == $c and .ruling != "wrong") | .id ] | join(", ")) as $f
+      | " " + $c + " reads unmet through " + (if $f != "" then "finding " + $f elif .answeredBy == "person" then "the person'"'"'s answer"
+                                              elif .answeredBy == "script" then "a script row" else "no answer" end) + ";" ] | join("")' "$review_file")"
+    die 119 "reopen: no finding of the review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns, and none names a frozen test a person ruled wrong.${unmet:+ Unmet:${unmet%;}. Only a finding reaches an order. A person runs redo on the order that owns each of these, or fixes it on the task branch and runs finish again.}${unmet:- A person fixes on the task branch, then runs finish again.}"
+  fi
 
   # An order proved by tests owes one failing test of the bug before its fixer runs (owner,
   # 2026-10-28), when a finding on it holds logic (logicFinding in scripts/lib/proof.sh). Any
