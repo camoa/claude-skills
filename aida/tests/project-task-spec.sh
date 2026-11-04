@@ -84,7 +84,8 @@ expect "a tree made inside an open task's tree is cut from the trunk" "$(create_
 
 # no_tree_scope_case <how>: task n1 has no tree on disk, and scope init runs on it from the tree of
 # t1 (gap row 492). With `created`, create --tree-at-start made n1. With `recorded`, n1 records a
-# path and a branch that are not on disk. The exit, and whether the contract was written.
+# path and a branch that are not on disk. With `empty`, that path is an empty folder git does not
+# list. With `full`, that folder holds a file. The exit, and whether the contract was written.
 no_tree_scope_case() (
   source "$HERE/records.bash"
   task_records branch
@@ -94,12 +95,36 @@ no_tree_scope_case() (
     mkdir -p "$PROJECT/tasks/n1"
     jq -n --arg p "$ROOT/code.worktrees/code-n1" '{schemaVersion: 1, id: "n1", state: "new", parent: null,
         children: [], worktree: {path: $p, branch: "feature/n1"}}' >"$PROJECT/tasks/n1/task.json"
+    [ "$1" = recorded ] || mkdir -p "$ROOT/code.worktrees/code-n1"
+    [ "$1" != full ] || printf 'x\n' >"$ROOT/code.worktrees/code-n1/x"
   fi
   run "$PLUGIN/skills/scope/scripts/scope-actions.sh" init "$PROJECT/tasks/n1"
   printf '%s|%s\n' "$RC" "$(on_disk "$PROJECT/tasks/n1/alignment.json")"
 )
 expect "scope runs on a task made with --tree-at-start" "$(no_tree_scope_case created)" '0|yes'
 expect "scope runs on a task whose recorded tree is not on disk" "$(no_tree_scope_case recorded)" '0|yes'
+expect "scope runs on a task whose recorded tree is an empty folder git does not list" "$(no_tree_scope_case empty)" '0|yes'
+expect "scope refuses a task whose recorded tree is a folder with files git does not list" "$(no_tree_scope_case full)" '79|no'
+
+# empty_tree_cut_case: n1 records a path that is an empty folder git does not list, and
+# task_worktree, which every action that needs the code calls, resolves n1's tree. The exit, and
+# whether git now lists that folder as the tree of feature/n1.
+empty_tree_cut_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  local tree="$ROOT/code.worktrees/code-n1"
+  mkdir -p "$PROJECT/tasks/n1" "$tree"
+  jq -n --arg p "$tree" '{schemaVersion: 1, id: "n1", state: "in_progress", parent: null, children: [],
+      worktree: {path: $p, branch: "feature/n1"}}' >"$PROJECT/tasks/n1/task.json"
+  (
+    die1() { exit 1; }; die3() { exit 3; }; die79() { exit 79; }
+    export PLUGIN_ROOT="$PLUGIN"
+    source "$PLUGIN/scripts/lib/recipes.sh" && source "$PLUGIN/scripts/lib/task-helpers.sh" || exit 1
+    task_worktree "$PROJECT/tasks/n1" spec >/dev/null
+  ) >"$OUT" 2>&1
+  printf '%s|%s\n' "$?" "$(git -C "$CODE" worktree list --porcelain | grep -A2 -Fx "worktree $tree" | grep -c '^branch refs/heads/feature/n1$')"
+)
+expect "a tree is cut into an empty folder git does not list" "$(empty_tree_cut_case)" '0|1'
 
 # start_findings_case: a task whose record has no parent field starts. The exit, the state, and
 # how many warnings the task records for the start.
