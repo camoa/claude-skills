@@ -4365,7 +4365,8 @@ tt_ledger_update() {
 }
 
 # Appends to list $1 the `information` items the review record of order $2 holds, each as
-# {id, from, summary, file}. Prints the list. Empty when the record is missing or holds none. Both
+# {id, from, summary, file}, and takenAs when a person took the item into a fix (gap row 488).
+# Prints the list. Empty when the record is missing or holds none. Both
 # brief actions carry these to a dependent order the way they carry the interface record, so what
 # a reviewer wrote for the person reaches the next order's author and builder instead of living in
 # the conversation that dispatched the review (live-run row 103).
@@ -4373,7 +4374,7 @@ im_dependency_information() {
   local list="$1" dep_id="$2" review_file="$IMPL_DIR/review-$2.json" items='[]'
   if [ -f "$review_file" ]; then
     items="$(jq -c --arg from "$dep_id" \
-      '[ (.information // [])[] | {id, from: $from, summary, file} ]' "$review_file" 2>/dev/null)"
+      '[ (.information // [])[] | {id, from: $from, summary, file} + (if .takenAs then {takenAs} else {} end) ]' "$review_file" 2>/dev/null)"
     [ -n "$items" ] || items='[]'
   fi
   printf '%s' "$list" | jq -c --argjson items "$items" '. + $items'
@@ -4662,7 +4663,7 @@ TB_OWNED
          whatToDo: (if ($r.retiredTests // []) != []
            then "A person ruled the tests in retiredTests wrong. Remove each one by deleting its lines, and change no other line. Delete a file when every test in it is named. Return each kept test with a locks-in reason naming the code it passes against."
            elif ($r.retires // []) == []
-           then "This closed order holds a bug. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."
+           then "This order holds a bug. Write one test that fails on it, in a new test file this order owns, and write its red run. Do not change a frozen test. The fixer then makes the test pass."
            else "A person ruled these frozen tests wrong at the task review. Correct each one in its own file, and change no other test. Return each corrected test with a locks-in reason naming the code it passes against." end)}
       + (if ($r.retires // []) == [] then {} else {retires: $r.retires} end)
       + (if ($r.retiredTests // []) == [] then {} else {retiredTests: $r.retiredTests} end)')"
@@ -10348,7 +10349,7 @@ do_review_record() {
       [ .[] | select(.actionable == false and (.severity == "medium" or .severity == "high")) ]
       | if length == 0 then empty
         else (.[] | "unrouted: \(.id) \(.severity) \(.evidence | gsub("\n"; " ") | .[0:240]) (\(if .file == "" then "no file named" else .file end))"),
-             "unrouted: \(length) of medium or higher severity; the record holds them, a person decides" end')"
+             "unrouted: \(length) of medium or higher severity; the record holds them, a person decides; a person may take one into this order\u0027s fix with fix-brief --take <id> --because <words>" end')"
     [ -z "$unrouted" ] || printf '%s\n' "$unrouted"
   fi
   # Live-run row 103. What the reviewer wrote for the person and not as a finding, one line each
@@ -10358,7 +10359,7 @@ do_review_record() {
   information_lines="$(printf '%s' "$information_json" | jq -r '
     if length == 0 then empty
     else (.[] | "information: \(.id) \(.summary | gsub("\n"; " ") | .[0:240])"),
-         "information: \(length) for the person, in the record and in the next order\u0027s briefs" end')"
+         "information: \(length) for the person, in the record and in the next order\u0027s briefs; a person may take one into this order\u0027s fix with fix-brief --take <id> --because <words>" end')"
   [ -z "$information_lines" ] || printf '%s\n' "$information_lines"
   # Gap row 300. A departure this action recorded not-applicable is shown, so a person sees it.
   printf '%s' "$RV_RECIPE_ANSWERS" | jq -r '.[] | select(has("departedAnswer"))
@@ -10372,7 +10373,7 @@ do_review_record() {
 # ------------------------------------------------------------------------------------------------
 # fix-brief: every open finding of one order, in severity order, with the union of their scopes.
 # Not one fixer per finding (ideal/implementation.md, "One fixer per round, verification per
-# finding").
+# finding"). With --take, a person first takes review rows no fixer would see into the round.
 # ------------------------------------------------------------------------------------------------
 
 # The order's reasoning paragraphs that the last build brief did not carry. An owner's ruling added
@@ -10393,14 +10394,105 @@ fb_new_reasoning() {
     | liveReasoning | split("\n\n") | map(select(. != "" and (. as $p | $had | index($p) | not))) | join("\n\n")'
 }
 
+# Gap row 488. A person takes an information item, or an open finding that cites nothing, of open
+# order $1's review into its own fix: --take values $2, one per line, and the words $3. Each row
+# becomes one repair finding on its file, through the helper the closed-order grant uses, and the
+# row gains takenAs. One repair entry adds one round, with a failing test first when the helper
+# says one is owed. Every guard runs before any write. The added round must serve the taken rows
+# alone, so an open actionable finding refuses: its rounds are for a ruling or a go-on to decide.
+# Then the call reads its own writes again. With a test owed it prints the next step and exits;
+# otherwise fix-brief goes on and writes the round's brief.
+fb_take() {
+  local unit_id="$1" take_raw="$2" because="$3" rounds_used owned_json id row file seen="" rows='[]'
+  local new_ids="" owed=false ledger_doc
+  [ "$(rv_open_actionable_count "$RV_REVIEW_DOC")" = 0 ] \
+    || die3 "fix-brief: $unit_id has an open actionable finding. A take adds a round for the taken rows alone, so fix or rule the open findings first. Nothing is written."
+  rounds_used="$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.roundsUsed // 0')"
+  case "$rounds_used" in ''|*[!0-9]*) rounds_used=0 ;; esac
+  rv_require_round_verified "fix-brief" "$unit_id" "$rounds_used"
+  rv_load_codepath "fix-brief"
+  rv_frozen_test_paths_json "fix-brief" "$unit_id"
+  owned_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson o "$(im_owns_of "$unit_id")" '(.ownedFiles // []) + $o')"
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    case " $seen " in *" $id "*) die3 "fix-brief: --take names $id twice. Nothing is written." ;; esac
+    seen="$seen $id"
+    row="$(printf '%s' "$RV_REVIEW_DOC" | jq -c --arg id "$id" '
+      [ ((.information // [])[] | select(.id == $id) | . + {kind: "information"}),
+        ((.findings // [])[] | select(.id == $id and .actionable == false and .status == "open") | . + {kind: "finding"}) ]')"
+    case "$(printf '%s' "$row" | jq 'length')" in
+      0) die3 "fix-brief: $id names no information item and no open finding that cites nothing in $RV_REVIEW_FILE. Nothing is written." ;;
+      1) row="$(printf '%s' "$row" | jq -c '.[0]')" ;;
+      *) die3 "fix-brief: $id names both an information item and a finding in $RV_REVIEW_FILE. Nothing is written." ;;
+    esac
+    [ "$(printf '%s' "$row" | jq -r '.takenAs // ""')" = "" ] \
+      || die3 "fix-brief: $id was taken already, as $(printf '%s' "$row" | jq -r '.takenAs'). Nothing is written."
+    [ "$(printf '%s' "$row" | jq -r '.departsFromDesign // false')" = "false" ] \
+      || die3 "fix-brief: $id departs from the design, and no fixer repairs a design. The person decides it at the task review. Nothing is written."
+    file="$(printf '%s' "$row" | jq -r '.file // ""')"
+    [ -n "$file" ] || die3 "fix-brief: $id names no file, so a fix has nowhere to go. Nothing is written."
+    [ -z "$(rv_scope_outside "$(jq -nc --arg p "$file" '[$p]')" "$owned_json" "$RV_CODEPATH" "$TASK_PATH")" ] \
+      || die3 "fix-brief: $id is on $file, which $unit_id does not own. A path outside its files is a grant, with --allow. Nothing is written."
+    [ "$(printf '%s' "$RV_FROZEN_PATHS_JSON" | jq --arg p "$file" 'index($p)')" = "null" ] \
+      || die3 "fix-brief: $id is on $file, a frozen test. A fixer never changes a test. Nothing is written."
+    rows="$(printf '%s' "$rows" | jq -c --argjson r "$row" '. + [$r]')"
+  done <<FB_TAKE
+$take_raw
+FB_TAKE
+  task_require_person 100 fix-brief "--take, a review row taken into $unit_id's fix," "$TASK_PATH" implement \
+    "implement fix-brief" "$unit_id" "$take_raw$because"
+  # The helper reads the review record from disk, so each row's finding is written before the next.
+  # Every row cites the same first criterion, so only the first call can return 1, before any write.
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    id="$(printf '%s' "$row" | jq -r '.id')"
+    im_repair_finding fix-brief "$unit_id" "$(printf '%s' "$row" | jq -r '.file')" "$(printf '%s' "$row" | jq -r --arg b "$because" '
+        (if .kind == "finding" then .evidence else .summary + (if (.lines // "") == "" then "" else " (lines " + .lines + ")" end) end)
+        + " A person took " + .id + " into the fix of this order: " + $b')" \
+      || die3 "fix-brief: $unit_id serves no criterion, so no fixer could act on a repair finding. Nothing is written."
+    [ "$IM_REPAIR_OWED" != "true" ] || owed=true
+    write_atomic "$RV_REVIEW_FILE" "$(printf '%s' "$IM_REPAIR_DOC" | jq -c --arg id "$id" --arg f "$IM_REPAIR_ID" --arg kind "$(printf '%s' "$row" | jq -r '.kind')" '
+      if $kind == "information" then .information |= map(if .id == $id then .takenAs = $f else . end)
+      else .findings |= map(if .id == $id then .takenAs = $f else . end) end')"
+    new_ids="$new_ids$IM_REPAIR_ID
+"
+  done <<FB_ROWS
+$(printf '%s' "$rows" | jq -c '.[]')
+FB_ROWS
+  ledger_doc="$(im_reopen_in "$RV_LEDGER_DOC" "$unit_id" "$(jq -cn --arg t "$take_raw" --arg f "$new_ids" \
+    --arg at "$(date -u +%Y-%m-%d)" --argjson owed "$owed" '
+    {taken: ($t | split("\n") | map(select(. != ""))), findings: ($f | split("\n") | map(select(. != ""))), at: $at}
+    + (if $owed then {testOwed: true} else {} end)')")"
+  [ -n "$ledger_doc" ] || die3 "fix-brief: the take on $unit_id could not be written to the ledger."
+  write_atomic "$RV_LEDGER_FILE" "$ledger_doc"
+  rv_load_review_record "fix-brief" "$unit_id"
+  RV_LEDGER_DOC="$ledger_doc"
+  RV_ORDER_ENTRY="$(printf '%s' "$RV_LEDGER_DOC" | jq -c --arg id "$unit_id" '.orders[] | select(.id == $id)')"
+  FIX_ROUNDS_ALLOWED=$((FIX_ROUNDS_ALLOWED + 1))
+  [ "$owed" = "true" ] || return 0
+  im_print_summary "fix-brief" "$(jq -cn --arg order "$unit_id" --arg f "$(printf '%s' "$new_ids" | paste -sd, -)" \
+    --arg record "$RV_REVIEW_FILE" --arg next "$(im_next_step "$RV_LEDGER_DOC" "$SNAPSHOT_DOC" "$IMPL_DIR" "true" "false")" '
+    {order: $order, taken: ("repair findings " + $f + ", with one failing test owed first"), record: $record, next: $next}')"
+  exit 0
+}
+
 do_fix_brief() {
-  local task_arg="" unit_id="" allow_raw=""
+  local task_arg="" unit_id="" allow_raw="" take_raw="" because=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --allow)
         need_value "fix-brief" "--allow" "$#" "${2:-}" non-empty
         allow_raw="$allow_raw$2
 "
+        shift 2 ;;
+      --take)
+        need_value "fix-brief" "--take" "$#" "${2:-}" non-empty
+        take_raw="$take_raw$2
+"
+        shift 2 ;;
+      --because)
+        need_value "fix-brief" "--because" "$#" "${2:-}" non-empty
+        because="$2"
         shift 2 ;;
       -*) die3 "fix-brief: unrecognized argument: $1" ;;
       *)
@@ -10412,6 +10504,11 @@ do_fix_brief() {
   done
   [ -n "$task_arg" ] || die3 "fix-brief: a task folder is required"
   [ -n "$unit_id" ]  || die3 "fix-brief: a unit id is required"
+  [ -z "$take_raw" ] || [ -n "$because" ] || die3 "fix-brief: --take needs --because, the person's own words."
+  [ -n "$take_raw" ] || [ -z "$because" ] || die3 "fix-brief: --because goes with --take, a review row a person takes into the order's fix."
+  # The two flags pass different gates, and one call holds one person's answer.
+  [ -z "$take_raw" ] || [ -z "$allow_raw" ] \
+    || die3 "fix-brief: --take and --allow go in two calls. Take the rows first, then grant a path. Nothing is written."
   im_load_task "$task_arg" "fix-brief"
 
   rv_load_state "fix-brief" "$unit_id"
@@ -10423,6 +10520,7 @@ do_fix_brief() {
   [ -z "$(im_repair_owed "$RV_LEDGER_DOC" "$unit_id")" ] \
     || die 121 "fix-brief: $unit_id owes the test of the task review's repair first. Run tests-brief on $unit_id, dispatch its test author, put the row to the checker, and run tests-freeze. Nothing is written."
   rv_load_review_record "fix-brief" "$unit_id"
+  [ -z "$take_raw" ] || fb_take "$unit_id" "$take_raw" "$because"
 
   local open_count rounds_used
   open_count="$(rv_open_actionable_count "$RV_REVIEW_DOC")"

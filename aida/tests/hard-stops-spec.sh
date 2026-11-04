@@ -193,6 +193,8 @@ expect "a run mode naming an unknown stage takes no chat answer" "$(unknown_stag
 expect "a role's plain finish is not refused by the person rule" "$(STEP="finish $TASK" person_step_case aida:implementer)" allow
 expect "a role's finish --regression is refused" \
   "$(STEP="finish $TASK --regression wo1=x --because y" person_step_case aida:implementer)" deny
+expect "a role's fix-brief --take is refused, and its plain fix-brief is not" \
+  "$(STEP="fix-brief $TASK wo1 --take i1 --because x" person_step_case aida:fixer)|$(STEP="fix-brief $TASK wo1" person_step_case aida:fixer)" "deny|allow"
 expect "no agent or template names an action the hook refuses whole to a role" "$(whole_action_names)" none
 expect "a checkout of an older copy of the task folder is refused" "$(checkout_case tasks/t1)" deny
 expect "a checkout of an older copy of the tasks folder is refused" "$(checkout_case tasks)" deny

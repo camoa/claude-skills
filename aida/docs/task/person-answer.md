@@ -21,8 +21,8 @@ script runs. This page says which steps take which, what that guarantees, and wh
 
 ## The steps that take your answer from the chat when attended
 
-- In implementation: `go-on` in its other forms, `redo`, `drop`, `start --leftovers keep`, and a
-  test row you judged at the freeze.
+- In implementation: `go-on` in its other forms, `redo`, `drop`, `start --leftovers keep`,
+  `fix-brief --take`, and a test row you judged at the freeze.
 - In scope: `retire`, and `add` or `update` with `--author owner`.
 - In review: `close --row` and `acceptance --accept-baseline`.
 - In completion: `close` with `--reason`, `--leave` or `--captures-offered`.

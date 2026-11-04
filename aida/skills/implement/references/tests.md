@@ -115,7 +115,8 @@ It reads the frozen copy and never the live files. It writes exactly eight thing
 - the boundaries it names;
 - the declared interface of every order it depends on;
 - `dependencyInformation`, each dependency's review `information` items: the id, the order it
-  came from, the summary and the file;
+  came from, the summary and the file. `takenAs` names the repair finding when a person took the
+  item into that order's fix. Do not build around a defect that fix removes;
 - `reuses`, the path and the interface of every existing thing design's dispose recorded on
   this order. A reused module is production source of no work order, so this is the only place
   the test author gets its shape. An order disposed with no path carries none;

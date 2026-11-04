@@ -205,7 +205,7 @@ write_signal() {
 # with no words refuses the action itself. Since gap row 481 the list holds every person-only
 # action that cannot be undone, because most of them pass on the chat answer when attended: the
 # script cannot tell a role from the main session, and only this hook reads agent_id. Each implement
-# line names the person's form alone, so a role may still run plain finish or fix-brief. go-on,
+# line names the person's forms alone, so a role may still run plain finish or fix-brief. go-on,
 # redo and drop are person-only in every form. tests-freeze is refused whole: its person form sits
 # inside a --row value, which can come from an @/<file> the command text never shows. No agent or
 # template runs tests-freeze. A step that can be undone is left out: environment up and
@@ -215,7 +215,7 @@ PERSON_ACTIONS='task-actions.sh set-budget|decline-recipe|defer-surface|set-run-
 task-actions.sh prune([[:space:]]+--project[[:space:]=]+[^[:space:]]+)*[[:space:]]+([^-[:space:]][^[:space:]]*|--all)
 implement-actions.sh start --leftovers[[:space:]=]+.?keep
 implement-actions.sh tests-freeze|go-on|redo|drop
-implement-actions.sh fix-brief --allow
+implement-actions.sh fix-brief --allow --take
 implement-actions.sh verify-record --ruling
 implement-actions.sh finish --regression
 implement-actions.sh reopen --test
