@@ -545,8 +545,10 @@ confirmed or rejected and who judged it. A done-when test needs the done-when ro
 order id. Rows follow the tests. A criterion this order only serves and names on no test needs no
 row from it; the row for it belongs to its owner. A criterion a person verifies carries a
 checklist instead, never a row: it has no judgement, and review's close is what confirms it. A row for
-anything no test of this order claims refuses the freeze, the same way a missing row does. So does
-a row for a criterion a person verifies. Every accepted criterion row is appended to that
+anything no test of this order claims refuses the freeze, the same way a missing row does. A
+rejected done-when row is the exception, because the missing test is what the checker rejected. It
+refuses at exit 65 and lands under `rowsRejected`. A row for a criterion a person verifies also
+refuses the freeze. Every accepted criterion row is appended to that
 criterion's own record in the ledger, and the done-when row to this order's own entry. `close` is
 what decides a criterion from its rows, once every order serving it has closed and its owner has
 judged it.

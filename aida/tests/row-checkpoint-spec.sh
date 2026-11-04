@@ -46,6 +46,18 @@ check_again_case() (
 )
 expect "a rejection puts back the rejected row alone, and records the confirmed one" "$(check_again_case)" '65|["c1"]|c2'
 
+# No test claims wo1, so the checker's rejection of the order row is that absence. The freeze
+# records it on the ledger, where tests-brief reads it.
+order_row_case() (
+  source "$HERE/records.bash"
+  two_rows
+  jq -n '{rows: [{criterion: "wo1", verdict: "rejected", repair: "tests", note: "no test pins the order"}]}' \
+    >"$IMPL/row-check-wo1.json"
+  freeze "c1=confirmed::model::observes b" "c2=confirmed::model::observes c" "wo1=rejected::model::no test pins the order"
+  printf '%s|%s\n' "$RC" "$(ledger '[.rowsRejected[].criterion] | join(",")')"
+)
+expect "a rejected order row that no test claims is recorded" "$(order_row_case)" '65|wo1'
+
 # The repair edited tests/a_test.sh after c2 was confirmed. Only the repair touched the file, so
 # the freeze carries c2 and judges c1 from its new --row.
 carry_case() (

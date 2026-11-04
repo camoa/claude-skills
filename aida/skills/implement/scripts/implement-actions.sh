@@ -5731,8 +5731,11 @@ TF_RECORDED
     ')"
   [ -z "$rows_person" ] \
     || die3 "tests-freeze: a --row names $rows_person, which a person verifies. Such a criterion carries a checklist and never a judgement; completion confirms it. Drop that --row."
-  rows_unknown="$(jq -nr --argjson expected "$rows_expected_json" --argjson rows "$rows_meta_json" '
-      [ $rows[] | .criterion as $k | select(($expected | index($k)) == null) | $k ] | unique | join(", ")
+  # A rejected order row with no test claiming the order is that absence, so it reaches the
+  # rejection below and lands on the ledger (gap row 491).
+  rows_unknown="$(jq -nr --argjson expected "$rows_expected_json" --argjson rows "$rows_meta_json" --arg unit "$unit_id" '
+      [ $rows[] | select(.criterion != $unit or .verdict != "rejected") | .criterion as $k
+        | select(($expected | index($k)) == null) | $k ] | unique | join(", ")
     ')"
   [ -z "$rows_unknown" ] \
     || die3 "tests-freeze: a --row names something no --test of $unit_id claims: $rows_unknown. A row judges the tests named against it; the row for a criterion this order only serves belongs to its owner. Drop that --row."
