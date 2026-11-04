@@ -394,9 +394,9 @@ anything is built." Then name the requirement in its own words, the tests, the c
 and the answer the note recommends. The person's answer becomes
 `--row <criterion id>=confirmed::person::<the person's words>` or
 `--row <criterion id>=rejected::person::<the person's words>`. A row a person judged needs the
-person's answer on record, in every run mode, or `tests-freeze` refuses (exit 70). Record it with
-the task skill's `person-answer.sh`, step `implement tests-freeze`, with each such `--row` as the
-words, one per line. A row the person rejects goes back to
+person's answer. Attended at an interactive stage, it comes from the chat. Otherwise it needs the
+answer on record, or `tests-freeze` refuses (exit 70). Record it with the task skill's
+`person-answer.sh`, step `implement tests-freeze`, with each such `--row` as the words, one per line. A row the person rejects goes back to
 the test author before anything is frozen, in three steps. Run `tests-freeze` with every row as
 answered. It refuses (exit 65) and writes no test record. It records each rejected row on the
 order's ledger entry, with the person's words and the checker's note. A row a model rejected is
@@ -561,10 +561,12 @@ which owns the file, may rewrite the setup the tests stand on and the frozen-tes
 met. The freeze refuses a support path that does not exist (exit 3). It also refuses one a test
 glob matches (exit 3), because that file is a test: pass it as `--test`.
 
-Then it commits the test files it hashed, and the support files, on the task branch, and only
-those paths. The implementer starts from a tree that already holds the tests, and the record's
-commit is the one they are in. Work beside them stays uncommitted, and the freeze says so in one
-line. A commit that fails, for want of a git identity or any other reason, refuses before the
+Then it commits the test files it hashed, and the support files, on the task branch. It also
+commits each test file the order owns that the author changed or staged, though that file holds no
+frozen test. When an order's frozen record holds tests in such a file, it refuses (exit 27) and
+freezes nothing. It commits no other path. The implementer starts from a tree that already holds the tests,
+and the record's commit is the one they are in. Work beside them stays uncommitted, and the
+freeze says so in one line. A commit that fails, for want of a git identity or any other reason, refuses before the
 record is written, with git's own message.
 
 A person is not a role, and is not refused. A freeze is not a lock: it exists so a change is

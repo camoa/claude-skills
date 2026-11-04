@@ -185,12 +185,13 @@ answer_write_signal() {
 # Returns 0 when segment $1 holds a redirect other than 2> or one to /dev/null, a write verb,
 # sed -i, awk -i, find -delete, or git checkout or restore. The answers are committed, so a checkout
 # of an older copy would make a used answer usable again.
+GIT_RESTORE_RE='(^|[[:space:];&|(`/])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+(checkout|restore)([[:space:]]|$)'
 write_signal() {
   local s
   s="$(printf '%s' "$1" | sed -E 's#[0-9]*>&[0-9-]+##g; s#(&|[0-9])?>>?[[:space:]]*/dev/null##g; s#2>>?[[:space:]]*[^[:space:]]*##g')"
   case "$s" in *'>'*) return 0 ;; esac
   printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])(tee|cp|mv|install|dd|rm|sponge|truncate|ln|rsync|patch|ed)([[:space:];&|)`]|$)' && return 0
-  printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+(checkout|restore)([[:space:]]|$)' && return 0
+  printf '%s' "$s" | grep -Eq "$GIT_RESTORE_RE" && return 0
   printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])g?awk[[:space:]].*(-i[[:space:]]*inplace|--inplace)' && return 0
   printf '%s' "$s" | grep -Eq '(^|[[:space:]])-delete([[:space:]]|$)' && return 0
   printf '%s' "$s" | grep -Eq '(^|[[:space:];&|(`/])sed[[:space:]]' \
@@ -199,15 +200,28 @@ write_signal() {
 }
 # Gap row 438. A person check that trusts the run mode the caller declares passes an agent that
 # leaves out --run-mode autonomous. So no agent runs an action that records a person's approval,
-# ruling or answer, and no agent runs person-answer.sh. This list is the one copy. Each line is a script, its action as an extended
-# regex, then the words that make the call a person's. A line with no words refuses the action
-# itself. The list holds the actions whose script still asks for a person by the run mode and
-# that cannot be undone. A step that reads the answer record in every mode is not listed: no
-# agent can write an answer for it. A step that can be undone is left out: environment up and not-applicable,
-# surfaces --viewport and --enable, tool install. prune's regex also reads its operands, because
-# only a task id or --all removes a tree; the form with --project alone only lists.
-PERSON_ACTIONS='task-actions.sh set-budget|decline-recipe|defer-surface
+# ruling or answer, and no agent runs person-answer.sh. This list is the one copy. Each line is a
+# script, its action as an extended regex, then the words that make the call a person's. A line
+# with no words refuses the action itself. Since gap row 481 the list holds every person-only
+# action that cannot be undone, because most of them pass on the chat answer when attended: the
+# script cannot tell a role from the main session, and only this hook reads agent_id. Each implement
+# line names the person's form alone, so a role may still run plain finish or fix-brief. go-on,
+# redo and drop are person-only in every form. tests-freeze is refused whole: its person form sits
+# inside a --row value, which can come from an @/<file> the command text never shows. No agent or
+# template runs tests-freeze. A step that can be undone is left out: environment up and
+# not-applicable, surfaces --viewport and --enable, tool install. prune's regex also reads its
+# operands, because only a task id or --all removes a tree; the form with --project alone only lists.
+PERSON_ACTIONS='task-actions.sh set-budget|decline-recipe|defer-surface|set-run-mode
 task-actions.sh prune([[:space:]]+--project[[:space:]=]+[^[:space:]]+)*[[:space:]]+([^-[:space:]][^[:space:]]*|--all)
+implement-actions.sh start --leftovers[[:space:]=]+.?keep
+implement-actions.sh tests-freeze|go-on|redo|drop
+implement-actions.sh fix-brief --allow
+implement-actions.sh verify-record --ruling
+implement-actions.sh finish --regression
+implement-actions.sh reopen --test
+scope-actions.sh approve|retire
+scope-actions.sh add|update --author
+design-actions.sh close --approve-runs
 review-actions.sh acceptance --accept-baseline
 review-actions.sh close --row
 completion-actions.sh close --reason --leave --captures-offered
@@ -294,6 +308,34 @@ names_task_record() {
   done < <(printf '%s\n' "${ROLE_CMD//$'\\\n'/}" | grep -oE "[^[:space:];&|()<>=]*$name_re")
   return 1
 }
+# True when a segment of ROLE_CMD runs git checkout or restore with an operand that is a task's
+# folder or a project's tasks folder. Such a checkout brings back an older task.json without naming
+# it (gap row 481). An operand resolves as names_task_record resolves a word. A command library
+# that cannot be read counts as such a checkout.
+restores_task_folder() {
+  case "$ROLE_CMD" in *checkout*|*restore*) ;; *) return 1 ;; esac
+  # shellcheck source=/dev/null
+  source "$PLUGIN_ROOT/scripts/lib/command-text.sh" 2>/dev/null || return 0
+  local seg word d bases w
+  bases="$(cd_operands "$ROLE_CMD")"
+  set -f
+  while IFS= read -r seg; do
+    printf '%s' "$seg" | grep -Eq "$GIT_RESTORE_RE" || continue
+    read_words "$seg"
+    for word in "${w[@]}"; do
+      word="$(printf '%s' "$word" | tr -d "\"'")"; word="${word%/}"
+      case "$word" in ''|-*|*'$'*) continue ;; esac
+      is_task_record "$word/task.json" || is_task_record "$word/x/task.json" && { set +f; return 0; }
+      case "$word" in /*) continue ;; esac
+      while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        is_task_record "$d/$word/task.json" || is_task_record "$d/$word/x/task.json" && { set +f; return 0; }
+      done <<<"$bases"
+    done
+  done < <(split_segments "$(strip_heredocs "${ROLE_CMD//"$BSNL"/}")")
+  set +f
+  return 1
+}
 # Refuses with reason $2 a command that names $1 on a heredoc line holding an interpreter, since
 # the segments above are read with every heredoc body dropped.
 deny_interpreter_heredoc() {
@@ -309,17 +351,22 @@ deny_interpreter_heredoc() {
 # mode; in auto mode the classifier cannot approve it silently. The docs list no prompt for a hook's
 # ask in bypassPermissions, and dontAsk denies every call that would prompt. So those two, and an
 # input with no permission_mode, are refused outright, and nothing is recorded. The prompt's reason
-# goes to the person, not to Claude, and it shows the words of any @/<file> the command passes.
+# goes to the person, not to Claude, and it shows the words of any @/<file> the command passes, up
+# to 20,000 bytes. A real contract page runs to 15 KB, and scope approve's words are that page.
 # $1 the reason, $2 the segment.
 ask_person() {
-  local mode words="" f
+  local mode words="" f size
   mode="$(jq -r '.permission_mode // empty' <<<"$INPUT" 2>/dev/null)"
   case "$mode" in
     default|acceptEdits|plan|auto)
       for f in $(printf '%s' "$2" | grep -oE '@/[^[:space:]"'"'"']+' | sed 's/^@//'); do
-        [ -f "$f" ] && [ -r "$f" ] && words="$words
+        [ -f "$f" ] && [ -r "$f" ] || continue
+        size="$(wc -c <"$f" | tr -d ' ')"
+        words="$words
 $f holds:
-$(head -c 2000 -- "$f")"
+$(head -c 20000 -- "$f")"
+        [ "$size" -le 20000 ] || words="$words
+truncated: $((size - 20000)) bytes not shown; read $f"
       done
       jq -nc --arg r "$1 $2$words" \
         '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
@@ -337,6 +384,7 @@ if [ "$TOOL" = Bash ]; then
     deny_named_segment task.json 'task\.json' answer_write_signal "$TASK_REFUSAL"
     deny_interpreter_heredoc task.json "$TASK_REFUSAL"
   fi
+  ! restores_task_folder || deny_own_record "$TASK_REFUSAL"
   if [ -n "$AGENT_ID" ]; then
     deny_named_segment person-answer.sh 'person-answer\.sh' names_it "$PERSON_REFUSAL"
     while read -r PA_SCRIPT; do
@@ -345,6 +393,15 @@ if [ "$TOOL" = Bash ]; then
   else
     deny_named_segment person-answer.sh 'person-answer\.sh' names_it \
       "AIDA records a person's answer. Approve only if you, the person, give this answer:" ask_person
+    # An agent type with no agent id is a `claude --agent` main session, or an agent-team teammate
+    # whose payload may carry no id. Neither can be told from the other, so a person-only action
+    # asks: the prompt stands where a chat answer would (gap row 481).
+    if [ -n "$AGENT" ]; then
+      while read -r PA_SCRIPT; do
+        deny_named_segment "$PA_SCRIPT" "$(printf '%s' "$PA_SCRIPT" | sed 's/\./\\./g')" person_action_signal \
+          "AIDA runs a step only a person decides, from a session of agent type $AGENT. Approve only if you, the person, decide it:" ask_person
+      done < <(printf '%s\n' "$PERSON_ACTIONS" | cut -d' ' -f1 | sort -u)
+    fi
   fi
 else
   RECORD_TARGET="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$INPUT" 2>/dev/null)"
@@ -640,9 +697,13 @@ OWNER_ABS=""
 owner_of_arg() {
   local arg="$1" cand u
   # The acceptance verifier's own test: a target outside its records is a hit. /dev is not a file.
+  # A mkdir of review/evidence itself makes the folder its files go in, and a copy names it as the
+  # folder its files land in (gap row 477). ln is left out, because normalize_abs does not resolve
+  # a link, so a link there leads out of the folder.
   if [ "$VERIFIER" = true ]; then
     cand="$(normalize_abs "$(resolve_against "$arg" "$RUN_DIR")")"
     case "$cand" in /dev/*) return 1 ;; esac
+    case "$VIA" in mkdir|cp|mv|install|rsync) case "$cand" in */review/evidence) return 1 ;; esac ;; esac
     [ "$(own_record_owner "$cand")" != acceptance-verifier ] || return 1
     OWNER_UNIT=""; OWNER_ABS="$cand"; return 0
   fi
@@ -872,10 +933,14 @@ case "$TOOL" in
       [ -n "$HIT" ] && break
       case "${w[0]}" in
         rm|touch|truncate|chmod|mkdir|rmdir|tee|unlink)
-          # chmod's first operand is its mode, never a path; rule two would refuse it as one.
+          # chmod's first operand is its mode, never a path; rule two would refuse it as one. The
+          # word after mkdir's -m is its mode too, whatever it starts with (gap row 486).
           mode_skip=false; [ "${w[0]}" = chmod ] && mode_skip=true
+          mode_next=false
           VIA="${w[0]}"
           for t in "${w[@]:1}"; do
+            if [ "$mode_next" = true ]; then mode_next=false; continue; fi
+            case "${w[0]}:$t" in mkdir:-m|mkdir:-[!-]*m|mkdir:--mode) mode_next=true; continue ;; esac
             case "$t" in -*|*'>'*|*'<'*) continue ;; esac
             if [ "$mode_skip" = true ]; then mode_skip=false; continue; fi
             if owner_of_arg "$t" && take_hit "$t"; then break; fi

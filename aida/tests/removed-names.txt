@@ -132,3 +132,7 @@ ruling_halt
 RV_RULING_HALT
 halted_doc
 halts no order
+# Gap row 481: one gate, task_require_person, serves every person-only step.
+task_require_answer
+rw_require_person
+cp_require_person

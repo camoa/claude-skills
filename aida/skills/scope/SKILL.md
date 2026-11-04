@@ -336,9 +336,10 @@ The contract is final by then. Then run:
   approve "<task_folder>"
 ```
 With no answer recorded, it refuses with exit 70 in every run mode, and prints the
-`person-answer.sh` command. Its words name the contract's hash, so the yes is for the contract as
-it stands. Run that command: Claude Code shows its permission prompt, and the person's yes there is
-the approval. Then run `approve` again. A change after the yes needs a new one (gap row 473).
+`person-answer.sh` command. It renders `alignment.md` first, and its words are that page, passed as
+`@<task_folder>/alignment.md`, so the yes is for the contract as the person reads it. Run that
+command: Claude Code shows its permission prompt with the page, and the person's yes there is the
+approval. Then run `approve` again. A change after the yes needs a new one (gap row 473).
 It promotes every criterion still `designer` to `owner` and prints `promoted:` with the count.
 It marks each decision an unattended run took as approved by the person, and prints
 `approved-decisions:` with the count. A marked decision is history, not an open question. A
@@ -352,8 +353,9 @@ When `set-goal`, `set-tests`, `update` or `remove` prints `superseded-decisions:
 person which unattended answer their change replaced.
 
 A decision can stop holding after it was approved, or name no field at all. When the person
-says one no longer holds, record their answer with `person-answer.sh`, step `scope retire`, and
-the words `entry <n>: <the person's reason>`. Then run:
+says one no longer holds, run `retire` on their answer. Attended at an interactive stage, the chat
+answer passes it. When it refuses for the answer, record it with `person-answer.sh`, step
+`scope retire`, and the words `entry <n>: <the person's reason>`. Then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/scope/scripts/scope-actions.sh --run-mode interactive \
   retire "<task_folder>" --entry <n> --reason "<the person's reason>"
@@ -450,9 +452,10 @@ spares a change to the verify clause alone. When a started order serves a criter
 its text stops every order that serves it, whatever is recorded. Those stops clear when the text
 goes back word for word.
 A non-goal's id only accepts `--text`; the others are a criterion's own fields. `approve`
-promotes every `designer` criterion. `--author owner` promotes one, and it is a person's answer:
-record it first with `person-answer.sh`, step `scope update` and the words `<id> author owner`,
-or step `scope add` and the criterion's text. Both only ever move a criterion from `designer` to
+promotes every `designer` criterion. `--author owner` promotes one, and it is a person's answer.
+Attended at an interactive stage, the chat answer passes it. When it refuses for the answer, record
+it with `person-answer.sh`, step `scope update` and the words `<id> author owner`, or step
+`scope add` and the criterion's text. Both only ever move a criterion from `designer` to
 `owner`, and the other way round is refused.
 
 To drop one:

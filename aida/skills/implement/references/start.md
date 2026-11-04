@@ -32,8 +32,8 @@ The usual first-run case is `package-lock.json`, changed by a surfaces harness i
 
 With no `--leftovers`, the script sets such files aside itself, in both run modes, and writes a
 warning. Read the paths to the person. To keep a file next time, the person commits it first. Or
-run start with `--leftovers keep` to leave it as it is, for that run only. `--leftovers keep`
-refuses without the person's answer on record (exit 68).
+run start with `--leftovers keep` to leave it as it is, for that run only. `--leftovers keep` is a
+person's answer: from the chat when attended at an interactive stage, else on record (exit 68).
 
 Set aside moves each untracked file to `<task_folder>/implementation/set-aside/<time>/`, under its
 own path. A modified file is copied there, and its committed version comes back. Nothing is
@@ -44,6 +44,9 @@ so give the person that path. The `leftovers:` line names each file that was kep
 Unattended, a start after a design reopen sets aside the tests an author has not frozen yet. Do
 not copy them back by hand. The next fresh `dispatch-open` of a test author names the latest copy
 of each test file that order owns. Put its `earlier tests:` paths in the dispatch message.
+An order whose repair still owes its test is the one exception. A new file stays in the tree when
+that order owns it in the closed design and its test globs match it. The `leftovers:` line marks
+it kept.
 
 The freeze keeps its own warning about uncommitted files. It names a file that the test author
 made during its own run, after this check. An untracked file under a path the order owns, which the

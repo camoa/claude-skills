@@ -39,6 +39,16 @@ grant_case() (
 expect "a grant of a closed order's file reopens it, and the granting order waits" "$(grant_case)" \
   '0|reviewed|wo2 true|["a.php"]|none|tests wo1|40'
 
+# Attended at an interactive stage, the grant still needs the recorded answer: with none it
+# refuses, and wo1 is not reopened.
+unanswered_case() (
+  source "$HERE/records.bash"
+  in_review closed
+  run "$IMPLEMENT" fix-brief "$TASK" wo2 --allow a.php
+  printf '%s|%s\n' "$RC" "$(ledger '.lastStep')"
+)
+expect "an attended grant with no recorded answer refuses" "$(unanswered_case)" '100|closed'
+
 # An owner that is not closed is not reopened: the grant refuses as before.
 open_case() (
   source "$HERE/records.bash"

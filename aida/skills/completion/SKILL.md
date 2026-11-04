@@ -95,7 +95,8 @@ A person's answer is accepted only when a person is present.
 | The summary for `task complete` | the person gives one or two lines | one line naming the grounds |
 | A saved note offered as a play | the person says yes or no per note, and names the play | offers nothing; the record says `autonomous` |
 
-`close` refuses `--reason`, `--leave` and `--captures-offered` on an autonomous run at exit 70. A run with nobody present closes a task on a passed review with no
+`close` refuses `--reason`, `--leave` and `--captures-offered` on an autonomous run at exit 70, and
+in a session that does not report itself attended. A run with nobody present closes a task on a passed review with no
 warning and on nothing else. That is the one place an unattended task stops on the review. Or the person's answer is recorded with the task skill's `person-answer.sh`, step
 `completion close`. Claude Code asks the person first. The refusal prints the command whole. The
 implement skill's `references/finish.md` says how.

@@ -38,6 +38,19 @@ outside_case() (
   printf '%s|%s\n' "$RC" "$(jq 'has("evidence")' "$TASK/review/review.json")"
 )
 
+# empty_last_case: two rows for c1, the last with no path. The row's path stays empty, and the
+# row before it keeps its own. Prints the exit and the stored paths with the task folder cut off.
+empty_last_case() (
+  source "$HERE/records.bash"
+  review_records
+  reviewed_record
+  : >"$TASK/review/evidence/export.txt"
+  evidence "$(c1_row met export.txt)" "$(c1_row unknown "")"
+  run "$REVIEW" acceptance "$TASK"
+  run "$REVIEW" acceptance "$TASK" --evidence
+  printf '%s|%s\n' "$RC" "$(jq -r '[ .evidence[].path ] | map(tostring) | join(",")' "$TASK/review/review.json" | sed "s|$TASK/||")"
+)
+
 # bug_case: the verifier judged c1 unmet and named the file the bug is in. wo1, which owns a.php
 # and c1, is closed. Prints the finding's lens, the review verdict and reopen's exit.
 bug_case() (
@@ -155,6 +168,8 @@ echo "--- acceptance --evidence, then close"
 expect "close prints the evidence row under the criterion, its path resolved in review/evidence" "$(close_case)" \
   "evidence(c1): met review/evidence/export.txt | three rows came out"
 expect "a path that climbs out of review/evidence refuses, and records no evidence" "$(outside_case)" "52|false"
+expect "an empty path on the last row stays an empty path, and the row before keeps its own" \
+  "$(empty_last_case)" "0|review/evidence/export.txt,"
 expect "an unmet row naming a file is a finding that fails the review, and reopen takes it" "$(bug_case)" "acceptance|failed|0"
 
 echo "--- a page surface and the verifier's look"

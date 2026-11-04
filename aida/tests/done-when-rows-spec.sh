@@ -34,7 +34,6 @@ removed_case() (
   edit "$IMPL/snapshot.json" '(.workOrders[] | select(.id == "wo1")).doneWhen += ["a cosmetic row"]'
   edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")) |= . + {doneWhenGained: ["a cosmetic row"], doneWhenGainedAt: "2026-10-28T00:00:00Z",
       changed: [{step: "start", reason: "design drift: the design file for wo1 has changed since the snapshot was taken", allows: ["keep"]}]}'
-  answer "implement go-on keep" wo1 "keep the design without the cosmetic row"
   run "$IMPLEMENT" go-on "$TASK" wo1 --continue keep --because "keep the design without the cosmetic row"
   printf '%s|%s|%s|' "$RC" "$(ledger '.doneWhenGained // "none"')" "$(sed -n 's/^next: //p' "$OUT")"
   run "$IMPLEMENT" build-brief "$TASK" wo1
@@ -56,7 +55,6 @@ reworded_case() (
   edit "$TASK/design-closed.json" '.hash = $h' --arg h "$(records_hash_for "$TASK")"
   edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")) |= . + {doneWhenGained: ["a cosmetic row"], doneWhenGainedAt: "2026-10-28T00:00:00Z",
       changed: [{step: "start", reason: "design drift: the design file for wo1 has changed since the snapshot was taken", allows: ["keep"]}]}'
-  answer "implement go-on keep" wo1 "keep the reworded row"
   run "$IMPLEMENT" go-on "$TASK" wo1 --continue keep --because "keep the reworded row"
   printf '%s|%s|' "$RC" "$(ledger '.doneWhenGained | join(",")')"
   run "$IMPLEMENT" build-brief "$TASK" wo1
@@ -80,11 +78,25 @@ judged_case() (
   edit "$TASK/design/wo1.json" '.doneWhen = ["a.php says b"]'
   edit "$TASK/design-closed.json" '.hash = $h' --arg h "$(records_hash_for "$TASK")"
   edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).changed = [{step: "start", reason: "design drift: the design file for wo1 has changed since the snapshot was taken", allows: ["keep"]}]'
-  answer "implement go-on keep" wo1 "take the cosmetic row out"
   run "$IMPLEMENT" go-on "$TASK" wo1 --continue keep --because "take the cosmetic row out"
   printf '%s|%s\n' "$(ledger '.doneWhenGained // "none"')" "$(ledger '.doneWhenJudgement.verdict // "none"')"
 )
 expect "the frozen rows keep their judgement through a gained row added and taken out" "$(judged_case)" \
   'a cosmetic row|confirmed|none|confirmed'
+
+# Unattended, go-on keep needs the person's recorded answer: with none it refuses, and the change
+# stays on wo1.
+unattended_keep_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records tests-frozen
+  suite_records ""
+  tests_record
+  edit "$TASK/task.json" '.runMode = "autonomous"'
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).changed = [{step: "start", reason: "design drift: the design file for wo1 has changed since the snapshot was taken", allows: ["keep"]}]'
+  run "$IMPLEMENT" go-on "$TASK" wo1 --continue keep --because "keep the design"
+  printf '%s|%s\n' "$RC" "$(ledger '.changed | length')"
+)
+expect "an autonomous go-on keep with no answer refuses, and the change stays" "$(unattended_keep_case)" '68|1'
 
 finish

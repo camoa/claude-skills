@@ -326,7 +326,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      A test written outside the framework's own pattern is not protected by anything later.
 #      Or its path is not a file the order owns (gap row 249); the refusal names the owned one.
 #      Or an untracked file lies under a path the order owns, which the freeze would leave out of
-#      its commit: it reaches the build unprotected. The message names each one.
+#      its commit: it reaches the build unprotected. The message names each one. Or the author
+#      changed a test file an order's frozen record holds, which no freeze commits (gap row 480).
 #  28  retired on 2026-10-19 (live-run row 374). `tests-freeze` refused a test name that did not
 #      end in the criterion id or the order id it claimed. The --test flag already names that id,
 #      the record keeps it, and every reader joins on the recorded name. The test-authoring recipe
@@ -476,13 +477,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      so drop is the route. Nothing is written. An order that is not stopped, or is closed or
 #      dropped, has nothing to leave, so the way out exits 0 and names the next step.
 #  68  `go-on`, `redo`, `drop`, `start --leftovers keep` or `finish --regression` was called
-#      with no matching answer in the task's answer record. Each is a person's judgement, in every
-#      run mode. The step of a go-on names its choice, `implement go-on <choice>`, so a yes to one
-#      choice passes no other. One number, because it is one fact. Keeping a builder's deviation or
+#      with no matching answer in the task's answer record. Each is a person's judgement. Attended
+#      at an interactive stage, the chat answer passes all but `finish --regression`, `go-on --owns`
+#      and `go-on --continue close`, which need the recorded answer in every run mode. The step of a
+#      go-on names its choice, `implement go-on <choice>`, so a yes to one choice passes no other. One number, because it is one fact. Keeping a builder's deviation or
 #      a reviewer's departure is `go-on --continue keep` (gap rows 224 and 266). A person answers through
 #      skills/task/scripts/person-answer.sh, which shows Claude Code's permission prompt.
 #  70  `tests-freeze` was given a `--row` judged by a person with no matching answer in the task's
-#      answer record, in any run mode. Without it, `person` is a claim nobody made. Nothing is
+#      answer record, unattended or at a stage that runs autonomous. Without it, `person` is a claim
+#      nobody made. Nothing is
 #      written. `model` is accepted on both runs. The row-checker judges every row in both modes,
 #      and a person answers only a row it rejected (live-run row 70).
 #
@@ -1386,13 +1389,13 @@ im_next_step() {
     return 0
   fi
   if [ "$finished" = "true" ]; then
-    # A failed task review of this finish, or one holding a test ruled wrong, sends its findings
-    # back into the orders (gap rows 390 and 449).
+    # A failed task review of this finish, or one holding a test ruled wrong or a finding ruled
+    # fix, sends its findings back into the orders (gap rows 390, 449 and 479).
     if [ "$(jq -r --arg r "$(jq -r '.commitRange // ""' "$impl/finished.json" 2>/dev/null)" \
-      '(.verdict == "failed" or any((.findings // [])[]; .ruling == "test-wrong")
+      '(.verdict == "failed" or any((.findings // [])[]; .ruling == "test-wrong" or .ruling == "fix")
         or any((.checks // [])[]; (.id | startswith("decision-")) and .answer == "test-wrong")) and .reviewedRange == $r' \
       "$impl/../review/review.json" 2>/dev/null)" = "true" ]; then
-      printf 'finish: reopen, the task review of this finish failed or ruled a test wrong, and its findings go back to the orders that own their files'
+      printf 'finish: reopen, the task review of this finish failed, ruled a test wrong or ruled a finding fix, and its findings go back to the orders that own their files'
     else
       printf 'none: implementation is finished, the review stage is next, and a failed review takes a fix and a second finish'
     fi
@@ -1464,6 +1467,15 @@ im_next_step() {
 im_repair_owed() {
   printf '%s' "$1" | jq -r --arg id "$2" '[ (.orders // [])[] | select(.id == $id) ][0]
     | [ (.repairs // []) | to_entries[] | select(.value.testOwed == true) | .key + 1 ][0] // empty' 2>/dev/null
+}
+
+# The findings of repair $3 on order $2, from the order's review record, as one JSON list. $1 the
+# ledger document. Prints nothing when either record cannot be read.
+im_repair_findings() {
+  printf '%s' "$1" | jq -c --arg id "$2" --argjson n "$3" \
+    --slurpfile review <(cat "$IMPL_DIR/review-$2.json" 2>/dev/null || echo '{}') '
+    ([ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1].findings // []) as $f
+    | [ ($review[0].findings // [])[] | select(.id as $i | $f | index($i)) ]' 2>/dev/null
 }
 
 # The orders in ledger document $1 that are neither closed nor dropped and hold a repair order $2
@@ -1858,15 +1870,41 @@ do_start() {
   # im_scan_leftovers names them. They are set aside unless a person chose keep, in both run modes,
   # and the set-aside deletes nothing. Only an untracked or a modified file can move. Any other
   # change stays in the tree, and a warning names it.
-  local lo_xy lo_rel lo_tab lo_tracked leftovers_json lo_defaulted=""
+  # An order whose repair owes its test has a test author at work, not a stopped role. So a new file
+  # that the order owns and its test globs match stays in the tree (gap row 484). The closed design
+  # names it, not the snapshot, because add-owned-file gives the file to the order before this start
+  # takes it in. A design changed since its close keeps nothing.
+  local lo_xy lo_rel lo_tab lo_tracked leftovers_json lo_defaulted="" lo_owed_json='[]' lo_kept_json='[]' lo_ids lo_id lo_glob
   lo_tab="$(printf '\t')"
+  if [ "$(design_closed_state)" = "ok" ] && [ "$(design_closed_hash)" = "$live_hash" ]; then
+    lo_owed_json="$(jq -c --argjson w "$live_workorders_json" '[ (.orders // [])[]
+      | select(any((.repairs // [])[]; .testOwed == true)) | .id ] as $ids | [ $w[] | select(.id | IN($ids[])) ]' \
+      "$LEDGER_FILE" 2>/dev/null)"
+  fi
+  if [ -n "$lo_owed_json" ] && [ "$lo_owed_json" != "[]" ]; then
+    im_scan_leftovers "$code_path" "$lo_owed_json"
+    while IFS="$lo_tab" read -r lo_rel lo_ids; do
+      [ -n "$lo_rel" ] || continue
+      for lo_id in $lo_ids; do
+        while IFS= read -r lo_glob; do
+          [ -n "$lo_glob" ] && tf_path_matches_catalog_glob "$lo_rel" "$lo_glob" || continue
+          lo_kept_json="$(printf '%s' "$lo_kept_json" | jq -c --arg p "$lo_rel" --arg o "$lo_id" '. + [{path: $p, orders: [$o]}]')"
+          break 2
+        done <<LO_GLOBS
+$(jq -r '(.testGlobs // [])[]' "$IMPL_DIR/tests-$lo_id.json" 2>/dev/null)
+LO_GLOBS
+      done
+    done <<LO_OWED
+$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -r '.[] | select(.status == "??") | .path + "\t" + (.orders | join(" "))')
+LO_OWED
+  fi
   im_scan_leftovers "$code_path" "$( { jq -ce '.workOrders' "$SNAPSHOT_FILE" 2>/dev/null || printf '%s' "$live_workorders_json"; } )"
-  leftovers_json="$LO_LEFTOVERS_JSON"
+  leftovers_json="$(printf '%s' "$LO_LEFTOVERS_JSON" | jq -c --argjson k "$lo_kept_json" 'map(select(.path | IN($k[].path) | not))')"
   lo_tracked="$LO_TRACKED"
   if [ "$leftovers_json" != "[]" ]; then
     [ -n "$leftovers_choice" ] || { leftovers_choice="set-aside"; lo_defaulted=yes; }
     [ "$leftovers_choice" != "keep" ] \
-      || task_require_answer 68 start "--leftovers keep, the files a stopped role left," "$TASK_PATH" "implement start" "" keep
+      || task_require_person 68 start "--leftovers keep, the files a stopped role left," "$TASK_PATH" implement "implement start" "" keep
   fi
 
   # --- step 8: look for an existing snapshot: absent, present-readable, or present-unreadable ----
@@ -2662,7 +2700,7 @@ ST_CHANGES
     --argjson removed "$removed_ids_json" \
     --argjson added "$added_ids_json" \
     --arg finished "$st_unfinished" \
-    --argjson leftovers "$(printf '%s' "$leftovers_json" | jq -c "[ $LO_TEXT_JQ ]")" \
+    --argjson leftovers "$(printf '%s' "$leftovers_json" | jq -c --argjson k "$lo_kept_json" "[ $LO_TEXT_JQ ] + [ \$k[] | .path + \" (\" + .orders[0] + \", kept for its repair test)\" ]")" \
     --arg setAside "$set_aside_dir" \
     --argjson stopped "$stopped_orders_json" \
     --argjson inFlight "$(printf '%s' "$in_flight_json" | jq -c '[ .[] | {id, lastStep, attempts: ("attempts=" + (.attemptsUsed | tostring)), rounds: ("rounds=" + (.roundsUsed | tostring))} ]')" \
@@ -4610,10 +4648,14 @@ TB_OWNED
   local repair_json=null repair_at
   repair_at="$(im_repair_owed "$ledger_doc" "$unit_id")"
   if [ -n "$repair_at" ]; then
-    repair_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --argjson n "$repair_at" \
-      --slurpfile review <(cat "$IMPL_DIR/review-$unit_id.json" 2>/dev/null || echo '{}') '
+    # citedCriteria carries the text of each criterion a finding cites. The order may not serve it,
+    # and its test and row may still name it (gap row 483).
+    repair_json="$(im_repair_findings "$ledger_doc" "$unit_id" "$repair_at")"
+    [ -n "$repair_json" ] && repair_json="$(printf '%s' "$ledger_doc" | jq -c --arg id "$unit_id" --argjson n "$repair_at" \
+      --argjson found "$repair_json" --argjson criteria "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment.criteria // []')" '
       [ (.orders // [])[] | select(.id == $id) ][0].repairs[$n - 1] as $r
-      | {findings: [ ($review[0].findings // [])[] | select(.id as $i | $r.findings | index($i)) | {id, file, lines, linkedTo, evidence} ],
+      | {findings: [ $found[] | {id, file, lines, linkedTo, evidence} ],
+         citedCriteria: [ $criteria[] | select(.id as $c | any($found[]; .linkedTo == $c)) | {id, text, verification} ],
          whatToDo: (if ($r.retiredTests // []) != []
            then "A person ruled the tests in retiredTests wrong. Remove each one by deleting its lines, and change no other line. Delete a file when every test in it is named. Return each kept test with a locks-in reason naming the code it passes against."
            elif ($r.retires // []) == []
@@ -5193,6 +5235,17 @@ do_tests_freeze() {
       tf_prior_stop="$(stop_text "$(printf '%s' "$tf_prior_ledger" | jq -c --arg id "$unit_id" '[ (.orders // [])[] | select(.id == $id) ][0] // {}')")"
     fi
   fi
+  # `reopen` sends a finding to the one order that owns its file, which may not serve the criterion
+  # the finding cites (gap row 483). So a repair's test and row may also name that criterion.
+  local tf_cited
+  if [ -n "$tf_repair" ]; then
+    tf_cited="$(im_repair_findings "$tf_prior_ledger" "$unit_id" "$tf_repair")"
+    [ -z "$tf_cited" ] || tf_cited="$(printf '%s' "$SNAPSHOT_DOC" | jq -c --argjson found "$tf_cited" --argjson have "$CRITERIA_IDS_JSON" '
+      [ (.alignment.criteria // [])[] | select(.id as $c | any($found[]; .linkedTo == $c) and ($have | index($c) | not)) ]')"
+    [ -n "$tf_cited" ] || die3 "tests-freeze: the criteria the repair of $unit_id cites could not be read from $IMPL_DIR/review-$unit_id.json."
+    CRITERIA_JSON="$(printf '%s' "$CRITERIA_JSON" | jq -c --argjson c "$tf_cited" '. + $c')"
+    CRITERIA_IDS_JSON="$(printf '%s' "$CRITERIA_IDS_JSON" | jq -c --argjson c "$tf_cited" '. + ($c | map(.id))')"
+  fi
 
   # --- turn every raw --flag value into JSON, through temporary files beside the implementation dir
   local tests_tmp reds_tmp checklists_tmp goa_tmp rows_meta_tmp locks_tmp
@@ -5539,13 +5592,14 @@ TF_EOF
   # --- 70: a person's row is a claim only a person's answer makes -----------------------------------
   # A model's row is accepted on both runs. The row-checker judges every row in both modes, and the
   # person answers only a row it rejected. So `model` is the common case, not a checker standing in
-  # for a person (live-run row 70). A row judged by a person needs the person's answer, in every run
-  # mode: those --row values, one per line, are its words.
+  # for a person (live-run row 70). A row judged by a person needs the person's answer: from the chat
+  # when attended at an interactive stage, else on record, with those --row values, one per line, as
+  # its words.
   local person_rows
   person_rows="$(printf '%s' "$rows_meta_json" | jq -r '
       [ .[] | select(.judgedBy == "person") | .criterion + "=" + .verdict + "::person::" + .note ] | join("\n")')"
   [ -z "$person_rows" ] \
-    || task_require_answer 70 tests-freeze "a row a person judged" "$TASK_PATH" "implement tests-freeze" "$unit_id" "$person_rows"
+    || task_require_person 70 tests-freeze "a row a person judged" "$TASK_PATH" implement "implement tests-freeze" "$unit_id" "$person_rows"
 
   # --- 64: a model's confirmation stands on the checker's verdict file (gap row 373) ---------------
   # Only a checker writes it, and checkAgain puts every rejected row back to the next one, so a
@@ -6370,6 +6424,40 @@ TF_EOF
   done <<TF_EOF
 $tf_gone
 TF_EOF
+  # A tracked test file the order owns and the author changed rides in the same commit, though it
+  # holds no frozen test, so the build never starts beside it (gap row 480). It is not recorded as
+  # support: --support refuses a test path, and a support row would make a re-freeze read changed.
+  # A file an order's frozen record holds is refused instead: ownedFiles may share it, and a repair
+  # freeze may leave an earlier frozen file out of --test. Nobody changes a frozen test.
+  local tf_m tf_g tf_owned tf_held_frozen=""
+  while IFS= read -r tf_m; do
+    case "$tf_m" in M?' '*|?M' '*|A?' '*) tf_m="${tf_m#???}" ;; *) continue ;; esac
+    printf '%s\n' "$tf_commit_paths" | grep -qxF -- "$tf_m" && continue
+    tf_owned=false
+    while IFS= read -r o; do
+      [ -n "$o" ] && tf_path_matches_catalog_glob "$tf_m" "$o" && { tf_owned=true; break; }
+    done <<TF_EOF
+$owned_list
+TF_EOF
+    [ "$tf_owned" = "true" ] || continue
+    while IFS= read -r tf_g; do
+      [ -n "$tf_g" ] && tf_path_matches_catalog_glob "$tf_m" "$tf_g" || continue
+      ro_frozen_owner "$tf_m"
+      if [ -n "$RO_OWNER" ]; then
+        tf_held_frozen="$tf_held_frozen$tf_m ($RO_OWNER), "
+      else
+        tf_commit_paths="$tf_commit_paths${tf_commit_paths:+
+}$tf_m"
+      fi
+      break
+    done <<TF_EOF
+$(printf '%s' "$test_globs_json" | jq -r '.[]')
+TF_EOF
+  done <<TF_EOF
+$(git -C "$codepath" status --porcelain 2>/dev/null)
+TF_EOF
+  [ -z "$tf_held_frozen" ] \
+    || die 27 "tests-freeze: the test author changed these files, and a frozen record holds tests in each: ${tf_held_frozen%, }. Nobody changes a frozen test. The test author restores each file, and this freeze runs again. Nothing is frozen."
   if [ -n "$tf_commit_paths" ]; then
     set --
     while IFS= read -r p; do
@@ -6455,6 +6543,8 @@ TF_EOF
     || printf 'rowsCarried: %s\n' "$(printf '%s' "$tf_carried" | jq -r 'map(.criterion) | join(", ")')"
 
   if [ -n "$tf_unchanged_at" ]; then
+    [ -z "$tf_made" ] || write_atomic "$record_file" "$(jq --argjson fc "$(tf_freeze_commits "$record_file")" --arg m "$tf_made" \
+      '.freezeCommits = ($fc + [$m])' "$record_file")"
     echo "TESTS-FREEZE: unchanged (already frozen at commit $tf_unchanged_at with the same tests)"
     printf '%s\n' "$record_file"
     exit 0
@@ -8278,6 +8368,9 @@ im_reopen_in() {
       else . end))'
 }
 
+# What a repair finding's actionableBecause adds when it took the owner's first criterion.
+IM_POSITION_LINK="; the repair took the owner's first criterion by position, and nobody judged the link"
+
 # The review record of closed order $2 with one repair finding added on its file $3, with evidence
 # $4. The finding cites the owner's first criterion. $1 the action's own name. Sets IM_REPAIR_DOC,
 # IM_REPAIR_ID, IM_REPAIR_LINKED, and IM_REPAIR_OWED, true when tests prove the owner, so its test
@@ -8286,8 +8379,8 @@ im_reopen_in() {
 IM_REPAIR_DOC=""; IM_REPAIR_ID=""; IM_REPAIR_LINKED=""; IM_REPAIR_OWED=false
 im_repair_finding() {
   local built
-  IM_REPAIR_LINKED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" \
-    '[ .workOrders[] | select(.id == $id) | (.criteriaOwned // []) + (.criteriaServed // []) | .[] ][0] // ""')"
+  IM_REPAIR_LINKED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" "$BR_ORDER_FACTS_JQ"'
+    [ .workOrders[] | select(.id == $id) ][0] | firstCriterion')"
   IM_REPAIR_DOC="$(jq -c '.' "$IMPL_DIR/review-$2.json" 2>/dev/null)"
   [ -n "$IM_REPAIR_DOC" ] \
     || die3 "$1: $IMPL_DIR/review-$2.json is missing or not JSON, though the ledger records $2 as closed."
@@ -8296,7 +8389,7 @@ im_repair_finding() {
     '{id: $id, severity: "high", file: $file, lines: "", linkedTo: $linked, evidence: $evidence, fixScope: [$file]}')" \
     "$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')" repair)"
   [ "$(printf '%s' "$built" | jq -r '.actionable')" = "true" ] || return 1
-  built="$(printf '%s' "$built" | jq -c '.actionableBecause += "; the repair took the owner'"'"'s first criterion by position, and nobody judged the link"')"
+  built="$(printf '%s' "$built" | jq -c --arg w "$IM_POSITION_LINK" '.actionableBecause += $w')"
   IM_REPAIR_DOC="$(printf '%s' "$IM_REPAIR_DOC" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
   [ -n "$IM_REPAIR_DOC" ] || die3 "$1: the repair finding on $2 could not be written."
   IM_REPAIR_OWED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" "$BR_ORDER_FACTS_JQ"'
@@ -10244,6 +10337,24 @@ do_review_record() {
 # finding").
 # ------------------------------------------------------------------------------------------------
 
+# The order's reasoning paragraphs that the last build brief did not carry. An owner's ruling added
+# with `update --append-reasoning` after the build reaches the fixer this way (gap row 485). That
+# update writes only design/<order>.json, so the live text is read there, but only when it starts
+# with the frozen text: an edit to earlier text stays unfrozen and never reaches a fixer. A struck
+# paragraph stays out, as in the build brief.
+fb_new_reasoning() {
+  local built="" live="null"
+  [ ! -f "$IMPL_DIR/brief-$1-build.json" ] \
+    || built="$(jq -r '.unit.reasoning // ""' "$IMPL_DIR/brief-$1-build.json" 2>/dev/null)"
+  [ ! -f "$TASK_PATH/design/$1.json" ] \
+    || live="$(jq -c '{reasoning: (.reasoning // "")}' "$TASK_PATH/design/$1.json" 2>/dev/null || echo null)"
+  printf '%s' "$RV_UNIT_JSON" | jq -r --arg built "$built" --argjson live "${live:-null}" "$REASONING_JQ"'
+    (.reasoning // "") as $frozen
+    | (if $live != null and ($live.reasoning | startswith($frozen)) then .reasoning = $live.reasoning else . end)
+    | ($built | split("\n\n")) as $had
+    | liveReasoning | split("\n\n") | map(select(. != "" and (. as $p | $had | index($p) | not))) | join("\n\n")'
+}
+
 do_fix_brief() {
   local task_arg="" unit_id="" allow_raw=""
   while [ "$#" -gt 0 ]; do
@@ -10354,13 +10465,14 @@ do_fix_brief() {
   rv_load_range_repo "fix-brief" "$RV_UNIT_JSON"
 
   # Live-run row 116. A fixScope path outside the order's ownedFiles is withheld from the fixer
-  # unless a person allows it here. An allow is a person's grant, so unattended refuses it
-  # (exit 100). A path already owned needs no grant. A frozen test or a support file may never
-  # be granted. An unowned path no open finding names is a grant for nothing (exit 3, each). A
-  # person's answer record naming the --allow values, one per line, passes it (gap row 357).
+  # unless a person allows it here. An allow is a person's grant past the owned-files stop, so it
+  # needs the person's answer on record in every run mode, with the --allow values, one per line,
+  # as its words (gap rows 357, 481); without it, exit 100. A path already owned needs no grant. A
+  # frozen test or a support file may never be granted. An unowned path no open finding names is a
+  # grant for nothing (exit 3, each).
   local allowed_json='[]' granted_json='[]' ap ap_abs ap_owned other tf fp frozen_list frozen_hit named closed_grant=""
   [ -z "$allow_raw" ] \
-    || task_require_answer 100 fix-brief "--allow, a path outside $unit_id's own files," "$TASK_PATH" "implement fix-brief" "$unit_id" "$allow_raw"
+    || task_require_person 100 fix-brief "--allow, a path outside $unit_id's own files," "$TASK_PATH" "" "implement fix-brief" "$unit_id" "$allow_raw"
   # Every frozen test and support path of the task, the list the write hook reads.
   frozen_list=""
   for tf in "$IMPL_DIR"/tests-*.json; do
@@ -10532,11 +10644,13 @@ FB_CLOSED
     --arg diffBudget "$(printf '%s' "$RV_UNIT_JSON" | jq -r '.diffBudget // ""')" \
     --argjson roundsUsed "$rounds_used" --argjson roundsAllowed "$FIX_ROUNDS_ALLOWED" \
     --argjson round "$((rounds_used + 1))" --argjson playbooksPath "$(playbooks_path_json "$TASK_PATH")" \
-    --arg worktree "$RV_CODEPATH" '
+    --arg worktree "$RV_CODEPATH" \
+    --arg newReasoning "$(fb_new_reasoning "$unit_id")" '
     {
       unit: $unit,
       worktree: $worktree,
       round: $round,
+      newReasoning: $newReasoning,
       roundsUsed: $roundsUsed,
       roundsAllowed: $roundsAllowed,
       findings: $findings,
@@ -11096,12 +11210,12 @@ do_verify_record() {
   [ "$rounds_used" -gt 0 ] 2>/dev/null || [ "$(printf '%s' "$RV_ORDER_ENTRY" | jq -r '.lastStep')" = "reviewed" ] \
     || die3 "verify-record: $unit_id records no fix round, though the ledger records it as fixed."
 
-  # Exit 55: a ruling is a person's judgement. An unattended run has none to offer, so it refuses
-  # the flag outright rather than recording a model's own word as a person's (decision 12). Read
-  # before the round is looked up, so a ruling on a round already recorded meets the same refusal.
-  # A person's answer record naming these rulings, one per line, passes it (gap row 357).
+  # Exit 55: a ruling is a person's judgement past an open finding, so it needs the person's answer
+  # on record in every run mode, with these rulings, one per line, as its words (decision 12, gap
+  # rows 357, 481). A model's own word is never recorded as a person's. Read before the round is
+  # looked up, so a ruling on a round already recorded meets the same refusal.
   [ -z "$rulings_raw" ] \
-    || task_require_answer 55 verify-record "a ruling on an open finding" "$TASK_PATH" "implement verify-record" "$unit_id" "$rulings_raw"
+    || task_require_person 55 verify-record "a ruling on an open finding" "$TASK_PATH" "" "implement verify-record" "$unit_id" "$rulings_raw"
 
   # A round is verified once. A second verification of the same round would record a
   # second set of verdicts over findings the first set already closed.
@@ -11790,11 +11904,12 @@ fn_load_task_state() {
   FN_LEDGER_DOC="$STARTED_LEDGER_DOC"
 }
 
-# Exit 68. The three ways out of a stop and the warnings finish accepts are a person's judgement, in
-# every run mode, so each refuses without a person's answer in the task's answer record, step "implement
-# $1" (task_require_answer). The run mode does not decide whether a person answered. The summary
-# printer marks the answer used. $1 the action's own name, $2 what the caller would have been
-# deciding, $3 the order or empty for a task-wide action, $4 the person's words the call carries.
+# Exit 68. The three ways out of a stop and finish's regressions are a person's judgement, step
+# "implement $1" (task_require_person). Stage $5 is implement for a step that takes the person's
+# answer from the chat when attended at an interactive stage. It is empty for a way past another hard
+# stop, which needs the answer on record in every run mode. The summary printer marks a recorded
+# answer used. $1 the action's own name, $2 what the caller would have been deciding, $3 the order
+# or empty for a task-wide action, $4 the person's words the call carries.
 # Uncommitted changes at a step that does not record the order's work are a warning, not a stop.
 # $1 the step, $2 the repository, $3 the order or empty, $4 pathspecs, one per line, or empty for
 # the whole tree. The paths go to standard error.
@@ -11807,7 +11922,7 @@ im_warn_dirty_tree() {
 }
 
 fn_require_answer() {
-  task_require_answer 68 "$1" "$2" "$TASK_PATH" "implement $1" "$3" "$4"
+  task_require_person 68 "$1" "$2" "$TASK_PATH" "$5" "implement $1" "$3" "$4"
 }
 
 # The JSON array of lines $1 as the subtraction keys them (br_line_keys), in the same order, so a
@@ -12039,7 +12154,7 @@ do_finish() {
 
   fn_load_task_state "finish"
   [ "$regressions" = "[]" ] \
-    || fn_require_answer "finish regression" "giving a test newly broken at finish to an order, or recording it as not caused by this task" "" "$because"
+    || fn_require_answer "finish regression" "giving a test newly broken at finish to an order, or recording it as not caused by this task" "" "$because" ""
   for to in $(printf '%s' "$regressions" | jq -r '.[].to | select(. != "not-caused")'); do
     [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$to" '[ (.orders // [])[] | select(.id == $id) ][0].lastStep // ""')" = "closed" ] \
       || die3 "finish: --regression gives a test to $to, which is not a closed order in the ledger. Give it to a closed order, or to not-caused."
@@ -12314,6 +12429,9 @@ RO_EOF
 # A finding a person ruled test-wrong names a frozen test file. It reopens the order whose record
 # froze that file, and the repair retires the file, so that order's test author writes the
 # corrected copy and freezes it as the repair's own record (gap row 449).
+# A finding a person ruled fix at review close carries disposition criterion, so it routes the
+# same way. One that cites no criterion, or cites a non-goal, goes to the one order that owns its
+# file, and takes that order's first criterion (gap rows 479 and 482).
 # One repair entry per order, so one fix round is added however many findings it takes. A finding
 # no order takes is named and left. finished.json goes, because finish's condition no longer
 # holds and every field in it is derived. Exit 119 when no closed review covers this finish, or
@@ -12365,11 +12483,15 @@ do_reopen() {
       || die 119 "reopen: the task review of $finished_range in $review_file is open. A person closes it first, and its findings then route in the same call as this ruling."
   fi
 
-  local alignment findings='[]' count i one fid file crit abs rel owners owner owner_glob entry
+  local alignment findings='[]' count i one fid file crit abs rel owners owner owner_glob entry linked_by
   local review_doc new_id raw built routed='{}' not_routed="" reopened='[]' ledger_doc order rf retired
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
   [ "$review_closed" = false ] \
     || findings="$(jq -c '[ (.findings // [])[] | select((.disposition == "criterion" and (.ruling // "") != "wrong") or .ruling == "test-wrong") ]' "$review_file")"
+  # A finding left out with no ruling is named, so the person sees it waits (gap row 482).
+  [ "$review_closed" = false ] \
+    || not_routed="$(jq -r '[ (.findings // [])[] | select(.disposition != "criterion" and (.ruling // "") == "")
+         | " " + .id + " (it fails no criterion, and no person ruled it fix);" ] | join("")' "$review_file")"
   # A decision a build left and the person ruled test-wrong at the task review takes the same
   # route as a finding ruled so (gap row 449). Its finding is the order's own, on its review record.
   local decided='[]'
@@ -12427,7 +12549,9 @@ RO_RULED
     i=$((i + 1))
     fid="$(printf '%s' "$one" | jq -r '.id')"
     file="$(printf '%s' "$one" | jq -r '.file // ""')"
-    crit="$(printf '%s' "$one" | jq -r '.linkedTo // ""')"
+    # A link to a non-goal cites no criterion, so the repair takes the owner's first one (gap row 482).
+    crit="$(printf '%s' "$one" | jq -r --argjson a "$alignment" \
+      '(.linkedTo // "") as $l | if any(($a.criteria // [])[]; .id == $l) then $l else "" end')"
     if [ -z "$file" ]; then not_routed="$not_routed $fid (it names no file);"; continue; fi
     abs="$(normalize_abs "$(resolve_against "$file" "$RV_CODEPATH")")"
     rel="${abs#"$RV_CODEPATH"/}"
@@ -12458,30 +12582,39 @@ RO_ONE
     fi
     if [ -z "$owner" ]; then
       if [ -z "$owners" ]; then not_routed="$not_routed $fid (no order owns $file);"
-      else not_routed="$not_routed $fid ($(printf '%s' "$owners" | cut -f1 | sort -u | paste -sd, -) own $file, and none serves $crit);"; fi
+      else not_routed="$not_routed $fid ($(printf '%s' "$owners" | cut -f1 | sort -u | paste -sd, -) own $file, and none serves $(printf '%s' "$one" | jq -r '.linkedTo // ""'));"; fi
       continue
     fi
     [ "$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg id "$owner" '.orders[] | select(.id == $id) | .lastStep // ""')" = "closed" ] \
       || { not_routed="$not_routed $fid ($owner owns $file and is not closed);"; continue; }
     case "$owner_glob" in /*) rel="$abs" ;; esac
+    linked_by=""
+    if [ -z "$crit" ]; then
+      crit="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg o "$owner" "$BR_ORDER_FACTS_JQ"'[ .workOrders[] | select(.id == $o) ][0] | firstCriterion')"
+      linked_by="$IM_POSITION_LINK"
+    fi
     review_doc="$(printf '%s' "$routed" | jq -c --arg o "$owner" '.[$o].doc // empty')"
     [ -n "$review_doc" ] || review_doc="$(jq -c '.' "$IMPL_DIR/review-$owner.json" 2>/dev/null)"
     [ -n "$review_doc" ] \
       || die3 "reopen: $IMPL_DIR/review-$owner.json is missing or not JSON, though the ledger records $owner as closed."
     new_id="f$(printf '%s' "$review_doc" | jq '[ (.findings // [])[] | .id | ltrimstr("f") | tonumber? // 0 ] | max // 0 | . + 1')"
-    raw="$(printf '%s' "$one" | jq -c --arg id "$new_id" --arg file "$rel" --arg range "$reviewed" '
-      {id: $id, severity, file: $file, lines: (.lines // ""), linkedTo,
-       evidence: (if .retiredTest then .evidence
-                  else "The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence end),
+    raw="$(printf '%s' "$one" | jq -c --arg id "$new_id" --arg file "$rel" --arg range "$reviewed" --arg crit "$crit" '
+      {id: $id, severity, file: $file, lines: (.lines // ""), linkedTo: $crit,
+       evidence: ((if .retiredTest then .evidence
+                   else "The task review over " + $range + " found this as its finding " + .id + ", " + .lens + " lens: " + .evidence end)
+                  + (if (.linkedTo // "") == "" or .linkedTo == $crit then "" else ", citing " + .linkedTo end)),
        fixScope: [$file]}')"
     built="$(rv_finding_record "$raw" "$alignment" repair)"
+    [ -z "$linked_by" ] || built="$(printf '%s' "$built" | jq -c --arg w "$linked_by" '.actionableBecause += $w')"
     review_doc="$(printf '%s' "$review_doc" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
-    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --argjson doc "$review_doc" '
+    # logic: some finding on this order holds logic, so its repair owes a failing test first.
+    routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --argjson doc "$review_doc" "$BR_ORDER_FACTS_JQ"'
       .[$o] = {doc: $doc, reviewFindings: ((.[$o].reviewFindings // []) + (if $one.retiredTest then [] else [$one.id] end)),
-               findings: ((.[$o].findings // []) + [$f])}
+               findings: ((.[$o].findings // []) + [$f]), logic: ((.[$o].logic // false) or ($one | logicFinding))}
       + (.[$o] // {} | with_entries(select(.key == "retires" or .key == "retiredTests")))
       | if $one.retiredTest then .[$o].retiredTests = ((.[$o].retiredTests // []) + [$one.retiredTest]) else . end')"
     routed="$(printf '%s' "$routed" | jq -c --arg o "$owner" --arg r "$retired" 'if $r == "" then . else .[$o].retires = (((.[$o].retires // []) + [$r]) | unique) end')"
+    [ -n "$routed" ] || die3 "reopen: the repair of finding $fid on $owner could not be built. Nothing is written."
     reopened="$(printf '%s' "$reopened" | jq -c --arg o "$owner" --arg f "$new_id" --argjson one "$one" --arg c "$crit" --arg file "$rel" \
       '. + [{order: $o, finding: $f, from: (if $one.retiredTest then "a person'"'"'s ruling" else "task review " + $one.id end), cites: ("cites " + $c), file: $file}]')"
   done
@@ -12489,9 +12622,10 @@ RO_ONE
     || die 119 "reopen: no finding of the review in $review_file can go to an order.${not_routed:+ Left:${not_routed%;}.} No finding fails a criterion in a file a closed order owns, and none names a frozen test a person ruled wrong. A person fixes on the task branch, then runs finish again."
 
   # An order proved by tests owes one failing test of the bug before its fixer runs (owner,
-  # 2026-10-28). Any other proof has no logic to test, so its fix round opens at once.
+  # 2026-10-28), when a finding on it holds logic (logicFinding in scripts/lib/proof.sh). Any
+  # other proof, or a repair of text files or code shape alone, opens its fix round at once.
   # The person's words are each --test value, one per line, then the --because words.
-  [ -z "$ruled_raw" ] || fn_require_answer "reopen" "ruling a frozen test wrong" "" "$ruled_raw$because"
+  [ -z "$ruled_raw" ] || fn_require_answer "reopen" "ruling a frozen test wrong" "" "$ruled_raw$because" ""
   ledger_doc="$FN_LEDGER_DOC"
   for order in $(printf '%s' "$routed" | jq -r 'keys[]'); do
     br_order_facts "$(printf '%s' "$SNAPSHOT_DOC" | jq -c --arg o "$order" '[ .workOrders[] | select(.id == $o) ][0]')"
@@ -12499,7 +12633,7 @@ RO_ONE
       --arg range "${finished_range:-$(printf '%s' "$FN_LEDGER_DOC" | jq -r --arg o "$order" '.orders[] | select(.id == $o) | .commitRange // ""')}" \
       --argjson owed "$([ "$BR_ORDER_SLOT" = "order-tests" ] && echo true || echo false)" '
       {review: $range, reviewFindings: .[$o].reviewFindings, findings: .[$o].findings, at: $at}
-      + (if $owed or .[$o].retires != null then {testOwed: true} else {} end)
+      + (if ($owed and .[$o].logic) or .[$o].retires != null then {testOwed: true} else {} end)
       + (if .[$o].retires == null then {} else {retires: .[$o].retires} end)
       + (if .[$o].retiredTests == null then {} else {retiredTests: .[$o].retiredTests, because: $because} end)')"
     ledger_doc="$(im_reopen_in "$ledger_doc" "$order" "$rf")"
@@ -12522,11 +12656,12 @@ RO_ONE
 }
 
 # ------------------------------------------------------------------------------------------------
-# The three ways out of a stop: go-on, redo and drop. Each is a person's answer, in every run mode,
-# through the task's answer record, step "implement go-on <choice>", "implement redo" or
-# "implement drop" (fn_require_answer). Every separate route out of a stop that came before them,
-# each added for one gap, made new gaps of its own (row 437 came from one of them), so these three
-# are the only ones.
+# The three ways out of a stop: go-on, redo and drop. Each is a person's answer, step "implement
+# go-on <choice>", "implement redo" or "implement drop" (fn_require_answer). Attended at an
+# interactive stage it comes from the chat, except go-on --owns and go-on close, which pass the
+# owned-files stop and open findings and need it on record. Every separate route out of a stop that
+# came before them, each added for one gap, made new gaps of its own (row 437 came from one of
+# them), so these three are the only ones.
 # ------------------------------------------------------------------------------------------------
 
 # Reverts every commit order $1 made in repository $2, newest first, one revert commit each, so
@@ -12747,7 +12882,11 @@ do_go_on() {
     "") die3 "go-on: --continue is required: build, fix, check, close or keep." ;;
     *) die3 "go-on: --continue takes build, fix, check, close or keep; got: $choice" ;;
   esac
-  fn_require_answer "go-on $choice" "going on with $choice on one order" "$WAY_UNIT" "$WAY_BECAUSE"
+  # --owns passes the owned-files stop and close passes open findings, so both need the recorded
+  # answer in every run mode (gap row 481).
+  local answer_stage=implement
+  [ "$owns_json" = '[]' ] && [ "$choice" != close ] || answer_stage=""
+  fn_require_answer "go-on $choice" "going on with $choice on one order" "$WAY_UNIT" "$WAY_BECAUSE" "$answer_stage"
 
   # --- exit 67: every reason the order is stopped for, or warned of, allows this choice -----------
   # An attended change mid-build leaves the order going on with a `changed` list, which go-on keep
@@ -12918,7 +13057,7 @@ GO_OWNS
 # new order design added enters at that next start, as before. Every other order keeps its work.
 do_redo() {
   im_way_plain_args "redo" "$@"
-  fn_require_answer "redo" "redoing one order" "$WAY_UNIT" "$WAY_BECAUSE"
+  fn_require_answer "redo" "redoing one order" "$WAY_UNIT" "$WAY_BECAUSE" implement
 
   ALIGNMENT_FILE="$TASK_PATH/alignment.json"
   DESIGN_DIR="$TASK_PATH/design"
@@ -12995,7 +13134,7 @@ do_redo() {
 # the task review reads each such criterion unanswered.
 do_drop() {
   im_way_plain_args "drop" "$@"
-  fn_require_answer "drop" "dropping one order" "$WAY_UNIT" "$WAY_BECAUSE"
+  fn_require_answer "drop" "dropping one order" "$WAY_UNIT" "$WAY_BECAUSE" implement
 
   rv_load_codepath "drop"
   rv_load_range_repo "drop" "$RV_UNIT_JSON"

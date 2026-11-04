@@ -13,6 +13,10 @@ Review leaves these as follow ups:
 - a decision from the build you ruled `deferred`;
 - a static analysis finding in the frozen tests, for the test author.
 
+A finding you ruled `fix` at the review's close is no follow up, whatever its severity. It goes
+back to its order through the build's `reopen`. If you close the task on a reason before that fix
+lands, the task record keeps a warning that names the finding.
+
 Review may already have offered a task for some of them. Completion offers again for each one
 that still has none.
 

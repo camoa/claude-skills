@@ -17,6 +17,9 @@ export AIDA_SETTINGS_PATH="$ROOT/settings.json" GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=aida-test GIT_AUTHOR_EMAIL=aida-test@example.invalid
 export GIT_COMMITTER_NAME=aida-test GIT_COMMITTER_EMAIL=aida-test@example.invalid
 unset AIDA_SESSION_PLUGIN_VERSION AIDA_SESSION_CHECKED CLAUDE_PLUGIN_ROOT
+# A spec runs as an attended session, whatever shell runs it. A case for a session nobody attends
+# unsets the variable.
+export CLAUDE_CODE_SESSION_ATTENDED=1
 CODE="$ROOT/code"
 PROJECT="$ROOT/projects/p"
 TASK="$PROJECT/tasks/t1"
@@ -222,15 +225,16 @@ answer() {
     >/dev/null || exit 1
 }
 
-# write_hook <tool input> [<agent type>]: the write hook's decision on one call from $HOOK_CWD, else
-# the worktree, deny, ask or allow. A command in the input makes it a Bash call, else a Write. With
-# no agent type, the call is the main session's. The hook's output stays in $ROOT/hook.json.
+# write_hook <tool input> [<agent type>] [<agent id>]: the write hook's decision on one call from
+# $HOOK_CWD, else the worktree, deny, ask or allow. A command in the input makes it a Bash call, else
+# a Write. With no agent type, the call is the main session's. An agent type comes with agent id a1,
+# or with none when the third argument is empty. The hook's output stays in $ROOT/hook.json.
 write_hook() {
   local tool=Write
   [ "$(printf '%s' "$1" | jq 'has("command")')" = true ] && tool=Bash
-  jq -nc --arg t "$tool" --argjson i "$1" --arg c "${HOOK_CWD:-$WT}" --arg a "${2:-}" \
+  jq -nc --arg t "$tool" --argjson i "$1" --arg c "${HOOK_CWD:-$WT}" --arg a "${2:-}" --arg id "${3-a1}" \
     '{tool_name: $t, tool_input: $i, cwd: $c, permission_mode: "default", session_id: "s1"}
-     + (if $a == "" then {} else {agent_type: $a, agent_id: "a1"} end)' \
+     + (if $a == "" then {} else {agent_type: $a} + (if $id == "" then {} else {agent_id: $id} end) end)' \
     | CLAUDE_PLUGIN_ROOT="$PLUGIN" bash "$PLUGIN/hooks/deny-frozen-test-writes.sh" | tee "$ROOT/hook.json" | jq -r '.hookSpecificOutput.permissionDecision // "allow"'
 }
 file() { jq -nc --arg f "$1" '{file_path: $f}'; }

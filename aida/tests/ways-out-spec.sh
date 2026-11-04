@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # ways-out-spec.sh: a stopped order refuses tests, build and review until a person takes one of the
-# three ways out. Each way out refuses without the person's answer and writes nothing, and works
-# with it. Each case sources the helper in a subshell, so it starts from fresh records.
+# three ways out. Attended at an interactive stage, a way out takes the person's answer from the
+# chat. Unattended, it refuses without the recorded answer and writes nothing. go-on close needs the
+# recorded answer in every mode. Each case sources the helper in a subshell, so it starts from fresh
+# records.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
@@ -28,24 +30,22 @@ read_case() (
   sed -n 's/^next: //p' "$OUT"
 )
 
-# way_case <action> <answer step> <words> [<args>...]: runs the way out on wo1, stopped for a build
-# with one commit of its builder, first with no answer and then with one. Prints the first exit,
-# whether that run left the ledger as it was, and the second exit. Then the jq filter in $LOOK runs
-# over wo1's ledger entry, a.php's text follows, and $AFTER, when set, runs last.
+# way_case <action> <words> [<args>...]: runs the way out on wo1, stopped for a build with one commit
+# of its builder, with no person's answer. With AUTO set, implement runs autonomous. Prints the exit
+# and whether the run left the ledger as it was. Then the jq filter in $LOOK runs over wo1's ledger
+# entry, a.php's text follows, and $AFTER, when set, runs last.
 way_case() (
   source "$HERE/records.bash"
-  local action="$1" step="$2" words="$3" first same
-  shift 3
+  local action="$1" words="$2" same
+  shift 2
   task_records branch ${WO2:+wo2}
   order_records code-written "${ALLOWS:-[\"build\"]}"
   order_commit
+  [ -z "${AUTO:-}" ] || edit "$TASK/task.json" '.runMode = "autonomous"'
   cp "$IMPL/ledger.json" "$ROOT/ledger.before"
   run "$IMPLEMENT" "$action" "$TASK" wo1 "$@" --because "$words"
-  first="$RC"
   same="$(cmp -s "$IMPL/ledger.json" "$ROOT/ledger.before" && echo same || echo changed)"
-  answer "$step" wo1 "$words"
-  run "$IMPLEMENT" "$action" "$TASK" wo1 "$@" --because "$words"
-  printf '%s|%s|%s|%s|%s' "$first" "$same" "$RC" "$(ledger "$LOOK")" "$(cat "$WT/a.php")"
+  printf '%s|%s|%s|%s' "$RC" "$same" "$(ledger "$LOOK")" "$(cat "$WT/a.php")"
   # Exit 3 is shared by many refusals and no field names this one, so its phrase identifies it.
   [ -z "${AFTER:-}" ] || { run "$IMPLEMENT" tests-brief "$TASK" wo2; printf '|%s:%s:%s' "$RC" "$(grep -q 'depends on wo1, which has no completion record' "$OUT" && echo dependency || echo other)" "$([ -e "$IMPL/brief-wo2-tests.json" ] && echo brief || echo none)"; }
   echo
@@ -58,16 +58,24 @@ expect "review-brief on a stopped order refuses and writes no brief" "$(stopped_
 expect "stopped, the read offers the ways out the stop allows" "$(read_case)" \
   "finish: wo1 is stopped, so offer the ways out: go-on with fix, redo or drop"
 
-echo "--- go-on: a choice the stop does not allow refuses; an allowed one clears the stop"
-expect "go-on fix on a stop that allows build refuses with the answer, and writes nothing" \
-  "$(LOOK='.stopped | length' way_case go-on "implement go-on fix" "fix it" --continue fix)" "68|same|67|1|b"
-expect "go-on build refuses with no answer and writes nothing, and with the answer clears the stop" \
-  "$(LOOK='.stopped // "none"' way_case go-on "implement go-on build" "one more attempt" --continue build)" "68|same|0|none|b"
+echo "--- go-on: attended, a choice the stop allows clears it with no recorded answer; unattended, it refuses"
+expect "go-on fix on a stop that allows build refuses, and writes nothing" \
+  "$(LOOK='.stopped | length' way_case go-on "fix it" --continue fix)" "67|same|1|b"
+expect "go-on build, attended, clears the stop with no recorded answer" \
+  "$(LOOK='.stopped // "none"' way_case go-on "one more attempt" --continue build)" "0|changed|none|b"
+expect "go-on build, autonomous, refuses with no answer and writes nothing" \
+  "$(AUTO=1 LOOK='.stopped | length' way_case go-on "one more attempt" --continue build)" "68|same|1|b"
+expect "go-on --owns, attended, still refuses with no answer and writes nothing" \
+  "$(LOOK='.stopped | length' way_case go-on "give b.php" --continue build --owns b.php)" "68|same|1|b"
+expect "go-on close, attended, still refuses with no answer and writes nothing" \
+  "$(ALLOWS='["close"]' LOOK='.stopped | length' way_case go-on "close it" --continue close)" "68|same|1|b"
 
-echo "--- redo: refuses with no answer; with it, the order is planned again and its commit reverted"
-expect "redo" "$(ALLOWS='[]' LOOK='.lastStep' way_case redo "implement redo" "the test was wrong")" "68|same|0|null|a"
+echo "--- redo: attended, the order is planned again and its commit reverted; unattended, it refuses"
+expect "redo, attended" "$(ALLOWS='[]' LOOK='.lastStep' way_case redo "the test was wrong")" "0|changed|null|a"
+expect "redo, autonomous" "$(AUTO=1 ALLOWS='[]' LOOK='.lastStep' way_case redo "the test was wrong")" "68|same|code-written|b"
 
-echo "--- drop: refuses with no answer; with it, the order is dropped, reverted, and its dependent cannot start"
-expect "drop" "$(ALLOWS='[]' WO2=1 AFTER=1 LOOK='.lastStep' way_case drop "implement drop" "not needed")" "68|same|0|dropped|a|3:dependency:none"
+echo "--- drop: attended, the order is dropped, reverted, and its dependent cannot start; unattended, it refuses"
+expect "drop, attended" "$(ALLOWS='[]' WO2=1 AFTER=1 LOOK='.lastStep' way_case drop "not needed")" "0|changed|dropped|a|3:dependency:none"
+expect "drop, autonomous" "$(AUTO=1 ALLOWS='[]' LOOK='.lastStep' way_case drop "not needed")" "68|same|code-written|b"
 
 finish

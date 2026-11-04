@@ -59,12 +59,10 @@ closed_task() {
       deviationPending: {departure: "a.php says c", file: "report.md"}}' >"$IMPL/review-wo1.json"
 }
 
-# finish takes no --accept-warnings, even with a person's answer on the step it used: an
-# unrecognized argument, and nothing is written.
+# finish takes no --accept-warnings: an unrecognized argument, and nothing is written.
 accept_case() (
   source "$HERE/records.bash"
   closed_task
-  answer "implement finish" "" "the warnings are fine"
   run "$IMPLEMENT" finish "$TASK" --accept-warnings "the warnings are fine"
   printf '%s|%s\n' "$RC" "$([ -f "$IMPL/finished.json" ] && echo written || echo none)"
 )
@@ -118,7 +116,7 @@ fix_case() (
 expect "fix-record records the round, and nothing stops the order" "$(fix_case)" '0|fixed|none'
 
 # redo on wo1, after wo1 and then wo2 each committed: wo1's change is reverted, wo2's stays, and
-# no revert names wo2's commit.
+# no revert names wo2's commit. With AUTO set, implement runs autonomous.
 redo_case() (
   source "$HERE/records.bash"
   task_records branch wo2
@@ -130,12 +128,13 @@ redo_case() (
   wo2_commit="$(git -C "$WT" rev-parse HEAD)"
   jq --arg c "$wo2_commit" '(.orders[] | select(.id == "wo2")).unrecordedCommits = [$c]' \
     "$IMPL/ledger.json" >"$IMPL/ledger.new" && mv "$IMPL/ledger.new" "$IMPL/ledger.json"
-  answer "implement redo" wo1 "start again"
+  [ -z "${AUTO:-}" ] || edit "$TASK/task.json" '.runMode = "autonomous"'
   run "$IMPLEMENT" redo "$TASK" wo1 --because "start again"
   printf '%s|%s|%s|%s\n' "$RC" "$(cat "$WT/a.php")" "$(cat "$WT/b.php" 2>/dev/null)" \
     "$(git -C "$WT" log --format=%B | grep -c "This reverts commit $wo2_commit")"
 )
 expect "redo reverts its own order's commit and leaves another order's" "$(redo_case)" '0|a|b|0'
+expect "an autonomous redo with no answer refuses and reverts nothing" "$(AUTO=1 redo_case)" '68|b|b|0'
 
 # build-record on a record order, whose own check reads deferred: the floor accepts it.
 record_build_case() (

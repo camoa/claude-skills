@@ -15,6 +15,20 @@ expect "a copy into the worktree is refused" \
   "$(write_hook "$(cmd "cp $TASK/task.json $WT/b.php")" aida:acceptance-verifier)" deny
 expect "a redirect into review/evidence/ passes" \
   "$(write_hook "$(cmd "curl -s localhost > $TASK/review/evidence/home.html")" aida:acceptance-verifier)" allow
+expect "a mkdir of review/evidence itself passes" \
+  "$(write_hook "$(cmd "cd $TASK && mkdir -p review/evidence")" aida:acceptance-verifier)" allow
+expect "a mkdir of review/evidence with a mode passes (row 486)" \
+  "$(write_hook "$(cmd "mkdir -p -m 755 $TASK/review/evidence")" aida:acceptance-verifier)" allow
+expect "a mkdir with a mode is still refused outside review/evidence" \
+  "$(write_hook "$(cmd "mkdir -m 755 $WT/src")" aida:acceptance-verifier)" deny
+expect "a mode word that starts with a dash is still the mode" \
+  "$(write_hook "$(cmd "mkdir -m -w $WT/src")" aida:acceptance-verifier)" deny
+expect "a tee into review/evidence/ passes" \
+  "$(write_hook "$(cmd "curl -s localhost | tee $TASK/review/evidence/home.html")" aida:acceptance-verifier)" allow
+expect "a copy into review/evidence/ named as the folder passes" \
+  "$(write_hook "$(cmd "cd $TASK && cp $WT/a review/evidence/")" aida:acceptance-verifier)" allow
+expect "a touch of review/evidence itself is refused" \
+  "$(write_hook "$(cmd "touch $TASK/review/evidence")" aida:acceptance-verifier)" deny
 expect "a run with its output sent to /dev/null passes" \
   "$(write_hook "$(cmd "bash tests/a_test.sh > /dev/null")" aida:acceptance-verifier)" allow
 

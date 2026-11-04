@@ -47,6 +47,8 @@ answers each one, at the same commit, with no fresh review. See
 - **A medium or high finding.** It fails the criterion it cites unless you rule it `wrong`,
   `deferred` or `contract-wrong`. A finding you rule `test-wrong` still fails it, and `reopen`
   sends it to the test author.
+- **A finding you rule `fix`.** It fails the criterion it cites, whatever its severity, and
+  `reopen` sends it to the fixer of the order that owns its file.
 - **A changed non-goal you reject.** Its check reads unmet, a warning.
 
 A wrong or missing answer is corrected by running close again at the same commit. After a fix

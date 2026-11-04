@@ -145,7 +145,8 @@ branch is recorded rather than assumed.
 | Setting up a surface | offered once | not offered, and recorded as not offered |
 
 `acceptance` refuses `--accept-baseline` on an autonomous run, and `close` refuses a `--row` there
-unless the person's answer is recorded. The task skill's `person-answer.sh` records it, step
+unless the person's answer is recorded. A session that does not report itself attended, or a task
+that stands at an autonomous stage, counts as an autonomous run here. The task skill's `person-answer.sh` records it, step
 `review close`, after Claude Code asks the person.
 A standing order never answers a changed non-goal: ask the person, who accepts or rejects it.
 A command surface needs no look, because its exit status is the whole answer.

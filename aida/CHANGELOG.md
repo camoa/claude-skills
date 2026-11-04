@@ -4,6 +4,83 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.2] - 2026-11-03
+
+Fewer permission prompts in attended sessions, and nine fixes from a
+live run. A person can send a review finding back to its order's
+fixer. The acceptance verifier can write its evidence folder, and the
+freeze commits every test file the author changed.
+
+### Added
+
+- A person can rule a review finding `fix` at review close, with
+  `--row <finding>=fix`. A finding that cites a criterion then fails it,
+  so the review fails. A finding that cites no criterion leaves its lens
+  check unmet, a warning. Either way, `reopen` sends the finding to the
+  fixer of the order that owns its file. An uncited finding takes that
+  order's first criterion. Completion offers no follow-up task for it.
+  The ruling stays when the next pass raises the same finding. A close
+  on `--reason` before the repair lands leaves a warning. A finding of
+  any reviewer lens may take a ruling, a low one too. A finding in a
+  frozen test file takes `test-wrong` and not `fix`. A finding that cites
+  a non-goal counts as uncited. Rule it `fix`, and it takes that
+  order's first criterion.
+
+### Changed
+
+- In an attended session, at a stage the task runs interactive, most
+  person-only steps take the person's answer from the chat. No
+  permission prompt shows for them. Eight steps still show the prompt
+  in every run mode. These are the run-mode switch, the contract's
+  approval and the approval of a design's commands. The other five are
+  the ways past another hard stop: `reopen --test`, `fix-brief --allow`,
+  `go-on --owns` or `--continue close`, `verify-record --ruling` and
+  `finish --regression`. A light task always shows the prompt. A chat
+  answer is what the main session reports, and nothing records or
+  proves it.
+- A chat answer counts only when Claude Code reports an attended
+  session. In `claude -p`, or when the task's mode cannot be read, the
+  recorded answer is required. A recipe step with no task, such as
+  `surfaces decline` or `tool install`, now refuses in `claude -p`.
+- The contract's approval prompt now shows the rendered contract, up to
+  20,000 bytes.
+- The hook refuses a dispatched agent every person-only step that
+  cannot be undone. A session with an agent type and no agent id, such
+  as `claude --agent`, gets the prompt for them instead. Every session
+  is refused a git checkout or restore of a task folder.
+- A child task that a split makes keeps its parent's run mode.
+- A repair owes a failing test first only when one of its findings
+  holds logic. A finding in a document or configuration file, or one
+  from the duplication, design-principle or architecture lens, holds
+  none.
+- `tests-freeze` commits a test file that the order owns and the test
+  author changed or staged, though it holds no test of the order. It
+  refuses, and freezes nothing, when a frozen record holds tests in
+  that file.
+- `reopen` names each finding that fails no criterion and that no
+  person ruled. The reason says that no person ruled it `fix`.
+- A repair freeze accepts the criterion of each finding the repair
+  carries, even when its order does not serve that criterion. The
+  repair's tests brief carries that criterion's text and verification.
+- `fix-brief` carries the order's reasoning appended since its last
+  build, so a fixer sees a ruling the person added. A ruling that edits
+  or strikes earlier reasoning does not reach the fixer.
+- `start` keeps a new file that an order owing a repair test owns, when
+  its test globs match. The design must be unchanged since its close.
+  The `leftovers:` line names each kept file.
+
+### Fixed
+
+- The acceptance verifier's write hook refused `mkdir -p review/evidence`,
+  a `mkdir` with a mode, and a copy into that folder, although the folder
+  is its own. The verifier's definition now says to give the full
+  path of `review/evidence/`. A relative path lands in the code path,
+  and the hook allows it.
+- `acceptance --evidence` lost an empty path on the last evidence row,
+  so a task with no surfaces could not record its evidence.
+- When `reopen` could not build a repair, it exited 0 and removed the
+  finished record. It now refuses first.
+
 ## [6.1.1] - 2026-10-30
 
 Two fixes from a live run. A person can retire a frozen test before the

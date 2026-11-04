@@ -39,7 +39,8 @@ rewrite you can defend afterward.
 
 Read the brief first. It holds the open findings for this round, in severity order, each with its
 evidence and the criterion or non-goal it cites. It holds the fix scope union, the frozen tests
-that cover it, the diff budget, and the path of your report file.
+that cover it, the diff budget, and the path of your report file. It also holds `newReasoning`:
+the owner's reasoning added after the build. Treat it as a ruling. Do not repeat a fix it rules out.
 
 **Follow the plays.** The brief's `playbooksPath` names the playbook record that research loaded,
 or is null. When it is not null, open it. Follow every play whose `when` covers a file you own. The

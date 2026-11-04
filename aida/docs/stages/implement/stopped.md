@@ -38,8 +38,10 @@ records your words.
 
 ## Your answer
 
-Each way out is a person's judgement, so each refuses until your answer is on record, in every run
-mode. Claude Code shows you a permission prompt to record it. See
+Each way out is a person's judgement. In an attended session, at a stage the task runs
+interactive, Claude asks you in the chat and runs it on your answer. Otherwise it refuses until
+your answer is on record, and Claude Code shows you a permission prompt to record it. `go-on --owns`
+and `go-on --continue close` always need the recorded answer. See
 [the person's answer](../../task/person-answer.md).
 
 Some decisions do not stop an unattended run. They wait as pending on the order's review record,

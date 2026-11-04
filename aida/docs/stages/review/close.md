@@ -43,6 +43,14 @@ says. You rule each one once:
 - `contract-wrong:<corrected text>`: the code is right, and the criterion's words are wrong. The
   record keeps your text beside the frozen one, and the criterion reads its own answer. Completion
   offers a follow up task that changes the criterion through `/aida:scope`.
+- `fix`: you want the finding fixed in this task. The finding then fails the criterion it cites,
+  and the review fails. The build's `reopen` sends it to the fixer of the order that owns its
+  file. Completion offers no follow up task for it. See [after a failed review](failed.md).
+
+Any finding a reviewer lens raised takes `fix`, a low one too. A finding in a frozen test takes
+`test-wrong` and not `fix`, and a finding in any other file takes `fix` and not `test-wrong`. A
+finding ruled `fix` keeps its lens check unmet. When the next pass raises the same finding again,
+it keeps the ruling.
 
 A finding keeps its id across review passes while its content is the same, and a new finding
 takes a new id. So an answer you prepared from an earlier pass never rules another finding. With

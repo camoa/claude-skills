@@ -188,11 +188,11 @@ LENS_WORDS="non-goals solid dry architecture guides practices mutation purpose"
 RW_ROW_WORDS_JQ='def row_words: if (startswith("decision-") and endswith("-departure")) then ["keep", "rebuild"]
   elif (startswith("decision-") and endswith("-non-goal")) then ["accept", "reject"]
   elif startswith("decision-") then ["wrong", "deferred", "load-bearing", "test-wrong"]
-  elif test("^f[1-9][0-9]*$") then ["wrong", "deferred", "test-wrong", "contract-wrong"]
+  elif test("^f[1-9][0-9]*$") then ["wrong", "deferred", "test-wrong", "contract-wrong", "fix"]
   else ["met", "unmet"] end;
 def or_list: if length < 2 then join("") else (.[0:-1] | join(", ")) + " or " + .[-1] end;'
 # The words that rule a finding at close. contract-wrong carries the corrected text after a colon.
-RW_RULING_WORDS='["wrong", "deferred", "test-wrong", "contract-wrong"]'
+RW_RULING_WORDS='["wrong", "deferred", "test-wrong", "contract-wrong", "fix"]'
 
 # The search review records, through research-actions.sh record, when no guide body is on disk:
 # current practice for the stack, found by the outward searcher (gap row 364). It is a research
@@ -460,27 +460,15 @@ rw_refuse_moved_code() {
     || rw_pass_moved "$who" "the working tree at $RV_CODEPATH is dirty, and the reviewer may write nothing but its own findings file. What changed: $(printf '%s' "$dirty" | tr '\n' ' ')"
 }
 
-# Exit 70. A person's answer is accepted only when a person is present, which is the rule
-# tests-freeze already applies to its own rows and the number it already uses. A person's answer in
-# the task's answer record, step "review $1", passes it too, without a change of mode
-# (task_answer_find). $1 the action, $2 the flag, $3 what the flag would have decided, $4 the
-# flag's values, one per line, or empty where no answer may stand in.
-rw_require_person() {
-  local who="$1" flag="$2" what="$3" route=""
-  [ "$RW_RUN_MODE" = "autonomous" ] || return 0
-  task_answer_find "$TASK_PATH" "review $who" "" "${4:-}" && return 0
-  [ -z "${4:-}" ] || route="$(task_answer_route "$TASK_PATH" "review $who" "" "$4")"
-  die 70 "$who: $flag says $what, and this run is autonomous. No person is here to answer, and an answer recorded as a person's is one nobody can list again later. Nothing is written.$route"
-}
-
 # The rows a close still waits on, each with the words it takes, in one line (live-run row 430).
 # $1 the review record, $2 the person criteria that wait, as a JSON list of ids, $3 the findings a
 # person may rule, as a JSON list of ids. A finding already ruled and a check already answered do
-# not wait.
+# not wait. A low follow-up finding may take fix, but it holds back nothing, so it does not wait.
 rw_rows_waiting() {
   printf '%s' "$1" | jq -r --argjson criteria "$2" --argjson rf "$3" "$RW_ROW_WORDS_JQ"'
     [ $criteria[] ]
-    + [ (.findings // [])[] | select(.id as $i | ($rf | index($i)) != null) | select((.ruling // "") == "") | .id ]
+    + [ (.findings // [])[] | select(.id as $i | ($rf | index($i)) != null) | select((.ruling // "") == "")
+        | select(.disposition == "criterion" or .severity != "low") | .id ]
     + [ (.checks // [])[] | select(.verdict == "unknown" and ((.id | startswith("decision-")) or .answeredBy == "nobody")) | .id ]
     | map(. + " takes " + (row_words | or_list)) | join("; ")'
 }
@@ -1913,12 +1901,15 @@ rw_lens_hits() {
 # One lens's reading of its check, as one check row, or nothing when the lens raised no finding.
 # A medium or high finding reads unmet. Only low findings read met: they stay follow-up, and
 # completion offers each as a task. A finding a person ruled at close counts as low here, because
-# the person already answered it (gap row 329). $1 the lens, $2 the check id, $3 the findings array.
+# the person already answered it (gap row 329). A finding ruled fix counts as unmet whatever its
+# severity, because the person wants it fixed in this task (gap row 479). $1 the lens, $2 the
+# check id, $3 the findings array.
 rw_lens_row() {
   local lens_word="$1" check_id="$2" hits low_only
   hits="$(rw_lens_hits "$lens_word" "$3")"
   [ -n "$hits" ] || return 0
-  low_only="$(printf '%s' "$3" | jq -r --arg l "$lens_word" '[ .[] | select(.lens == $l) | select(has("ruling") | not) | .severity ] | all(. == "low")')"
+  low_only="$(printf '%s' "$3" | jq -r --arg l "$lens_word" '[ .[] | select(.lens == $l) | select((has("ruling") | not) or .ruling == "fix")
+    | if .ruling == "fix" then "fix" else .severity end ] | all(. == "low")')"
   if [ "$low_only" = "true" ]; then
     rw_check_row "$check_id" "met" "every finding the $lens_word lens raised is low or ruled by the person, so each stays follow-up: $hits."
   else
@@ -2040,17 +2031,20 @@ do_findings() {
   # finding. A finding whose lens, file, lines and evidence match one an archived pass recorded
   # takes that id. Every other finding takes a fresh id above every id any pass used, so a stale
   # row names no finding, and close drops it with a warning.
+  # The same content keeps a fix ruling too, when fix is the one ruling any archived pass gave it,
+  # so the next pass sends it to its order again (gap row 479). A later wrong or deferred stops it.
   local archived_findings
   archived_findings="$(find "$REVIEW_DIR" -maxdepth 1 -type f -name 'review-*.json' -exec cat {} + 2>/dev/null \
-    | jq -cs '[ .[] | (.findings // [])[] | select(.lens != "frozen-tests") | {id, k: [.lens, .file, .lines, .evidence]} ]' 2>/dev/null)"
+    | jq -cs '[ .[] | (.findings // [])[] | select(.lens != "frozen-tests") | {id, k: [.lens, .file, .lines, .evidence], ruling} ]' 2>/dev/null)"
   [ -n "$archived_findings" ] || archived_findings='[]'
   findings_json="$(printf '%s' "$findings_json" | jq -c --argjson old "$archived_findings" '
     ([ $old[] | .id[1:] | tonumber ] | max // 0) as $top
     | reduce .[] as $f ({out: [], used: [], next: ($top + 1)};
         . as $s
-        | ([ $old[] | select(.k == [$f.lens, $f.file, $f.lines, $f.evidence]) | .id ]
-           | map(select(. as $i | $s.used | index($i) | not)) | .[0]) as $same
-        | if $same != null then .out += [$f + {id: $same}] | .used += [$same]
+        | ([ $old[] | select(.k == [$f.lens, $f.file, $f.lines, $f.evidence]) ]) as $match
+        | ([ $match[] | .id ] | map(select(. as $i | $s.used | index($i) | not)) | .[0]) as $same
+        | (if ([ $match[] | .ruling // empty ] | unique) == ["fix"] then {ruling: "fix", disposition: "criterion"} else {} end) as $carry
+        | if $same != null then .out += [$f + {id: $same} + $carry] | .used += [$same]
           elif $top == 0 then .out += [$f]
           else .out += [$f + {id: ("f" + (.next | tostring))}] | .next += 1 end)
     | .out')"
@@ -2320,7 +2314,7 @@ RW_RESEARCH_FILES
   follow_up="$(printf '%s' "$findings_json" | jq -r '[ .[] | select(.disposition == "follow-up") | .id ] | join(", ")')"
   high_security="$(printf '%s' "$findings_json" | jq -r '[ .[] | select(.disposition == "follow-up" and .severity == "high") | .id ] | join(", ")')"
   [ -z "$follow_up" ] \
-    || echo "FINDINGS: these findings cite no non-goal, and no criterion at medium or high severity, so they are recorded as follow-up work nobody has a task for: $follow_up" >&2
+    || echo "FINDINGS: these findings cite no non-goal, and no criterion at medium or high severity, so they are recorded as follow-up work nobody has a task for: $follow_up. A person who wants one fixed in this task rules it fix at close." >&2
   [ -z "$high_security" ] \
     || echo "FINDINGS: these follow-up findings are high severity and go to the person now, because leaving one queued ships it: $high_security" >&2
   exit 0
@@ -2720,7 +2714,7 @@ rw_surface_extra_rows() {
 # code path. Reads SF_SURFACES and the viewports in $1.
 RW_EVIDENCE="[]"
 rw_load_evidence() {
-  local viewports="$1" bad missing one abs resolved='[]' evidence_dir="$REVIEW_DIR/evidence"
+  local viewports="$1" bad missing one abs i resolved='[]' evidence_dir="$REVIEW_DIR/evidence"
   [ "$(json_file_state "$EVIDENCE_FILE")" = "ok" ] \
     || die 52 "acceptance: --evidence reads $EVIDENCE_FILE, and it is $(json_file_state "$EVIDENCE_FILE"). The acceptance verifier writes it. Dispatch the verifier, then run this again."
   RW_EVIDENCE="$(jq -c '.rows' "$EVIDENCE_FILE")"
@@ -2743,7 +2737,9 @@ rw_load_evidence() {
   [ -z "$bad" ] \
     || die 52 "acceptance: $EVIDENCE_FILE holds rows that are not evidence rows (scripts/review-schema.json, evidenceRow). Or they name a criterion, surface or viewport this task does not hold: $bad. Nothing was written."
   bad=""
-  while IFS= read -r one; do
+  # Each path is read by its index: a list read through $(...) loses an empty last path.
+  for i in $(printf '%s' "$RW_EVIDENCE" | jq -r 'keys[]'); do
+    one="$(printf '%s' "$RW_EVIDENCE" | jq -r --argjson i "$i" '.[$i].path')"
     abs=""
     if [ -n "$one" ]; then
       abs="$(normalize_abs "$(resolve_against "$one" "$evidence_dir")")"
@@ -2751,9 +2747,7 @@ rw_load_evidence() {
       [ -e "$abs" ] || bad="$bad $one (not on disk)"
     fi
     resolved="$(jq -nc --argjson have "$resolved" --arg p "$abs" '$have + [$p]')"
-  done <<RW_EVIDENCE_PATHS
-$(printf '%s' "$RW_EVIDENCE" | jq -r '.[].path')
-RW_EVIDENCE_PATHS
+  done
   while IFS= read -r one; do
     [ -z "$one" ] || [ -e "$(resolve_against "$one" "$RV_CODEPATH")" ] || bad="$bad $one (no such code file)"
   done <<RW_EVIDENCE_FILES
@@ -2829,7 +2823,7 @@ do_acceptance() {
   [ -z "$evidence_given" ] || [ -z "$(pc_trim "$accepted")" ] \
     || die 3 "acceptance: --evidence records the verifier's rows over the run already recorded, and --accept-baseline runs the surfaces again. Run them one at a time."
   [ -z "$(pc_trim "$accepted")" ] \
-    || rw_require_person "acceptance" "--accept-baseline" "a person accepted a new baseline for a surface"
+    || task_require_person 70 acceptance "--accept-baseline, a person's acceptance of a new baseline for a surface," "$TASK_PATH" review "review acceptance" "" ""
 
   RW_CATALOG_NOTES="$(printf '%s' "$RW_RECORD_DOC" | jq -c '.catalogNotes // []')"
   RW_ACCEPTED_DONE=""; RW_ACCEPTED_ROWS=""
@@ -3062,21 +3056,39 @@ do_close() {
         | {id: (.id | ltrimstr("decision-") | rtrimstr("-non-goal")), frozen: .frozenText, live: .liveText} ]
         | sort_by(.id)')" = "$(rw_non_goal_changes | jq -c 'sort_by(.id)')" ] \
     || rw_pass_moved "close" "$ALIGNMENT_FILE changed a non-goal since brief ran, so the reviewer judged another text."
-  [ -z "$rows" ] || rw_require_person "close" "--row" "a person read a checklist row and judged it" "$rows_raw"
+  [ -z "$rows" ] || task_require_person 70 close "--row, a person's judgement of a checklist row," "$TASK_PATH" review "review close" "" "$rows_raw"
 
   # A person rules a finding that fails a criterion (gap row 329). wrong: the reviewer was mistaken,
   # so the criterion reads its own answer. deferred: the finding is real and waits, so it becomes
   # follow-up and completion offers it as a task. test-wrong: a frozen test is wrong, so `reopen`
   # sends the finding to the test author of the order that froze it (gap row 449).
   # contract-wrong: the criterion's wording is wrong, so the finding is follow-up with the corrected
-  # text beside it, and completion hands it to scope (gap row 450). The finding stays in the record
-  # either way, and `ruling` holds the person's word. A medium or high finding that cites no
-  # criterion fails its lens check, so the person may rule it the same way (gap row 337). A
-  # frozen-tests finding decides no check.
+  # text beside it, and completion hands it to scope (gap row 450). fix: the person wants it fixed
+  # in this task, so it fails its criterion and `reopen` sends it to the order that owns its file
+  # (gap row 479). The finding stays in the record either way, and `ruling` holds the person's
+  # word. A medium or high finding that cites no criterion fails its lens check, so the person may
+  # rule it the same way (gap row 337). Any finding of a reviewer lens may take a ruling, so a low
+  # one can take fix. A frozen-tests finding decides no check.
+  # fix and test-wrong depend on the finding's file. A file a frozen record holds takes test-wrong
+  # and not fix. Any other file takes fix and not test-wrong, because no test author can change it.
   local rulable_findings ruled person_owned person_checks dropped
   rulable_findings="$(printf '%s' "$RW_RECORD_DOC" | jq -c --arg lenses "$LENS_WORDS" '[ (.findings // [])[]
     | . as $f | select(.disposition == "criterion" or has("ruling")
-                       or (.severity != "low" and (($lenses | split(" ") | index($f.lens)) != null))) | .id ]')"
+                       or (($lenses | split(" ") | index($f.lens)) != null)) | .id ]')"
+  # A finding's file is resolved against the code path, as reopen resolves it, so a ./ or an
+  # absolute path names the same frozen test.
+  local in_frozen_tests='[]' frozen_paths f_id f_file f_abs
+  rw_load_test_rows "close"
+  frozen_paths="$(printf '%s' "$RW_TEST_ROWS" | jq -c '[ .[] | (.tests // [])[] | .path ]')"
+  while IFS='	' read -r f_id f_file; do
+    [ -n "$f_file" ] || continue
+    f_abs="$(normalize_abs "$(resolve_against "$f_file" "$RV_CODEPATH")")"
+    if [ "$(printf '%s' "$frozen_paths" | jq --arg p "${f_abs#"$RV_CODEPATH"/}" 'index($p) != null')" = true ]; then
+      in_frozen_tests="$(printf '%s' "$in_frozen_tests" | jq -c --arg i "$f_id" '. + [$i]')"
+    fi
+  done <<RW_FINDING_FILES
+$(printf '%s' "$RW_RECORD_DOC" | jq -r '(.findings // [])[] | .id + "\t" + (.file // "")')
+RW_FINDING_FILES
   # The criteria a person answers, personCriteria in scripts/lib/proof.sh: each person-verified
   # one, and each one an order proved by confirm puts to the person. The person answers each with
   # --row, from the checklist rows `finish` wrote (gap row 196).
@@ -3087,11 +3099,13 @@ do_close() {
   local texted
   texted="$(printf '%s' "$corrected" | cut -f1 | jq -Rsc 'split("\n") | map(select(length > 0))')"
   dropped="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --argjson pf "$rulable_findings" \
-    --argjson texted "$texted" --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
+    --argjson texted "$texted" --argjson ff "$in_frozen_tests" --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
     [ ($given | split("\n"))[] | split("\t") | select(length == 2) | . as [$id, $w]
       | if ($po | index($id)) == null and ($pc | index($id)) == null and ($pf | index($id)) == null then $id + "=" + $w + " (no such row waits)"
         elif ($id | row_words | index($w)) == null then $id + "=" + $w + " (it takes " + ($id | row_words | or_list) + ")"
         elif $w == "contract-wrong" and ($texted | index($id)) == null then $id + "=" + $w + " (it takes the corrected text after a colon)"
+        elif $w == "fix" and ($ff | index($id)) != null then $id + "=" + $w + " (its file is a frozen test, so rule it test-wrong)"
+        elif $w == "test-wrong" and ($pf | index($id)) != null and ($ff | index($id)) == null then $id + "=" + $w + " (no frozen record holds its file)"
         else empty end ] | join(", ")' <<RW_ROWS
 $rows
 RW_ROWS
@@ -3099,11 +3113,13 @@ RW_ROWS
   if [ -n "$dropped" ]; then
     task_warn "$TASK_PATH" "review close" "" "these --row answers decided nothing and were dropped: $dropped"
     rows="$(jq -Rrn --argjson po "$person_owned" --argjson pc "$person_checks" --argjson pf "$rulable_findings" \
-      --argjson texted "$texted" --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
+      --argjson texted "$texted" --argjson ff "$in_frozen_tests" --rawfile given /dev/stdin "$RW_ROW_WORDS_JQ"'
       [ ($given | split("\n"))[] | split("\t") | select(length == 2) | . as [$id, $w]
         | select(($po | index($id)) != null or ($pc | index($id)) != null or ($pf | index($id)) != null)
         | select(($id | row_words | index($w)) != null)
-        | select($w != "contract-wrong" or ($texted | index($id)) != null) | $id + "\t" + $w ] | join("\n")' <<RW_ROWS
+        | select($w != "contract-wrong" or ($texted | index($id)) != null)
+        | select($w != "fix" or ($ff | index($id)) == null)
+        | select($w != "test-wrong" or ($pf | index($id)) == null or ($ff | index($id)) != null) | $id + "\t" + $w ] | join("\n")' <<RW_ROWS
 $rows
 RW_ROWS
 )"
@@ -3144,7 +3160,6 @@ RW_ROWS
   criteria="$(printf '%s' "$alignment" | jq -c '.criteria // []')"
   count="$(printf '%s' "$criteria" | jq 'length')"
   suite_verdict="$(printf '%s' "$RW_RECORD_DOC" | jq -r '[ (.checks // [])[] | select(.id == "suite") ][0].verdict // "unknown"')"
-  rw_load_test_rows "close"
 
   rows_out="$(mktemp)" || die 3 "close: could not create a temporary file"
   i=0; cid=""; kind=""; state=""; verdict=""; answered=""; hit="false"
@@ -3211,9 +3226,10 @@ RW_ROWS
   rm -f "$rows_out"
 
   # A record `findings` wrote before gap row 274 routed low findings through criteria. Close does
-  # not judge severity, so it names them and sends the person back to the producer.
+  # not judge severity, so it names them and sends the person back to the producer. A low finding
+  # a person ruled carries disposition criterion by that ruling, so it is not named.
   stale_low="$(printf '%s' "$RW_RECORD_DOC" | jq -r \
-    '[ (.findings // [])[] | select(.disposition == "criterion" and .severity == "low") | .id ] | join(", ")')"
+    '[ (.findings // [])[] | select(.disposition == "criterion" and .severity == "low" and (.ruling // "") == "") | .id ] | join(", ")')"
   local check_one_verdict check_one_detail
   if [ "$unmet_count" -gt 0 ]; then
     check_one_verdict="unmet"

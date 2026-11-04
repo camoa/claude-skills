@@ -99,13 +99,14 @@ stage next, which reads `finished.json`. Review's close, not this step, confirms
 person verifies by checklist.
 
 **Finish runs again after a failed review.** When the task review of this finish failed, or a
-person ruled a frozen test wrong there, `next:` names `reopen`. Run:
+person ruled a frozen test wrong or a finding `fix` there, `next:` names `reopen`. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh reopen "<task_folder>"
 ```
 It takes each review finding that fails a criterion, unless the person ruled it wrong. The finding
 goes to the closed order that owns its file and owns that criterion, else to one that serves it.
-When no such order exists, it goes to the one order that owns the file. That order gets one finding with origin `repair` per
+When no such order exists, it goes to the one order that owns the file. A finding the person ruled
+`fix` that cites no criterion, or cites a non-goal, goes to that one order, and takes its first criterion. That order gets one finding with origin `repair` per
 review finding, scoped to the file, and one more fix round. It goes back to its fix step.
 
 A finding the person ruled `test-wrong` names a frozen test. It goes to the order whose frozen
@@ -126,9 +127,13 @@ order's judgement on it.
 An order proved by tests first takes one failing test of the bug. `next:` names the tests step for
 it. Run `tests-brief`, and its brief holds the bug under `repair`. Dispatch the order's test
 author, put the row to the checker, then run `tests-freeze`. The test goes in a new test file the
-order owns. It freezes as a record of its own, `tests-<order>-repair-<n>.json`, and the order's
+order owns. The test and its row may name the criterion the finding cites, even one the order does
+not serve. The brief holds that criterion's text under `repair.citedCriteria`. Give it to the
+checker with the row. It freezes as a record of its own, `tests-<order>-repair-<n>.json`, and the order's
 first record is never rewritten. `fix-brief` refuses until then (exit 121). An order proved
-another way has no logic to test, so its fix round opens at once.
+another way has no logic to test, so its fix round opens at once. So does a repair whose every
+finding is in a document or configuration file, or comes from the `dry`, `solid` or `architecture`
+lens. Those findings judge text or the shape of code, so no test can watch them fail.
 
 The order's own fixer repairs it under a dispatch record, its owned files and the frozen-test
 hook. It makes the repair's test pass with the order's other tests. A fresh
@@ -138,7 +143,8 @@ head, and review runs from its first step. `reopen` removes `finished.json`, bec
 open again.
 
 The summary names each finding no order takes, with the reason. One reason is two orders that own
-the file when neither serves the criterion. Another is a file no order owns. That finding waits
+the file when neither serves the criterion. Another is a file no order owns. Another is a finding
+that fails no criterion and that the person did not rule. That finding waits
 for the person. The person commits the fix on the task branch before this step runs again,
 or rules it at the next review. Keep that fix inside the files the orders own. A file no order
 owns reads unmet at review's check that every change serves a criterion.
@@ -289,10 +295,19 @@ is not raised again.
 ## A person's answer
 
 Some calls are a person's decision only. In implement they are `go-on`, `redo`, `drop`,
-`start --leftovers keep` and `finish --regression` (exit 68). They are also `verify-record --ruling` (exit 55),
-`fix-brief --allow` (exit 100), and `tests-freeze` with a row a person judged (exit 70). Each one
-refuses without the person's answer on record, in every run mode. The run mode does not decide
-whether a person answered.
+`start --leftovers keep`, `reopen --test` and `finish --regression` (exit 68). They are also
+`verify-record --ruling` (exit 55), `fix-brief --allow` (exit 100), and `tests-freeze` with a row a
+person judged (exit 70).
+
+Five of them are the only ways past another hard stop: `reopen --test`, `fix-brief --allow`,
+`go-on --owns` or `go-on --continue close`, `verify-record --ruling` and `finish --regression`.
+Each refuses without the person's answer on record, in every run mode.
+
+The others take the person's answer from the chat when the session is attended and both
+implement and the task's own stage run interactive (`task_require_person` in
+`scripts/lib/task-helpers.sh`). Ask the person in the chat. Run the call only on their answer, with
+their words. If the call refuses for the answer, record it as below. A dispatched agent never takes
+either kind: a hook refuses every such call to it.
 
 Record the answer with the task skill's `person-answer.sh`, before the call:
 ```
@@ -313,11 +328,11 @@ does not count. Each refusal prints the command with the words to use.
 Each answer is one entry in `person-answers.json` in the task folder. An entry serves one attempt.
 The call marks it used once its own writes are done. A call that refuses after it found the entry
 marks it refused, so the next attempt needs a new answer. An argument fault (exit 3) keeps it. No
-entry is removed, so review can count every answer. A hook refuses every other write of this file,
-and of `task.json`, from any session.
+entry is removed. A call that took the chat answer writes no entry. A hook refuses every other
+write of this file, and of `task.json`, from any session.
 
-Three other stages still refuse only on an unattended stage (exit 70): review's `close --row`,
-completion's `close` flags, and the task skill's `environment` calls. There the same action records
+Review's `close --row` and completion's `close` flags follow the same chat rule, with exit 70. The
+task skill's `environment` calls still refuse only on an unattended stage. There the same action records
 the answer, with step `review close`, `completion close` or `task environment <up|down|not-applicable>`.
 For completion's `close`, the words are one `<flag> <value>` line per person's flag, in the call's
 order. For `environment`, the words are the reason for `not-applicable`, and `yes` for the other

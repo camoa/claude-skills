@@ -163,6 +163,87 @@ ids_case() (
 expect "a finding keeps its id across passes while its content is the same, and a new one takes a fresh id (row 472)" \
   "$(ids_case)" "f2|f3"
 
+echo "--- a finding the person wants fixed (row 479)"
+# fix_record <finding JSON>...: wo1 closed with an empty review record, and a task review record
+# that holds these findings as findings leaves them.
+fix_record() {
+  review_records "" closed
+  printf '{"findings": []}\n' >"$IMPL/review-wo1.json"
+  reviewed_record
+  edit "$TASK/review/review.json" '.findings = $f' --argjson f "$(jq -nc '[ $ARGS.positional[] | fromjson ]' --args "$@")"
+}
+low_dry='{"id": "f1", "lens": "dry", "severity": "low", "file": "a.php", "lines": "1", "linkedTo": "c1", "evidence": "a copy", "disposition": "follow-up"}'
+
+fix_case() (
+  source "$HERE/records.bash"
+  fix_record "$low_dry"
+  closed_with --row c1=met --row f1=fix
+  printf '%s|%s|%s|%s|' "$RC" "$(jq -r '.findings[0] | .ruling + "|" + .disposition' "$TASK/review/review.json")" \
+    "$(jq -r '.criteria[0].verdict + "|" + .verdict' "$TASK/review/review.json")" \
+    "$(jq -r '.checks[] | select(.id == "every-criterion") | .detail | test("older findings step")' "$TASK/review/review.json")"
+  run "$IMPLEMENT" read "$TASK"
+  printf '%s|' "$(sed -n 's/^next: //p' "$OUT" | cut -d, -f1)"
+  run "$COMPLETION" read "$TASK"
+  printf '%s|' "$(grep -c '^followUp(f1): ' "$OUT")"
+  run "$IMPLEMENT" reopen "$TASK"
+  printf '%s|%s\n' "$RC" "$(ledger '.repairs[0].reviewFindings | join(",")')"
+)
+expect "a low finding ruled fix fails its criterion, reopen sends it to its order, and completion offers no task" \
+  "$(fix_case)" "0|fix|criterion|unmet|failed|false|finish: reopen|0|0|f1"
+
+# split_case <word> [<path>]: f1, low, in the frozen test, named by <path>, default
+# tests/a_test.sh, and f2, medium, in a.php, both ruled <word>.
+split_case() (
+  source "$HERE/records.bash"
+  fix_record "$(printf '%s' "$low_dry" | jq -c --arg p "${2:-tests/a_test.sh}" '.file = $p')" \
+    "$(printf '%s' "$low_dry" | jq -c '.id = "f2" | .severity = "medium" | .linkedTo = ""')"
+  tests_record
+  closed_with --row c1=met --row "f1=$1" --row "f2=$1"
+  jq -r '[ .findings[] | .ruling // "none" ] | join("|")' "$TASK/review/review.json"
+)
+expect "fix on a finding in a frozen test is dropped, and fix in a.php is taken" "$(split_case fix)" "none|fix"
+expect "test-wrong on a finding in a frozen test is taken, and test-wrong in a.php is dropped" \
+  "$(split_case test-wrong)" "test-wrong|none"
+expect "a frozen test named with ./ is the same frozen test" "$(split_case test-wrong ./tests/a_test.sh)" "test-wrong|none"
+
+nolink_case() (
+  source "$HERE/records.bash"
+  fix_record "$(printf '%s' "$low_dry" | jq -c '.lens = "solid" | .severity = "medium" | .linkedTo = ""')"
+  edit "$TASK/review/review.json" '.checks = [{id: "solid", verdict: "unmet", detail: "f1"}]'
+  closed_with --row c1=met --row f1=fix
+  printf '%s|' "$(jq -r '.checks[] | select(.id == "solid") | .verdict' "$TASK/review/review.json")"
+  run "$IMPLEMENT" read "$TASK"
+  printf '%s|' "$(sed -n 's/^next: //p' "$OUT" | cut -d, -f1)"
+  run "$IMPLEMENT" reopen "$TASK"
+  jq -r '.findings[-1] | .linkedTo + "|" + (.actionable | tostring)' "$IMPL/review-wo1.json"
+)
+expect "a finding that cites no criterion, ruled fix, holds its lens, and its repair cites the owner's first criterion" \
+  "$(nolink_case)" "unmet|finish: reopen|c1|true"
+
+carry_case() (
+  source "$HERE/records.bash"
+  review_records
+  halves_record
+  jq --argjson f "$low_dry" '.verdict = "failed" | .findings = [$f + {disposition: "criterion", ruling: "fix"}]' \
+    "$TASK/review/review.json" >"$TASK/review/review-2026-10-27-abc1234.json"
+  printf '%s' "$low_dry" | jq '{findings: [del(.disposition)]}' >"$ROOT/findings.json"
+  run "$REVIEW" findings "$TASK" --findings "$ROOT/findings.json"
+  jq -r '.findings[0] | .id + "|" + (.ruling // "none") + "|" + .disposition' "$TASK/review/review.json"
+)
+expect "a finding raised again with the same content keeps its fix ruling" "$(carry_case)" "f1|fix|criterion"
+
+reason_case() (
+  source "$HERE/records.bash"
+  review_records
+  reviewed_record
+  edit "$TASK/review/review.json" '.verdict = "failed" | .warnings = []
+    | .findings = [$f + {disposition: "criterion", ruling: "fix"}]
+    | .criteria = [{id: "c1", verifiedBy: "person", verdict: "unmet", answeredBy: "script"}]' --argjson f "$low_dry"
+  run "$COMPLETION" close "$TASK" --reason "the owner closes it" -- "done"
+  printf '%s|%s\n' "$RC" "$(jq '[ (.warnings // [])[] | select(.step == "completion close") ] | length' "$TASK/task.json")"
+)
+expect "a close on --reason over a finding ruled fix leaves one warning in the task record" "$(reason_case)" "0|1"
+
 echo "--- checks: the task's own change set (row 441)"
 merge_case() (
   source "$HERE/records.bash"
@@ -243,6 +324,20 @@ lens_wrong_case() (
 )
 expect "a test ruled wrong on a finding with no criterion warns, and reopen routes it" "$(lens_wrong_case)" "f1|0|tests/a_test.sh"
 
+# Two low findings in the frozen test, both ruled test-wrong, leave the review passed (row 486).
+low_wrong_case() (
+  source "$HERE/records.bash"
+  fix_record "$(printf '%s' "$low_dry" | jq -c '.file = "tests/a_test.sh"')" \
+    "$(printf '%s' "$low_dry" | jq -c '.id = "f2" | .file = "tests/a_test.sh" | .linkedTo = ""')"
+  tests_record
+  closed_with --row c1=met --row f1=test-wrong --row f2=test-wrong
+  printf '%s|' "$(jq -r '.verdict' "$TASK/review/review.json")"
+  run "$IMPLEMENT" reopen "$TASK"
+  printf '%s|%s|%s|%s\n' "$RC" "$(ledger '(.repairs[0].retires // []) | join(",")')" "$(ledger '.repairs[0].findings | length')" \
+    "$(ledger '.repairs[0].testOwed')"
+)
+expect "two low findings ruled test-wrong on a passed review reopen their order once" "$(low_wrong_case)" "passed|0|tests/a_test.sh|2|true"
+
 no_text_case() (
   source "$HERE/records.bash"
   review_records "" closed
@@ -306,8 +401,8 @@ supersede_case() (
 expect "a repair's record holds a retired test to its new hash" "$(supersede_case)" "0"
 
 # redo_rebuild_case <answer>: wo1 closed with one commit, finished, and a closed task review over
-# that finish whose decision-wo1-departure the person answered <answer>. Then redo, with the
-# person's answer. Prints wo1's lastStep, a.php's text, and whether finished.json stays.
+# that finish whose decision-wo1-departure the person answered <answer>. Then redo, attended, or
+# autonomous with AUTO set. Prints wo1's lastStep, a.php's text, and whether finished.json stays.
 redo_rebuild_case() (
   source "$HERE/records.bash"
   task_records branch
@@ -320,13 +415,14 @@ redo_rebuild_case() (
   jq -n --arg r "$range" --arg a "$1" '{verdict: "passed", reviewedRange: $r, findings: [],
     checks: [{id: "decision-wo1-departure", verdict: "unmet", answeredBy: "person", answer: $a, detail: "wo1 departs"}]}' \
     >"$TASK/review/review.json"
-  answer "implement redo" wo1 "rebuild it to the design"
+  [ -z "${AUTO:-}" ] || edit "$TASK/task.json" '.runMode = "autonomous"'
   run "$IMPLEMENT" redo "$TASK" wo1 --because "rebuild it to the design"
   printf '%s|%s|%s\n' "$(ledger '.lastStep')" "$(cat "$WT/a.php")" "$([ -f "$IMPL/finished.json" ] && echo finished || echo open)"
 )
 expect "redo takes a closed order whose departure the person ruled rebuild at the task review" \
   "$(redo_rebuild_case rebuild)" "null|a|open"
 expect "a closed order with no rebuild ruling is still left as it is" "$(redo_rebuild_case keep)" "closed|b|finished"
+expect "an autonomous redo of a closed order with no answer leaves it as it is" "$(AUTO=1 redo_rebuild_case rebuild)" "closed|b|finished"
 
 echo "--- the fix verifier cites the files the fix rests on (row 445)"
 # verified <verdict JSON>: wo1 fixed in one round over a.php, verify-brief run, and verify-record
@@ -354,6 +450,22 @@ expect "an addressed verdict citing no listed file reads not addressed" \
   "$(verified '{"id": "f1", "verdict": "addressed", "file": "b.php", "lines": "1", "evidence": "fine"}')" "a.php|open"
 expect "an addressed verdict naming a file it could not read reads not addressed" \
   "$(verified '{"id": "f1", "verdict": "addressed", "file": "a.php", "lines": "1", "couldNotRead": ["hooks/h.sh"], "evidence": "fine"}')" "a.php|open"
+
+# Attended at an interactive stage, a ruling still needs the recorded answer: with none,
+# verify-record refuses and f1 stays open.
+ruling_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records fixed
+  order_commit
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")) |= (.roundsUsed = 1 | del(.unrecordedCommits))'
+  jq -n --arg h "$(git -C "$WT" rev-parse HEAD)" '{schemaVersion: 1, takenAt: "2026-10-28", unit: "wo1", reviewedAt: $h,
+    findingsPath: "x", rounds: [], findings: [{id: "f1", severity: "high", file: "a.php", lines: "1", linkedTo: "c1",
+    evidence: "a says a", actionable: true, status: "open", origin: "review", fixScope: ["a.php"]}]}' >"$IMPL/review-wo1.json"
+  run "$IMPLEMENT" verify-record "$TASK" wo1 --ruling "f1=deferred:later"
+  printf '%s|%s\n' "$RC" "$(jq -r '.findings[] | select(.id == "f1") | .status' "$IMPL/review-wo1.json")"
+)
+expect "an attended ruling with no recorded answer refuses" "$(ruling_case)" "55|open"
 
 echo "--- completion: the one unattended stop"
 stop_case() (

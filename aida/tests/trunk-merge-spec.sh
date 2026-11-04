@@ -254,11 +254,21 @@ frozen_go_on_case() (
   build_records upstream
   edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).stopped = [{step: "build-record", reason: "a stop", allows: ["check"]}]'
   frozen_merges
-  answer "implement go-on check" wo1 "check wo1 again"
   run "$IMPLEMENT" go-on "$TASK" wo1 --continue check --because "check wo1 again"
   printf '%s|%s\n' "$RC" "$(ledger '.stopped | length')"
 )
 expect "go-on check after trunk changed wo1's frozen test refuses, and the stop stays" "$(frozen_go_on_case)" '63|1'
+
+# Unattended, go-on check needs the person's recorded answer: with none it refuses, and the stop stays.
+unattended_check_case() (
+  source "$HERE/records.bash"
+  build_records upstream
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).stopped = [{step: "build-record", reason: "a stop", allows: ["check"]}]'
+  edit "$TASK/task.json" '.runMode = "autonomous"'
+  run "$IMPLEMENT" go-on "$TASK" wo1 --continue check --because "check wo1 again"
+  printf '%s|%s\n' "$RC" "$(ledger '.stopped | length')"
+)
+expect "an autonomous go-on check with no answer refuses, and the stop stays" "$(unattended_check_case)" '68|1'
 
 echo "--- the readers of the range"
 unattributed_case() (
