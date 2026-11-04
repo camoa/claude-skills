@@ -8376,7 +8376,7 @@ IM_POSITION_LINK="; the repair took the owner's first criterion by position, and
 
 # The review record of closed order $2 with one repair finding added on its file $3, with evidence
 # $4. The finding cites the owner's first criterion. $1 the action's own name. Sets IM_REPAIR_DOC,
-# IM_REPAIR_ID, IM_REPAIR_LINKED, and IM_REPAIR_OWED, true when tests prove the owner, so its test
+# IM_REPAIR_ID, IM_REPAIR_LINKED, and IM_REPAIR_OWED, true when tests prove the owner and the file holds logic, so its test
 # author writes one failing test of the bug before its fixer runs, as reopen asks. Returns 1 when
 # the owner serves no criterion, so no fixer could act on the finding.
 IM_REPAIR_DOC=""; IM_REPAIR_ID=""; IM_REPAIR_LINKED=""; IM_REPAIR_OWED=false
@@ -8395,8 +8395,8 @@ im_repair_finding() {
   built="$(printf '%s' "$built" | jq -c --arg w "$IM_POSITION_LINK" '.actionableBecause += $w')"
   IM_REPAIR_DOC="$(printf '%s' "$IM_REPAIR_DOC" | jq -c --argjson f "$built" '.findings = ((.findings // []) + [$f])')"
   [ -n "$IM_REPAIR_DOC" ] || die3 "$1: the repair finding on $2 could not be written."
-  IM_REPAIR_OWED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" "$BR_ORDER_FACTS_JQ"'
-    [ .workOrders[] | select(.id == $id) ][0] | orderFacts.slot == "order-tests"')"
+  IM_REPAIR_OWED="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$2" --argjson f "$built" "$BR_ORDER_FACTS_JQ"'
+    ([ .workOrders[] | select(.id == $id) ][0] | orderFacts.slot == "order-tests") and ($f | logicFinding)')"
 }
 
 # Gap row 286. A builder that meets a defect in a file a closed order owns stops with
@@ -10535,8 +10535,8 @@ $allow_raw
 FB_ALLOW
 
   # The closed owner gets one repair finding on the file and one more fix round, with a failing
-  # test first when tests prove it and an open finding holds logic, as reopen gives it. This order writes no brief, and fix-brief
-  # refuses it (exit 40) until the owner closes again.
+  # test first, when tests prove it and the file holds logic, as reopen gives it. This order writes
+  # no brief, and fix-brief refuses it (exit 40) until the owner closes again.
   if [ -n "$closed_grant" ]; then
     local cg_owner cg_glob cg_abs cg_rel cg_ledger
     [ "$granted_json" = "[]" ] \
@@ -10552,9 +10552,7 @@ FB_CLOSED
       || die3 "fix-brief: $cg_owner owns $cg_rel and serves no criterion, so no fixer could act on a repair finding. Nothing is written."
     cg_ledger="$(im_reopen_in "$RV_LEDGER_DOC" "$cg_owner" "$(jq -cn --arg u "$unit_id" --arg f "$IM_REPAIR_ID" \
       --arg at "$(date -u +%Y-%m-%d)" --argjson owed "$IM_REPAIR_OWED" \
-      --argjson logic "$(printf '%s' "$RV_REVIEW_DOC" | jq -c "$BR_ORDER_FACTS_JQ"'
-        any((.findings // [])[]; .actionable == true and .status == "open" and logicFinding)')" \
-      '{by: $u, findings: [$f], at: $at} + (if $owed and $logic then {testOwed: true} else {} end)')")"
+      '{by: $u, findings: [$f], at: $at} + (if $owed then {testOwed: true} else {} end)')")"
     [ -n "$cg_ledger" ] || die3 "fix-brief: the repair on $cg_owner could not be written to the ledger."
     write_atomic "$IMPL_DIR/review-$cg_owner.json" "$IM_REPAIR_DOC"
     write_atomic "$RV_LEDGER_FILE" "$cg_ledger"

@@ -39,17 +39,18 @@ grant_case() (
 expect "a grant of a closed order's file reopens it, and the granting order waits" "$(grant_case)" \
   '0|reviewed|wo2 true|["a.php"]|none|tests wo1|40'
 
-# The failing test is owed only when an open finding of the granting order holds logic: a grant at
-# a finding on a document owes none, and the owner's fix round opens at once (gap row 493).
+# The failing test is owed by the granted file, not by the granting order's findings: a grant of a
+# text file owes none, and the owner's fix round opens at once (gap row 493). The same holds for a
+# builder's closed-order-defect stop.
 text_case() (
   source "$HERE/records.bash"
   in_review closed
-  edit "$IMPL/review-wo2.json" '.findings[0].file = "notes.md" | .findings[0].fixScope = ["notes.md"]'
-  answer "implement fix-brief" wo2 "a.php"
-  run "$IMPLEMENT" fix-brief "$TASK" wo2 --allow a.php
-  printf '%s|%s\n' "$RC" "$(ledger '.repairs[0].testOwed // "none"')"
+  edit "$IMPL/snapshot.json" '(.workOrders[] | select(.id == "wo1") | .ownedFiles) += ["services.yml"]'
+  answer "implement fix-brief" wo2 "services.yml"
+  run "$IMPLEMENT" fix-brief "$TASK" wo2 --allow services.yml
+  printf '%s|%s\n' "$RC" "$(ledger '(.repairs[0].by // "norepair") + " " + (.repairs[0].testOwed // "none")')"
 )
-expect "a grant at a finding on a text file owes no failing test" "$(text_case)" '0|none'
+expect "a grant of a text file owes no failing test" "$(text_case)" '0|wo2 none'
 
 # Attended at an interactive stage, the grant still needs the recorded answer: with none it
 # refuses, and wo1 is not reopened.
@@ -105,5 +106,18 @@ builder_case() (
   printf '%s|%s|%s\n' "$RC" "$(ledger '.repairs[0].by + " " + (.repairs[0].testOwed | tostring)')" "$(sed -n 's/^next: //p' "$OUT" | cut -d: -f1)"
 )
 expect "a builder's closed-order-defect on a tests order owes the failing test first" "$(builder_case)" '0|wo2 true|tests wo1'
+
+# The same file test applies to a builder's stop on a defect in a closed tests order's text file.
+builder_text_case() (
+  source "$HERE/records.bash"
+  in_review closed
+  edit "$IMPL/snapshot.json" '(.workOrders[] | select(.id == "wo1") | .ownedFiles) += ["services.yml"]'
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo2")).lastStep = "tests-frozen"'
+  sed 's/wo1/wo2/' "$IMPL/tests-wo1.json" >"$IMPL/tests-wo2.json"
+  printf 'Stop: closed-order-defect: services.yml: the key is wrong\nDeviation: none\n' >"$IMPL/answers-wo2-attempt1.md"
+  run "$IMPLEMENT" build-record "$TASK" wo2 --report "$IMPL/answers-wo2-attempt1.md" --interface "$IMPL/interface-wo2.md" --started-at "$(git -C "$WT" rev-parse HEAD)"
+  printf '%s|%s\n' "$RC" "$(ledger '(.repairs[0].by // "norepair") + " " + (.repairs[0].testOwed // "none")')"
+)
+expect "a builder's closed-order-defect in a text file owes no failing test" "$(builder_text_case)" '0|wo2 none'
 
 finish
