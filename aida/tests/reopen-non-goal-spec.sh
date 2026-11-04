@@ -56,4 +56,20 @@ left_case() (
 )
 expect "reopen names an unruled finding it leaves out, and not a deferred one" "$(left_case)" '0|f2'
 
+# A finding a person ruled wrong fails no criterion, so the refusal names it with that ruling
+# (gap row 490). Its unruled acceptance copy still routes, and the routed line names f1.
+wrong_case() (
+  source "$HERE/records.bash"
+  reopened '[{"id": "f1", "linkedTo": "c1", "disposition": "criterion", "ruling": "wrong"}]'
+  printf '%s|%s\n' "$RC" "$(grep -c 'f1 (a person ruled it wrong' "$OUT")"
+)
+expect "reopen refuses a finding ruled wrong and names the ruling" "$(wrong_case)" '119|1'
+copy_case() (
+  source "$HERE/records.bash"
+  reopened '[{"id": "f1", "linkedTo": "c1", "disposition": "criterion", "ruling": "wrong"},
+             {"id": "f9", "linkedTo": "c1", "disposition": "criterion", "lens": "acceptance"}]'
+  printf '%s|%s|%s\n' "$RC" "$(jq -r '[ .findings[].evidence | test("as its finding f9,") ] | any' "$IMPL/review-wo1.json")" "$(left_ids)"
+)
+expect "an unruled copy of a finding ruled wrong reopens its order" "$(copy_case)" '0|true|f1'
+
 finish

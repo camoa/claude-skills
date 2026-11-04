@@ -12491,10 +12491,13 @@ do_reopen() {
   alignment="$(printf '%s' "$SNAPSHOT_DOC" | jq -c '.alignment // {}')"
   [ "$review_closed" = false ] \
     || findings="$(jq -c '[ (.findings // [])[] | select((.disposition == "criterion" and (.ruling // "") != "wrong") or .ruling == "test-wrong") ]' "$review_file")"
-  # A finding left out with no ruling is named, so the person sees it waits (gap row 482).
+  # A finding left out with no ruling is named, so the person sees it waits (gap row 482). One ruled
+  # wrong is named too, because that ruling is why it routes nowhere (gap row 490).
   [ "$review_closed" = false ] \
-    || not_routed="$(jq -r '[ (.findings // [])[] | select(.disposition != "criterion" and (.ruling // "") == "")
-         | " " + .id + " (it fails no criterion, and no person ruled it fix);" ] | join("")' "$review_file")"
+    || not_routed="$(jq -r '[ (.findings // [])[]
+         | if .ruling == "wrong" then " " + .id + " (a person ruled it wrong at close, so it fails no criterion);"
+           elif .disposition != "criterion" and (.ruling // "") == "" then " " + .id + " (it fails no criterion, and no person ruled it fix);"
+           else empty end ] | join("")' "$review_file")"
   # A decision a build left and the person ruled test-wrong at the task review takes the same
   # route as a finding ruled so (gap row 449). Its finding is the order's own, on its review record.
   local decided='[]'
