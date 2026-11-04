@@ -662,14 +662,15 @@ if printf '%s' "$WORK_ORDERS_JSON" | jq -e 'any(.[]; .proof == "confirm")' >/dev
           TO_HIT=false
           while IFS= read -r TO_GLOB; do
             tf_path_matches_catalog_glob "$TO_FILE" "$TO_GLOB" && { TO_HIT=true; break; }
-          done <<TO_GLOBS
-$CONFIRM_TEST_GLOBS
-TO_GLOBS
+          # A here-string, not a here-document: inside a command substitution, bash 5.2 and 5.3
+          # drop the first semicolon on the command line after the end line of a here-document,
+          # so TO_ALL=false never happened. The line after TO_FILES holds no semicolon list.
+          done <<< "$CONFIRM_TEST_GLOBS"
           [ "$TO_HIT" = true ] || { TO_ALL=false; break; }
         done <<TO_FILES
 $(printf '%s' "$TO_ORDER" | jq -r '.ownedFiles[]')
 TO_FILES
-        if [ "$TO_ALL" = true ]; then printf '%s' "$TO_ORDER" | jq -r '.id + "\ttests"'; fi
+        [ "$TO_ALL" = false ] || printf '%s' "$TO_ORDER" | jq -r '.id + "\ttests"'
       fi
     done
   )" || die3 "the recipes library failed to load: $PLUGIN_ROOT/scripts/lib/recipes.sh"

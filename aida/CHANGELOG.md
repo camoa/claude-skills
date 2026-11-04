@@ -4,6 +4,21 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.3] - 2026-11-04
+
+One fix for bash 5.3, which CI's runner image now uses.
+
+### Fixed
+
+- On bash 5.3, the design check treated a tests order that also owns
+  code as an order of test files only. It then refused the order for a
+  test another open task froze. Inside a command substitution, bash 5.2
+  and 5.3 drop the first `;` on the line after a here-document's end
+  line. This site broke on 5.3 only, because an assignment there did
+  not take effect. The loop now reads a here-string.
+- A static check now finds that shape in every plugin shell file.
+  `bash32-spec.sh` runs it on any bash that has python3, so CI runs it.
+
 ## [6.1.2] - 2026-11-03
 
 Fewer permission prompts in attended sessions, and nine fixes from a

@@ -1,6 +1,10 @@
-"""case-in-comsub.py: prints file:line for each case pattern with no leading "(" inside a $( )
-or <( ) body, and exits 1 when it finds one. bash 3.2 ends such a body at the pattern's ")", and
-inside double quotes the rest still parses, so bash -n passes and the body breaks at run time.
+"""case-in-comsub.py: prints file:line for each shape inside a $( ) or <( ) body that bash runs
+wrongly, and exits 1 when it finds one. Two shapes:
+- A case pattern with no leading "(". bash 3.2 ends the body at the pattern's ")", and inside
+  double quotes the rest still parses, so bash -n passes and the body breaks at run time.
+- A ";" list on the first command line after a here-document's end line. bash 5.2 and 5.3 rerun
+  the body from a reprint that drops that ";", so `{ A=false; break; }` became `A=false break`
+  and the assignment was lost.
 bash32-spec.sh runs it. Usage: python3 case-in-comsub.py <file>...
 """
 import re
@@ -83,6 +87,27 @@ class Scan:
         self.heredoc_tags = []
         return i
 
+    def heredocs_in(self, i, depth):
+        """heredocs, and in a body, a hit for a ";" on the next command line before its ")"."""
+        i = self.heredocs(i)
+        if depth == 0: return i
+        j = i
+        while j < self.n:
+            e = self.t.find('\n', j)
+            e = self.n if e < 0 else e
+            cmd = self.t[j:e].strip()
+            if cmd and not cmd.startswith('#'): break
+            j = e + 1
+        else:
+            return i
+        bare = re.sub(r"'[^']*'|\"(\\.|[^\"\\])*\"", '', cmd).split(' #')[0]
+        level = 0
+        for k, c in enumerate(bare):
+            level += {'(': 1, ')': -1}.get(c, 0)
+            if level < 0: bare = bare[:k]; break
+        if re.search(r'(?<!;);(?!;)', bare): self.hits.append(self.line(j))
+        return i
+
     def code(self, i, depth, end):
         """Shell code from i to the unmatched `end`: ")" for a body, None for the file. depth
         counts the $( ) bodies around i. A case stack holds w (before in), p (a pattern is next)
@@ -94,7 +119,7 @@ class Scan:
             c = t[i]
             if case and case[-1] == 'p':
                 if c in ' \t\n':
-                    if c == '\n' and self.heredoc_tags: i = self.heredocs(i + 1); continue
+                    if c == '\n' and self.heredoc_tags: i = self.heredocs_in(i + 1, depth); continue
                     i += 1; continue
                 if c == '#':
                     e = t.find('\n', i); i = self.n if e < 0 else e; continue
@@ -111,7 +136,7 @@ class Scan:
                 case[-1] = 'b'
                 continue
             if c == '\n':
-                if self.heredoc_tags: i = self.heredocs(i + 1); continue
+                if self.heredoc_tags: i = self.heredocs_in(i + 1, depth); continue
                 i += 1; continue
             if c == '\\': i += 2; continue
             if c == '#' and self.word_start(i):

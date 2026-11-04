@@ -9,7 +9,9 @@
 #
 # bash -n under 3.2 does not parse the body of a "$( )" until it runs. So a case pattern with no
 # leading "(" inside "$( )" parses there and breaks at run time. tests/case-in-comsub.py finds
-# that one statically. It runs first, on any bash, and prints a skip line when python3 is absent.
+# that one statically. It also finds a `;` list on the command line after a here-document's end
+# line inside "$( )", which bash 5.2 and 5.3 rerun without that `;`. It runs first, on any bash,
+# and prints a skip line when python3 is absent.
 #
 # What it cannot see: an empty array expanded under set -u, which bash 3.2 refuses as unbound.
 # Whether an array can be empty is known only at run time. Running the specs under bash 3.2 finds
@@ -25,7 +27,7 @@ FAIL=0
 
 if command -v python3 >/dev/null 2>&1; then
   (cd "$PLUGIN" && find . -type f \( -name '*.sh' -o -name '*.bash' \) -exec python3 -I "$HERE/case-in-comsub.py" {} +) \
-    || { printf 'a case pattern with no leading ( inside $( ) at the lines above\n'; FAIL=1; }
+    || { printf 'a case pattern with no leading (, or a ; list after a here-document, inside $( ), at the lines above\n'; FAIL=1; }
 else
   printf 'skip: no python3 here, so case patterns inside $( ) are not checked.\n'
 fi
