@@ -82,6 +82,25 @@ create_trunk_case() (
 )
 expect "a tree made inside an open task's tree is cut from the trunk" "$(create_trunk_case)" 'trunk'
 
+# no_tree_scope_case <how>: task n1 has no tree on disk, and scope init runs on it from the tree of
+# t1 (gap row 492). With `created`, create --tree-at-start made n1. With `recorded`, n1 records a
+# path and a branch that are not on disk. The exit, and whether the contract was written.
+no_tree_scope_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  if [ "$1" = created ]; then
+    run "$TASK_ACTIONS" create --project "$PROJECT" --name n1 --tree-at-start -- "more work"
+  else
+    mkdir -p "$PROJECT/tasks/n1"
+    jq -n --arg p "$ROOT/code.worktrees/code-n1" '{schemaVersion: 1, id: "n1", state: "new", parent: null,
+        children: [], worktree: {path: $p, branch: "feature/n1"}}' >"$PROJECT/tasks/n1/task.json"
+  fi
+  run "$PLUGIN/skills/scope/scripts/scope-actions.sh" init "$PROJECT/tasks/n1"
+  printf '%s|%s\n' "$RC" "$(on_disk "$PROJECT/tasks/n1/alignment.json")"
+)
+expect "scope runs on a task made with --tree-at-start" "$(no_tree_scope_case created)" '0|yes'
+expect "scope runs on a task whose recorded tree is not on disk" "$(no_tree_scope_case recorded)" '0|yes'
+
 # start_findings_case: a task whose record has no parent field starts. The exit, the state, and
 # how many warnings the task records for the start.
 start_findings_case() (
