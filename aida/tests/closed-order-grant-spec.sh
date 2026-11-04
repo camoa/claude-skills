@@ -39,6 +39,18 @@ grant_case() (
 expect "a grant of a closed order's file reopens it, and the granting order waits" "$(grant_case)" \
   '0|reviewed|wo2 true|["a.php"]|none|tests wo1|40'
 
+# The failing test is owed only when an open finding of the granting order holds logic: a grant at
+# a finding on a document owes none, and the owner's fix round opens at once (gap row 493).
+text_case() (
+  source "$HERE/records.bash"
+  in_review closed
+  edit "$IMPL/review-wo2.json" '.findings[0].file = "notes.md" | .findings[0].fixScope = ["notes.md"]'
+  answer "implement fix-brief" wo2 "a.php"
+  run "$IMPLEMENT" fix-brief "$TASK" wo2 --allow a.php
+  printf '%s|%s\n' "$RC" "$(ledger '.repairs[0].testOwed // "none"')"
+)
+expect "a grant at a finding on a text file owes no failing test" "$(text_case)" '0|none'
+
 # Attended at an interactive stage, the grant still needs the recorded answer: with none it
 # refuses, and wo1 is not reopened.
 unanswered_case() (
