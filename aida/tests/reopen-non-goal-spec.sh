@@ -7,8 +7,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=records.bash
 source "$HERE/records.bash"
 
-# reopened <findings JSON>: wo1 closed over its build, proved by tests, under a contract with
-# non-goal n1, and a failed task review of the finish that holds <findings>. Then reopen.
+# reopened <findings JSON> [criteria JSON]: wo1 closed over its build, proved by tests, under a
+# contract with non-goal n1, and a failed task review of the finish that holds <findings> and the
+# criterion rows. Then reopen.
 reopened() {
   task_records branch
   jq '.nonGoals = [{id: "n1", text: "no map is refused"}] | .nextNonGoalId = 2' "$TASK/alignment.json" >"$ROOT/a.json" \
@@ -25,7 +26,7 @@ reopened() {
   jq -n '{schemaVersion: 1, unit: "wo1", findings: []}' >"$IMPL/review-wo1.json"
   jq -n --arg r "$range" '{schemaVersion: 1, commitRange: $r}' >"$IMPL/finished.json"
   mkdir -p "$TASK/review"
-  jq -n --arg r "$range" --argjson f "$1" '{verdict: "failed", reviewedRange: $r,
+  jq -n --arg r "$range" --argjson f "$1" --argjson c "${2:-[]}" '{verdict: "failed", reviewedRange: $r, criteria: $c,
       findings: [ $f[] | {severity: "medium", file: "a.php", lines: "", lens: "correctness", evidence: "a valid map is refused"} + . ]}' \
     >"$TASK/review/review.json"
   run "$IMPLEMENT" reopen "$TASK"
@@ -55,5 +56,30 @@ left_case() (
   printf '%s|%s\n' "$RC" "$(left_ids)"
 )
 expect "reopen names an unruled finding it leaves out, and not a deferred one" "$(left_case)" '0|f2'
+
+# A finding a person ruled wrong fails no criterion, so the refusal names it with that ruling
+# (gap row 490). Its unruled acceptance copy still routes, and the routed line names f1.
+wrong_case() (
+  source "$HERE/records.bash"
+  reopened '[{"id": "f1", "linkedTo": "c1", "disposition": "criterion", "ruling": "wrong"}]'
+  printf '%s|%s\n' "$RC" "$(grep -c 'f1 (a person ruled it wrong' "$OUT")"
+)
+expect "reopen refuses a finding ruled wrong and names the ruling" "$(wrong_case)" '119|1'
+# The person answered c1 unmet, and its only finding is ruled wrong. No finding reaches an order,
+# so the refusal names c1 and the answer it failed through.
+answer_case() (
+  source "$HERE/records.bash"
+  reopened '[{"id": "f1", "linkedTo": "c1", "disposition": "criterion", "ruling": "wrong"}]' \
+    '[{"id": "c1", "verifiedBy": "person", "verdict": "unmet", "answeredBy": "person"}]'
+  printf '%s|%s\n' "$RC" "$(grep -o "c1 reads unmet through the person's answer" "$OUT" | wc -l | tr -d ' ')"
+)
+expect "reopen names a criterion that failed through the person's answer" "$(answer_case)" '119|1'
+copy_case() (
+  source "$HERE/records.bash"
+  reopened '[{"id": "f1", "linkedTo": "c1", "disposition": "criterion", "ruling": "wrong"},
+             {"id": "f9", "linkedTo": "c1", "disposition": "criterion", "lens": "acceptance"}]'
+  printf '%s|%s|%s\n' "$RC" "$(jq -r '[ .findings[].evidence | test("as its finding f9,") ] | any' "$IMPL/review-wo1.json")" "$(left_ids)"
+)
+expect "an unruled copy of a finding ruled wrong reopens its order" "$(copy_case)" '0|true|f1'
 
 finish

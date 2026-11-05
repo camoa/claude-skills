@@ -48,7 +48,7 @@
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/$defs/information" },
-      "description": "What the reviewer wrote for the person and not as a finding: a fact about the diff or what it stands on that cites no criterion the diff fails, such as a frozen base class built against a schema the site does not have (live-run row 103). Copied from the reviewer's own `information` list, present only when it wrote one, so a record without it reads as it did before the key existed. `review-record` prints one line per item; `tests-brief` and `build-brief` carry the items to every order that depends on this one, under `dependencyInformation`. Nothing routes an item to a fixer, and nothing closes one: it is information, not a finding."
+      "description": "What the reviewer wrote for the person and not as a finding: a fact about the diff or what it stands on that cites no criterion the diff fails, such as a frozen base class built against a schema the site does not have (live-run row 103). Copied from the reviewer's own `information` list, present only when it wrote one, so a record without it reads as it did before the key existed. `review-record` prints one line per item; `tests-brief` and `build-brief` carry the items to every order that depends on this one, under `dependencyInformation`. No item reaches a fixer on its own, and nothing closes one: it is information, not a finding. A person may take one into the order's own fix with `fix-brief --take`, which writes a repair finding and marks the item `takenAs` (gap row 488)."
     },
     "recipes": {
       "type": "array",
@@ -223,6 +223,11 @@
           "type": "string",
           "minLength": 1,
           "description": "Why that ruling, in the person's own words. Required with every ruling, because a ruling with no reason is the finding disappearing rather than being answered."
+        },
+        "takenAs": {
+          "type": "string",
+          "pattern": "^f[1-9][0-9]*$",
+          "description": "Present only on a finding that cites nothing, once a person took it into the order's own fix with `fix-brief --take` (gap row 488): the repair finding written for it. The finding itself stays open and not actionable, so the record keeps what the reviewer cited."
         }
       }
     },
@@ -252,6 +257,11 @@
         "departsFromDesign": {
           "type": "boolean",
           "description": "The reviewer's one routed answer: true when the item names a departure from the order's design or interface (gap row 224). `review-record` refuses an item without it (exit 52). True stops nothing in either mode: when no other departure was found, the item is held as deviationPending for the task review (gap row 308)."
+        },
+        "takenAs": {
+          "type": "string",
+          "pattern": "^f[1-9][0-9]*$",
+          "description": "Present only once a person took the item into the order's own fix with `fix-brief --take` (gap row 488): the repair finding written for it. A dependent order's briefs carry it, so its author and builder see the defect goes to a fix."
         }
       }
     },

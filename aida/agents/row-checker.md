@@ -117,7 +117,7 @@ anywhere. Write it in this shape:
 ```json
 { "rows": [
   { "criterion": "c1", "verdict": "confirmed|rejected", "repair": "tests|row", "note": "..." },
-  { "criterion": "wo1", "verdict": "confirmed|rejected", "note": "..." }
+  { "criterion": "wo1", "verdict": "confirmed|rejected", "repair": "tests|row", "note": "..." }
 ] }
 ```
 

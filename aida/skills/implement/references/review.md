@@ -89,8 +89,8 @@ item is an id, one sentence, a file and lines, with no severity and no fix scope
 refuses a malformed item (exit 52), the way it refuses a malformed finding. It records the list
 beside the findings and prints one `information:` line per item, then a count. `tests-brief` and
 `build-brief` carry the items to every order that depends on this one, under
-`dependencyInformation`. Nothing routes an item to a fixer. Read the lines; a person may need to
-act on one outside this task.
+`dependencyInformation`. No item reaches a fixer on its own. Read the lines. A person may need to
+act on one outside this task, or take it into this order's fix, as "Take a row into the fix" says.
 
 A departure the builder declared never closes clean, whatever the review holds. The script scans
 the latest attempt's report and the interface record in its build record, the way `build-record`
@@ -134,15 +134,16 @@ actionable finding: the order is reviewed and clean, so go to Close.
 
 Interactive, the script also prints one `unrouted:` line per finding of medium or higher
 severity that cites no id, then a count line. Nothing prints when there are none. Such a finding
-has no route inside this task. `fix-brief` hands a fixer open actionable findings only, and has
-nothing to do when there are none. A hand fix after the review record is a warning at `close`,
+reaches no fixer unless a person takes it. `fix-brief` hands a fixer open actionable findings only,
+and has nothing to do when there are none. A hand fix after the review record is a warning at `close`,
 and review never reads it, so nobody fixes it by hand before the close. A new order needs a criterion to
 serve, and this finding cites none. `finish` carries only findings ruled deferred into
 `finished.json`, so the review stage sees this one only if its own reviewer finds it again. When an
 `unrouted:` line prints, put it to the person, opening with: "The reviewer found a problem this task
 has no criterion or non-goal for, so nothing here will fix it. Only you can say what happens to it.
 Close as recorded: the finding stays in the order's review record, and the order closes. Track it as
-a task, then close: a follow up task takes it as its goal, and the order closes." Then say each
+a task, then close: a follow up task takes it as its goal, and the order closes. Fix it in this
+order: this order's fixer gets it, after a failing test when one is owed." Then say each
 finding in plain words and name its file. A yes to the second answer is the person's ask for
 that task, so run, once per finding said yes to:
 ```
@@ -151,8 +152,31 @@ that task, so run, once per finding said yes to:
   -- <the finding's evidence, then one sentence naming the finding, the order and the file>
 ```
 That is the id and the goal completion gives a leftover finding, in `docs/stages/completion/follow-ups.md`. Show
-the whole output, and do not enter the new worktree. Then go to Close in either answer.
-Unattended, nothing prints, and the record holds them.
+the whole output, and do not enter the new worktree. Then go to Close after the first two answers.
+A yes to the third goes to "Take a row into the fix". Unattended, nothing prints, and the record
+holds them.
+
+### Take a row into the fix
+
+Interactive, put each `information:` line on a file this order owns to the person before Close.
+Offer the same three answers as for an `unrouted:` line. A yes to "Fix it in this order" is the
+person's answer. Run, with one `--take` per row said yes to:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh fix-brief "<task_folder>" <order id> \
+  --take <row id> --because <the person's words>
+```
+It refuses (exit 3) when the order holds an open actionable finding. Fix or rule that one first. It
+also refuses a row taken already, a departure from the design, a file the order does not own, and
+a frozen test. It refuses `--take` beside `--allow`: grant a path in its own call. Attended at an
+interactive stage, the chat answer is enough. Otherwise the call needs the answer on record (exit
+100), with the take values one per line, then the words.
+
+Each row becomes a repair finding on its file, and it cites the order's first criterion. The row
+records `takenAs`. The order gets one more fix round. When tests prove the order and the file holds
+logic, `next:` names the tests step first. The test author writes one failing test, `tests-freeze`
+freezes it, and `fix-brief` with no flag opens the round. A new test file that no owned glob covers
+refuses at the freeze (exit 27). Add it with `add-owned-file`, close design, then run `start`. With
+no test owed, the same call writes the round's brief. Then go on with the section below.
 
 ## Fix, one round at a time
 

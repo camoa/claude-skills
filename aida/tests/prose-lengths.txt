@@ -19,12 +19,12 @@ skills/completion/SKILL.md 115
 skills/completion/references/close.md 132
 skills/design/SKILL.md 997
 skills/implement/SKILL.md 297
-skills/implement/references/build.md 505
+skills/implement/references/build.md 506
 skills/implement/references/finish.md 342
 skills/implement/references/preconditions.md 317
-skills/implement/references/review.md 487
+skills/implement/references/review.md 511
 skills/implement/references/start.md 157
-skills/implement/references/tests.md 585
+skills/implement/references/tests.md 589
 skills/implement/references/what-a-test-is.md 76
 skills/next/SKILL.md 202
 skills/next/references/handoff.md 14

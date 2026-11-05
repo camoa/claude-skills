@@ -49,7 +49,8 @@ It reads the frozen copy and the frozen tests. It writes twelve things to
   the order's own done-when, not a criterion;
 - every order it depends on, with its declared interface;
 - `dependencyInformation`, each dependency's review `information` items: the id, the order it
-  came from, the summary and the file;
+  came from, the summary and the file. `takenAs` names the repair finding when a person took the
+  item into that order's fix. Do not build around a defect that fix removes;
 - `reportPath`, `implementation/answers-<order id>-attempt<n>.md`, where the implementer writes
   its five answers;
 - `interfacePath`, `implementation/interface-<order id>.md`, where the implementer writes its

@@ -115,7 +115,8 @@ It reads the frozen copy and never the live files. It writes exactly eight thing
 - the boundaries it names;
 - the declared interface of every order it depends on;
 - `dependencyInformation`, each dependency's review `information` items: the id, the order it
-  came from, the summary and the file;
+  came from, the summary and the file. `takenAs` names the repair finding when a person took the
+  item into that order's fix. Do not build around a defect that fix removes;
 - `reuses`, the path and the interface of every existing thing design's dispose recorded on
   this order. A reused module is production source of no work order, so this is the only place
   the test author gets its shape. An order disposed with no path carries none;
@@ -484,6 +485,8 @@ this order goes forward from here, not back.
 The script refuses a test file that does not exist, sits outside the code repository, or misses
 the framework's own declared pattern. It refuses one in a file the order does not own (exit 27). It
 refuses an untracked file under a path the order owns, which the freeze would leave out (exit 27).
+A test file belongs to one order's freeze, so it refuses a test file another order's record holds
+(exit 27). Put the new test in a new file. To change the other order's test, use `reopen --test`.
 It refuses
 a record that would hold no row (exit 74). The checks below each write a warning into the task
 record and let the freeze go on. Report every warning to the person when you report this step.
@@ -545,11 +548,12 @@ confirmed or rejected and who judged it. A done-when test needs the done-when ro
 order id. Rows follow the tests. A criterion this order only serves and names on no test needs no
 row from it; the row for it belongs to its owner. A criterion a person verifies carries a
 checklist instead, never a row: it has no judgement, and review's close is what confirms it. A row for
-anything no test of this order claims refuses the freeze, the same way a missing row does. So does
-a row for a criterion a person verifies. Every accepted criterion row is appended to that
-criterion's own record in the ledger, and the done-when row to this order's own entry. `close` is
-what decides a criterion from its rows, once every order serving it has closed and its owner has
-judged it.
+anything no test of this order claims refuses the freeze, the same way a missing row does. A
+rejected done-when row is the exception, because the missing test is what the checker rejected. It
+refuses at exit 65 and lands under `rowsRejected`. A row for a criterion a person verifies also
+refuses the freeze. Every accepted criterion row is appended to that criterion's own record in the
+ledger, and the done-when row to this order's own entry. `close` is what decides a criterion from
+its rows, once every order serving it has closed and its owner has judged it.
 
 Then it records a hash for each test file. That hash is the freeze. From here a hook refuses a
 write to one of those files from every dispatched role except the test author of the order that

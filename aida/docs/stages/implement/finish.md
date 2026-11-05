@@ -112,8 +112,10 @@ named test and changes nothing else, and deletes a file whose every test you nam
 record names what it retires, so those tests stop counting. A criterion left with no test is a
 warning at the freeze, and review reads it as unproved. After the fix round, finish runs again.
 
-A finding no order can take is named, with the reason. Commit its fix on the task branch, inside
-the files the orders own, or rule it at the next review.
+A finding no order can take is named, with the reason, and so is one you ruled wrong. When nothing
+routes, each unmet criterion is named with what failed it: a finding, your answer or a script row.
+Commit a fix on the task branch, inside the files the orders own, run `redo` on the order that owns
+it, or rule the finding at the next review.
 
 ## Why it works this way
 

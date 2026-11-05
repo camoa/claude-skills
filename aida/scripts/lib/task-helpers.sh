@@ -235,8 +235,9 @@ TASK_TREE
     printf '%s' "$p"; return 0
   fi
   # A recorded tree gone from disk, that git places nowhere else, is not refused: the action that
-  # makes it again names it.
-  [ -d "$wt" ] || { printf '%s' "$p"; return 0; }
+  # makes it again names it. An empty folder is no tree either, since a tree holds its .git file,
+  # and task_worktree cuts the tree into it (gap row 492).
+  [ -d "$wt" ] && [ -n "$(ls -A "$wt" 2>/dev/null)" ] || { printf '%s' "$p"; return 0; }
   [ "$(active_tree_for "$code" "$wt")" = "$wt" ] \
     || die79 "$who: task.json records the worktree $wt, and git does not list it as a worktree of $code. Nothing written there reaches the branch. Remove that folder, and the next action that needs the code makes the tree again."
   # The route named is the one that works where this call ran. EnterWorktree takes a worktree of
@@ -1281,7 +1282,7 @@ task_worktree() {
   local task_folder="$1" who="$2" task_json="$1/task.json" wt branch project code base said dirty id
   local found rule group base_branch after after_branch after_base pred why
   wt="$(jq -r '.worktree.path // empty' "$task_json" 2>/dev/null)"
-  if [ -n "$wt" ] && [ -d "$wt" ]; then printf '%s' "$wt"; return 0; fi
+  if [ -n "$wt" ] && [ -d "$wt" ] && [ -n "$(ls -A "$wt" 2>/dev/null)" ]; then printf '%s' "$wt"; return 0; fi
   project="$(resolve_project_folder "$task_folder")" \
     || die3 "$who: could not resolve a project folder two levels up from $task_folder, or it has no project.json"
   code="$(project_code_path_value "$project")"

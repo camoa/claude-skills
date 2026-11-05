@@ -18,13 +18,19 @@ refusal.
   verify](fix.md).
 - **A finding that hits a non-goal**, unattended, stops the order and names the non-goal.
   Interactive, it goes to the fixer like any other finding.
-- **A finding that cites neither** is recorded and never reaches a fixer. With you present, each
-  one of medium or higher severity is put to you before the order closes. Close as recorded, and
-  it stays in the review record. Or track it as a task, and AIDA creates a follow-up task with
-  the finding as its goal. Then the order closes.
+- **A finding that cites neither** is recorded and never reaches a fixer on its own. With you
+  present, each one of medium or higher severity is put to you before the order closes. Close as
+  recorded, and it stays in the review record. Or track it as a task, and AIDA creates a follow-up
+  task with the finding as its goal. Then the order closes.
 - **An information item** is something the reviewer saw that cites no failed criterion. AIDA
   prints one line each. The author and builder of each later order that depends on this one see
   it in their briefs. You may need to act on one outside this task.
+- **Take a row into this order's fix.** Before the order closes, you can send an information
+  item, or a finding that cites neither, to this order's fixer. AIDA writes a repair finding on
+  the row's file and adds one fix round. When tests prove the order and the file holds logic, the
+  test author first writes one failing test of the defect. The row must be on a file this order
+  owns, not a frozen test, and not a departure from the design. Any other open finding is fixed
+  or ruled first.
 
 ## A departure from the design
 
