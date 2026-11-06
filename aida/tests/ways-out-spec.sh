@@ -143,6 +143,25 @@ after_record_case() (
   printf '%s|%s|%s\n' "$RC" "$([ -e "$PROJECT/notes/a.md" ] && echo doc || echo none)" "$([ -e "$TASK/note.md" ] && echo note || echo none)"
 )
 
+# merged_case <from> <file>...: wo1 frozen, then one commit on <from>, the local trunk or a side
+# branch, changing each <file>, which no upstream holds and which the branch takes by a merge. Runs
+# redo. Prints the exit, a.php's text, and whether other.php is there.
+merged_case() (
+  source "$HERE/records.bash"
+  local from="$1" f
+  shift
+  task_records branch
+  order_records tests-frozen
+  tests_record
+  git -C "$CODE" checkout -q -B "$from" main
+  for f in "$@"; do printf 'theirs\n' >"$CODE/$f"; done
+  git -C "$CODE" add "$@" && git -C "$CODE" commit -qm "a commit of $from"
+  git -C "$CODE" checkout -q --detach
+  git -C "$WT" merge -q --no-edit "$from"
+  run "$IMPLEMENT" redo "$TASK" wo1 --because "the design changed"
+  printf '%s|%s|%s\n' "$RC" "$(cat "$WT/a.php")" "$([ -e "$WT/other.php" ] && echo other || echo none)"
+)
+
 echo "--- a commit after the last record: its own files are the order's, others refuse or stay"
 expect "redo reverts a commit no record lists that changes only the order's files" "$(after_case redo a.php)" "0|changed|a|none|1"
 expect "drop reverts it the same way" "$(after_case drop a.php)" "0|changed|a|none|1"
@@ -153,7 +172,12 @@ expect "a commit that changes no file of the order is left alone" "$(after_case 
 expect "a person's revert of the refused commit lets redo through, and what they kept stays" \
   "$(KEEP=1 after_case redo a.php other.php)" "0|changed|a|other|1"
 expect "the refused commit and its revert leave nothing unattributed" "$(after_listed)" "unattributed: none"
-expect "a shared file alone never makes a commit the order's" "$(SHARED=1 after_case redo a.php)" "0|changed|b|none|0"
+expect "a shared file alone never makes a commit the order's, and redo names the commit it left" \
+  "$(SHARED=1 after_case redo a.php)" "0|changed|b|none|1"
+expect "drop names it the same way" "$(SHARED=1 after_case drop a.php)" "0|changed|b|none|1"
+expect "a local trunk commit a merge brought in is never the order's" "$(merged_case main a.php)" "0|theirs|none"
+expect "a mixed trunk commit a merge brought in does not refuse" "$(merged_case main a.php other.php)" "0|theirs|other"
+expect "a side branch's commit a merge brought in is never the order's" "$(merged_case side a.php)" "0|theirs|none"
 expect "a record order's commit is reverted, and a commit of AIDA's records stays" "$(after_record_case)" "0|none|note"
 
 finish

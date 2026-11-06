@@ -12870,38 +12870,48 @@ IRT_REVERTS
 # The commits after the last recorded head of order $1 in the repository $2 that change a file only
 # this order owns (gap row 497). A role can commit before its record runs, and no list holds that
 # commit. The head is the newest commit HEAD holds of $3, the commits the records list, and of the
-# commit each record stood at. Left out: every commit im_role_commits leaves out, and every revert,
-# which reverting would undo. A shared file is no file of its own here, because a path alone never
-# attributes a shared file (im_path_claim). Sets IM_AFTER_COMMITS, one commit per line, and
-# IM_AFTER_MIXED, one line "<commit> <its other files>" for each of them that changes other files.
-IM_AFTER_COMMITS=""; IM_AFTER_MIXED=""
+# commit each record stood at. Only the branch's own line is read: a commit a merge brought in is
+# trunk's or a side branch's, whether or not an upstream holds it. Left out too: every commit
+# im_role_commits leaves out, and every revert, which reverting would undo. A shared file is no file
+# of its own here, because a path alone never attributes a shared file (im_path_claim). Sets
+# IM_AFTER_COMMITS, one commit per line, IM_AFTER_MIXED, one line "<commit> <its other files>" for
+# each that changes its own files and others, and IM_AFTER_SHARED, one line "<commit> <shared
+# files>" for each that changes shared files and none of its own, which stays and is named.
+IM_AFTER_COMMITS=""; IM_AFTER_MIXED=""; IM_AFTER_SHARED=""
 im_after_records() {
-  local unit_id="$1" repo="$2" head unit_json c p own others
-  IM_AFTER_COMMITS=""; IM_AFTER_MIXED=""
+  local unit_id="$1" repo="$2" head unit_json c p own others shared
+  IM_AFTER_COMMITS=""; IM_AFTER_MIXED=""; IM_AFTER_SHARED=""
   head="$(git -C "$repo" rev-list --topo-order HEAD 2>/dev/null | grep -Fx -f <(printf '%s\n' "$3"
     find "$IMPL_DIR" -maxdepth 1 -type f \( -name "tests-$unit_id.json" -o -name "tests-$unit_id-repair-*.json" \
       -o -name "build-$unit_id.json" -o -name "fix-$unit_id-*.json" \) -exec jq -r '.commit // empty' {} + 2>/dev/null) | head -n 1)"
   [ -n "$head" ] || return 0
   unit_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson o "$(im_owns_of "$unit_id")" '.ownedFiles = (.ownedFiles // []) + $o')"
-  for c in $(im_role_commits "$repo" "$head" HEAD "$unit_id" | jq -r '.[]'); do
+  for c in $(im_role_commits "$repo" "$head" HEAD "$unit_id" | jq -r '.[]' \
+      | grep -Fx -f <(git -C "$repo" rev-list --first-parent "$head..HEAD" 2>/dev/null)); do
     [ -z "$(im_revert_target "$repo" "$c")" ] || continue
-    own=""; others=""
+    own=""; others=""; shared=""
     while IFS= read -r p; do
       [ -n "$p" ] || continue
-      if [ "$(im_path_claim "${RV_RANGE_SCOPE:+$RV_RANGE_SCOPE/}$p" "$unit_json")" = "own" ]; then own=yes
-      else others="$others${others:+, }$p"; fi
+      case "$(im_path_claim "${RV_RANGE_SCOPE:+$RV_RANGE_SCOPE/}$p" "$unit_json")" in
+        own) own=yes ;;
+        shared) shared="$shared${shared:+, }$p"; others="$others${others:+, }$p" ;;
+        *) others="$others${others:+, }$p" ;;
+      esac
     done <<IAR_PATHS
 $(im_commits_paths "$repo" "[\"$c\"]" "$RV_RANGE_SCOPE")
 IAR_PATHS
-    [ -n "$own" ] || continue
+    [ -n "$own$shared" ] || continue
     IM_AFTER_COMMITS="$IM_AFTER_COMMITS$c
 "
-    [ -z "$others" ] || IM_AFTER_MIXED="$IM_AFTER_MIXED$c $others
+    if [ -z "$own" ]; then IM_AFTER_SHARED="$IM_AFTER_SHARED$c $shared
 "
+    elif [ -n "$others" ]; then IM_AFTER_MIXED="$IM_AFTER_MIXED$c $others
+"
+    fi
   done
 }
 im_revert_order() {
-  local unit_id="$1" repo="$2" listed commits="" c r said orig made failed by merges="" mixed mixed_text=""
+  local unit_id="$1" repo="$2" listed commits="" c r said orig made failed by merges="" mixed mixed_text="" shared
   WAY_REVERTED='[]'; WAY_SKIPPED='[]'
   listed="$(im_own_listed "$unit_id" "$repo")"
   im_after_records "$unit_id" "$repo" "$listed"
@@ -12918,6 +12928,12 @@ $(git -C "$repo" log --format=%H --grep='^This reverts commit ' "$c..HEAD" 2>/de
 IRO_REVERTS
     if [ -n "$by" ]; then
       WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" --arg by "$by" '. + [{commit: $c, why: ("already reverted by " + $by), revert: $by}]')"
+      continue
+    fi
+    shared="$(printf '%s' "$IM_AFTER_SHARED" | sed -n "s/^$c //p")"
+    if [ -n "$shared" ]; then
+      WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" --arg f "$shared" \
+        '. + [{commit: $c, why: ("no record lists it, and it changes shared files and none of its own: " + $f + ". A shared file never makes a commit the order'"'"'s, so it stays")}]')"
       continue
     fi
     ! git -C "$repo" rev-parse --verify --quiet "$c^2" >/dev/null 2>&1 || merges="$merges ${c:0:7}"

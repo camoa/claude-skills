@@ -49,7 +49,8 @@ going on before the raise brings the stop straight back. How the limit is set is
   files, so `redo` and `drop` revert it. One that changes no file of the order stays. One that also
   changes other files refuses (exit 113), and the message names it. Run `git revert <commit>`,
   commit again what must stay, and run the way out again. A file the order shares with another
-  order never makes a commit the order's.
+  order never makes a commit the order's, so that commit stays and the output names it. A commit
+  that a merge brought in is never the order's.
 
 ## Why it works this way
 

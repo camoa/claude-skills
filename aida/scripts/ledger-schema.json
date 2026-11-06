@@ -568,12 +568,12 @@
             "additionalProperties": false,
             "required": ["commit", "why"],
             "properties": {
-              "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$", "description": "One of the order's own listed commits that was not reverted."},
-              "why": {"type": "string", "minLength": 1, "description": "HEAD does not hold it, as after a rebase, or a later commit on the branch already reverts it."},
+              "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$", "description": "One of the order's own listed commits that was not reverted, or a commit after its last record that changes shared files and none of its own."},
+              "why": {"type": "string", "minLength": 1, "description": "HEAD does not hold it, as after a rebase, or a later commit on the branch already reverts it, or a shared file alone never makes it the order's."},
               "revert": {"type": "string", "pattern": "^[0-9a-f]{40}$", "description": "The commit on the branch that already reverts it, which no order then counts as its own. Present only for that case."}
             }
           },
-          "description": "The order's listed commits left alone, each with why. Present only when one was."
+          "description": "The commits left alone, each with why. Present only when one was."
         }
       }
     },
