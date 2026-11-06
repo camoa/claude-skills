@@ -147,8 +147,8 @@ table-driven test is one test: `test.each`, a data provider or `parametrize` tak
 never one per case.
 
 Report any test that passed on arrival, and say why you think it did. Do not weaken it until it
-fails. Correct it once. If it is still green because code that already exists satisfies it, keep
-it only when it is the one test of a part of the clause. Return a `locks-in` reason for it: one
+fails. Correct it once. Existing code can still keep it green. Keep it then only when it is the
+one test of a part of the clause. Return a `locks-in` reason for it: one
 sentence naming that code. Otherwise delete it, and name it in your report. If you can name no
 existing code, report it as green on arrival.
 

@@ -17,14 +17,14 @@ agents/test-author.md 183
 agents/test-reader.md 79
 skills/completion/SKILL.md 115
 skills/completion/references/close.md 148
-skills/design/SKILL.md 1006
+skills/design/SKILL.md 1007
 skills/implement/SKILL.md 296
 skills/implement/references/build.md 509
 skills/implement/references/finish.md 352
 skills/implement/references/preconditions.md 317
 skills/implement/references/review.md 511
 skills/implement/references/start.md 159
-skills/implement/references/tests.md 603
+skills/implement/references/tests.md 606
 skills/implement/references/what-a-test-is.md 96
 skills/next/SKILL.md 202
 skills/next/references/handoff.md 14

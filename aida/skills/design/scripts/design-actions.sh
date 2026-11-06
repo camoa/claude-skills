@@ -1139,8 +1139,8 @@ do_add_owned_file() {
     echo "proof-set: confirm, because every owned file of $id is a document or configuration, so a reading proves it and no test does"
   fi
   case "$path_val" in
-    */) [ "$(printf '%s' "$doc" | jq 'has("proof")')" = "true" ] \
-      || echo "proof-note: a folder reads as code, so $id reads tests. Name each file when it holds only text." ;;
+    */) [ "$(printf '%s' "$doc" | jq --arg tests "$(automated_tests "$TASK_PATH")" '(.proof // "") == "" or (.proof == "confirm" and $tests != "no")')" != "true" ] \
+      || echo "proof-note: a folder reads as code, so the design check treats $id as code. Name each file when it holds only text." ;;
   esac
   write_atomic "$file" "$doc"
   echo "UPDATED: $file"

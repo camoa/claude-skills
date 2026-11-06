@@ -172,21 +172,27 @@ order_claim_case() (
 expect "a test that claims the order id on a person's order is recorded, run and guarded" "$(order_claim_case)" \
   "0|tests/a_test.sh|0|frozen-tests=met order-tests=met"
 
-# text_case <change> [<exit>]: wo1 is a person's text order with one verify line that leaves
-# $ROOT/ran and exits <exit>, default 1. <change> is a jq filter on wo1 in the snapshot. Prints the
-# freeze's exit, how many warnings it wrote, and whether the line ran (gap row 504).
-text_case() (
-  source "$HERE/records.bash"
+# text_records <change> [<exit>]: wo1 is a person's text order with one verify line that prints
+# "first run", leaves $ROOT/ran and leak.txt in the folder it runs from, and exits <exit>, default 1.
+# <change> is a jq filter on wo1 in the snapshot (gap row 504).
+text_records() {
   task_records branch
   order_records planned
-  printf 'touch "%s/ran"\nexit %s\n' "$ROOT" "${2:-1}" >"$ROOT/line.sh"
+  printf 'echo first run\ntouch "%s/ran" leak.txt\nexit %s\n' "$ROOT" "${2:-1}" >"$ROOT/line.sh"
   edit "$IMPL/snapshot.json" '.alignment.criteria[0].verifiedBy = "person"
     | (.workOrders[] | select(.id == "wo1")) |= (.proof = "confirm" | .tests = [] | .criteriaOwned = [] | .ownedFiles = ["skills/x/SKILL.md"]
         | .verify = [{run: ("sh " + $line), pass: "exit 0", cites: "a recipe", binding: true}] | '"$1"')' --arg line "$ROOT/line.sh"
   suite_records ""
-  run "$IMPLEMENT" tests-freeze "$TASK" wo1 --checklist "c1=read the skill"
-  printf '%s|%s|%s\n' "$RC" "$(jq '[ (.warnings // [])[] | select(.step == "tests-freeze") ] | length' "$TASK/task.json")" \
-    "$([ -f "$ROOT/ran" ] && echo ran || echo not-run)"
+}
+text_freeze() { run "$IMPLEMENT" tests-freeze "$TASK" wo1 --checklist "c1=read the skill"; }
+text_warned() { jq '[ (.warnings // [])[] | select(.step == "tests-freeze") ] | length' "$TASK/task.json"; }
+text_ran() { [ -f "$ROOT/ran" ] && echo ran || echo not-run; }
+# Prints the freeze's exit, how many warnings it wrote, and whether the line ran.
+text_case() (
+  source "$HERE/records.bash"
+  text_records "$@"
+  text_freeze
+  printf '%s|%s|%s\n' "$RC" "$(text_warned)" "$(text_ran)"
 )
 expect "a text order's line that fails runs at the freeze and warns of nothing" "$(text_case .)" "0|0|ran"
 expect "a text order's line that passes runs at the freeze and warns" "$(text_case . 0)" "0|1|ran"
@@ -196,6 +202,41 @@ expect "a text order's run line with no approval warns and does not run" \
   "$(text_case '.verify[0].binding = false')" "0|1|not-run"
 expect "a confirm order that owns code does not run its line at the freeze" \
   "$(text_case '.ownedFiles = ["a.php"]')" "0|0|not-run"
+
+# The text is committed and the line now passes. A second freeze runs nothing and keeps the first
+# result. Prints the second freeze's exit, the warnings, whether the line ran, and the kept output.
+text_again_case() (
+  source "$HERE/records.bash"
+  text_records .
+  text_freeze
+  rm -f "$ROOT/ran"
+  sed -i.bak 's/^exit 1$/exit 0/' "$ROOT/line.sh"
+  mkdir -p "$WT/skills/x" && printf 'a skill\n' >"$WT/skills/x/SKILL.md"
+  git -C "$WT" add skills && git -C "$WT" commit -qm "the text"
+  text_freeze
+  printf '%s|%s|%s|%s\n' "$RC" "$(text_warned)" "$(text_ran)" "$(grep -c '^first run$' "$IMPL/verify-wo1-freeze.txt")"
+)
+expect "a second freeze of a text order runs nothing and keeps the first result" "$(text_again_case)" "0|0|not-run|1"
+
+# Nothing the line writes reaches the build's tree. Prints the freeze's exit and what git reports.
+text_leak_case() (
+  source "$HERE/records.bash"
+  text_records .
+  text_freeze
+  printf '%s|%s|%s\n' "$RC" "$(text_ran)" "$(git -C "$WT" status --porcelain | wc -l | tr -d ' ')|$(git -C "$WT" worktree list | wc -l | tr -d ' ')"
+)
+expect "a line's write stays out of the tree, and no extra worktree stays" "$(text_leak_case)" "0|ran|0|2"
+
+# The recipe the line cites ships a file that differs from the tree's. The build refuses that. The
+# freeze only warns, because every signal of this run is a warning.
+text_differ_case() (
+  source "$HERE/records.bash"
+  text_records ".verify[0].cites = \"$ROOT/verify-recipe.md\""
+  printf '## Verifier\n\n## Files\n\n```sh a.php\nnot a\n```\n' >"$ROOT/verify-recipe.md"
+  text_freeze
+  printf '%s|%s\n' "$RC" "$(text_warned)"
+)
+expect "a recipe file that differs from the tree warns at the freeze" "$(text_differ_case)" "0|1"
 
 # A repair owes a test of a bug, so it says nothing about the order's lines.
 text_repair_case() (

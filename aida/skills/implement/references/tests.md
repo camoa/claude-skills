@@ -100,7 +100,9 @@ each criterion a verify run line names, and freeze with a `--row` for each, no `
 done-when row into a checklist row. The row sits under each criterion the order owns, or serves
 when it owns none, and the person answers those criteria at review.
 
-The freeze runs a text order's verify lines once, before the build. A line that fails is the
+The first freeze runs a text order's verify lines once, before the build. They run in a worktree
+of their own at HEAD, so a write stays out of the build's tree. A file git ignores is absent
+there, so a line that needs one fails, and the build's own run decides. A line that fails is the
 failing first step, and it prints nothing. A line that passes warns, because it cannot tell the
 work from its absence. Do not take that line's later pass as evidence, and change the line with a
 redo when the order matters. A line that could not run warns, and a run line with no person's
@@ -255,7 +257,7 @@ criterion the order owns, and for its done-when where nothing it owns covers tha
 
 **A test green on its first run has four outcomes.** The test was wrong: it is corrected once.
 Still green, and the author can name the existing code that satisfies it: it stays only as the one
-test of a part of the clause, and the reason is recorded with `--locks-in`. The author deletes any
+test of a part of the clause. The reason is recorded with `--locks-in`. The author deletes any
 other such test and names it in the report. Still green with no existing code to name: it is
 reported by name and the step stops. Failed: it is frozen with its red run. A green test is never
 deleted quietly and never weakened into failing.
@@ -320,8 +322,9 @@ its tool rows, because no role after the freeze may write them.
 **The freeze runs the build's order-tests command when a test has no locks-in reason.** It is the command
 build-record runs over the frozen files whole, with no argument. A run that passes refuses the
 freeze (exit 80): a test that does not fail now proves nothing a build could change. The check
-reads the whole run. So a test that passes beside tests that fail freezes, and the freeze warns:
-the test has neither a `--red` nor a `--locks-in`, or it was reported green on arrival. When the run fails and prints something, at least one red file must share a line with
+reads the whole run. So a test that passes beside tests that fail freezes, and the freeze warns.
+The warning says the test has neither a `--red` nor a `--locks-in`, or was reported green on
+arrival. When the run fails and prints something, at least one red file must share a line with
 what it printed. Numbers in a line are not compared. Otherwise the freeze refuses (exit 80): the
 build would run something other than what the reds show, and read a correct build unmet. The
 message names the command and the output. Send it back to the author. A test file that runs a

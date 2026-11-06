@@ -6,8 +6,8 @@ say it again.
 
 A test drives one change. It is seen failing for the right reason, and then the change makes it
 pass. A test is not a regression suite and not coverage. A test that drove no change is kept only
-when it is the one test of a part of a clause, and it carries a locks-in reason. The suite is what
-the tests leave behind. Nobody writes a test for the suite.
+as the one test of a part of a clause. It then carries a locks-in reason. The suite is what the
+tests leave behind. Nobody writes a test for the suite.
 
 An order whose files are tests, and a retired test, change tests and not code. Their tests take a
 locks-in reason for that cause.

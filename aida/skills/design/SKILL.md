@@ -840,7 +840,8 @@ lines are not enough, and fix the specific order each line names. The same repai
     the task has tests after all. One with no done-when row needs an `add-done-when` call. Each
     row is a sentence the person confirms at review, so write it as one thing they can check. A
     `confirm` order on a task with tests that owns code needs `update --proof tests` and its
-    tests, unless run lines prove every machine criterion it owns;
+    tests, unless run lines prove every machine criterion it owns. When its other files are text,
+    a folder it owns needs `remove-owned-file`, and `add-owned-file` for each file the folder holds;
   - a `tests` order that owns only documents or configuration needs `update --proof confirm`,
     or `record` when its files lie under the project folder;
   - a machine-verified criterion on an order that owns only documents or configuration is a
