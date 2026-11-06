@@ -1074,7 +1074,7 @@ rp_ask() {
       if type != "object" then "other"
       elif .available == true then "path"
       elif .available != false then "other"
-      elif (.reason // "") == "" then (if .key == null then "no-recipe" else "other" end)
+      elif has("reason") | not then (if has("key") and .key == null then "no-recipe" else "other" end)
       elif .reason == "index unavailable or network error" or .reason == "no index cached" then "listing-unreachable"
       elif .reason == "refusing non-canonical body URL" or .reason == "body fetch failed" then "fetch-failed"
       else "other" end' 2>/dev/null)"

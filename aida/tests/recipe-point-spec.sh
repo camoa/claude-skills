@@ -105,6 +105,9 @@ word "another reason reads fetch-failed, never no-recipe" \
   '{"key":null,"available":false,"reason":"disk full"}' fetch-failed "disk full"
 word "a report with no available field reads fetch-failed" '{"key":null}' fetch-failed '{"key":null}'
 word "output that is not JSON reads fetch-failed" 'Bad gateway' fetch-failed 'Bad gateway'
+word "a report with no key field reads fetch-failed" '{"available":false}' fetch-failed '{"available":false}'
+word "an empty reason reads fetch-failed" '{"key":null,"available":false,"reason":""}' fetch-failed \
+  '{"key":null,"available":false,"reason":""}'
 report '{"key":null,"available":false}'
 STUB_RC=7 point --point design --framework zed
 expect "a non-zero exit reads fetch-failed, whatever it printed" "$(result)" \
