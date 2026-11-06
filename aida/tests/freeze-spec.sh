@@ -227,6 +227,23 @@ text_leak_case() (
 )
 expect "a line's write stays out of the tree, and no extra worktree stays" "$(text_leak_case)" "0|ran|0|2"
 
+# TERM reaches the freeze while the line runs. Prints its exit, how many worktrees git lists, and
+# whether the temporary folder stayed.
+text_term_case() (
+  source "$HERE/records.bash"
+  text_records .
+  printf 'pwd >"%s/tree"\ntouch "%s/ran"\nsleep 1\nexit 1\n' "$ROOT" "$ROOT" >"$ROOT/line.sh"
+  cd "$WT" || exit 1
+  bash "$IMPLEMENT" tests-freeze "$TASK" wo1 --checklist "c1=read the skill" >"$OUT" 2>&1 &
+  local pid=$! tries=0 rc
+  while [ ! -f "$ROOT/ran" ] && [ "$tries" -lt 300 ]; do sleep 0.1; tries=$((tries + 1)); done
+  kill -TERM "$pid"
+  wait "$pid"; rc=$?
+  printf '%s|%s|%s\n' "$rc" "$(git -C "$WT" worktree list | wc -l | tr -d ' ')" \
+    "$([ -e "$(dirname "$(cat "$ROOT/tree")")" ] && echo left || echo gone)"
+)
+expect "TERM during the line leaves no worktree and no folder" "$(text_term_case)" "143|2|gone"
+
 # The recipe the line cites ships a file that differs from the tree's. The build refuses that. The
 # freeze only warns, because every signal of this run is a warning.
 text_differ_case() (

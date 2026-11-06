@@ -5065,8 +5065,21 @@ tf_coding_standards() {
 
 # The freeze's temporary files sit in the implementation folder, each named for this process. A
 # refusal exits through die, so the EXIT trap removes them. find, not a glob: zsh stops on a glob
-# with no match.
-tf_tmp_remove() { [ -z "${IMPL_DIR:-}" ] || find "$IMPL_DIR" -maxdepth 1 -name ".tests-freeze-*.$$" -exec rm -f {} + 2>/dev/null; }
+# with no match. A signal during a text order's first run exits here too, so this also takes out
+# that run's worktree. TF_TEXT_DIR and TF_TEXT_CODE are globals, because zsh runs the EXIT trap after
+# the locals are gone. A line that makes the tree read-only can leave the folder behind.
+TF_TEXT_DIR=""; TF_TEXT_CODE=""
+tf_text_tree_remove() {
+  [ -n "$TF_TEXT_DIR" ] || return 0
+  git -C "$TF_TEXT_CODE" worktree remove --force "$TF_TEXT_DIR/tree" >/dev/null 2>&1
+  rm -f "$TF_TEXT_DIR/result"
+  rmdir "$TF_TEXT_DIR" 2>/dev/null
+  TF_TEXT_DIR=""
+}
+tf_tmp_remove() {
+  tf_text_tree_remove
+  [ -z "${IMPL_DIR:-}" ] || find "$IMPL_DIR" -maxdepth 1 -name ".tests-freeze-*.$$" -exec rm -f {} + 2>/dev/null
+}
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
   local support_raw="" absence_raw="[]"
@@ -6341,7 +6354,7 @@ TF_EOF
   # a line that needs one fails, and the build's own run of the line decides.
   if [ "$BR_ORDER_SLOT" = "confirm-at-review" ] && [ -z "${tf_prior_step:-}" ] \
     && [ "$(printf '%s' "$UNIT_JSON" | jq -r "$BR_ORDER_FACTS_JQ textOnly")" = "true" ]; then
-    local tf_text_out tf_text_unapproved tf_text_dir
+    local tf_text_out tf_text_unapproved
     tf_text_out="$IMPL_DIR/verify-$unit_id-freeze.txt"
     BRC_WHO="tests-freeze"; BRC_UNIT_JSON="$UNIT_JSON"; BRC_CODEPATH="$codepath"
     br_verify_runs
@@ -6351,15 +6364,14 @@ TF_EOF
       || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these verify lines of $unit_id have no person's approval, so they did not run before the build, and the reviewer reads each as a check: $tf_text_unapproved"
     if [ "$BRV_RUNS" != "[]" ]; then
       : >"$tf_text_out"
-      tf_text_dir="$(mktemp -d)" || die3 "tests-freeze: could not create a temporary folder"
-      git -C "$codepath" worktree add -q --detach "$tf_text_dir/tree" HEAD >>"$tf_text_out" 2>&1 \
-        && ( br_run_verify_lines "$tf_text_dir/tree" "$tf_text_out" >>"$tf_text_out" 2>&1
-             printf '%s\n%s\n' "$BRL_VERDICT" "$BRL_WHY" >"$tf_text_dir/result" )
+      TF_TEXT_DIR="$(mktemp -d)" || die3 "tests-freeze: could not create a temporary folder"
+      TF_TEXT_CODE="$codepath"
+      git -C "$codepath" worktree add -q --detach "$TF_TEXT_DIR/tree" HEAD >>"$tf_text_out" 2>&1 \
+        && ( br_run_verify_lines "$TF_TEXT_DIR/tree" "$tf_text_out" >>"$tf_text_out" 2>&1
+             printf '%s\n%s\n' "$BRL_VERDICT" "$BRL_WHY" >"$TF_TEXT_DIR/result" )
       BRL_VERDICT="unknown"; BRL_WHY="the run was refused"
-      [ ! -f "$tf_text_dir/result" ] || { BRL_VERDICT="$(sed -n 1p "$tf_text_dir/result")"; BRL_WHY="$(sed -n 2p "$tf_text_dir/result")"; }
-      git -C "$codepath" worktree remove --force "$tf_text_dir/tree" >/dev/null 2>&1
-      rm -f "$tf_text_dir/result"
-      rmdir "$tf_text_dir" 2>/dev/null
+      [ ! -f "$TF_TEXT_DIR/result" ] || { BRL_VERDICT="$(sed -n 1p "$TF_TEXT_DIR/result")"; BRL_WHY="$(sed -n 2p "$TF_TEXT_DIR/result")"; }
+      tf_text_tree_remove
       case "$BRL_VERDICT" in
         unmet) ;;
         "") task_warn "$TASK_PATH" tests-freeze "$unit_id" "the verify lines of $unit_id pass before the build, so they cannot tell the work from its absence. Their later pass is no evidence (references/tests.md). Their output is in $tf_text_out" ;;
