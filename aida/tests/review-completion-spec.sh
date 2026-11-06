@@ -289,6 +289,14 @@ fold_case() (
 )
 expect "a fold writes the task on each row and in the body" "$(fold_case)" '0|[["other",""],["other",""]]|2'
 
+fold_tab_case() (
+  source "$HERE/records.bash"
+  fold_record
+  run "$COMPLETION" close "$TASK" --leave "f1=task:other"$'\t' -- "done"
+  jq -c '.followUps[0].task' "$TASK/completion/completed.json"
+)
+expect "a tab after the task id stays out of the record" "$(fold_tab_case)" '"other"'
+
 fold_high_case() (
   source "$HERE/records.bash"
   fold_record

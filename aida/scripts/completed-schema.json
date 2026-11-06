@@ -55,7 +55,7 @@
       "type": "array",
       "default": [],
       "items": { "$ref": "#/$defs/followUp" },
-      "description": "One row per finding in the review record carrying `disposition: follow-up`. The task id comes from the folder check under tasks/, or from `--leave <finding id>=task:<task id>`, and is null when neither gives one. The reason comes from --leave. A high severity finding with no task and no reason is a warning in the task record, because leaving a queued security fault ships it. Empty when the review raised no such finding, or when no review ran."
+      "description": "One row per finding in the review record carrying `disposition: follow-up`. The task id comes from the folder check under tasks/, or from `--leave <finding id>=task:<task id>`, and is null when neither gives one. The reason comes from --leave. A high severity finding with no task and no reason is a warning in the task record. Leaving a queued security fault ships it. Empty when the review raised no such finding, or when no review ran."
     },
     "capturesOffered": {
       "type": "integer",
@@ -84,7 +84,7 @@
             { "type": "null" },
             { "type": "string", "minLength": 1 }
           ],
-          "description": "The id of the task that holds this finding. A task of its own reads `<source task>-<finding id>`, when that folder exists under tasks/: no task field records that link, and the folder is how completion knows the task exists. A task several findings share comes from `--leave <finding id>=task:<task id>`, which `close` checks against that task. Null when neither applies."
+          "description": "The id of the task that holds this finding. A task of its own reads `<source task>-<finding id>`, when that folder exists under tasks/. No task field records that link: the folder is how completion knows the task exists. A task several findings share comes from `--leave <finding id>=task:<task id>`, which `close` checks against that task. Null when neither applies."
         },
         "reason": {
           "type": "string",

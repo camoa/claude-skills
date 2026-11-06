@@ -671,8 +671,8 @@ CP_RESTORE_TODO
 # `--leave <finding id>=task:<task id>` sends the finding to one task a person made for several. The
 # row is written once and `close` never runs twice, so a wrong target stays a false row. Each one
 # is refused here, before anything is written. A deferred decision's text lives outside the review
-# record, and a contract-wrong ruling's wording reaches scope only through the finding's own task,
-# so neither folds. $1 the --leave lines, `<finding id><tab><value>`.
+# record. A contract-wrong ruling's wording reaches scope only through the finding's own task. So
+# neither folds. $1 the --leave lines, `<finding id><tab><value>`.
 cp_refuse_bad_folds() {
   local fid value target file why
   while IFS="$(printf '\t')" read -r fid value; do
@@ -794,7 +794,7 @@ CP_LEAVES
     ([ ($given | split("\n"))[] | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))} ] | from_entries) as $why
     | [ $f[] | ($why[.finding] // "") as $w | ($w | startswith("task:")) as $fold
         | {finding: .finding, severity: .severity,
-           task: (if $fold then .task // ($w | ltrimstr("task:")) else .task end),
+           task: (if $fold then .task // ($w | ltrimstr("task:") | sub("\t+$"; "")) else .task end),
            reason: (if $fold then "" else $w end)} ]' <<CP_LEAVES2
 $leaves
 CP_LEAVES2
