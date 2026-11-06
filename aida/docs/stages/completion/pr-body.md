@@ -12,11 +12,11 @@ written in words, never left blank, so the body claims only what a record holds.
 | Success criteria | every criterion with the verdict review gave it |
 | Non-goals | the non-goals from the contract |
 | Commit range | the range the build finished, the branch, and the worktree to push from |
-| Review audit | one line per check, one per surface, and a line of counts |
-| Review | the verdict, and every finding grouped by what review decided |
+| Review audit | one line per check, one per surface, and a line of counts. A decision row stops at who answered it |
+| Review | the verdict, every finding grouped by what review decided, and the path to the evidence. A finding's line holds its id, severity, lens, file and lines, and any ruling |
 | Grounds for closing | who closed the task, on which verdict, and the reason when one was given |
 | Follow-up tasks | each finding with its task, or the reason it was left with none |
-| Catalog notes | what review saw that a guide or a recipe should hear about |
+| Catalog notes | how many notes review left for a guide or a recipe, and the path to them |
 
 ## What the reviewer of the pull request should read
 
@@ -45,5 +45,12 @@ The commit range section adds a line when each of these applies:
 
 - A body that claims only what a record holds cannot claim a check ran when it did not.
 - Completion never prints the body into the conversation. It costs context and gains nothing.
+- The body is public, and a role's words can name a private thing. So it leaves out the evidence,
+  the catalog notes and the text of a decision. Read them in `review/review.json` in the task
+  folder.
+- The body still copies text from the contract and from your own reasons. Read those before you
+  publish: the goal, the criteria, the non-goals, a reason you gave at close, and your words on a
+  failing test. A file path in a finding's line comes from the reviewer, and the commit range
+  names the worktree path on this machine.
 
 Source: skills/completion/references/close.md, skills/completion/scripts/completion-actions.sh

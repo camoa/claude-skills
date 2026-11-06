@@ -1456,7 +1456,7 @@ RW_FRAMEWORKS
   fi
   RW_BLOCK_NOTE="$(pc_trim "$RW_BLOCK_NOTE")"
   # A project copy can fall behind the catalog after preconditions compared them, so review compares
-  # again (gap row 284). A catalog note reaches the pull request body and the unattended halt.
+  # again (gap row 284). The pull request body counts a catalog note, and the unattended halt prints it.
   while IFS="$(printf '\t')" read -r fw catalog; do
     [ -n "$fw" ] && [ -n "$(cr_lookup "$recipes" "$fw")" ] || continue
     stale="$(recipe_stale_line "$fw" "$(cr_lookup "$recipes" "$fw")" "$catalog")"
@@ -3462,6 +3462,7 @@ do_audit() {
     # A check a person answered, or one nobody was present to answer, carries its detail here,
     # because completion prints these lines into the pull request body (gap row 274). So does a
     # surface check whose file another branch holds, so the body names that branch (gap row 278).
+    # The body cuts the detail of a decision row, which quotes what a role wrote (gap row 495).
     | ([ .checks[] | {id, verdict, how: how,
           note: (if has("answeredBy") then " answeredBy=" + .answeredBy + ": " + .detail
                  elif (.detail | test("Branch [^ ]+ holds it")) then ": " + .detail else "" end)} ]) as $rows

@@ -443,7 +443,8 @@ CP_WANTED
 
 # Renders the pull request body from the records only. Completion computes nothing: each section
 # reads one field, and a missing record is written in words, never left blank. The body is never
-# printed; its path is. $1 the record this close is about to write, $2 the lines the review
+# printed; its path is. The body is public and a role's words can name a private thing, so it holds
+# a finding's fields and the path to its evidence, never the text (gap row 495). $1 the record this close is about to write, $2 the lines the review
 # script's `audit` printed, empty when there is no review record.
 cp_render_body() {
   jq_files -nr --arg task "$CP_TASK_ID" --argjson alignment "$CP_ALIGNMENT_DOC" --argjson finished "$CP_FINISHED_DOC" \
@@ -451,6 +452,7 @@ cp_render_body() {
     --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" '
     def section($title; $lines): ["## " + $title, ""] + $lines + [""];
     def none_when_empty($lines; $word): if ($lines | length) == 0 then [$word] else $lines end;
+    def review_path: "`review/review.json` in the task folder";
     # The rows the acceptance verifier wrote for a criterion, beside its verdict, each with the file it
     # was judged from, such as a screenshot.
     def evidence_note($id):
@@ -510,17 +512,20 @@ cp_render_body() {
                      "After the merge: `task prune " + $task + "` from the main checkout tears the site down when one is up, then removes the tree and the merged branch."] end) end))
     + section("Review audit";
         if $review == null then ["no review record; nothing was checked"]
-        else ($audit | split("\n") | map(select(length > 0) | "- " + .)) end)
+        # The detail of a decision row quotes what a role wrote, so its line stops at who answered.
+        else ($audit | split("\n") | map(select(length > 0)
+               | if startswith("check(decision-") then split(": ")[:2] | join(": ") else . end | "- " + .)) end)
     + section("Review";
         if $review == null then ["no review record; nothing was checked"]
         elif ($review | has("verdict") | not) then ["review ran and did not close"]
         else ["Verdict: " + $review.verdict, ""]
+          + (if ($review.findings // []) == [] then [] else ["The evidence of each finding is in " + review_path + ".", ""] end)
           + none_when_empty(([ ($review.findings // []) | group_by(.disposition)[]
               | ["### " + .[0].disposition, ""]
                 + [ .[] | "- " + .id + " (" + .severity + ", " + .lens
                     + (if .file == "" then "" else ", " + .file + (if .lines == "" then "" else ":" + .lines end) end)
                     + (if has("ruling") then ", ruled " + .ruling + " by the person" else "" end)
-                    + "): " + .evidence ] ]
+                    + ")" ] ]
               | map(. + [""]) | add // [] | .[:-1]); "no findings")
         end)
     + section("Grounds for closing";
@@ -531,7 +536,8 @@ cp_render_body() {
           | "- " + .finding + ": " + (if .task == null then "no task" + (if .reason == "" then "" else ", left because " + .reason end) else .task end) ]; "none"))
     + section("Catalog notes";
         if $review == null then ["none"]
-        else none_when_empty([ ($review.catalogNotes // [])[] | "- " + .seen + " (" + .where + ")" ]; "none") end)
+        else (($review.catalogNotes // []) | length) as $notes
+          | if $notes == 0 then ["none"] else ["Count: " + ($notes | tostring) + ". The notes are in " + review_path + "."] end end)
     | .[]'
 }
 
@@ -715,7 +721,7 @@ do_close() {
   # review, naming the verdict and the warnings, because a script inventing a reason would be a
   # bypass.
   if { [ "$CP_REVIEW_VERDICT" != "passed" ] || [ -n "$CP_REVIEW_WARNINGS" ]; } && [ -z "$reason" ]; then
-    # The catalog notes are reported here, since the body that would carry them is not written on
+    # The catalog notes are reported here, since the body that would count them is not written on
     # this halt, such as a project recipe copy behind the catalog (row 284). The decisions an
     # unattended build left wait for the person the same way (gap row 279).
     local notes undecided
