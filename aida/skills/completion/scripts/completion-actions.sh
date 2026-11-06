@@ -19,7 +19,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Usage:
 #   completion-actions.sh read       <task_folder>
 #   completion-actions.sh follow-ups <task_folder> [--create <finding id>]...
-#   completion-actions.sh close      <task_folder> [--reason <text>] [--leave <finding id>=<reason>]...
+#   completion-actions.sh close      <task_folder> [--reason <text>]
+#                                                  [--leave <finding id>=<reason>|task:<task id>]...
 #                                                  [--captures-offered <n>] [-- <summary...>]
 #   completion-actions.sh step       <name> [--part <n>]
 #
@@ -53,7 +54,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      resolved, a record that is present but unreadable, a record that does not match
 #      scripts/completed-schema.json, or a file that could not be written. A task name collision
 #      comes back from task-actions.sh at 3 too, and its own line is relayed as printed. So does
-#      a tear-down task-actions.sh refused, and a restore commit git refused.
+#      a tear-down task-actions.sh refused, and a restore commit git refused. A `--leave` value
+#      naming a task that cannot take the finding is refused here too, with nothing written.
 #  70  --reason, --leave or --captures-offered was passed on a run with nobody present. The number
 #      tests-freeze and review already give a person's answer arriving on an autonomous run.
 #  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
@@ -134,7 +136,8 @@ usage() {
   cat <<'EOF' >&2
 usage: completion-actions.sh read       <task_folder>
        completion-actions.sh follow-ups <task_folder> [--create <finding id>]...
-       completion-actions.sh close      <task_folder> [--reason <text>] [--leave <finding id>=<reason>]...
+       completion-actions.sh close      <task_folder> [--reason <text>]
+                                                      [--leave <finding id>=<reason>|task:<task id>]...
                                                       [--captures-offered <n>] [-- <summary...>]
        completion-actions.sh step       <name> [--part <n>]
 EOF
@@ -665,6 +668,37 @@ CP_RESTORE_TODO
   CP_RESTORE_PATHS="${said#*"$tab"}"
 }
 
+# `--leave <finding id>=task:<task id>` sends the finding to one task a person made for several. The
+# row is written once and `close` never runs twice, so a wrong target stays a false row. Each one
+# is refused here, before anything is written. A deferred decision's text lives outside the review
+# record, and a contract-wrong ruling's wording reaches scope only through the finding's own task,
+# so neither folds. $1 the --leave lines, `<finding id><tab><value>`.
+cp_refuse_bad_folds() {
+  local fid value target file why
+  while IFS="$(printf '\t')" read -r fid value; do
+    case "$value" in task:*) ;; *) continue ;; esac
+    target="${value#task:}"
+    file="$TASKS_DIR/$target/task.json"
+    why=""
+    if ! jq -e --arg id "$target" '.id == $id' "$file" >/dev/null 2>&1; then
+      why="no task under $TASKS_DIR has that id"
+    elif [ "$target" = "$CP_TASK_ID" ]; then
+      why="that is this task, which is closing"
+    elif jq -e '.state == "complete"' "$file" >/dev/null; then
+      why="that task is complete, so nobody picks the finding up there"
+    elif ! grep -qwF -- "$fid" "$TASKS_DIR/$target/task.md" 2>/dev/null; then
+      why="the task.md of that task does not name the finding"
+    elif printf '%s' "$CP_FOLLOW_UPS" | jq -e --arg id "$fid" 'any(.[]; .finding == $id and .lens == "decision")' >/dev/null; then
+      why="a deferred decision keeps its own task, through follow-ups --create"
+    elif printf '%s' "$CP_REVIEW_DOC" | jq -e --arg id "$fid" 'any((.findings // [])[]; .id == $id and .ruling == "contract-wrong")' >/dev/null; then
+      why="a finding ruled contract-wrong keeps its own task, through follow-ups --create"
+    fi
+    [ -z "$why" ] || die 3 "close: --leave $fid=$value is refused: $why. Nothing was written. A value that starts with task: names the task the finding goes to, so a reason cannot start with task:."
+  done <<CP_FOLDS
+$1
+CP_FOLDS
+}
+
 do_close() {
   local task_arg="" reason="" leaves="" captures_offered="" captures_skipped="" fid value
   local person_words=""
@@ -683,11 +717,11 @@ do_close() {
         is_blank "$2" && die 3 "close: --reason was given no text. A reason is a sentence the record keeps, so a later reader knows the grounds."
         reason="$2"; shift 2 ;;
       --leave)
-        [ "$#" -ge 2 ] || die 3 "close: --leave needs <finding id>=<reason>"
-        case "$2" in *=*) ;; *) die 3 "close: --leave takes <finding id>=<reason>, got: $2" ;; esac
+        [ "$#" -ge 2 ] || die 3 "close: --leave needs <finding id>=<reason> or <finding id>=task:<task id>"
+        case "$2" in *=*) ;; *) die 3 "close: --leave takes <finding id>=<reason> or <finding id>=task:<task id>, got: $2" ;; esac
         fid="${2%%=*}"; value="${2#*=}"
         [ -n "$fid" ] || die 3 "close: --leave was given no finding id: $2"
-        is_blank "$value" && die 3 "close: --leave $fid was given no reason. Say why the finding is left without a task."
+        is_blank "$value" && die 3 "close: --leave $fid was given no reason. Say why the finding is left without a task, or name its task with task:<task id>."
         leaves="$leaves$(printf '%s\t%s' "$fid" "$value")
 "
         shift 2 ;;
@@ -703,9 +737,10 @@ do_close() {
   cp_paths "close" "$task_arg"
   cp_load "close"
   cp_refuse_complete "close"
+  cp_refuse_bad_folds "$leaves"
   # One answer covers the whole call: its words are every person's flag, one "<flag> <value>" per line.
   [ -z "$reason" ] || task_require_person 70 close "--reason, a person's decision to close without a passed review," "$TASK_PATH" completion "completion close" "" "$person_words"
-  [ -z "$leaves" ] || task_require_person 70 close "--leave, a person's decision to leave a finding without a task," "$TASK_PATH" completion "completion close" "" "$person_words"
+  [ -z "$leaves" ] || task_require_person 70 close "--leave, a person's decision to leave a finding without a task or send it to one," "$TASK_PATH" completion "completion close" "" "$person_words"
   [ -z "$captures_offered" ] || task_require_person 70 close "--captures-offered, a person's word that the notes were offered as plays," "$TASK_PATH" completion "completion close" "" "$person_words"
   # Unattended with no answer record, nothing is offered and the record says why; a person names a
   # play, a script never does.
@@ -740,7 +775,7 @@ do_close() {
   fi
 
   # Every --leave names a follow up finding that has no task. A high severity finding with no
-  # task and no reason refuses the close, because leaving a queued security fault ships it.
+  # task and no reason is a warning, because leaving a queued security fault ships it.
   local bad_leaves rows blocking
   bad_leaves="$(jq -Rrn --argjson f "$CP_FOLLOW_UPS" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
@@ -757,7 +792,10 @@ CP_LEAVES
     || task_warn "$TASK_PATH" "completion close" "" "--leave named $bad_leaves, which decided nothing. A finding is left only when the review record holds it as a follow up and no task exists for it."
   rows="$(jq -cn --argjson f "$CP_FOLLOW_UPS" --rawfile given /dev/stdin '
     ([ ($given | split("\n"))[] | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))} ] | from_entries) as $why
-    | [ $f[] | {finding: .finding, severity: .severity, task: .task, reason: ($why[.finding] // "")} ]' <<CP_LEAVES2
+    | [ $f[] | ($why[.finding] // "") as $w | ($w | startswith("task:")) as $fold
+        | {finding: .finding, severity: .severity,
+           task: (if $fold then .task // ($w | ltrimstr("task:")) else .task end),
+           reason: (if $fold then "" else $w end)} ]' <<CP_LEAVES2
 $leaves
 CP_LEAVES2
 )"

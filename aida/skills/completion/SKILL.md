@@ -91,7 +91,7 @@ A person's answer is accepted only when a person is present.
 |---|---|---|
 | A follow up finding with no task | the person accepts or declines each one | every one is created and listed |
 | A review that did not pass, or passed with warnings | the person gives the reason | the close halts, naming the verdict and the warnings |
-| A high severity follow up with no task | the person creates it, or says why not | the close warns, since the tasks were created first |
+| A high severity follow up with no task | the person creates it, sends it to a shared task, or says why not | the close warns, since the tasks were created first |
 | The summary for `task complete` | the person gives one or two lines | one line naming the grounds |
 | A saved note offered as a play | the person says yes or no per note, and names the play | offers nothing; the record says `autonomous` |
 
@@ -108,7 +108,7 @@ One number never means two things, and none is new to this plugin.
 | Code | What it says |
 |---|---|
 | 1 | refused, with the reason on the first line. The path holds no `task.json`, or the task is already complete. Or the review did not pass, or passed with warnings, and no reason was given. Everything else `close` finds is a warning in the task record. Examples are an open child and a high severity follow up with no task. |
-| 3 | the script could not do its job. A missing argument, a record it could not read or that fails its schema, a file it could not write, or a task name the task script refused. |
+| 3 | the script could not do its job. A missing argument, a record it could not read or that fails its schema, a file it could not write, or a task name the task script refused. Or a `--leave` value `task:<task id>` names a task that cannot take the finding. |
 | 70 | `--reason` or `--leave` was passed on a run with nobody present |
 | 79 | the call ran outside the task's worktree. Enter the tree, the way `/aida:next` does, and run it again. `read` alone runs from anywhere |
 

@@ -268,6 +268,69 @@ body_case() (
 )
 expect "the body holds a finding's line, no text a role wrote, and no absolute path" "$(body_case)" "0|0|0|2|2|1|1"
 
+echo "--- close: findings folded into one task (row 496)"
+# fold_record: a passed review with follow-ups f1 and f2, and an open task `other` that names both.
+fold_record() {
+  review_records
+  passed_record
+  edit "$TASK/review/review.json" '.findings = [$f, $f + {id: "f2"}]' --argjson f "$low_dry"
+  mkdir -p "$PROJECT/tasks/other"
+  jq -n '{schemaVersion: 1, id: "other", state: "new", parent: null, children: []}' >"$PROJECT/tasks/other/task.json"
+  printf 'Fix f1, f2 and wo1-f9 of t1.\n' >"$PROJECT/tasks/other/task.md"
+}
+close_warnings() { jq -r '(.warnings // [])[] | select(.step == "completion close") | .words' "$TASK/task.json"; }
+
+fold_case() (
+  source "$HERE/records.bash"
+  fold_record
+  run "$COMPLETION" close "$TASK" --leave f1=task:other --leave f2=task:other -- "done"
+  printf '%s|%s|%s\n' "$RC" "$(jq -c '[ .followUps[] | [.task, .reason] ]' "$TASK/completion/completed.json")" \
+    "$(grep -c '^- f[12]: other$' "$TASK/completion/pr-body.md")"
+)
+expect "a fold writes the task on each row and in the body" "$(fold_case)" '0|[["other",""],["other",""]]|2'
+
+fold_high_case() (
+  source "$HERE/records.bash"
+  fold_record
+  edit "$TASK/review/review.json" '.findings[0].severity = "high"'
+  run "$COMPLETION" close "$TASK" --leave f1=task:other -- "done"
+  printf '%s|%s\n' "$(jq -r '.followUps[0].task' "$TASK/completion/completed.json")" "$(close_warnings | grep -c 'f1')"
+)
+expect "a folded high severity finding has its task, and no warning names it" "$(fold_high_case)" "other|0"
+
+# fold_refused <kind>: close refuses one bad fold of f1 or of a deferred decision, and writes nothing.
+fold_refused() (
+  source "$HERE/records.bash"
+  fold_record
+  local leave=f1=task:other
+  case "$1" in
+    no-task) leave=f1=task:gone ;;
+    complete) edit "$PROJECT/tasks/other/task.json" '.state = "complete"' ;;
+    this-task) leave=f1=task:t1; printf 'Fix f1.\n' >"$TASK/task.md" ;;
+    unnamed) printf 'Something else.\n' >"$PROJECT/tasks/other/task.md" ;;
+    other-id) edit "$PROJECT/tasks/other/task.json" '.id = "another"' ;;
+    contract-wrong) edit "$TASK/review/review.json" '.findings[0] += {ruling: "contract-wrong", correctedText: "x"}' ;;
+    decision) leave=wo1-f9=task:other
+      edit "$TASK/review/review.json" '.checks += [{id: "decision-wo1-f9", verdict: "met", detail: "d", answer: "deferred"}]'
+      edit "$IMPL/finished.json" '.pendingDecisions = [{unit: "wo1", finding: "f9", severity: "low", text: "t"}]' ;;
+  esac
+  run "$COMPLETION" close "$TASK" --leave "$leave" -- "done"
+  printf '%s|%s|%s\n' "$RC" "$([ -f "$TASK/completion/completed.json" ] && echo written || echo none)" "$(jq -r '.state' "$TASK/task.json")"
+)
+for kind in no-task complete this-task unnamed other-id contract-wrong decision; do
+  expect "a fold is refused with nothing written: $kind" "$(fold_refused "$kind")" "3|none|in_progress"
+done
+
+fold_own_task_case() (
+  source "$HERE/records.bash"
+  fold_record
+  mkdir -p "$PROJECT/tasks/t1-f1"
+  jq -n '{schemaVersion: 1, id: "t1-f1", state: "new", parent: null, children: []}' >"$PROJECT/tasks/t1-f1/task.json"
+  run "$COMPLETION" close "$TASK" --leave f1=task:other -- "done"
+  printf '%s|%s\n' "$(jq -c '.followUps[0] | [.task, .reason]' "$TASK/completion/completed.json")" "$(close_warnings | grep -c -e '--leave')"
+)
+expect "a finding with its own task keeps it, with no reason, and the --leave is named" "$(fold_own_task_case)" '["t1-f1",""]|1'
+
 echo "--- checks: the task's own change set (row 441)"
 merge_case() (
   source "$HERE/records.bash"

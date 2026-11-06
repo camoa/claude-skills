@@ -11,7 +11,17 @@ review did not pass or passed with warnings, takes the summary, and writes every
 `none`. The task id is `<source task>-<finding id>`, and that folder under `tasks/` is how the
 script knows a task exists.
 
-Interactive: for each finding reading `task=none`, ask the person whether to create the task,
+Interactive, when more than one finding reads `task=none`: ask once whether any go together in
+one task. Leave out a deferred decision, whose id reads `<order>-<finding>`, and a finding ruled
+`contract-wrong`. Each of those keeps its own task. For a yes:
+
+1. Invoke the task skill's `create` with `--tree-at-start`. The goal names each finding id and the
+   path of this task's review record. Do not read the evidence into the conversation.
+2. Pass one `--leave <finding id>=task:<task id>` per finding to `close`.
+
+An existing task qualifies only when it is open and its goal already names the findings.
+
+Interactive: for each other finding reading `task=none`, ask the person whether to create the task,
 one question per finding. Name the finding id and its severity, and say the task id it will get.
 Do not read the finding's evidence into the conversation; the task's goal will carry it. For
 each yes, run:
@@ -86,12 +96,17 @@ no, and pass the count to `close` as `--captures-offered <n>`.
 Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/completion/scripts/completion-actions.sh close "<task_folder>" \
-  [--reason "<sentence>"] [--leave <finding id>=<reason>]... [--captures-offered <n>] \
-  [-- <summary...>]
+  [--reason "<sentence>"] [--leave <finding id>=<reason>|task:<task id>]... \
+  [--captures-offered <n>] [-- <summary...>]
 ```
 It refuses at exit 1 when the review did not pass, or passed with warnings, and no `--reason` was
 given. An open child, a high severity follow up with no task, and a `--leave` that decides nothing
 are warnings in the task record. Relay each `warning:` line.
+
+It refuses at exit 3, with nothing written, when a `task:` value fails its check. The task must
+exist and be open, and it must not be this task. Its `task.md` must name the finding. The finding
+must not be a deferred decision or ruled `contract-wrong`. Relay the line. A reason cannot start
+with `task:`, because that prefix names a task.
 
 Then it takes out of the task branch the files `task environment up` changed for the worktree's
 own site. Merged, they would change the main checkout's site. It reads them from
@@ -122,7 +137,8 @@ run `close` again with the same arguments; that is the repair.
 
 Give the person the body path and the record path from the summary. Say the verdict the record
 holds and who closed it. Name the restore commit and its files from the `restoreCommit` line,
-or say there was none. Name each follow up task created and each finding left, with its reason.
+or say there was none. Name each follow up task created, each finding sent to a shared task, and each finding left, with
+its reason.
 Name each play captured by its id, or say "no play captured".
 Say the person opens the pull request from the body file by hand, changing nothing in it first.
 End by naming `/aida:next`. When the script says every child of the parent is complete, say the

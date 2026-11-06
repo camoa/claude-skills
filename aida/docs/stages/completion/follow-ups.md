@@ -30,10 +30,26 @@ and one sentence that names where it came from. The task gets no worktree yet. I
 from the trunk when it starts, so a follow-up nobody starts costs no disk. A follow-up you find
 moot closes with `/aida:task complete` and the reason.
 
+## Several findings in one task
+
+When more than one finding has no task, completion first asks whether any go together. For a yes,
+it makes one task whose goal names each finding and the review record. Each finding then records
+that task, and the pull request body lists it beside the finding. An open task whose goal already
+names the findings can take them instead.
+
+The close refuses a shared task, with nothing written, in these cases:
+
+- the task does not exist, is complete, or is the task that is closing;
+- its goal does not name the finding;
+- the finding is a deferred decision, or you ruled it `contract-wrong`.
+
+Each of those two kinds keeps its own task, because that task carries text the review findings do
+not hold.
+
 ## A high severity finding
 
-A high severity finding left with no task refuses the close. Create the task, or say in one
-sentence why not. The record and the pull request body keep that sentence. A finding below high
+A high severity finding left with no task is a warning in the task record. Create the task, send
+it to a shared task, or say in one sentence why not. The record and the pull request body keep that sentence. A finding below high
 severity may be left with no reason.
 
 ## Why it works this way
@@ -42,5 +58,6 @@ severity may be left with no reason.
   changes the contract least.
 - A queued security fault ships if nobody tracks it, so a high severity finding needs a task or a
   reason.
+- A close runs once, so a wrong shared task would stay in the record. The close checks it first.
 
 Source: skills/completion/references/close.md, skills/completion/scripts/completion-actions.sh, skills/review/references/close.md

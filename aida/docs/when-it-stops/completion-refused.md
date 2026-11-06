@@ -9,6 +9,7 @@ first line. A review that did not pass, or passed with warnings, closes only on 
 |---|---|
 | The task is already complete | Nothing. Completion names its record and stops |
 | The review did not pass, or warns, and no reason was given | Answer what review left open, or give your reason (below) |
+| Exit 3: a shared task cannot take a finding. The line names the check that failed | Fix what the line names, or [give the finding its own task](../stages/completion/follow-ups.md). A reason cannot start with `task:` |
 
 These close, and each leaves a `warning:` line in the task record. A child task is still open. A
 high-severity follow-up finding has no task. A `--leave` decides nothing. A file
