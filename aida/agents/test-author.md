@@ -118,7 +118,8 @@ what each one reaches.
 
 Name each test the way the recipe says. Your report names the criterion each test proves, and the
 freeze records it, so no script reads the id from the name. A test of the order's `doneWhen`
-claims the order id instead, and names no criterion.
+claims the order id instead, and names no criterion. A test never claims a criterion a person verifies,
+because the freeze refuses it. Such a test claims the order id too.
 
 Run every test and record what the run printed, to one file per test under the task folder's
 `implementation/` folder. Run it with the command the test-execution recipe

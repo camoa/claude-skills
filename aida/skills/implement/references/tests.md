@@ -459,7 +459,9 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
 ```
 
 A `--test` names its criteria or the order's own id, never both. The second form marks a test of
-the order's done-when. A `--test` path must be a file the
+the order's done-when. A test may claim no machine-verified criterion of this order. No row can
+hold that test, so the freeze refuses it (exit 3) and commits nothing. A test written for a
+criterion a person verifies claims the order id. A `--test` path must be a file the
 order owns. The freeze refuses any other (exit 27) and names the test file design chose. Do not
 move the tests yourself. Run `dispatch-open` with `--resume` and resume the test author, which
 writes the tests into that file and takes a new red run for each. Then freeze again.

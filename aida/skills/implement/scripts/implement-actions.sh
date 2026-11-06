@@ -251,7 +251,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #        option as its value, a path that does not exist or lies outside the code root, a test
 #        name no --test row carries, a --locks-in commit id that is not hexadecimal or is shorter
 #        than seven characters, a --row that names a person-verified criterion, a criterion no
-#        --test claims (a rejected order row goes to 65 instead), or one criterion twice, an
+#        --test claims (a rejected order row goes to 65 instead), or one criterion twice, a
+#        --test that claims no machine-verified criterion of the order, an
 #        --absence clause that is not verbatim a doneWhen entry, a --started-at that is not a commit or not an ancestor of HEAD.
 #      - The task: a folder that holds no task.json, no contract or one that cannot be used, a
 #        criterion whose verifiedBy is neither machine nor person, no work orders under design/,
@@ -5285,7 +5286,6 @@ do_tests_freeze() {
     'map(if .criteria == [$unit] then (.criteria = [] | .provesDoneWhen = true) else . end)')"
   local has_done_when_tests
   has_done_when_tests="$(printf '%s' "$tests_json" | jq 'any(.[]; .provesDoneWhen == true)')"
-
   # --- the task's own project, resolved the same way start and preconditions already resolve it --
   local codepath
   rv_load_codepath "tests-freeze"
@@ -5917,6 +5917,18 @@ checkAgain: $tf_check_again
 redAgain: $(printf '%s' "$rows_meta_json" | jq -c --argjson entries "$tf_red_entries" "$RED_AGAIN_JQ"'
     [ .[] | select(.verdict == "rejected") | red_again($entries; .criterion)[] ] | unique')"
   fi
+
+  # Rows hold a test only under a machine criterion or the doneWhen, and the commit below takes every
+  # --test path. So a test on neither would be committed and recorded nowhere: nothing would run it
+  # or guard it (gap row 499). This comes after the rejected-row stop, so a rejected row still lands
+  # on the ledger.
+  local tf_unrecorded
+  tf_unrecorded="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" '
+      [ $criteria[] | select(.verifiedBy == "machine") | .id ] as $machine
+      | [ $tests[] | select(.provesDoneWhen != true) | select(.criteria - $machine == .criteria) | .name ]
+      | unique | join(", ")')"
+  [ -z "$tf_unrecorded" ] \
+    || die3 "tests-freeze: no row of $unit_id would hold these tests, because each claims no machine-verified criterion of the order: $tf_unrecorded. Nothing is committed. A test of the order's own work claims the order id: --test <path>::<test name>=$unit_id, with --row $unit_id=<confirmed|rejected>::<person|model>::<note>. A criterion a person verifies takes a --checklist."
 
   # --- a --red file must exist, hold something, and name a test that has a --test row -------------
   local bad_red_names
