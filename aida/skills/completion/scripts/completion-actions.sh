@@ -449,15 +449,18 @@ CP_WANTED
 cp_render_body() {
   jq_files -nr --arg task "$CP_TASK_ID" --argjson alignment "$CP_ALIGNMENT_DOC" --argjson finished "$CP_FINISHED_DOC" \
     --argjson review "$CP_REVIEW_DOC" --argjson record "$1" --argjson taskDoc "$CP_TASK_DOC" --arg audit "$2" \
-    --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" '
+    --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" --arg taskPath "$TASK_PATH/" '
     def section($title; $lines): ["## " + $title, ""] + $lines + [""];
     def none_when_empty($lines; $word): if ($lines | length) == 0 then [$word] else $lines end;
-    def review_path: "`review/review.json` in the task folder";
+    def owner_record: "in the task record (`review/review.json`), for the owner of the task";
+    # An absolute path names a folder on this machine, so a path a tool or a role printed keeps its
+    # last part. Contract text and a person'"'"'s words stay as written: there, /a/b can be a web route.
+    def no_abs: gsub("(?<![\\w.~:/-])/[^\\s:,;)\"]+/(?<last>[^/\\s:,;)\"]+)"; "\(.last)");
     # The rows the acceptance verifier wrote for a criterion, beside its verdict, each with the file it
     # was judged from, such as a screenshot.
     def evidence_note($id):
       ([ (($review // {}).evidence // [])[] | select(.criterion == $id)
-         | .verdict + " " + (if .path == "" then "(no file)" else .path end) ]) as $rows
+         | .verdict + " " + (if .path == "" then "(no file)" else .path | ltrimstr($taskPath) | no_abs end) ]) as $rows
       | if ($rows | length) == 0 then "" else "; evidence: " + ($rows | join(", ")) end;
     ["# " + $task, ""]
     + section("Goal";
@@ -479,7 +482,7 @@ cp_render_body() {
                     then ["The code repository holds nothing from this task: both ends of this range are one commit. Every deliverable is committed in the project folder."]
                     else [] end))
               + [ ($finished.suite.notCaused // [])[]
-                  | "A test fails at the end of this range that passed at its start. A person recorded it as not caused by this task: " + .line + ". Their words: " + .because ] end)
+                  | "A test fails at the end of this range that passed at its start. A person recorded it as not caused by this task: " + (.line | no_abs) + ". Their words: " + .because ] end)
         + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end)
         # A task page promises the tear-down here (live-run row 150). The old line printed for
         # every worktree. It told a task with no site to prune, and a task with a live site
@@ -487,7 +490,7 @@ cp_render_body() {
         # a site is up, and the marker holds one while a site is coming up. Both `not-applicable`
         # and an absent key name no recipe and no site.
         + (if ($taskDoc.worktree // null) == null then [] else
-            ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there."]
+            ["Branch " + $taskDoc.worktree.branch + ". Push from its worktree."]
             # So a reviewer sees why the files the site needed are absent from the diff (gap row 262).
             + (if $restore == "" then [] else
                 ($restore | split(" ")) as $ids
@@ -500,9 +503,7 @@ cp_render_body() {
                      "`task prune " + $task + "` refuses the tree until a person "
                      + (if ($taskDoc.environment.recipe // null) != null
                         then "runs `task environment " + $task + " down`, which lets go of the site and prints its tear-down lines, runs those lines in the worktree, and runs `task environment " + $task + " down` again."
-                        else "tears the site down in the worktree with "
-                          + (if ($taskDoc.environment.tearDown // null) != null then "these lines, which delete that database: `" + $taskDoc.environment.tearDown + "`," else "the recipe'"'"'s ## Tear down lines," end)
-                          + " and runs `task environment " + $task + " down`." end)]
+                        else "tears the site down in the worktree with the lines `task prune` prints, and runs `task environment " + $task + " down`." end)]
              elif ($taskDoc.environment.recipe // null) == null
                then ["After the merge: `task prune " + $task + "` from the main checkout removes the tree and the merged branch."]
                else [(if ($taskDoc.environment.address // null) == null
@@ -514,16 +515,16 @@ cp_render_body() {
         if $review == null then ["no review record; nothing was checked"]
         # The detail of a decision row quotes what a role wrote, so its line stops at who answered.
         else ($audit | split("\n") | map(select(length > 0)
-               | if startswith("check(decision-") then split(": ")[:2] | join(": ") else . end | "- " + .)) end)
+               | if startswith("check(decision-") then split(": ")[:2] | join(": ") else . end | "- " + no_abs)) end)
     + section("Review";
         if $review == null then ["no review record; nothing was checked"]
         elif ($review | has("verdict") | not) then ["review ran and did not close"]
         else ["Verdict: " + $review.verdict, ""]
-          + (if ($review.findings // []) == [] then [] else ["The evidence of each finding is in " + review_path + ".", ""] end)
+          + (if ($review.findings // []) == [] then [] else ["The evidence of each finding stays " + owner_record + ".", ""] end)
           + none_when_empty(([ ($review.findings // []) | group_by(.disposition)[]
               | ["### " + .[0].disposition, ""]
                 + [ .[] | "- " + .id + " (" + .severity + ", " + .lens
-                    + (if .file == "" then "" else ", " + .file + (if .lines == "" then "" else ":" + .lines end) end)
+                    + (if .file == "" then "" else ", " + (.file | no_abs) + (if .lines == "" then "" else ":" + .lines end) end)
                     + (if has("ruling") then ", ruled " + .ruling + " by the person" else "" end)
                     + ")" ] ]
               | map(. + [""]) | add // [] | .[:-1]); "no findings")
@@ -537,7 +538,7 @@ cp_render_body() {
     + section("Catalog notes";
         if $review == null then ["none"]
         else (($review.catalogNotes // []) | length) as $notes
-          | if $notes == 0 then ["none"] else ["Count: " + ($notes | tostring) + ". The notes are in " + review_path + "."] end end)
+          | if $notes == 0 then ["none"] else ["Count: " + ($notes | tostring) + ". The notes stay " + owner_record + "."] end end)
     | .[]'
 }
 

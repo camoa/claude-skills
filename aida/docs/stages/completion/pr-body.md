@@ -11,12 +11,12 @@ written in words, never left blank, so the body claims only what a record holds.
 | Goal | the goal from the scope contract |
 | Success criteria | every criterion with the verdict review gave it |
 | Non-goals | the non-goals from the contract |
-| Commit range | the range the build finished, the branch, and the worktree to push from |
+| Commit range | the range the build finished, and the branch to push |
 | Review audit | one line per check, one per surface, and a line of counts. A decision row stops at who answered it |
-| Review | the verdict, every finding grouped by what review decided, and the path to the evidence. A finding's line holds its id, severity, lens, file and lines, and any ruling |
+| Review | the verdict, every finding grouped by what review decided, and where the evidence stays. A finding's line holds its id, severity, lens, file and lines, and any ruling |
 | Grounds for closing | who closed the task, on which verdict, and the reason when one was given |
 | Follow-up tasks | each finding with its task, or the reason it was left with none |
-| Catalog notes | how many notes review left for a guide or a recipe, and the path to them |
+| Catalog notes | how many notes review left for a guide or a recipe, and where they stay |
 
 ## What the reviewer of the pull request should read
 
@@ -36,7 +36,7 @@ The commit range section adds a line when each of these applies:
 - a test that passed at the start of the range fails at its end, and you said at finish that this
   task did not cause it: the line and your words;
 - the branch has no upstream: push before you open the pull request;
-- the task has a worktree: the branch, and the worktree to push from;
+- the task has a worktree: the branch, to push from that worktree;
 - a restore commit put back the site's files: the commit and the files;
 - the task's site was adopted: it stays up after the merge, and the line says how to tear it
   down before pruning.
@@ -46,11 +46,14 @@ The commit range section adds a line when each of these applies:
 - A body that claims only what a record holds cannot claim a check ran when it did not.
 - Completion never prints the body into the conversation. It costs context and gains nothing.
 - The body is public, and a role's words can name a private thing. So it leaves out the evidence,
-  the catalog notes and the text of a decision. Read them in `review/review.json` in the task
-  folder.
-- The body still copies text from the contract and from your own reasons. Read those before you
-  publish: the goal, the criteria, the non-goals, a reason you gave at close, and your words on a
-  failing test. A file path in a finding's line comes from the reviewer, and the commit range
-  names the worktree path on this machine.
+  the catalog notes and the text of a decision. They stay in the task record,
+  `review/review.json`, for the owner of the task. That file is outside the repository, so a
+  reader of the pull request cannot open it.
+- The body prints no absolute path that a tool or a role wrote. An evidence file is relative to
+  the task folder. Any other such path keeps only its last part, and the worktree is not named.
+- The body still copies text from the contract and from your own reasons, as written. Read those
+  before you publish: the goal, the criteria, the non-goals, a reason you gave at close, and your
+  words on a failing test. A finding's file and a failing test's line come from a role or a tool,
+  so they can still name a private thing.
 
 Source: skills/completion/references/close.md, skills/completion/scripts/completion-actions.sh

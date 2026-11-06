@@ -249,18 +249,24 @@ body_case() (
   source "$HERE/records.bash"
   review_records
   reviewed_record
-  local decision='{"id": "decision-wo1-f9", "verdict": "met", "answeredBy": "person", "answer": "wrong", "detail": "wo1 finding f9 waits: PRIVATE-DECISION."}'
-  edit "$TASK/review/review.json" '.verdict = "failed" | .warnings = [] | .checks += [$d]
-    | .findings = [$f + {evidence: "PRIVATE-EVIDENCE"}, $f + {id: "f2", disposition: "criterion", severity: "high", evidence: "PRIVATE-EVIDENCE"}]
-    | .catalogNotes = [{seen: "PRIVATE-NOTE", where: "PRIVATE-WHERE"}]
+  local two=$'first line\nPRIVATE-SECOND-LINE'
+  local decision='{"id": "decision-wo1-f9", "verdict": "met", "answeredBy": "person", "answer": "wrong"}'
+  edit "$TASK/review/review.json" '.verdict = "failed" | .warnings = [] | .checks += [$d + {detail: ("PRIVATE-DECISION " + $two)}]
+    | .findings = [$f + {evidence: ("PRIVATE-EVIDENCE " + $two)},
+                   $f + {id: "f2", file: ($root + "/wt/a.php"), disposition: "criterion", severity: "high", evidence: "PRIVATE-EVIDENCE"}]
+    | .catalogNotes = [{seen: ("PRIVATE-NOTE " + $two), where: "PRIVATE-WHERE"}]
+    | .evidence = [{criterion: "c1", verdict: "unmet", path: ($task + "/review/evidence/shot.png")}]
     | .criteria = [{id: "c1", verifiedBy: "person", verdict: "unmet", answeredBy: "script"}]' \
-    --argjson f "$low_dry" --argjson d "$decision"
+    --argjson f "$low_dry" --argjson d "$decision" --arg two "$two" --arg task "$TASK" --arg root "$ROOT"
+  edit "$IMPL/finished.json" '.suite.notCaused = [{line: ("FAIL " + $root + "/wt/tests/b_test.sh:3 expected 1"), because: "an old flake"}]' --arg root "$ROOT"
+  edit "$TASK/task.json" '.environment = {adopted: true, tearDown: ("rm -rf " + $root + "/site")}' --arg root "$ROOT"
   run "$COMPLETION" close "$TASK" --reason "the owner closes it" --leave "f1=later" -- "done"
   local body="$TASK/completion/pr-body.md"
-  printf '%s|%s|%s|%s|%s\n' "$RC" "$(grep -c PRIVATE "$body")" "$(grep -c '^- f[12] (.*a\.php:1' "$body")" \
-    "$(grep -c 'review/review\.json' "$body")" "$(grep -c '^- check(decision-wo1-f9): met' "$body")"
+  printf '%s|%s|%s|%s|%s|%s|%s\n' "$RC" "$(grep -c PRIVATE "$body")" "$(grep -c "$ROOT" "$body")" \
+    "$(grep -c '^- f[12] (.*a\.php:1' "$body")" "$(grep -c 'review/review\.json' "$body")" \
+    "$(grep -c '^- check(decision-wo1-f9): met' "$body")" "$(grep -c 'review/evidence/shot\.png' "$body")"
 )
-expect "the body carries each finding's line and its evidence path, and no text a role wrote" "$(body_case)" "0|0|2|2|1"
+expect "the body holds a finding's line, no text a role wrote, and no absolute path" "$(body_case)" "0|0|0|2|2|1|1"
 
 echo "--- checks: the task's own change set (row 441)"
 merge_case() (
