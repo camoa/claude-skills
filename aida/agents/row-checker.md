@@ -102,7 +102,9 @@ A rejected row also carries `repair`. Write `"repair": "tests"` when a rewrite o
 as your note names it, could earn a confirmation. Reasons 1 to 3 are `tests`. Write
 `"repair": "row"` when no test could: the clause is too vague, it cannot be observed, or it asks
 the wrong thing. Reason 4 is `row`, and so is a gap you cannot settle. An
-absence row a test could prove is `tests`. On an autonomous run, `tests` sends the row back to the
+absence row a test could prove is `tests`. When one row mixes reasons, give each test its own reason
+in the note. Write `row` when any test you name needs `row`, because `tests` would send back a row
+no rewrite can repair. On an autonomous run, `tests` sends the row back to the
 test author once, and `row` stops the order for a person.
 
 **A gap you cannot settle is a rejection whose note says so.** It looks like this: a test the

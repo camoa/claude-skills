@@ -160,9 +160,9 @@ says why it is the person's call, and says what each answer causes. Text a perso
 plain words. A framework term such as row, freeze, done-when or order is replaced by a plain
 word, or defined in the sentence that uses it. Keep each sentence under twenty words. The person
 may have returned to the terminal days later, holding none of the order's context (live-run row
-89). The shape: "The checker doubts that one new test proves what its criterion asks. A model
-may not settle that alone. Confirm it and the test is kept as written; reject it and the test
-author rewrites it." Then show what the
+89). The shape: "The checker doubts that the new tests for one requirement prove what it asks. A
+model may not settle that alone. Confirm and the tests are kept as written; reject and the test
+author rewrites them." Then show what the
 step names. Each step file writes its own sentence out; this paragraph is the rule, stated once.
 
 **Name the role on every dispatch.** A dispatch that names none runs as the general agent, with

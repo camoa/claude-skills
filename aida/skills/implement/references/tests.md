@@ -429,9 +429,10 @@ rewrites the tests and never answers the rejection. Only the checker's next verd
 Every other rejection stops the order, with the checker's note as the reason. That is a row
 marked `"repair": "row"`, a row in `rowsSentBack` already, or an order with no test author.
 A rejection that says the requirement is wrong needs design or a person, and no model may settle
-it. A rejection names every test the checker rejects on the row. So a second rejection of one row
-means the author could not meet the note. Report the stop, and take the next ready order instead. A person who judges the row at a second freeze then goes on
-with `build`. A person who changes the tests or the row redoes the order, under "Leave a stop" in
+it. The stop counts a second rejection of the row, not of a test. A fresh checker can reject a test
+the first note did not name, so the order can stop though the author met that note. Report the
+stop, and take the next ready order instead. A person who judges the row at a second freeze then
+goes on with `build`. A person who changes the tests or the row redoes the order, under "Leave a stop" in
 `references/finish.md`.
 
 **A person's row needs a person.** A row judged `person` on an autonomous run refuses, because

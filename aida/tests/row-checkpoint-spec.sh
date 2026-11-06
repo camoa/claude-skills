@@ -103,7 +103,7 @@ two_tests_case() (
   reject
   printf '%s|%s\n' "$RC" "$(ledger '(.stopped // []) | length')"
 )
-expect "one rejection covers both tests on a row, and the row's second rejection stops the order" \
+expect "the stop counts the row: its first rejection goes back, its second stops the order" \
   "$(two_tests_case)" '65|c1|one,two|0
 65|1'
 
