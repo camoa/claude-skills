@@ -5934,7 +5934,7 @@ redAgain: $(printf '%s' "$rows_meta_json" | jq -c --argjson entries "$tf_red_ent
       | [ $tests[] | select(.provesDoneWhen != true) | select(.criteria - $machine == .criteria) | .name ]
       | unique | join(", ")')"
   [ -z "$tf_unrecorded" ] \
-    || die3 "tests-freeze: no row of $unit_id would hold these tests, because each claims no machine-verified criterion of the order: $tf_unrecorded. Nothing is committed. A test of the order's own work claims the order id: --test <path>::<test name>=$unit_id, with --row $unit_id=<confirmed|rejected>::<person|model>::<note>. A criterion a person verifies takes a --checklist."
+    || die3 "tests-freeze: no row of $unit_id would hold these tests, because each claims no machine-verified criterion of the order: $tf_unrecorded. Nothing is committed. A test of the order's done-when claims the order id: --test <path>::<test name>=$unit_id, with --row $unit_id=<confirmed|rejected>::<person|model>::<note>. Write no test for a criterion a person verifies: it takes a --checklist."
 
   # --- a --red file must exist, hold something, and name a test that has a --test row -------------
   local bad_red_names
@@ -6331,6 +6331,31 @@ TF_EOF
     fi
   fi
 
+  # --- a text order's verify lines run once, before the build ---------------------------------------
+  # A person answers a text order, so no test author runs and these lines name no criterion. This
+  # run is the order's failing first step (gap row 504). A line that fails is what test-first wants,
+  # so it prints nothing. A line that passes before the build cannot tell the work from its absence.
+  if [ "$BR_ORDER_SLOT" = "confirm-at-review" ] && [ -z "$tf_repair" ] \
+    && [ "$(printf '%s' "$UNIT_JSON" | jq -r "$BR_ORDER_FACTS_JQ textOnly")" = "true" ]; then
+    local tf_text_out tf_text_unapproved
+    tf_text_out="$IMPL_DIR/verify-$unit_id-freeze.txt"
+    BRC_WHO="tests-freeze"; BRC_UNIT_JSON="$UNIT_JSON"; BRC_CODEPATH="$codepath"
+    br_verify_runs
+    tf_text_unapproved="$(printf '%s' "$UNIT_JSON" | jq -r --argjson kept "$BRV_RUNS" '
+      ($kept | map(.run)) as $k | [ (.verify // [])[] | select(has("run")) | .run | select(. as $r | $k | index($r) | not) ] | join("; ")')"
+    [ -z "$tf_text_unapproved" ] \
+      || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these verify lines of $unit_id have no person's approval, so they did not run before the build, and the reviewer reads each as a check: $tf_text_unapproved"
+    if [ "$BRV_RUNS" != "[]" ]; then
+      : >"$tf_text_out"
+      br_run_verify_lines "$codepath" "$tf_text_out"
+      case "$BRL_VERDICT" in
+        unmet) ;;
+        "") task_warn "$TASK_PATH" tests-freeze "$unit_id" "the verify lines of $unit_id pass before the build, so they cannot tell the work from its absence. Their later pass is no evidence (references/tests.md). Their output is in $tf_text_out" ;;
+        *) task_warn "$TASK_PATH" tests-freeze "$unit_id" "the verify lines of $unit_id could not run before the build: $BRL_WHY. Their output is in $tf_text_out" ;;
+      esac
+    fi
+  fi
+
   # --- each verify line that proves a criterion runs now, over the files about to freeze ------------
   # The implementer may not edit a frozen test. So a line such as a coding-standards run over the
   # test file runs here, while the test author can still repair the file (gap row 370). A line that
@@ -6401,8 +6426,9 @@ TF_CS_EOF
   # shows only that red. A run that printed nothing or read unknown is left to the build. A line
   # that differs only in a random name, such as a temporary path, does not match; that is the limit.
   local tf_ot_paths tf_ot_json tf_ot_out tf_ot_keys tf_ot_red_keys tf_ot_names tf_ot_started tf_ot_argv
-  # A test with no locks-in reason must fail, whether it came with a red, a green-on-arrival or
-  # neither: a test seen passing before the code proves nothing (references/what-a-test-is.md).
+  # A test with no locks-in reason should fail, whether it came with a red, a green-on-arrival or
+  # neither: a test seen passing before the code proves nothing (references/what-a-test-is.md). This
+  # check reads the whole run, so a test that passes beside one that fails freezes on a warning.
   tf_ot_paths="$(br_frozen_test_paths "$rows_json")"
   tf_ot_names="$(jq -nr --argjson tests "$tests_json" --argjson locks "$locks_json" \
     '($locks | map(.name)) as $l | [ $tests[] | .name | select(($l | index(.)) == null) ] | unique | join(", ")')"
@@ -6417,7 +6443,7 @@ TF_CS_EOF
     test_weight_warn "$TASK_PATH" tests-freeze "$unit_id" "$(($(date +%s) - tf_ot_started))"
     tf_ot_argv="$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | (.orderTests.argv // []) | join(" ") ] | join("; ")')"
     [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" != "met" ] \
-      || die 80 "tests-freeze: the order-tests command build-record runs, $tf_ot_argv, over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), passes, so these tests with no locks-in reason do not fail when it runs them: $tf_ot_names. A frozen test fails before the build (references/what-a-test-is.md). The test author repairs the tests, or returns a locks-in reason for a test that passes against existing code, and this freeze runs again. Nothing is frozen."
+      || die 80 "tests-freeze: the order-tests command build-record runs, $tf_ot_argv, over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), passes, so these tests with no locks-in reason do not fail when it runs them: $tf_ot_names. A frozen test fails before the build (references/what-a-test-is.md). The test author repairs the tests. A test that passes against existing code stays only as the one test of a part of a clause, with a locks-in reason. The author deletes any other and names it in the report. This freeze then runs again. Nothing is frozen."
     tf_ot_out="$(mktemp)" || die3 "tests-freeze: could not create a temporary file"
     tf_ot_keys="$(mktemp)" || { rm -f "$tf_ot_out"; die3 "tests-freeze: could not create a temporary file"; }
     tf_ot_red_keys="$(mktemp)" || { rm -f "$tf_ot_out" "$tf_ot_keys"; die3 "tests-freeze: could not create a temporary file"; }

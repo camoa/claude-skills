@@ -1134,7 +1134,7 @@ def open: {
     ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
     ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
     ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests, so a test would only read the text back: update --proof confirm, or record for a document under the project folder"),
-    ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope, or give it to an order that builds code"),
+    ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope"),
     ((.coverage.machineCriteriaOnLookOrRecordOrders // [])[] | "order " + .id + " is " + prover(.proof) + " and owns the machine-verified criterion " + .criterionId + ", which neither a look nor a reading judges: make it person-verified in scope, add a run line that proves it, or give it to an order that builds code"),
     ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person on a task with tests and owns code, "
       + (if .machineOwned == 0 then "which gets tests even with no machine criterion" else "and run lines do not prove every machine criterion it owns" end) + ": update --proof tests"),

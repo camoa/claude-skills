@@ -36,7 +36,9 @@ The proof follows what the order produces, read from the files it owns. A criter
 never decides it. Design sets a proof itself only on an order with no proof yet, at the moment a
 file is added. It sets `record` when every owned file lies under the project folder. It sets
 `confirm` when every owned file is a document or configuration, which it reads from the file
-extensions. A `gate` order is never this case. On a task with no automated tests, it sets
+extensions. A `.prompt`, `.mdx`, `.csv` or `.jsonl` file is text too. A folder reads as code, so
+own a skill by its files, and `add-owned-file` prints a line when you own a folder. A `gate` order is
+never this case. On a task with no automated tests, it sets
 `confirm` when the file is code. A proof already set, by you or by design, never changes this
 way. You can pick another kind at any time.
 

@@ -172,4 +172,46 @@ order_claim_case() (
 expect "a test that claims the order id on a person's order is recorded, run and guarded" "$(order_claim_case)" \
   "0|tests/a_test.sh|0|frozen-tests=met order-tests=met"
 
+# text_case <change> [<exit>]: wo1 is a person's text order with one verify line that leaves
+# $ROOT/ran and exits <exit>, default 1. <change> is a jq filter on wo1 in the snapshot. Prints the
+# freeze's exit, how many warnings it wrote, and whether the line ran (gap row 504).
+text_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records planned
+  printf 'touch "%s/ran"\nexit %s\n' "$ROOT" "${2:-1}" >"$ROOT/line.sh"
+  edit "$IMPL/snapshot.json" '.alignment.criteria[0].verifiedBy = "person"
+    | (.workOrders[] | select(.id == "wo1")) |= (.proof = "confirm" | .tests = [] | .criteriaOwned = [] | .ownedFiles = ["skills/x/SKILL.md"]
+        | .verify = [{run: ("sh " + $line), pass: "exit 0", cites: "a recipe", binding: true}] | '"$1"')' --arg line "$ROOT/line.sh"
+  suite_records ""
+  run "$IMPLEMENT" tests-freeze "$TASK" wo1 --checklist "c1=read the skill"
+  printf '%s|%s|%s\n' "$RC" "$(jq '[ (.warnings // [])[] | select(.step == "tests-freeze") ] | length' "$TASK/task.json")" \
+    "$([ -f "$ROOT/ran" ] && echo ran || echo not-run)"
+)
+expect "a text order's line that fails runs at the freeze and warns of nothing" "$(text_case .)" "0|0|ran"
+expect "a text order's line that passes runs at the freeze and warns" "$(text_case . 0)" "0|1|ran"
+expect "a text order's line that decides nothing warns that it could not run" \
+  "$(text_case '.verify[0].pass = "no such pass"' 0)" "0|1|ran"
+expect "a text order's run line with no approval warns and does not run" \
+  "$(text_case '.verify[0].binding = false')" "0|1|not-run"
+expect "a confirm order that owns code does not run its line at the freeze" \
+  "$(text_case '.ownedFiles = ["a.php"]')" "0|0|not-run"
+
+# A repair owes a test of a bug, so it says nothing about the order's lines.
+text_repair_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records reviewed
+  printf 'touch "%s/ran"\nexit 1\n' "$ROOT" >"$ROOT/line.sh"
+  edit "$IMPL/snapshot.json" '.alignment.criteria[0].verifiedBy = "person"
+    | (.workOrders[] | select(.id == "wo1")) |= (.proof = "confirm" | .tests = [] | .ownedFiles = ["skills/x/SKILL.md"]
+        | .verify = [{run: ("sh " + $line), pass: "exit 0", cites: "a recipe", binding: true}])' --arg line "$ROOT/line.sh"
+  suite_records ""
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo1")).repairs = [{review: "r", reviewFindings: [], findings: [], at: "2026-10-28", testOwed: true}]'
+  jq -n '{unit: "wo1", rows: [], support: []}' >"$IMPL/tests-wo1.json"
+  run "$IMPLEMENT" tests-freeze "$TASK" wo1 --checklist "c1=read the skill"
+  printf '%s\n' "$([ -f "$ROOT/ran" ] && echo ran || echo not-run)"
+)
+expect "a repair freeze of a text order does not run its line" "$(text_repair_case)" "not-run"
+
 finish

@@ -234,7 +234,9 @@ and pick the kind from that answer:
 - A document, a recipe, a skill or agent file, or hand-written configuration in the code
   repository: `confirm`. It holds no logic for a test to prove. The reviewer reads it, and the
   person confirms each done-when row at review. `add-owned-file` sets this value itself when
-  every owned file is a document or configuration. A `gate` order is never this case.
+  every owned file is a document or configuration. A `gate` order is never this case. Own a skill
+  by its files: a folder reads as code, and `add-owned-file` prints `proof-note:` when it does.
+  When text has a behaviour of its own, put it in its own order, so that its lines run first.
 - Something only a person or a browser can see: `observe`.
 - Code, on a task whose contract says it has no automated tests: `confirm`. Nothing runs a
   test. The implementer builds it, one reviewer reads the diff, and the person confirms each
@@ -653,11 +655,21 @@ reviewer judges it as a check.
 Give `--criterion` when the command's output alone proves a machine criterion the order owns,
 such as a linter run. That criterion then needs no test. When run lines prove every machine
 criterion an order owns, give the order `--proof confirm`. The lines run in its check, and the
-person confirms its done-when rows at review. On a `tests` order, the freeze runs the line over
+person confirms its done-when rows at review. A text order rests no machine criterion on a line.
+Its line is evidence for the person. On a `tests` order, the freeze runs the line over
 the test author's files, and the row-checker judges whether the line proves the whole clause. A
 clause that names two tools needs a line for each.
 A line runs unattended when it equals, word for word, an `argv` in the project's check recipe
 `check_commands`. Any other research line needs the person's approval at the close.
+
+**A skill or prompt with an eval takes two orders.** The first owns the case files under `evals/`,
+each by name. Its proof is `confirm`, and its done-when rows name the scenario and the graders. It
+holds no `scaffold_script`, because a `.sh` file makes the order `tests`. The second owns the skill,
+`dependsOn` the first, and runs the eval as its run line. So the skill's author does not write the
+case, and the owned-files check stops that author from changing it. A `claude plugin eval` line
+names `--case`, `--runs 1`, `--ablation none`, `--trust-plugin`, `--no-publish` and an
+`--output-dir` outside the tree. Its graders call no judge. What fails first for each kind of work
+is in `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
 `--clear` empties the list, and `--recipe` replaces it.
 
 A run line is argv, never a shell, so `--run` refuses a shell character. A recipe entry with one is
@@ -832,8 +844,7 @@ lines are not enough, and fix the specific order each line names. The same repai
   - a `tests` order that owns only documents or configuration needs `update --proof confirm`,
     or `record` when its files lie under the project folder;
   - a machine-verified criterion on an order that owns only documents or configuration is a
-    person's. Change it to `person` with scope's `update --verified-by person`, or give it to an
-    order that builds code;
+    person's. Change it to `person` with scope's `update --verified-by person`;
   - a machine-verified criterion on an `observe` or `record` order is a person's too. Change it
     the same way, add a run line that proves it, or give it to an order that builds code;
   - a `confirm` order that owns a test file needs `remove-owned-file` for it. Nothing runs that

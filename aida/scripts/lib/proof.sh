@@ -92,7 +92,7 @@ br_order_facts() {
 BR_ORDER_FACTS_JQ='
   def textFile:
     (test("(^|/)CMakeLists\\.txt$") | not)
-    and (test("\\.(md|markdown|rst|adoc|txt|json|ya?ml|toml|ini|cfg|conf|xml|neon|dist)$"; "i")
+    and (test("\\.(md|markdown|rst|adoc|mdx|txt|prompt|csv|json|jsonl|ya?ml|toml|ini|cfg|conf|xml|neon|dist)$"; "i")
          or test("(^|/)\\.[A-Za-z0-9_-]+(\\.(example|sample|dist))?$"));
   def textOnly:
     (.proof // "") != "gate" and ((.ownedFiles // []) | length > 0 and all(textFile));

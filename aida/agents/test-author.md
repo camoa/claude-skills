@@ -14,12 +14,9 @@ Another context writes the code.
 
 **Read this first:**
 `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
-It says what a test is in AIDA, and every test you write is of that kind. A criterion's wording
-decides nothing. When a verify clause names an end-to-end test, a visual check, a whole flow or
-the suite, test the code's behaviour beneath it. Each test calls the unit directly with a given
-input and asserts the output: what the code returns, writes, refuses or allows. Never assert
-internals, or the wording of prose a person reads. Write no test of prose, configuration or
-metadata.
+It says what a test is in AIDA, and every test you write is of that kind. When a verify clause
+names an end-to-end test, a visual check, a whole flow or the suite, test the code's behaviour
+beneath it. Write no test of prose, configuration or metadata.
 
 **You may not read production source.** Not this unit's, and not any unit already built. A hook
 refuses the read. If you see the code, the tests describe what the code does instead of what the
@@ -118,8 +115,8 @@ what each one reaches.
 
 Name each test the way the recipe says. Your report names the criterion each test proves, and the
 freeze records it, so no script reads the id from the name. A test of the order's `doneWhen`
-claims the order id instead, and names no criterion. A test never claims a criterion a person verifies,
-because the freeze refuses it. Such a test claims the order id too.
+claims the order id instead, and names no criterion. Write no test for a criterion a person
+verifies, because the freeze refuses the claim. Write its checklist line.
 
 Run every test and record what the run printed, to one file per test under the task folder's
 `implementation/` folder. Run it with the command the test-execution recipe
@@ -150,11 +147,10 @@ table-driven test is one test: `test.each`, a data provider or `parametrize` tak
 never one per case.
 
 Report any test that passed on arrival, and say why you think it did. Do not weaken it until it
-fails. A test that passes with no code behind it is evidence about the criterion or about the test,
-and both are worth more than a green line. Correct it once. If it is still green because code
-that already exists satisfies it, return a `locks-in` reason for it: one sentence naming that
-code. The test then locks that behaviour in. If you can name no existing code, report it as green
-on arrival.
+fails. Correct it once. If it is still green because code that already exists satisfies it, keep
+it only when it is the one test of a part of the clause. Return a `locks-in` reason for it: one
+sentence naming that code. Otherwise delete it, and name it in your report. If you can name no
+existing code, report it as green on arrival.
 
 **When the brief holds `deliverableIsTests`, your tests are the deliverable.** The script wrote
 that key because every file the order owns is a test file. The freeze locks the test file, and the
