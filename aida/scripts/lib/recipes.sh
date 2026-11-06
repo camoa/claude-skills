@@ -1714,9 +1714,9 @@ br_require_clean_tree() {
   # One message for every caller. For the record step the reason is that the owned-files check
   # compares two commits, so an uncommitted change would pass it while staying in the tree; for
   # an install or a bring-up it is that the commit which follows would sweep the change in.
-  # redo and drop revert the commits the records list, so a commit made now would stay.
+  # redo and drop judge a commit made now by its files, so it could be reverted, refused or left.
   local route="Commit or move the changes aside"
-  case "$who" in redo|drop) route="Discard or stash the changes, because a commit made now is in no record, so $who would not revert it" ;; esac
+  case "$who" in redo|drop) route="Discard or stash the changes, because a commit made now is in no record, and $who judges it by its files alone" ;; esac
   die 61 "$who: the working tree at $repo is not clean, so nothing here can commit or record it faithfully. $route, then run $who again. What is uncommitted: $(printf '%s' "$dirty" | tr '\n' ' ')"
 }
 

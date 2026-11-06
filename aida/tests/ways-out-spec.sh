@@ -78,4 +78,82 @@ echo "--- drop: attended, the order is dropped, reverted, and its dependent cann
 expect "drop, attended" "$(ALLOWS='[]' WO2=1 AFTER=1 LOOK='.lastStep' way_case drop "not needed")" "0|changed|dropped|a|3:dependency:none"
 expect "drop, autonomous" "$(AUTO=1 ALLOWS='[]' LOOK='.lastStep' way_case drop "not needed")" "68|same|code-written|b"
 
+# after_case <action> <file>...: wo1 frozen, then one commit no record of it lists, changing each
+# <file>. Runs <action> attended. With KEEP set, a person first reverts that commit and commits
+# other.php again alone. Prints the exit, whether the ledger changed, a.php's text, whether other.php
+# is there, and how many lines of the action's output name that commit.
+after_case() (
+  source "$HERE/records.bash"
+  local action="$1" f c
+  shift
+  task_records branch
+  order_records tests-frozen
+  tests_record
+  [ -z "${SHARED:-}" ] || edit "$TASK/design/wo1.json" '.sharedFiles = ["a.php"]'
+  [ -z "${SHARED:-}" ] || { edit "$IMPL/snapshot.json" '.workOrders[0].sharedFiles = ["a.php"]'; close_design; }
+  for f in "$@"; do printf 'b\n' >"$WT/$f"; done
+  git -C "$WT" add "$@" && git -C "$WT" commit -qm "a commit before the record"
+  c="$(git -C "$WT" rev-parse --short=7 HEAD)"
+  if [ -n "${KEEP:-}" ]; then
+    git -C "$WT" revert --no-edit HEAD >/dev/null
+    printf 'b\n' >"$WT/other.php"
+    git -C "$WT" add other.php && git -C "$WT" commit -qm "other.php stays"
+  fi
+  cp "$IMPL/ledger.json" "$ROOT/ledger.before"
+  run "$IMPLEMENT" "$action" "$TASK" wo1 --because "the design changed"
+  printf '%s|%s|%s|%s|%s\n' "$RC" "$(cmp -s "$IMPL/ledger.json" "$ROOT/ledger.before" && echo same || echo changed)" \
+    "$(cat "$WT/a.php")" "$([ -e "$WT/other.php" ] && echo other || echo none)" "$(grep -c "$c" "$OUT")"
+)
+
+# after_listed: the refused commit a person reverted, then redo. Prints the commits unattributed
+# names, so a commit and its revert leave no loose end.
+after_listed() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records tests-frozen
+  tests_record
+  printf 'b\n' >"$WT/a.php"; printf 'b\n' >"$WT/other.php"
+  git -C "$WT" add a.php other.php && git -C "$WT" commit -qm "a commit before the record"
+  git -C "$WT" revert --no-edit HEAD >/dev/null
+  run "$IMPLEMENT" redo "$TASK" wo1 --because "the design changed"
+  run "$IMPLEMENT" unattributed "$TASK"
+  cat "$OUT"
+)
+
+# after_record_case: a record order, whose range lives in the project folder. After its freeze, one
+# commit there changes its document and one changes only a record of the task, as AIDA's own writes
+# do. Prints the exit, whether the document is there, and whether the task record kept its change.
+after_record_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  edit "$TASK/design/wo1.json" '.proof = "record" | .tests = [] | .interface = "" | .ownedFiles = [$doc]' --arg doc "$PROJECT/notes/a.md"
+  close_design
+  order_records tests-frozen
+  git -C "$PROJECT" add -A && git -C "$PROJECT" commit -qm "wo1 is a record order"
+  jq -n --arg c "$(git -C "$PROJECT" rev-parse HEAD)" \
+    '{schemaVersion: 1, takenAt: "2026-10-28", unit: "wo1", commit: $c, testGlobs: [], rows: [],
+      proof: "record", support: [], freezeCommits: []}' >"$IMPL/tests-wo1.json"
+  git -C "$PROJECT" add -A && git -C "$PROJECT" commit -qm "records"
+  mkdir -p "$PROJECT/notes"
+  printf 'b\n' >"$PROJECT/notes/a.md"
+  git -C "$PROJECT" add notes && git -C "$PROJECT" commit -qm "a commit before the record"
+  printf 'note\n' >"$TASK/note.md"
+  git -C "$PROJECT" add -A && git -C "$PROJECT" commit -qm "a task note"
+  run "$IMPLEMENT" redo "$TASK" wo1 --because "the design changed"
+  printf '%s|%s|%s\n' "$RC" "$([ -e "$PROJECT/notes/a.md" ] && echo doc || echo none)" "$([ -e "$TASK/note.md" ] && echo note || echo none)"
+)
+
+echo "--- a commit after the last record: its own files are the order's, others refuse or stay"
+expect "redo reverts a commit no record lists that changes only the order's files" "$(after_case redo a.php)" "0|changed|a|none|1"
+expect "drop reverts it the same way" "$(after_case drop a.php)" "0|changed|a|none|1"
+expect "redo refuses a commit that also changes another file, names it, and changes nothing" \
+  "$(after_case redo a.php other.php)" "113|same|b|other|1"
+expect "drop refuses it the same way" "$(after_case drop a.php other.php)" "113|same|b|other|1"
+expect "a commit that changes no file of the order is left alone" "$(after_case redo other.php)" "0|changed|a|other|0"
+expect "a person's revert of the refused commit lets redo through, and what they kept stays" \
+  "$(KEEP=1 after_case redo a.php other.php)" "0|changed|a|other|1"
+expect "the refused commit and its revert leave nothing unattributed" "$(after_listed)" "unattributed: none"
+expect "a shared file alone never makes a commit the order's" "$(SHARED=1 after_case redo a.php)" "0|changed|b|none|0"
+expect "a record order's commit is reverted, and a commit of AIDA's records stays" "$(after_record_case)" "0|none|note"
+
 finish

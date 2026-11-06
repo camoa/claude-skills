@@ -269,6 +269,10 @@ It refuses when the records list a commit HEAD does not hold, as after a rebase,
 commit (exit 113). Then a person reverts that work by hand. A revert that stops on a conflict is
 taken back, with every revert before it, so the branch is where it was.
 
+A commit after the order's last record is the order's when it changes only the order's files, so
+redo reverts it. One that also changes other files refuses (exit 113). The message names it. A
+person runs `git revert` on it, commits again what must stay, and runs redo again.
+
 ### Drop the order
 
 `drop` ends the order without code. Open with: "This unit of work is dropped. Its commits are

@@ -672,9 +672,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      above. A missing fix brief is such a fault.
 #      `fix-record` refuses a --report other than the one the fix brief pins (exit 3).
 # The code the reverting redo added (gap row 252).
-# 113  `redo` or `drop` found a merge commit among the order's own commits. A revert of a merge
-#      needs a person to choose its parent, so nothing is reverted, moved or written. The message
-#      names each such commit. A person reverts it by hand, then runs the way out again.
+# 113  `redo` or `drop` found a merge commit among the order's own commits, or a commit after its
+#      last record that changes its files and others too (gap row 497). A revert of a merge needs a
+#      person to choose its parent, and a revert of the other would take out what is not the order's,
+#      so nothing is reverted, moved or written. The message names each such commit. A person
+#      reverts it by hand, then runs the way out again.
 # The code the implementer's freeze check added (gap row 267).
 # 114  `dispatch-open` was given the implementer role for an order with no
 #      <task_folder>/implementation/tests-<unit_id>.json. `build-brief` refuses the same fact with
@@ -9254,8 +9256,8 @@ IPC_OWNED
 # The commits the records of every order but $1 list, one per line: their build and fix lists, the
 # earlier attempts' lists, and their freezes, which are AIDA's own commits of that order's tests.
 # Every folder under the task folder a record can sit in is read, a redo's or a drop's included.
-# So is every commit a redo or a drop reverted, with its revert, which the ledger lists: neither is
-# code the tree holds, and both sit inside the range of an order built around them. And so are the
+# So is every commit a redo or a drop reverted or found reverted, with its revert, which the ledger
+# lists: neither is code the tree holds, and both sit inside the range of an order built around them. And so are the
 # commits another order's stopped builder made, which its ledger entry lists. A record written
 # before the lists (6.1.0 batch 2a) names its own range instead, read in the repository $2: the
 # lists are new, and that range is the one thing such a record knows. A repair's freeze record of
@@ -9277,7 +9279,7 @@ im_others_listed() {
         esac
       done
   jq -r --arg id "$1" '(.orders // [])[]
-    | (((.redos // []) + [ .dropped // empty ])[] | ((.reverted // [])[] | .commit, .revert), ((.skipped // [])[] | .revert // empty)),
+    | (((.redos // []) + [ .dropped // empty ])[] | ((.reverted // [])[] | .commit, .revert), ((.skipped // [])[] | select(.revert) | .commit, .revert)),
       (select(.id != $id) | (.unrecordedCommits // [])[])' "$IMPL_DIR/ledger.json" 2>/dev/null
 }
 
@@ -12835,11 +12837,13 @@ RO_ONE
 # (gap row 348). `reset --keep` refuses to touch a changed file, and it runs only when the commits
 # since the start are this run's reverts alone, so a commit a hook or a person made meanwhile is
 # never dropped. The commits are the ones im_own_listed reads from the records in the implementation
-# folder, so a redo before this one reads only the order's work since then. Two kinds are skipped
+# folder, so a redo before this one reads only the order's work since then, and the ones
+# im_after_records finds after them. Two kinds are skipped
 # and named, so a second run after a person's own repair has a defined end: a commit HEAD does not
 # hold, as after a rebase, and a commit a later commit on the branch already reverts, by a person
 # or an earlier run. A merge that remains refuses (exit 113), because its revert needs a person to
-# choose the parent. Sets WAY_REVERTED, a JSON array of {commit, revert}, and WAY_SKIPPED, one of
+# choose the parent. So does a commit that remains and also changes files outside the order, because
+# its revert would take those out too. Sets WAY_REVERTED, a JSON array of {commit, revert}, and WAY_SKIPPED, one of
 # {commit, why}, with revert naming the commit that already reverts it, so no order counts that
 # commit as its own.
 WAY_WHO=""; WAY_REVERTED='[]'; WAY_SKIPPED='[]'
@@ -12863,11 +12867,45 @@ IRT_REVERTS
   fi
   printf '%s\n' "$t"
 }
+# The commits after the last recorded head of order $1 in the repository $2 that change a file only
+# this order owns (gap row 497). A role can commit before its record runs, and no list holds that
+# commit. The head is the newest commit HEAD holds of $3, the commits the records list, and of the
+# commit each record stood at. Left out: every commit im_role_commits leaves out, and every revert,
+# which reverting would undo. A shared file is no file of its own here, because a path alone never
+# attributes a shared file (im_path_claim). Sets IM_AFTER_COMMITS, one commit per line, and
+# IM_AFTER_MIXED, one line "<commit> <its other files>" for each of them that changes other files.
+IM_AFTER_COMMITS=""; IM_AFTER_MIXED=""
+im_after_records() {
+  local unit_id="$1" repo="$2" head unit_json c p own others
+  IM_AFTER_COMMITS=""; IM_AFTER_MIXED=""
+  head="$(git -C "$repo" rev-list --topo-order HEAD 2>/dev/null | grep -Fx -f <(printf '%s\n' "$3"
+    find "$IMPL_DIR" -maxdepth 1 -type f \( -name "tests-$unit_id.json" -o -name "tests-$unit_id-repair-*.json" \
+      -o -name "build-$unit_id.json" -o -name "fix-$unit_id-*.json" \) -exec jq -r '.commit // empty' {} + 2>/dev/null) | head -n 1)"
+  [ -n "$head" ] || return 0
+  unit_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson o "$(im_owns_of "$unit_id")" '.ownedFiles = (.ownedFiles // []) + $o')"
+  for c in $(im_role_commits "$repo" "$head" HEAD "$unit_id" | jq -r '.[]'); do
+    [ -z "$(im_revert_target "$repo" "$c")" ] || continue
+    own=""; others=""
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      if [ "$(im_path_claim "${RV_RANGE_SCOPE:+$RV_RANGE_SCOPE/}$p" "$unit_json")" = "own" ]; then own=yes
+      else others="$others${others:+, }$p"; fi
+    done <<IAR_PATHS
+$(im_commits_paths "$repo" "[\"$c\"]" "$RV_RANGE_SCOPE")
+IAR_PATHS
+    [ -n "$own" ] || continue
+    IM_AFTER_COMMITS="$IM_AFTER_COMMITS$c
+"
+    [ -z "$others" ] || IM_AFTER_MIXED="$IM_AFTER_MIXED$c $others
+"
+  done
+}
 im_revert_order() {
-  local unit_id="$1" repo="$2" listed commits="" c r said orig made failed by merges=""
+  local unit_id="$1" repo="$2" listed commits="" c r said orig made failed by merges="" mixed mixed_text=""
   WAY_REVERTED='[]'; WAY_SKIPPED='[]'
   listed="$(im_own_listed "$unit_id" "$repo")"
-  for c in $(printf '%s\n' "$listed"); do
+  im_after_records "$unit_id" "$repo" "$listed"
+  for c in $(printf '%s\n%s' "$listed" "$IM_AFTER_COMMITS"); do
     if ! git -C "$repo" merge-base --is-ancestor "$c" HEAD 2>/dev/null; then
       WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" '. + [{commit: $c, why: "HEAD does not hold it, as after a rebase"}]')"
       continue
@@ -12883,11 +12921,15 @@ IRO_REVERTS
       continue
     fi
     ! git -C "$repo" rev-parse --verify --quiet "$c^2" >/dev/null 2>&1 || merges="$merges ${c:0:7}"
+    mixed="$(printf '%s' "$IM_AFTER_MIXED" | sed -n "s/^$c //p")"
+    [ -z "$mixed" ] || mixed_text="$mixed_text ${c:0:7} ($mixed)"
     commits="$commits$c
 "
   done
   [ -z "$merges" ] \
-    || die 113 "$WAY_WHO: the records of $unit_id list merge commits:$merges. A revert of a merge needs a person to choose the parent. Nothing was reverted or moved. A person reverts each one with git revert -m 1 <commit>, then runs $WAY_WHO again: a commit the branch already reverts is skipped."
+    || die 113 "$WAY_WHO: the commits of $unit_id hold merge commits:$merges. A revert of a merge needs a person to choose the parent. Nothing was reverted or moved. A person reverts each one with git revert -m 1 <commit>, then runs $WAY_WHO again: a commit the branch already reverts is skipped."
+  [ -z "$mixed_text" ] \
+    || die 113 "$WAY_WHO: no record lists these commits after the last record of $unit_id, and each also changes files $unit_id does not own:$mixed_text. Reverting one would take those files out too. Nothing was reverted or moved. A person reverts each one with git revert <commit> and commits again what must stay, then runs $WAY_WHO again: a commit the branch already reverts is skipped."
   [ -n "$commits" ] || return 0
   commits="$(git -C "$repo" rev-list --topo-order HEAD 2>/dev/null | grep -Fx -f <(printf '%s' "$commits"))"
   orig="$(git -C "$repo" rev-parse HEAD)"
@@ -13214,8 +13256,8 @@ GO_OWNS
 }
 
 # redo: the order goes back to planned. A person changed its design or its tests first, through
-# design. Its own commits are reverted newest first, read from its records' commit lists, so the
-# tests frozen again fail first, as every freeze requires. Its records move to a dated folder with
+# design. Its own commits are reverted newest first, read from its records' commit lists and from
+# what follows them (im_after_records), so the tests frozen again fail first, as every freeze requires. Its records move to a dated folder with
 # the person's words, and the snapshot takes its live copy, which design must have closed on. The
 # snapshot keeps its frozen contract, and the next start refreshes it under start's own rules. A
 # new order design added enters at that next start, as before. Every other order keeps its work.
