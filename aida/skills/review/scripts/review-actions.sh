@@ -33,7 +33,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                                            [--row <finding id>=wrong|deferred]...
 #   review-actions.sh audit    <task_folder>          the checks, and how each verdict came about
 #   review-actions.sh archive  <task_folder>          moves a closed pass aside, so review runs again
-#   review-actions.sh step     <name>
+#   review-actions.sh step     <name> [--part <n>]
 #
 # `--recipe` names the `test-execution` recipe, for its `## Test commands` block, which carries the
 # suite row and the mutation row. `--check-recipe` names the `review` recipe, for its
@@ -228,7 +228,7 @@ usage: review-actions.sh read     <task_folder>
                                                [--row <finding id>=wrong|deferred]...
        review-actions.sh audit    <task_folder>
        review-actions.sh archive  <task_folder>
-       review-actions.sh step     <name>
+       review-actions.sh step     <name> [--part <n>]
 EOF
 }
 
@@ -3482,17 +3482,22 @@ do_audit() {
 # ------------------------------------------------------------------------------------------------
 
 do_step() {
-  local names
+  local names part=1
   names="$(md_basenames_in "$STEPS_DIR")"
   [ "$#" -ge 1 ] || die 3 "step: a step name is required. The steps are: $names"
+  if [ "$#" -eq 3 ] && [ "$2" = "--part" ]; then part="$3"; set -- "$1"; fi
   [ "$#" -le 1 ] || die 3 "step: unrecognized extra argument: $2"
   case "$1" in
     */*|.|..|'') die 3 "step: a step name is one name and never a path; got: $1. The steps are: $names" ;;
   esac
   [ -f "$STEPS_DIR/$1.md" ] \
     || die 3 "step: this skill ships no step file named $1. The steps are: $names"
-  cat "$STEPS_DIR/$1.md" || die 3 "step: $STEPS_DIR/$1.md could not be read."
-  exit 0
+  step_part "$STEPS_DIR" "$1" "$part" "$PLUGIN_ROOT/skills/review/scripts/review-actions.sh"
+  case "$?" in
+    0) exit 0 ;;
+    2) die 3 "step: $1 has no part $part. Run step $1 to see the first part and the count of parts." ;;
+    *) die 3 "step: $STEPS_DIR/$1.md could not be read." ;;
+  esac
 }
 
 # ------------------------------------------------------------------------------------------------

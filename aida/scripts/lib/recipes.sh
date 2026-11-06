@@ -76,6 +76,7 @@
 #   cr_catalog_pair <action> <value> [<flag>]  parses --catalog-recipe's path or reason into CR_PAIR
 #   json_file_state <file>                    missing | unreadable | ok, for any JSON file
 #   md_basenames_in <folder>                  the .md base names in it, sorted and space separated
+#   step_part <folder> <name> <part> <script> prints one step file, or one part of a large one
 #   sw_source_lines <project file> <kind>     the sources providing that kind, in precedence order
 #   sw_probe <project file> <kind> <folder> <framework> <leaf> <asks the catalog>  one folder source's file
 #   sw_list <project file> <kind> <folder> <framework>  every name the folder sources hold
@@ -1753,6 +1754,50 @@ br_worst_verdict() {
 # files, and one copy is what keeps their refusals listing their sets in the same shape.
 md_basenames_in() {
   find "$1" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sed 's#.*/##; s#\.md$##' | sort | tr '\n' ' '
+}
+
+# Prints part $3 of the step file $1/$2.md. $4 is the caller's own path, for the line that names the
+# next part. The Bash tool returns about 30,000 characters inline, and past that a preview and a
+# path, so a print over that size never reaches the model whole. The mirror says "roughly", so the
+# limit keeps 5,000 bytes of margin. A part ends only at a `## ` heading outside a code fence and
+# takes as many whole sections as fit. A file that makes one part prints as it stands.
+# Returns 0 when it printed, 2 when the file has no such part, 1 when the file could not be read.
+# The caller makes its own refusal, because the four callers refuse through different names.
+STEP_PART_BYTES=25000
+step_part() {
+  local file="$1/$2.md" part="$3" script="$4" ranges range total line
+  case "$part" in ''|0*|*[!0-9]*) return 2 ;; esac
+  ranges="$(LC_ALL=C awk -v limit="$STEP_PART_BYTES" '
+    function end_section() {
+      if (part_bytes > 0 && part_bytes + section_bytes > limit) {
+        print part_start "," section_start - 1
+        part_start = section_start
+        part_bytes = 0
+      }
+      part_bytes += section_bytes
+      section_start = FNR
+      section_bytes = 0
+    }
+    BEGIN { part_start = 1; section_start = 1 }
+    /^ *```/ { fenced = !fenced }
+    /^## / && !fenced { end_section() }
+    { section_bytes += length($0) + 1 }
+    END { end_section(); print part_start "," NR }
+  ' "$file")" || return 1
+  range="$(printf '%s\n' "$ranges" | sed -n "${part}p")"
+  [ -n "$range" ] || return 2
+  total="$(printf '%s\n' "$ranges" | wc -l | tr -d ' ')"
+  if [ "$total" -eq 1 ]; then
+    cat "$file" || return 1
+  elif [ "$part" -lt "$total" ]; then
+    line="STEP $2: part $part of $total. Run $script step $2 --part $((part + 1)) now, before you act on this part."
+    printf '%s\n' "$line"
+    sed -n "${range}p" "$file" || return 1
+    printf '%s\n' "$line"
+  else
+    printf 'STEP %s: part %s of %s, the last part.\n' "$2" "$part" "$total"
+    sed -n "${range}p" "$file" || return 1
+  fi
 }
 
 # ------------------------------------------------------------------------------------------------

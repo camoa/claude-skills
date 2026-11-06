@@ -96,7 +96,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--allow-write <path relative to codePath>]...
 #                            [--test-glob <glob from the implement recipe>]... [--resume]
 #   implement-actions.sh dispatch-close <task_folder> [--no-report | --not-sent]
-#   implement-actions.sh step <name>
+#   implement-actions.sh step <name> [--part <n>]
 #
 # A value flag refuses no value, and an empty value where a value must have text. A flag that takes
 # a name or a path also refuses a value that is itself the next option, such as `--allow --leave`.
@@ -142,7 +142,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # action rather than with Read: the documentation mirror scopes ${CLAUDE_PLUGIN_ROOT} substitution
 # in `allowed-tools` to Bash rules, so a Read rule naming that variable never matches and every
 # step-file read raises a prompt an unattended run cannot answer. A name carrying a slash, and a
-# name no file matches, both refuse with exit 3 and name the steps that exist.
+# name no file matches, both refuse with exit 3 and name the steps that exist. A file over the
+# inline limit prints in parts (step_part in scripts/lib/recipes.sh), and --part <n> prints one.
 #
 # Every action prints a summary of `key: value` lines and nothing else: no record body, no diff, no
 # command output, no brief, no finding's evidence. Each line that a person may want in full names
@@ -14198,17 +14199,22 @@ RA_ROWS
 # A name is one name and never a path. A slash would turn this into a reader for any file the
 # script can open, and it exists to hand over the six step files and nothing else.
 do_step() {
-  local names
+  local names part=1
   names="$(md_basenames_in "$STEPS_DIR")"
   [ "$#" -ge 1 ] || die3 "step: a step name is required. The steps are: $names"
+  if [ "$#" -eq 3 ] && [ "$2" = "--part" ]; then part="$3"; set -- "$1"; fi
   [ "$#" -le 1 ] || die3 "step: unrecognized extra argument: $2"
   case "$1" in
     */*|.|..|'') die3 "step: a step name is one name and never a path; got: $1. The steps are: $names" ;;
   esac
   [ -f "$STEPS_DIR/$1.md" ] \
     || die3 "step: this skill ships no step file named $1. The steps are: $names"
-  cat "$STEPS_DIR/$1.md" || die3 "step: $STEPS_DIR/$1.md could not be read."
-  exit 0
+  step_part "$STEPS_DIR" "$1" "$part" "$PLUGIN_ROOT/skills/implement/scripts/implement-actions.sh"
+  case "$?" in
+    0) exit 0 ;;
+    2) die3 "step: $1 has no part $part. Run step $1 to see the first part and the count of parts." ;;
+    *) die3 "step: $STEPS_DIR/$1.md could not be read." ;;
+  esac
 }
 
 do_dispatch_close() {

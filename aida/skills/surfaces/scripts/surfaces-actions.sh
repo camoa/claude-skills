@@ -15,7 +15,7 @@
 #   surfaces-actions.sh [--run-mode ...] baseline [<id>]... --check-recipe <framework>=<path>...
 #                                                 [--value <name>=<value>]... [--confirmed]
 #   surfaces-actions.sh decline <kind>
-#   surfaces-actions.sh step <name>
+#   surfaces-actions.sh step <name> [--part <n>]
 #
 # The recipe flags are `--recipe <framework>=<path>` or `--lookup-failed <framework>=<word>`, one
 # per framework the project records, the flags review's `checks` takes. A kind is `e2e` or
@@ -61,10 +61,17 @@ TAB="$(printf '\t')"
 
 if [ "$ACTION" = "step" ]; then
   names="$(md_basenames_in "$STEPS_DIR")"
+  part=1
+  if [ "$#" -eq 3 ] && [ "$2" = "--part" ]; then part="$3"; set -- "$1"; fi
   [ "$#" -eq 1 ] || die 3 "step: one step name is required. The steps are: $names"
   case "$1" in */*|.|..|'') die 3 "step: a step name is one name and never a path; got: $1" ;; esac
   [ -f "$STEPS_DIR/$1.md" ] || die 3 "step: this skill ships no step file named $1. The steps are: $names"
-  cat "$STEPS_DIR/$1.md"; exit 0
+  step_part "$STEPS_DIR" "$1" "$part" "$PLUGIN_ROOT/skills/surfaces/scripts/surfaces-actions.sh"
+  case "$?" in
+    0) exit 0 ;;
+    2) die 3 "step: $1 has no part $part. Run step $1 to see the first part and the count of parts." ;;
+    *) die 3 "step: $STEPS_DIR/$1.md could not be read." ;;
+  esac
 fi
 
 # ---------------------------------------------------------------- the project

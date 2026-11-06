@@ -135,7 +135,8 @@ Open the step file through the script, not through the Read tool:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh step <step name>
 ```
-This prints `references/<step name>.md`. A `Read` rule naming that folder does not reliably
+This prints `references/<step name>.md`. A file over the inline limit prints in parts, and the
+first line names the next part. A `Read` rule naming that folder does not reliably
 expand `${CLAUDE_PLUGIN_ROOT}`, which is why this skill grants only the one Bash rule above. Run
 `step` every time this table sends you to a file, even a file already read this turn. A step run
 from memory of an earlier invocation is a step run against rules that may have changed.

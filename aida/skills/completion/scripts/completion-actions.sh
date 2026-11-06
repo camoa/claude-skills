@@ -21,7 +21,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   completion-actions.sh follow-ups <task_folder> [--create <finding id>]...
 #   completion-actions.sh close      <task_folder> [--reason <text>] [--leave <finding id>=<reason>]...
 #                                                  [--captures-offered <n>] [-- <summary...>]
-#   completion-actions.sh step       <name>
+#   completion-actions.sh step       <name> [--part <n>]
 #
 # Every action prints a summary of `key: value` lines and paths, and nothing else: no record body,
 # no pull request body, no finding's evidence. A line a person may want in full names the path that
@@ -136,7 +136,7 @@ usage: completion-actions.sh read       <task_folder>
        completion-actions.sh follow-ups <task_folder> [--create <finding id>]...
        completion-actions.sh close      <task_folder> [--reason <text>] [--leave <finding id>=<reason>]...
                                                       [--captures-offered <n>] [-- <summary...>]
-       completion-actions.sh step       <name>
+       completion-actions.sh step       <name> [--part <n>]
 EOF
 }
 
@@ -847,17 +847,22 @@ CP_LEAVES2
 # ------------------------------------------------------------------------------------------------
 
 do_step() {
-  local names
+  local names part=1
   names="$(md_basenames_in "$STEPS_DIR")"
   [ "$#" -ge 1 ] || die 3 "step: a step name is required. The steps are: $names"
+  if [ "$#" -eq 3 ] && [ "$2" = "--part" ]; then part="$3"; set -- "$1"; fi
   [ "$#" -le 1 ] || die 3 "step: unrecognized extra argument: $2"
   case "$1" in
     */*|.|..|'') die 3 "step: a step name is one name and never a path; got: $1. The steps are: $names" ;;
   esac
   [ -f "$STEPS_DIR/$1.md" ] \
     || die 3 "step: this skill ships no step file named $1. The steps are: $names"
-  cat "$STEPS_DIR/$1.md" || die 3 "step: $STEPS_DIR/$1.md could not be read."
-  exit 0
+  step_part "$STEPS_DIR" "$1" "$part" "$PLUGIN_ROOT/skills/completion/scripts/completion-actions.sh"
+  case "$?" in
+    0) exit 0 ;;
+    2) die 3 "step: $1 has no part $part. Run step $1 to see the first part and the count of parts." ;;
+    *) die 3 "step: $STEPS_DIR/$1.md could not be read." ;;
+  esac
 }
 
 # ------------------------------------------------------------------------------------------------
