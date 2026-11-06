@@ -35,7 +35,7 @@ folders falls through to the catalog. An empty folder is not an answer, so a sta
 no-recipe path only when the catalog holds none either.
 
 A file that is there and cannot be read stops the lookup, which names the path. A source that a
-lookup could not read is named on an `unread:` line, so a short answer never reads as complete.
+lookup could not read is named in the `unread=` field of its line, so a short answer never reads as complete.
 
 Every agentic recipe your folders hold for a declared framework is named to research, whatever the
 task is about. You put it there deliberately, and the list is short.

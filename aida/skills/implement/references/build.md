@@ -5,13 +5,16 @@ reference now. Nothing below may change one.
 
 ## Resolve the recipe for this step
 
-Dispatch `catalog-identifier` with the lines `point: implement`, each framework, and the project
-folder. Skip it when an earlier step of this build has resolved it, the tests step included. Name
-the role, and pass the lookup's answer in its own word: SKILL.md holds both rules. Once resolved,
+Run this, with one `--framework` flag per framework:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-point "<project folder>" --point implement --framework <framework>
+```
+Skip it when an earlier step of this build has resolved it, the tests step included. Pass each
+`answer=` in its own word: SKILL.md holds that rule. Once resolved,
 reuse the path per framework for every order in this build. They live in the conversation, so a
-fresh window resolves them again. **Light:** dispatch nothing here. Read each path from
+fresh window resolves them again. **Light:** run nothing here. Read each path from
 `implementation/preconditions.json`, at `frameworks[].implementRecipePath`. Read its
-`implementLookup` too. `not-given` means nobody asked, so dispatch the lookup for that framework,
+`implementLookup` too. `not-given` means nobody asked, so run the lookup for that framework,
 as other modes do. A failure word means no implement recipe, so pass no path for it.
 
 This recipe carries the rules applied while code is written. The implementer opens it itself, from

@@ -3,7 +3,7 @@ name: task
 description: This skill should be used when the user wants to "create a task", "start a new task", "split a task", "make this an epic", "mark a task in progress", "mark a task done", "complete a task", "run this task autonomously", "set a budget on this task", "raise the budget", "save what we decided", "bring the site up" for a task's worktree, or "prune the worktrees" of complete tasks. It makes a new task, moves an old one into the project's tasks folder, changes a task's state, splits one task into a parent with children, sets a task's run mode, sets the ceiling on its build, saves a mid-stage decision as a note, brings the worktree's own site up and down, or removes the worktrees of complete tasks.
 argument-hint: "[create <name> | repair <old-task-folder> | start <task-id> | complete <task-id> | split <parent-task-id> | set-run-mode <task-id> <autonomous|light|interactive> [--stage <stage>]... | set-budget <task-id> [--dispatches <n>] [--minutes <n>] | save <task-id> | environment <task-id> <show|up|down|not-applicable> | prune [<task-id>]...]"
 arguments: [action, target]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh read-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh --run-mode * set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh distill *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh distill *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh read-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh --run-mode * set-worktree-base *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh distill *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh distill *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-point *), Agent, EnterWorktree
 ---
 
 # Task
@@ -113,15 +113,13 @@ tree", the one copy of that rule. Go on to step 5 either way.
 
 **5. Offer the site.** Runs here after step 4, and again at `start` whenever the task record
 still has no `environment`, whoever called `start`. A worktree has the branch's files and no
-site, so a review or a baseline taken there would capture the served checkout instead. Dispatch
-`catalog-identifier` once per point, as the surfaces skill does. The role reads any word that is
-not on a `point:` line as a framework. The first dispatch has the line
-`point: worktree-environment`, then every framework the project records and the project folder.
-When the project record has `surfaces.e2e.enabled`, dispatch the role again with
-`point: e2e-setup` and the same other lines. When it has `surfaces.visualRegression.enabled`,
-dispatch it again with `point: visual-regression`. **Light:** send all these points in one
-dispatch, one `point:` line each. `up` then installs that harness in the tree.
-Pass the worktree-environment answer as `--recipe <framework>=<path>` or
+site, so a review or a baseline taken there would capture the served checkout instead. Run
+`recipe-point` once, as the surfaces skill does, with `--point worktree-environment` and one
+`--framework` flag per framework the project records.
+When the project record has `surfaces.e2e.enabled`, add `--point e2e-setup`. When it has
+`surfaces.visualRegression.enabled`, add `--point visual-regression`. `up` then installs that
+harness in the tree.
+Pass the worktree-environment `answer=` as `--recipe <framework>=<path>` or
 `--lookup-failed <framework>=<word>`, one flag per framework. Pass each setup recipe as
 `--setup-recipe <kind>=<path>`, where the kind is `e2e` or `visual-regression`. A setup lookup
 that returns no path gives no flag, and `up` says that harness is not installed. Then run

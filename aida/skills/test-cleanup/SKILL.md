@@ -2,7 +2,7 @@
 name: test-cleanup
 description: This skill should be used when a project's test suite has grown too large and a person wants it analysed and cleaned up, for example "clean up the tests", "our suite is too big", "find exaggerated tests", "which tests can we delete", or "shrink the test suite". It sorts every test against one rubric, reports counts and causes, and asks the person, one group at a time, what to delete, merge or shrink. The approved cleanup becomes an AIDA task, run light when the person says so.
 argument-hint: "[--max-lines <n>]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/test-cleanup/scripts/cleanup-actions.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/test-cleanup/scripts/cleanup-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-point *)
 ---
 
 # Test cleanup
@@ -28,9 +28,14 @@ directory. Say so in one line, name `/aida:project`, and stop.
 
 ## 2. Take the test globs from the implement recipe
 
-Dispatch `catalog-identifier` once, naming the role. The message holds the lines
-`point: implement` and `point: test-authoring`, then each framework, then the project folder.
-Implementation asks for the same two recipes. Then pass each implement lookup to the script:
+Run this once, with one `--framework` flag per framework:
+
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-point "<project folder>" \
+  --point implement --point test-authoring --framework <framework>
+```
+
+Implementation asks for the same two recipes. Then pass each implement `answer=` to the script:
 
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/test-cleanup/scripts/cleanup-actions.sh where --implement-lookup "<framework>=<recipe path or reason>"...

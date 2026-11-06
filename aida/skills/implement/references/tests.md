@@ -28,21 +28,23 @@ and removes the list. Until then the build refuses the order (exit 120).
 
 ## Resolve the recipes for this step
 
-Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup once per point in
-`lookups=`, for each framework the project declares. Each message names the point as
-`point: <phase>`, then each framework, then the project folder. Name the role, and pass the
-lookup's answer in its own word: SKILL.md holds both rules.
+Run this once, with one `--point` flag per point in `lookups=` and one `--framework` flag per
+framework the project declares:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-point "<project folder>" --point <phase> --framework <framework>
+```
+Pass each `answer=` in its own word: SKILL.md holds that rule.
 
-**`point: test-authoring`, only when `lookups=` names it.** This answers where a test file goes,
+**`test-authoring`, only when `lookups=` names it.** This answers where a test file goes,
 which levels exist and when each is right, what a test may not do in this framework, and
 whether a test names its criterion. The test author and the row-checker read it, so an order
 whose roles hold neither skips it.
 
-**Light:** do not ask for `point: implement`. Preconditions resolved it, so read each path from
+**Light:** do not ask for `implement`. Preconditions resolved it, so read each path from
 `implementation/preconditions.json`, at `frameworks[].implementRecipePath`. A framework whose
 `implementLookup` reads `not-given` was never asked, so ask for it here.
 
-**`point: implement`, for its patterns and its path.** Take the file patterns from its `## Oracle files`
+**`implement`, for its patterns and its path.** Take the file patterns from its `## Oracle files`
 block, the same globs the `test_delete` row names. The catalog index designates that block for
 naming test files, so this is not a guess at what the block is for. Pass those globs and the path
 to the freeze below. This is the one recipe this step reads itself, because it needs the patterns as data rather

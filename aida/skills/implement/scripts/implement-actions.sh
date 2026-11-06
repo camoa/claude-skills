@@ -159,9 +159,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # a row-checker it also writes and prints implementation/interfaces-<unit_id>.json, when a tests
 # brief exists.
 #
-# `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
-# one belonging to this point and this framework, or reads a source the project configured itself,
-# and hands over a path. A framework whose lookup failed is passed with the reason it failed, and
+# `preconditions` never resolves a recipe itself. The skill body asks through `recipe-point` for
+# the one belonging to this point and this framework, and hands over a path. A framework whose lookup failed is passed with the reason it failed, and
 # the three reasons stay apart: no-recipe, listing-unreachable, fetch-failed. Only the first says
 # anything about the framework.
 #
@@ -2734,8 +2733,7 @@ ST_CHANGES
 # ------------------------------------------------------------------------------------------------
 # Step two: preconditions. Can this repository build and test at all?
 #
-# The skill resolves each framework's recipe, through the guides navigator for anything the catalog
-# publishes and directly for a source the project configured itself, and hands the path here. This
+# The skill resolves each framework's recipe through `recipe-point`, and hands the path here. This
 # script never fetches a catalog address and never reads the navigator's cache behind its back
 # (foundations.md, "Everything published in the catalog is read through the guides navigator").
 # That split is also what keeps this action exercisable against a file on disk.
@@ -3795,7 +3793,7 @@ PC_FOLDER
   im_advice="none"
   rv_unresolved="$(printf '%s' "$record_json" | jq -r '[ .frameworks[] | select(.reviewLookup != "resolved") | .framework + "=" + .reviewLookup ] | join(", ")')"
   [ -n "$rv_unresolved" ] \
-    && rv_unresolved="no review recipe for $rv_unresolved, so preconditions and review run no check command there. Ask for point: review and pass --check-recipe, or --check-lookup-failed with the lookup's word" \
+    && rv_unresolved="no review recipe for $rv_unresolved, so preconditions and review run no check command there. Run recipe-point with --point review and pass --check-recipe, or --check-lookup-failed with the lookup's word" \
     || rv_unresolved="none"
   [ -z "$im_notgiven" ] || [ -z "$im_blocked" ] \
     || im_unlooked="nobody looked up $im_notgiven, so nothing here says whether these test-proved orders can freeze: $im_blocked"
@@ -3813,7 +3811,7 @@ PC_FOLDER
     [ -z "$im_blocked" ] \
       || im_advice="No record maps an order to a framework. Check that one of those frameworks carries the ## Oracle files globs for each of those orders"
   elif ! printf '%s' "$record_json" | jq -e '[ .frameworks[] | select(.implementLookup != "not-given") ] | length > 0' >/dev/null; then
-    im_freeze="the implement recipe lookup was not run. Ask the navigator for point: implement, once per framework, and pass --implement-lookup <framework>=<path or reason>. A test-proved order cannot freeze without that recipe's ## Oracle files globs"
+    im_freeze="the implement recipe lookup was not run. Run recipe-point with --point implement, once per framework, and pass --implement-lookup <framework>=<path or reason>. A test-proved order cannot freeze without that recipe's ## Oracle files globs"
   elif [ -z "$im_blocked" ]; then
     im_freeze="no implement recipe for any framework. No order in this snapshot is proved by tests, so none of them needs one"
   else

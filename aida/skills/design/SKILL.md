@@ -3,7 +3,7 @@ name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
 argument-hint: "[close] [<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh read), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh read), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-point *), Agent, EnterWorktree
 ---
 
 # Design
@@ -21,7 +21,7 @@ orders that build it.
 Design's own records go through `design-actions.sh`, named in this skill's own grant, so they run
 without asking. One write below goes elsewhere. A lookup is recorded through the research skill's
 `research-actions.sh`, because that script is the single producer of a research finding, and it is
-named in the grant too. So is the project skill's `recipe-source` lookup. Any other Bash command
+named in the grant too. So is the project skill's `recipe-point` lookup. Any other Bash command
 still asks for approval. Dispatching an agent needs no approval either; it is also named in this
 skill's own grant.
 
@@ -165,18 +165,16 @@ entry at all means the first run recorded nothing, and every body is read.
 
 ## Read the process recipe for this project's framework
 
-The project's own sources answer before the catalog, so ask them first, once per framework:
+Run this, with one `--framework` flag per framework:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<projectPath>" design <framework>
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-point "<projectPath>" --point design --framework <framework>
 ```
-It prints one line, or nothing. `RECIPE: <path> source=<folder>`: take that path and skip the
-navigator. `RECIPE: catalog`, with or without `searched=<folders>`, or no line: ask the
-navigator's process-recipe lookup for this project's framework at the design stage. A folder
+It asks the project's own sources, then the navigator, and prints one `POINT:` line per framework.
+`answer=` is a path to the body on disk, or a word. A folder
 that holds nothing is not an answer, so a folder miss never skips the navigator. When
-`searched=` is present, record those folders beside the navigator's answer. A later reader then
+`searched=` names folders, record them beside the answer. A later reader then
 tells a folder miss from a project with no folder. The no-recipe path below is reached only
-after the navigator answers that none exists. The navigator answers whether one is
-available and, when it is, a path to the body on disk. Read the body from that path. Never fetch a
+when `answer=` reads `no-recipe`. Read the body from the path. Never fetch a
 catalog address yourself and never read a cached copy behind the navigator's back.
 Verdict words and a missing heading follow
 `${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.

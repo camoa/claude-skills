@@ -3,7 +3,7 @@ name: implement
 description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, refuses to land the build on the project's own trunk branch, establishes whether this repository can build and test at all, writes the tests for one work order and freezes them, writes the code for that order until it passes all three deciding checks, reviews the diff, repairs what the review finds, closes the order, and once every order is closed records the task's implementation as finished.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh --run-mode interactive create *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh --run-mode interactive create *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-point *), Agent, EnterWorktree
 ---
 
 # Implement
@@ -179,9 +179,7 @@ carry a label. The worktree line is written `worktree: <path>`, from the path `d
 prints and each brief carries. The role works there and starts each shell command with
 `cd <worktree> &&`. A role starts in this session's directory, and without the line it worked in
 the main checkout (gap row 230). The row checker's interface file carries no worktree, so only
-this line and the hooks keep it out of the main checkout. The identifier's process-recipe
-point is written `point: <phase>` and never a bare word. A bare
-`implement` reads as a task and not a phase (live-run row 138). Nothing else goes in. The
+this line and the hooks keep it out of the main checkout. Nothing else goes in. The
 role's rules and its return shape live in its agent definition, which reaches it on every
 dispatch.
 The data it needs lives in the brief the paths name. So the message restates neither, and two

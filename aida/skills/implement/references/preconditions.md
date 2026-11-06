@@ -6,24 +6,25 @@ once per build, not once per work order.
 ## Resolve one recipe per framework
 
 Read the project's own `frameworks`. A `project.json` recording none refuses outright (exit 3):
-no recipe can be chosen for a project the run cannot name a framework for. For each framework,
-dispatch `catalog-identifier` to ask the navigator's process-recipe lookup, with the lines
-`point: test-execution`, that framework, and the project folder. It answers whether one is
-available and, when it is, a path to the body on disk. Name the role, and pass the lookup's
-answer in its own word: SKILL.md holds both rules. The role identifies and returns a path, and it
-never opens the body.
+no recipe can be chosen for a project the run cannot name a framework for. Ask for this step's
+three recipes in one call, with one `--framework` flag per framework:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-point "<project folder>" \
+  --point test-execution --point review --point implement --framework <framework>
+```
+It prints one `POINT:` line per point and framework. `answer=` is a path to the body on disk, or
+a word. Pass the answer in its own word: SKILL.md holds that rule. Do not open the body.
 Never fetch a catalog address yourself and never read a cached copy behind the navigator's back.
-The role reads a folder source this project configured itself first, so it wins over the catalog.
-When a folder answers for `test-execution`, the role also returns the catalog's copy of the same
+A folder source this project configured itself is read first, so it wins over the catalog.
+When a folder answers for `test-execution`, `catalog=` holds the catalog's copy of the same
 recipe. Pass that path as `--catalog-recipe <framework>=<path>`, or the lookup's own word when it
 failed. A project copy at a lower version than the catalog's prints on the `staleRecipe:` line,
 with both versions. A failed lookup, or a catalog copy with another name, prints there as not
 checked. Read that line to the person. The step changes nothing, because the copy belongs to the
 project. Review compares the two copies again.
 
-Dispatch `catalog-identifier` once more, with `point: review` and each framework. This is a
-second recipe, never the same file as the `test-execution` one above. Pass its path straight
-through; the script reads its `## Check commands` block itself, per SKILL.md.
+The `review` line is a second recipe, never the same file as the `test-execution` one above.
+Pass its path straight through; the script reads its `## Check commands` block itself, per SKILL.md.
 
 A folder that holds any recipe for a framework, such as `worktree-environment.md`, but not one
 of these two, leaves that phase to the catalog. The catalog's commands can assume the environment
@@ -31,13 +32,12 @@ the folder replaced. The script walks the folders itself. The `folderRecipeMissi
 the folder, the files it holds, and each phase the catalog answers. A missing `test-execution`
 file counts only when an order needs the harness. Read that line to the person.
 
-Dispatch it a third time, with `point: implement` and each framework. Do not read that recipe
-here and do not pass it to anyone. The per-order tests step resolves it again for its globs. This
-dispatch exists so the freeze wall below is named before any order is built.
+Do not read the `implement` recipe here and do not pass it to anyone. The per-order tests step
+resolves it again for its globs. This lookup exists so the freeze wall below is named before any
+order is built.
 
-**Light:** ask for the three points in one dispatch, with the lines `point: test-execution`,
-`point: review` and `point: implement`, each framework, and the project folder. The record keeps
-the `implement` path, so the tests step and the build step of a light task read it there.
+**Light:** The record keeps the `implement` path, so the tests step and the build step of a light
+task read it there.
 
 ## Check the tools the test recipe names
 
@@ -290,8 +290,8 @@ run it again. While the run is live, `tests-brief` and `dispatch-open` of a writ
 
 The record pins each recipe's path, and every later step reads that path. When the catalog
 republishes a recipe this task pinned, the record still names the old body. Resolve the recipe
-again the way the first section says: dispatch `catalog-identifier` with `point: test-execution`
-and that framework, never a cached copy. Then run, with one flag per framework that changed:
+again the way the first section says: run `recipe-point` with `--point test-execution` and that
+framework, never a cached copy. Then run, with one flag per framework that changed:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh recipe-refresh "<task_folder>" \
   --recipe <framework>=<path to the test-execution recipe>
@@ -305,7 +305,7 @@ freeze refuses a `--test-recipe` that is not the record's path (exit 3), so run 
 The review recipe is pinned by the baseline, with its sha256. Review refuses a body the baseline
 did not read (exit 73). A baseline reads the tree before the task. Each tool runs where the tree
 stands, so a second reading records this task's own findings as pre-existing. Resolve it the same way, with
-`point: review`, then run:
+`--point review`, then run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh recipe-refresh "<task_folder>" \
   --check-recipe <framework>=<path to the review recipe>

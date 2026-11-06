@@ -111,7 +111,7 @@ usage: project-actions.sh create --name <name> --path <codePath> [--projects-hom
        project-actions.sh set-mutation <name-or-path> <on|off>
        project-actions.sh git-init <name-or-path>
        project-actions.sh add-source <name-or-path> <kind> <folder|catalog>
-       project-actions.sh recipe-source <projectFolder> <phase> <framework>
+       project-actions.sh recipe-point <projectFolder> --point <phase>... --framework <framework>... [--navigator <path>]
        project-actions.sh agentic-source <projectFolder> <framework>
        project-actions.sh subscribe-playbook <name-or-path> <framework> <set-id>
        project-actions.sh unsubscribe-playbook <name-or-path> <framework> <set-id>
@@ -135,7 +135,7 @@ source "$REGISTRY_LIB"
 # shellcheck source=/dev/null
 source "$COMMIT_LIB"
 # shellcheck source=/dev/null
-source "$SOURCES_LIB"  # the one source walk, for recipe-source and agentic-source below
+source "$SOURCES_LIB"  # the one source walk, for recipe-point and agentic-source below
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/scripts/lib/project-findings.sh"
 # shellcheck source=/dev/null
@@ -1021,58 +1021,154 @@ do_add_source() {
 }
 
 # ------------------------------------------------------------------------------------------------
-# recipe-source: the process recipe a project's own folder source holds for one phase
+# recipe-point: the process recipe for each point and framework, in one call
 # ------------------------------------------------------------------------------------------------
 
-# Walks `sources` whose `provides` holds processRecipes, in that kind's `precedence` order, and
-# prints one line a caller reads before it asks the navigator. A folder entry is probed for
-# `<folder>/process-recipes/<framework>/<phase>.md`; the first on disk answers
-# `RECIPE: <path> source=<folder>`. A catalog entry ends the walk: the sources before it held
-# nothing, so ask the navigator now. A walk that ends on folders alone also falls through to the
-# catalog. Both answer `RECIPE: catalog searched=<folders>`, naming every folder probed, and a
-# catalog entry that ranks first answers `RECIPE: catalog` alone. Precedence orders the sources
-# and never silences the ones below. A folder that holds nothing is not an answer (the owner's
-# rule of 2026-09-16). The rule of 2026-09-15, that a declared folder was the only
-# source, is gone with its `none` answer. No source provides the kind: prints
-# nothing, and the caller asks the catalog as the default. Version 5 resolved local recipes first
-# on every miss; version 6 recorded the source and read nothing until this action. The phase is
-# the catalog's own word, so a folder keys on what a stage asks for. Takes the project folder,
-# not a registry target, so a worktree session with no registry can run it as one plain command.
-do_recipe_source() {
-  local project_path="${1:-}"
-  [ -n "$project_path" ] || die3 "recipe-source: a project folder is required"
-  local phase="${2:-}"
-  [ -n "$phase" ] || die3 "recipe-source: a phase is required"
-  local fw="${3:-}"
-  [ -n "$fw" ] || die3 "recipe-source: a framework is required"
+# rs_probe <project folder> <phase> <framework>: walks `sources` whose `provides` holds
+# processRecipes, in that kind's `precedence` order. A folder entry is probed for
+# `<folder>/process-recipes/<framework>/<phase>.md`, and the first on disk answers: returns 0 with
+# SW_PATH and SW_SOURCE set. A catalog entry ends the walk: the sources before it held nothing. A
+# walk that ends on folders alone also falls through to the catalog. Returns 1 for both, with
+# SW_SEARCHED naming every folder probed. Precedence orders the sources and never silences the ones
+# below. A folder that holds nothing is not an answer (the owner's rule of 2026-09-16). The rule of
+# 2026-09-15, that a declared folder was the only source, is gone with its `none` answer. No source
+# provides the kind: the catalog is the default. Version 5 resolved local recipes first on every
+# miss; version 6 recorded the source and read nothing until this action. The phase is the catalog's
+# own word, so a folder keys on what a stage asks for. This runs in the action's own shell, so a
+# die3 here ends the action. A subshell would hide it.
+rs_probe() {
+  local project_path="$1" phase="$2" fw="$3" probe_rc
   case "$phase" in
     research|design|implement|test-authoring|test-execution|review|worktree-environment|e2e-setup|visual-regression) : ;;
-    *) die3 "recipe-source: phase must be one of research, design, implement, test-authoring, test-execution, review, worktree-environment, e2e-setup or visual-regression, got: $phase" ;;
+    *) die3 "recipe-point: phase must be one of research, design, implement, test-authoring, test-execution, review, worktree-environment, e2e-setup or visual-regression, got: $phase" ;;
   esac
-  [ -f "$project_path/project.json" ] || die3 "recipe-source: no project.json in $project_path"
+  [ -f "$project_path/project.json" ] || die3 "recipe-point: no project.json in $project_path"
   # The walk itself is scripts/lib/recipes.sh, shared with the tool skill's own lookup. `yes`
   # says this caller asks the navigator, so a catalog entry ends the walk. The library refuses
   # nothing, by its own header, so both refusals below are made here.
-  local probe_rc
   sw_probe "$project_path/project.json" processRecipes process-recipes "$fw" "$phase" yes
   probe_rc=$?
   # A locationType outside the four is a record this walk cannot read. One answer comes back from
   # this action and precedence decides which, so a source of unknown rank makes that answer a
   # guess. check-project.sh refuses the same record; this says the same thing where a stage runs.
   [ -z "$SW_UNKNOWN" ] \
-    || die3 "recipe-source: $project_path/project.json declares a source this walk cannot read: $SW_UNKNOWN. A locationType is one of folder, catalog, site or search. Repair that source, then run this again"
+    || die3 "recipe-point: $project_path/project.json declares a source this walk cannot read: $SW_UNKNOWN. A locationType is one of folder, catalog, site or search. Repair that source, then run this again"
   [ -z "$SW_UNREADABLE" ] \
-    || die3 "recipe-source: $SW_UNREADABLE is on disk and could not be read. A source this project ranked first is not a source that held nothing, so the catalog is not asked. Fix the file's permissions, or remove it"
-  # A site or a search source holds no folder this walk can probe, so it is named rather than
-  # passed over in silence. An answer from the folders is then not read as the whole story.
-  [ -z "$SW_OTHER" ] || echo "unread: $SW_OTHER"
-  if [ "$probe_rc" -eq 0 ]; then
-    echo "RECIPE: $SW_PATH source=$SW_SOURCE"
-    return 0
+    || die3 "recipe-point: $SW_UNREADABLE is on disk and could not be read. A source this project ranked first is not a source that held nothing, so the catalog is not asked. Fix the file's permissions, or remove it"
+  return "$probe_rc"
+}
+
+# rp_ask <navigator> <phase> <framework>: runs the navigator's lookup and sets RP_ANSWER to a path on
+# disk or to one of the three words, and RP_TEXT to the navigator's own text. Only `no-recipe` says
+# anything about the framework, so a report this cannot place reads `fetch-failed`. Stdout only,
+# because the store writes to stderr beside a valid report. A path that is not on disk gets one more
+# lookup, because the lookup fetches a body its store lacks.
+rp_ask() {
+  local tries=0 out rc class
+  while [ "$tries" -lt 2 ]; do
+    tries=$((tries + 1))
+    out="$("$1" process-recipe "$2" "$3" 2>/dev/null)"
+    rc=$?
+    class=other
+    [ "$rc" -ne 0 ] || class="$(printf '%s' "$out" | jq -r '
+      if type != "object" then "other"
+      elif .available == true then "path"
+      elif .available != false then "other"
+      elif (.reason // "") == "" then (if .key == null then "no-recipe" else "other" end)
+      elif .reason == "index unavailable or network error" or .reason == "no index cached" then "listing-unreachable"
+      elif .reason == "refusing non-canonical body URL" or .reason == "body fetch failed" then "fetch-failed"
+      else "other" end' 2>/dev/null)"
+    RP_TEXT="$(printf '%s' "$out" | jq -r '.reason // empty' 2>/dev/null)"
+    case "$class" in
+      path)
+        RP_ANSWER="$(printf '%s' "$out" | jq -r '.body_path // empty')"
+        [ ! -f "$RP_ANSWER" ] || return 0
+        RP_TEXT="the navigator named ${RP_ANSWER:-no path}, and no such file is on disk"
+        ;;
+      no-recipe|listing-unreachable|fetch-failed)
+        RP_ANSWER="$class"
+        return 0
+        ;;
+      *)
+        RP_ANSWER=fetch-failed
+        RP_TEXT="${RP_TEXT:-${out:-the navigator exited $rc and printed nothing}}"
+        return 0
+        ;;
+    esac
+  done
+  RP_ANSWER=fetch-failed
+}
+
+# Prints one `POINT:` line per point and framework. A word is an answer, so every answered pair
+# exits 0. Every pair is probed before any line prints, so a refusal leaves no partial answer. Each
+# line then prints as it completes, so a hung network leaves the lines already done. This never
+# changes directory: the navigator derives its memory folder from $PWD. A folder answer at
+# `test-execution` or `review` also asks the navigator, because preconditions and review compare the
+# two copies. Takes the project folder, not a registry target, so a worktree session with no registry
+# can run it as one plain command.
+do_recipe_point() {
+  local project_path="${1:-}" navigator="" phase fw answer from catalog ask searched missed=no
+  local points=() frameworks=()
+  [ -n "$project_path" ] || die3 "recipe-point: a project folder is required"
+  shift
+  while [ "$#" -gt 0 ]; do
+    [ "$#" -ge 2 ] || die3 "recipe-point: $1 needs a value"
+    case "$1" in
+      --point) points+=("$2") ;;
+      --framework) frameworks+=("$2") ;;
+      --navigator) navigator="$2" ;;
+      *) die3 "recipe-point: unknown argument: $1" ;;
+    esac
+    shift 2
+  done
+  [ "${#points[@]}" -gt 0 ] || die3 "recipe-point: --point is required"
+  [ "${#frameworks[@]}" -gt 0 ] || die3 "recipe-point: --framework is required"
+
+  # The grant lets this flag name what runs, so it names only the navigator's script.
+  if [ -n "$navigator" ]; then
+    [ "${navigator##*/}" = "dev-guides-lookup.sh" ] && [ -f "$navigator" ] && [ -x "$navigator" ] \
+      || die3 "recipe-point: --navigator must be an executable file named dev-guides-lookup.sh, got: $navigator"
+  elif [ -x "${AIDA_NAVIGATOR_LOOKUP:-}" ]; then
+    navigator="$AIDA_NAVIGATOR_LOOKUP"
+  else
+    # shellcheck source=/dev/null
+    source "${PLUGIN_ROOT}/scripts/lib/claude-settings.sh" \
+      || die3 "recipe-point: the library failed to load: claude-settings.sh"
+    navigator="$(ccs_navigator_lookup)"
   fi
-  [ -n "$SW_SEARCHED$SW_CATALOG" ] || return 0
-  echo "RECIPE: catalog${SW_SEARCHED:+ searched=${SW_SEARCHED% }}"
-  return 0
+
+  for phase in "${points[@]}"; do
+    for fw in "${frameworks[@]}"; do
+      rs_probe "$project_path" "$phase" "$fw" || :
+    done
+  done
+
+  for phase in "${points[@]}"; do
+    for fw in "${frameworks[@]}"; do
+      ask=yes; catalog=none; RP_TEXT=""
+      if rs_probe "$project_path" "$phase" "$fw"; then
+        answer="$SW_PATH"; from="$SW_SOURCE"
+        case "$phase" in test-execution|review) : ;; *) ask=no ;; esac
+      else
+        answer=""; from=catalog
+      fi
+      searched="${SW_SEARCHED% }"
+      if [ "$ask" = yes ]; then
+        if [ -z "$navigator" ]; then missed=yes; continue; fi
+        rp_ask "$navigator" "$phase" "$fw"
+        if [ -n "$answer" ]; then catalog="$RP_ANSWER"; else answer="$RP_ANSWER"; fi
+      fi
+      RP_TEXT="${RP_TEXT//$'\n'/ }"
+      printf 'POINT: %s %s answer=%s source=%s catalog=%s searched=%s unread=%s reason=%s\n' \
+        "$phase" "$fw" "$answer" "$from" "$catalog" "${searched:-none}" "${SW_OTHER:-none}" "${RP_TEXT:-none}"
+    done
+  done
+
+  # The role reads the path from the skill text the platform loaded, so this covers every load form
+  # the install record misses. plugin.json declares the navigator and the platform disables AIDA
+  # without it, so a miss is a failure of this lookup and never a missing plugin.
+  [ "$missed" = no ] \
+    || die 2 "recipe-point: the install record names no runnable navigator script. Dispatch catalog-identifier with locate: navigator, then run this again with --navigator <path>. Pass that flag on every later recipe-point call."
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1644,7 +1740,7 @@ case "$action" in
   set-mutation) do_set_mutation "$@" ;;
   git-init) do_git_init "$@" ;;
   add-source) do_add_source "$@" ;;
-  recipe-source) do_recipe_source "$@" ;;
+  recipe-point) do_recipe_point "$@" ;;
   agentic-source) do_agentic_source "$@" ;;
   subscribe-playbook) do_subscription subscribe "$@" ;;
   unsubscribe-playbook) do_subscription unsubscribe "$@" ;;

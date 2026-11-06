@@ -1804,7 +1804,7 @@ step_part() {
 # The sources a project declares, walked once for every kind a path can answer
 # ------------------------------------------------------------------------------------------------
 # `sources` in project.json is one list for five kinds. Two readers each walked it with their own
-# loop before this block: `recipe-source` in project-actions.sh and the tool skill's own copy.
+# loop before this block: `recipe-point` in project-actions.sh and the tool skill's own copy.
 # One walk now serves process recipes, tooling recipes and agentic recipes. Guides are not here.
 # They key on neither a framework nor a phase and are found by matching words, so a path probe
 # cannot serve them, and their lookup shape is still undecided.
