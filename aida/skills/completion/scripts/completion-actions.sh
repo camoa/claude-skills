@@ -470,7 +470,8 @@ cp_render_body() {
         if $alignment == null then ["no contract; see task.md"] else [$alignment.goal // ""] end)
     + section("Success criteria";
         if $alignment == null then ["no contract"]
-        else none_when_empty([ ($alignment.criteria // [])[] | "- " + .id + ": " + .text + " (" + (.verdict // "unanswered") + evidence_note(.id) + ")" ]; "none") end)
+        else none_when_empty([ ($alignment.criteria // [])[] | "- " + .id + ": " + .text + " (" + (.verdict // "unanswered") + evidence_note(.id) + ")" ]
+          + [ (($review // {}).droppedCriteria // [])[] | "- " + .id + ": " + .text + " (dropped with " + ([ .orders[] | .id + ": " + .because ] | join("; ")) + ")" ]; "none") end)
     + section("Non-goals";
         if $alignment == null then ["no contract"]
         else none_when_empty([ ($alignment.nonGoals // [])[] | "- " + .id + ": " + .text ]; "none") end)

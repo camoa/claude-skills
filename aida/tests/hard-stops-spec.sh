@@ -137,6 +137,12 @@ person_step_case() (
   task_records branch
   write_hook "$(jq -nc --arg c "$IMPLEMENT ${STEP:-drop $TASK wo1 --because 'not needed'}" '{command: $c}')" "$@"
 )
+# scope_remove_case [<role>]: the hook's decision on scope remove, from <role> or the main session.
+scope_remove_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  write_hook "$(jq -nc --arg c "$PLUGIN/skills/scope/scripts/scope-actions.sh remove $TASK --id c1" '{command: $c}')" "$@"
+)
 # unknown_stage_case: drop's exit on a task whose run mode names a stage that matches none, with
 # no answer, in an attended session.
 unknown_stage_case() (
@@ -195,6 +201,8 @@ expect "a role's finish --regression is refused" \
   "$(STEP="finish $TASK --regression wo1=x --because y" person_step_case aida:implementer)" deny
 expect "a role's fix-brief --take is refused, and its plain fix-brief is not" \
   "$(STEP="fix-brief $TASK wo1 --take i1 --because x" person_step_case aida:fixer)|$(STEP="fix-brief $TASK wo1" person_step_case aida:fixer)" "deny|allow"
+expect "a role's scope remove is refused, and the main session's is not" \
+  "$(scope_remove_case aida:fixer)|$(scope_remove_case)" "deny|allow"
 expect "no agent or template names an action the hook refuses whole to a role" "$(whole_action_names)" none
 expect "a checkout of an older copy of the task folder is refused" "$(checkout_case tasks/t1)" deny
 expect "a checkout of an older copy of the tasks folder is refused" "$(checkout_case tasks)" deny

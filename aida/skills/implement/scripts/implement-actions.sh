@@ -1936,7 +1936,7 @@ LO_OWED
   [ ! -f "$LEDGER_FILE" ] || dropped_ids_json="$(jq -c '[ (.orders // [])[] | select(.lastStep == "dropped") | .id ]' "$LEDGER_FILE" 2>/dev/null)"
   [ -n "$dropped_ids_json" ] || dropped_ids_json='[]'
   local widened_ids_json='[]' widened_json='[]' spared_json='{}'
-  local held_json='[]' held_hits_json='[]' kept_alignment_json=""
+  local held_json='[]' held_hits_json='[]' kept_alignment_json="" st_left=""
 
   if [ "$snapshot_present" = "false" ]; then
     # ---- new run: design must be formally closed on exactly these live files --------------------
@@ -2256,6 +2256,8 @@ REMOVED_PATHS
             '.workOrders = [ .workOrders[] | . as $o | select(($ids | index($o.id)) == null) ]')" "$resnapshot_ids_json" "$live_workorders_json" "$kept_alignment_json")" \
           || die3 "start: could not re-derive a hash for the snapshot with the live copies taken in (see stderr above)"
         resnapshot_hash="$(printf '%s' "$resnapshot_doc" | jq -r '.hash')"
+        st_left="$(jq_files -rn --argjson was "$snapshot_alignment_json" --argjson now "$(printf '%s' "$resnapshot_doc" | jq -c '.alignment')" '
+            [ ($was.criteria // [])[] | select(.id as $i | [ ($now.criteria // [])[].id ] | index($i) | not) | .id + ": " + .text ] | join("; ")')"
         snapshot_alignment_json="$(printf '%s' "$resnapshot_doc" | jq -c '.alignment')"
         snapshot_workorders_json="$(printf '%s' "$resnapshot_doc" | jq -c '.workOrders')"
         drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson ids "$resnapshot_ids_json" --argjson gone "$removed_ids_json" \
@@ -2597,7 +2599,8 @@ LO_MOVE
   # A change mid-build that an attended run goes on past is a warning in the task record, one per
   # order it touches. The words name the live design's hash, so a later change is its own warning.
   # Either mode names a criterion no order serves now, because review would find it unmet with no
-  # order to answer it.
+  # order to answer it, and a criterion the refresh took out of the frozen contract. No started order
+  # stood on that one, so no answer is needed and review will not see it (gap row 498).
   local st_change st_unserved
   while IFS= read -r st_change; do
     [ -n "$st_change" ] || continue
@@ -2612,6 +2615,8 @@ ST_CHANGES
     [ -z "$st_unserved" ] \
       || task_warn "$TASK_PATH" start "" "no order that is not dropped serves criterion $st_unserved, so no build answers it"
   fi
+  [ -z "$st_left" ] \
+    || task_warn "$TASK_PATH" start "" "the frozen contract no longer holds these criteria, which no started order served, so review will not judge them: $st_left"
 
   # --- step 13: the report --------------------------------------------------------------------------
   local ready_ids_json stopped_orders_json in_flight_json
@@ -13352,7 +13357,8 @@ do_redo() {
 # a dated folder with the person's words, and the order stays in the snapshot as dropped. Nothing
 # that depends on it can start, because an order starts only once every order it depends on is
 # closed. finish passes over a dropped order and lists it, with the criteria it leaves unbuilt, and
-# the task review reads each such criterion unanswered.
+# the task review reads each such criterion unanswered. So a criterion no remaining order serves goes
+# back to not judged, as in redo, because its code is reverted. One another order serves keeps its state.
 do_drop() {
   im_way_plain_args "drop" "$@"
   fn_require_answer "drop" "dropping one order" "$WAY_UNIT" "$WAY_BECAUSE" implement
@@ -13368,12 +13374,19 @@ do_drop() {
 
   local new_ledger waiting
   new_ledger="$(im_clear_stop_in "$RV_LEDGER_DOC" "$WAY_UNIT" drop "$(jq -cn --arg f "$WAY_FOLDER" '{movedTo: $f}')" \
-    | jq -c --arg id "$WAY_UNIT" --arg at "$(date -u +%Y-%m-%d)" --arg because "$WAY_BECAUSE" --arg folder "$WAY_FOLDER" \
+    | jq_files -c --arg id "$WAY_UNIT" --argjson snap "$SNAPSHOT_DOC" --arg at "$(date -u +%Y-%m-%d)" --arg because "$WAY_BECAUSE" --arg folder "$WAY_FOLDER" \
       --argjson reverted "$WAY_REVERTED" --argjson skipped "$WAY_SKIPPED" '
+    def touched: (.criteriaServed // []) + (.criteriaOwned // []);
     .orders = (.orders | map(if .id == $id
       then .lastStep = "dropped" | .dropped = ({at: $at, because: $because, movedTo: $folder, reverted: $reverted}
         + (if $skipped == [] then {} else {skipped: $skipped} end))
-      else . end))')"
+      else . end))
+    | ([ .orders[] | select(.lastStep == "dropped") | .id ]) as $gone
+    | ([ ($snap.workOrders // [])[] | select(.id as $i | $gone | index($i) | not) | touched[] ]) as $served
+    | ([ ($snap.workOrders // [])[] | select(.id == $id) | touched[] | select(. as $c | $served | index($c) | not) ]) as $left
+    | .criteria = ((.criteria // []) | map(. as $c | if ($left | index($c.id)) == null then .
+        else .rowState = "not-judged"
+             | if has("judgements") then .judgements = [ .judgements[] | select(.unit != $id) ] else . end end))')"
   [ -n "$new_ledger" ] || die3 "drop: the ledger update for $WAY_UNIT failed. Its commits were reverted and its records moved to $WAY_FOLDER; repair the ledger by hand."
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
   waiting="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$WAY_UNIT" '

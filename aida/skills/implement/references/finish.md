@@ -288,6 +288,12 @@ depends on it, directly or through another order. Each one cannot start: redo it
 or drop it too. An order the design removed takes this route, so its frozen test record stops
 guarding the files a surviving order took over.
 
+To drop a criterion with its order, take these steps in order. Run `scope remove` on the criterion.
+Take it out of each order with design `update`, or remove the order with design `remove`. Close
+design and run `start`. Run `drop` on a removed order, or `redo` on a changed one. Run `finish`.
+Review then reads the criterion unanswered, asks nobody for it, and warns. Completion closes on the
+person's reason. Only the main session runs `scope remove`, because the hook refuses it to a role.
+
 ### A design change clears itself when it goes back
 
 A stop about an order's own design file, or the live text of a criterion, clears when the drift

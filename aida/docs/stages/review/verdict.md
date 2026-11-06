@@ -27,6 +27,12 @@ The report names the criterion that caused a fail, and each warning. Beside the 
 each check that reads undeclared or unknown, the count of unanswered criteria, and the count of
 catalog notes.
 
+A criterion you dropped reads unanswered. You removed it with scope, a dropped work order served it,
+no other order serves it, and no frozen test names it. So it is a warning, and review does not ask
+you for it. The task closes only on your reason. The pull request body keeps its frozen text beside
+the words you gave `drop`. Any other removed criterion stops the review, and the message names the
+route.
+
 ## Catalog notes
 
 A catalog note is something a guide or a recipe should hear about. It never fails a review.

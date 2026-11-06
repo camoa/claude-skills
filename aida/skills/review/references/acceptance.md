@@ -79,6 +79,7 @@ Dispatch `aida:acceptance-verifier`, in both run modes. The message is one line 
 - `<task_folder>/review/review.json`
 - the surface file the summary's `surface-file:` line names, or `none`
 - the task record's `environment.address`, or `none`
+- the ids on the summary's `droppedCriteria:` line, or `none`
 - `<task_folder>/records/evidence.json`
 
 It runs a smoke test and the examples, explores with a one-line charter, and writes one evidence
@@ -95,7 +96,8 @@ runs twice. The evidence file stays under `records/`, which git ignores. The scr
 under `review/evidence/`, where git keeps text and no image. It refuses at exit 52 in four cases.
 A row is not an evidence row, or names a criterion, surface or viewport this task does not hold. A
 path lies outside `review/evidence/`. A file is not on disk. A criterion has no row. Give the
-refusal to the verifier's next dispatch.
+refusal to the verifier's next dispatch. A dropped criterion needs no row, and the script leaves out
+a row that names one.
 
 **A page surface with no row at every viewport reads unknown.** The look is half the answer. A
 command surface needs no look, because its exit status is the whole answer.

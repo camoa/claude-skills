@@ -595,4 +595,182 @@ down_case() (
 )
 expect "completion takes the task's own site down when the task closes" "$(down_case)" "0|down|none"
 
+echo "--- a criterion dropped with its order after the freeze (row 498)"
+# frozen_c2 [<wo2 fields JSON>]: c2 in the frozen contract and not in the live one. With fields, wo2
+# also stands in the snapshot, and serves c2 alone unless the fields say otherwise.
+frozen_c2() {
+  edit "$IMPL/snapshot.json" '.alignment.criteria += [.alignment.criteria[0] + {id: "c2", text: "b.php exists", verifiedBy: "machine"}]'
+  [ -z "${1:-}" ] || edit "$IMPL/snapshot.json" '.workOrders += [.workOrders[0] + {id: "wo2", criteriaServed: ["c2"], criteriaOwned: ["c2"], ownedFiles: ["b.php"]} + $f]' --argjson f "$1"
+}
+# dropped_records: review_records with wo2 dropped, the one order that served c2.
+dropped_records() {
+  review_records
+  frozen_c2 '{}'
+  edit "$IMPL/finished.json" '.dropped = [{id: "wo2", because: "b.php is not wanted", at: "2026-11-06", criteria: ["c2"]}]
+    | .criteria += [{id: "c2", verifiedBy: "machine", rowState: "not-judged"}]'
+}
+# briefable: the record brief reads, with the check it needs.
+briefable() {
+  reviewed_record
+  edit "$TASK/review/review.json" '.checks += [{id: "serves-a-criterion", verdict: "met", detail: "x", scriptHalf: {verdict: "met", detail: "x"}},
+    {id: "test-and-mutation", verdict: "met", detail: "x", scriptHalf: {verdict: "met", detail: "x"}}]'
+}
+
+drop_brief_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  briefable
+  run "$REVIEW" brief "$TASK"
+  printf '%s|%s\n' "$RC" "$(jq -r '([ .criteria[].id ] | join(",")) + "|" + (.droppedCriteria[0] | .id + "|" + .text + "|" + .orders[0].id + "|" + .orders[0].because)' "$TASK/review/brief.json")"
+)
+expect "brief leaves a dropped criterion out of the criteria, and names it with the person's words" "$(drop_brief_case)" \
+  "0|c1|c2|b.php exists|wo2|b.php is not wanted"
+
+drop_close_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  reviewed_record
+  closed_with --row c1=met
+  jq -r '.verdict + "|" + ([ .warnings[].id ] | join(",")) + "|"
+    + (.criteria[] | select(.id == "c2") | .verdict + "|" + .answeredBy) + "|" + .droppedCriteria[0].id
+    + "|" + (.checks[] | select(.id == "every-criterion") | .detail | test("wo2") | tostring)' "$TASK/review/review.json"
+)
+expect "close reads a dropped criterion unanswered, as a warning, and records and names the drop" "$(drop_close_case)" \
+  "passed|c2|unanswered|script|c2|true"
+
+drop_person_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  edit "$IMPL/snapshot.json" '(.alignment.criteria[] | select(.id == "c2")).verifiedBy = "person"'
+  reviewed_record
+  closed_with --row c1=met
+  printf '%s|%s\n' "$(jq -r '.verdict' "$TASK/review/review.json")" "$(grep -c 'c2 takes' "$OUT")"
+)
+expect "a dropped person criterion is not asked" "$(drop_person_case)" "passed|0"
+
+drop_reset_case() (
+  source "$HERE/records.bash"
+  task_records branch wo2
+  edit "$TASK/alignment.json" '.criteria += [.criteria[0] + {id: "c3", text: "both changed"}]'
+  edit "$TASK/design/wo1.json" '.criteriaServed += ["c3"]'
+  edit "$TASK/design/wo2.json" '.criteriaServed += ["c3"]'
+  close_design
+  order_records closed
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo2")).stopped = [{step: "start", reason: "a stop", allows: ["redo", "drop"]}]
+    | .criteria = [ .criteria[] | . + {rowState: "confirmed", judgements: [{unit: "wo2", verdict: "confirmed"}]} ]'
+  run "$IMPLEMENT" drop "$TASK" wo2 --because "b.php is not wanted"
+  jq -r '[ .criteria[] | .id + "=" + .rowState + ":" + (.judgements | length | tostring) ] | join(" ")' "$IMPL/ledger.json"
+)
+expect "drop resets a criterion no remaining order serves, and leaves one that another order serves" "$(drop_reset_case)" \
+  "c1=confirmed:1 c2=not-judged:0 c3=confirmed:1"
+
+drop_finding_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  briefable
+  jq -n '{findings: [{id: "f1", lens: "solid", severity: "high", file: "a.php", lines: "1", linkedTo: "c2", evidence: "no b.php"}]}' >"$ROOT/findings.json"
+  run "$REVIEW" findings "$TASK" --findings "$ROOT/findings.json"
+  local disposition
+  disposition="$(jq -r '.findings[0].disposition' "$TASK/review/review.json")"
+  closed_with --row c1=met
+  printf '%s|%s\n' "$disposition" "$(jq -r '.verdict' "$TASK/review/review.json")"
+)
+expect "a finding that cites a dropped criterion fails nothing" "$(drop_finding_case)" "follow-up|passed"
+
+live_order_case() (
+  source "$HERE/records.bash"
+  review_records
+  frozen_c2 '{}'
+  briefable
+  run "$REVIEW" brief "$TASK"
+  printf '%s|%s|%s|%s\n' "$RC" "$(grep -c 'design' "$OUT")" "$(grep -c '`start`' "$OUT")" "$(grep -c 'scope update' "$OUT")"
+)
+expect "a removed criterion a live order serves is refused, and the route starts at design" "$(live_order_case)" "3|1|1|0"
+
+no_order_case() (
+  source "$HERE/records.bash"
+  review_records
+  frozen_c2
+  briefable
+  run "$REVIEW" brief "$TASK"
+  printf '%s|%s\n' "$RC" "$(grep -c 'scope update' "$OUT")"
+)
+expect "a removed criterion no dropped order served is refused" "$(no_order_case)" "3|0"
+
+drop_test_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  tests_record
+  edit "$IMPL/tests-wo1.json" '.rows += [.rows[0] + {criterion: "c2"}]'
+  briefable
+  run "$REVIEW" brief "$TASK"
+  printf '%s|%s\n' "$RC" "$(grep -c 'tests/a_test.sh' "$OUT")"
+)
+expect "a frozen test that still names a dropped criterion keeps the refusal, and is named" "$(drop_test_case)" "3|1"
+
+drop_changed_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  edit "$TASK/alignment.json" '.criteria += [.criteria[0] + {id: "c2", text: "b.php says c"}]'
+  briefable
+  run "$REVIEW" brief "$TASK"
+  printf '%s|%s\n' "$RC" "$(grep -c 'scope update' "$OUT")"
+)
+expect "a changed text keeps its own refusal, though its order was dropped" "$(drop_changed_case)" "3|1"
+
+drop_completion_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  reviewed_record
+  closed_with --row c1=met
+  run "$COMPLETION" close "$TASK" -- "done"
+  printf '%s|%s|' "$RC" "$(grep -c 'c2' "$OUT")"
+  run "$COMPLETION" close "$TASK" --reason "the owner closes without b.php" -- "done"
+  printf '%s|%s\n' "$RC" "$(grep -c '^- c2: b.php exists (dropped with wo2: b.php is not wanted)$' "$TASK/completion/pr-body.md")"
+)
+expect "completion needs a reason over a dropped criterion, and the body keeps its frozen text" "$(drop_completion_case)" "1|1|0|1"
+
+drop_evidence_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  reviewed_record
+  run "$REVIEW" acceptance "$TASK"
+  printf '%s|' "$(grep -c '^droppedCriteria: c2$' "$OUT")"
+  evidence "$(c1_row)"
+  run "$REVIEW" acceptance "$TASK" --evidence
+  printf '%s|' "$RC"
+  evidence "$(c1_row)" '{"criterion": "c2", "sentence": "b.php is absent", "path": "", "verdict": "unmet", "note": "no file", "file": "a.php"}'
+  run "$REVIEW" acceptance "$TASK" --evidence
+  printf '%s|%s\n' "$RC" "$(jq '[ .findings[] | select(.linkedTo == "c2") ] | length' "$TASK/review/review.json")"
+)
+expect "the verifier owes no row for a dropped criterion, and a row for one makes no finding" "$(drop_evidence_case)" "1|0|0|0"
+
+drop_moved_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  reviewed_record
+  edit "$TASK/review/review.json" '.verdict = "failed" | .evidence = [] | .warnings = []'
+  jq -n '{droppedCriteria: []}' >"$TASK/review/brief.json"
+  edit "$TASK/task.json" '.runMode = "autonomous"'
+  run "$REVIEW" close "$TASK"
+  printf '%s|%s\n' "$RC" "$(jq -r '.verdict' "$TASK/review/review.json")"
+)
+expect "unattended, a removal after the brief stops close, and the verdict stands" "$(drop_moved_case)" "51|failed"
+
+# unstarted_case <step>: start after c2 and wo2 leave the live contract and design, with every order
+# at <step>. Prints what the snapshot holds, then the task warnings that name c2.
+unstarted_case() (
+  source "$HERE/records.bash"
+  task_records branch wo2
+  order_records "$1"
+  edit "$TASK/alignment.json" '.criteria = [ .criteria[] | select(.id != "c2") ]'
+  rm "$TASK/design/wo2.json"
+  close_design
+  run "$IMPLEMENT" start "$TASK"
+  printf '%s|%s\n' "$(jq -r '[ .alignment.criteria[].id ] | join(",")' "$IMPL/snapshot.json")" \
+    "$(jq '[ (.warnings // [])[] | select(.step == "start" and (.words | test("c2: b.php exists"))) ] | length' "$TASK/task.json")"
+)
+expect "a criterion that leaves the snapshot at start records one task warning" "$(unstarted_case planned)" "c1|1"
+expect "a criterion a started order holds stays frozen, with no such warning" "$(unstarted_case code-written)" "c1,c2|0"
+
 finish

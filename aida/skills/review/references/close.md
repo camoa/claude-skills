@@ -147,6 +147,13 @@ implement skill's `reopen`.
 Its `next:` line names it, per "Finish runs again after a failed review" in
 `skills/implement/references/finish.md`.
 
+**A dropped criterion reads unanswered.** A criterion is dropped when four things hold. `scope
+remove` took it out of the live contract. A dropped order served or owned it. No other order does.
+No frozen test names it. The person is not asked for it, and a finding that cites it is a follow
+up. Its row is a warning, so completion closes only on the person's reason. The record's
+`droppedCriteria` keeps its frozen text and the words from `drop`. Any other removed criterion
+refuses at `brief` and `close`, and the refusal names the route.
+
 ## Say what the write did to the contract
 
 `close` writes one field back into the contract, each criterion's `verdict` in `alignment.json`, which
