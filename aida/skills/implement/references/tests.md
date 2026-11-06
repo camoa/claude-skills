@@ -383,8 +383,8 @@ Close the dispatch record as soon as it returns, per SKILL.md.
 (exit 64) a model's confirmed row that the verdict file rejects, because no model settles the
 checker's rejection (gap row 373). The done-when row is keyed
 by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. Do not put a
-confirmed row to the person. The author edits only the rejected test, so a confirmed row stays as
-judged. The record says a model judged every confirmed row, so a person can list those rows later
+confirmed row to the person. The author edits only the tests a note names, so a confirmed row stays
+as judged. The record says a model judged every confirmed row, so a person can list those rows later
 and read any of them again.
 
 **Interactive, a rejected row goes to the person, one question per row.** Ask it in these words.
@@ -429,8 +429,8 @@ rewrites the tests and never answers the rejection. Only the checker's next verd
 Every other rejection stops the order, with the checker's note as the reason. That is a row
 marked `"repair": "row"`, a row in `rowsSentBack` already, or an order with no test author.
 A rejection that says the requirement is wrong needs design or a person, and no model may settle
-it. A second rejection of one row means the author could not meet the note. Report the stop, and
-take the next ready order instead. A person who judges the row at a second freeze then goes on
+it. A rejection names every test the checker rejects on the row. So a second rejection of one row
+means the author could not meet the note. Report the stop, and take the next ready order instead. A person who judges the row at a second freeze then goes on
 with `build`. A person who changes the tests or the row redoes the order, under "Leave a stop" in
 `references/finish.md`.
 

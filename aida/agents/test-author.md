@@ -49,7 +49,7 @@ When the brief holds `redo`, a person redid this unit: they changed its design o
 from the brief, and read the person's words for what changed.
 
 When the brief holds `rowsRejected`, those rows were rejected at the checkpoint. Each row holds
-the checker's note, and the person's words when a person rejected it. Edit only the test each note
+the checker's note, and the person's words when a person rejected it. Edit only the tests each note
 names, and leave every other test as it is. The checker does not read a confirmed row again. Do
 not argue with a note: a fresh checker reads your repair. Then run again
 each test that `rowsRejected.redAgain` names, and write its new red run. Each one shares a file
