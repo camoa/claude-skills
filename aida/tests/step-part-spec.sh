@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# step-part-spec.sh: the Bash tool returns about 30,000 characters inline, and past that a preview
-# and a path. So `step` prints a file over 25,000 bytes in parts, each part ends only at a `## `
-# heading outside a code fence, and the parts rebuild the file byte for byte (design
+# step-part-spec.sh: the Bash tool returns about 30,000 characters inline. Past that it returns a
+# preview and a path. So `step` prints a file over 25,000 bytes in parts. Each part ends only at a
+# `## ` heading outside a code fence. The parts rebuild the file byte for byte (design
 # audit/37-stage-manual-cost.md, step 1).
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"

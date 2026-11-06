@@ -1757,8 +1757,8 @@ md_basenames_in() {
 }
 
 # Prints part $3 of the step file $1/$2.md. $4 is the caller's own path, for the line that names the
-# next part. The Bash tool returns about 30,000 characters inline, and past that a preview and a
-# path, so a print over that size never reaches the model whole. The mirror says "roughly", so the
+# next part. The Bash tool returns about 30,000 characters inline. Past that it returns a preview
+# and a path, so a larger print never reaches the model whole. The mirror says "roughly", so the
 # limit keeps 5,000 bytes of margin. A part ends only at a `## ` heading outside a code fence and
 # takes as many whole sections as fit. A file that makes one part prints as it stands.
 # Returns 0 when it printed, 2 when the file has no such part, 1 when the file could not be read.
