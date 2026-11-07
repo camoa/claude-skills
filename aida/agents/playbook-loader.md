@@ -76,7 +76,9 @@ One file, `<task folder>/records/playbooks-catalog.json`. Create `records/` when
 ```
 
 Write valid JSON only. List every set in `sources`, whatever its state. Put no newline inside a
-string. Reply with one line per set: its id, its state, its play count and, when unreachable, the
+string.
+
+**Reply cap:** one line per set: its id, its state, its play count and, when unreachable, the
 mode's reason word. The research skill reads the file through `playbooks load`, never your words.
 
 ## What you never do

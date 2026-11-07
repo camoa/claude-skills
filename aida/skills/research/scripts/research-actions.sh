@@ -192,7 +192,7 @@ contract_criteria_json() {
     printf '[]'
     return
   fi
-  jq -c '[ (.criteria // [])[]? | {id: .id, text: .text, author: .author} ]' "$ALIGNMENT_FILE" 2>/dev/null || printf '[]'
+  jq -c '[ (.criteria // [])[]? | {id: .id, text: .text, author: .author, verifiedBy: .verifiedBy} ]' "$ALIGNMENT_FILE" 2>/dev/null || printf '[]'
 }
 
 # True (exit 0) when $1 is a valid criterion id shape, c<n> with no leading zero. The same case
@@ -231,6 +231,8 @@ do_read() {
   echo "contract: $contract_state"
   echo "contract-file: $ALIGNMENT_FILE"
   echo "criteria: $(printf '%s' "$criteria_json" | jq -r '[.[].id] | join(" ")')"
+  # Each criterion's text, so the session needs no read of the contract file (gap row 505).
+  printf '%s' "$criteria_json" | jq -r '.[] | "criterion: " + .id + " " + .verifiedBy + " " + ((.text // "") | gsub("\n"; " "))'
   echo "criteria-by-designer: $(printf '%s' "$criteria_json" | jq -r '[.[] | select(.author == "designer") | .id] | join(" ")')"
   echo "decided-without-a-person: $decided"
   echo "automated-tests: $(automated_tests "$TASK_PATH")"

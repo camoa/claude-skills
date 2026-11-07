@@ -21,9 +21,10 @@ Before step one, read what a test is in AIDA:
 
 ## Find the task
 
-Resolve the active project's own folder first, then the task, `<taskId>` when given or whichever
-task is already active in this conversation. Neither known: say so in one line and name the task
-skill. Stop; there is nowhere to act.
+Resolve the active project's own folder first, from the `project-folder:` line of the `## AIDA`
+block. Then resolve the task, `<taskId>` when given or whichever task is already active in this
+conversation. Neither known: say so in one line and name the task skill. Stop; there is nowhere to
+act.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
@@ -146,15 +147,14 @@ from memory of an earlier invocation is a step run against rules that may have c
 These hold for every step below, and each step file names them rather than restating them. This
 file is always loaded; a step file is loaded only while its own step runs.
 
-**The conversation holds summaries and paths. The records hold the bodies.** Every action prints
-`key: value` lines and a path, and each record action ends with `next:`. Never read a record, a
-brief, a diff, a tool output or a finding's evidence into this conversation, and never paste one
-back. Name the path the script printed, and say the person can open it in an editor. Each brief
-action writes its brief to a file and prints the path; the dispatch prompt names that path and
-carries no brief content. **Only the dispatched role reads bodies**, and it opens them itself, from
-the paths its brief names. The one exception is text a person must read to answer: a checklist row
-at `tests-freeze`, or a question a step asks. A body pasted here costs the build the context its own
-steps need.
+**The records hold the bodies.** Every action prints `key: value` lines and a path, and each record
+action ends with `next:`. Never read a record, a brief, a diff, a tool output or a finding's
+evidence into this conversation, and never paste one back. Name the path the script printed, and say
+the person can open it in an editor. Each brief action writes its brief to a file and prints the
+path; the dispatch prompt names that path and carries no brief content. **Only the dispatched role
+reads bodies**, and it opens them itself, from the paths its brief names. The one exception is text
+a person must read to answer: a checklist row at `tests-freeze`, or a question a step asks. A body
+pasted here costs the build the context its own steps need.
 
 **Every question a step puts to a person opens with one plain sentence.** It names the decision,
 says why it is the person's call, and says what each answer causes. Text a person reads uses

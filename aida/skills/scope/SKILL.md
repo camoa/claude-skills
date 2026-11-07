@@ -3,7 +3,7 @@ name: scope
 description: This skill should be used when a task needs its scope contract written or changed, for example "define scope", "write acceptance criteria", "what does this task have to do", "add a non-goal", "add a criterion", "change the contract", or "scope this task". It runs a conversation that produces alignment.json, holding the goal, the expected result, the acceptance criteria and the non-goals a person approves before a build starts.
 argument-hint: "[approve] [<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh read), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh report), Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh read), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Agent, EnterWorktree
 ---
 
 # Scope
@@ -40,11 +40,15 @@ stage only when the list names `scope`; otherwise this stage is interactive.
 Scope runs against a task that already exists. It does not create one and it does not scaffold a
 stub for a name with no folder.
 
-Every action below needs the active project's own folder (the one holding `project.json`, never
-the code folder). Resolve that first, with the project skill, before using anything here. The task
-is `<taskId>` when given, or whichever task is already active in this conversation. Neither known,
-or the resolved `<projectPath>/tasks/<task-id>` holds no `task.json`: say so in one line and name
-the task skill. Stop; there is nowhere to write.
+Every action below needs the active project's own folder (the one holding `project.json`, never the
+code folder). Resolve that first, before using anything here. Take the project folder from the
+`project-folder:` line of the `## AIDA` block. Then run
+`"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh report` once, and show the lines
+it prints. When it exits non-zero, invoke the project skill, whose table reads that exit. With no
+`project-folder:` line, invoke the project skill. The task is `<taskId>` when given, or whichever
+task is already active in this conversation. Neither known, or the resolved
+`<projectPath>/tasks/<task-id>` holds no `task.json`: say so in one line and name the task skill.
+Stop; there is nowhere to write.
 
 An invocation line whose first word is `approve` is the person's yes on the contract. The task is
 the word after it, or the active one. Go straight to "Approval" below and run the call there.
@@ -63,8 +67,8 @@ the criterion and non-goal ids, and whether the goal is set. Present means an up
 file at that path, so the conversation below reflects what is already recorded instead of
 re-asking for it. Absent means a first run: nothing is drafted yet.
 
-Every write below prints the same summary lines and never the contract's text. Read the file when
-a criterion's own words are needed.
+Every write below prints the line it changed and `rendered:`, and never the contract's text. `read`
+prints the summary. Read the file when a criterion's own words are needed.
 
 `read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
 the task builds in its worktree and this window is elsewhere. The refusal names the tree and the
@@ -128,8 +132,8 @@ criterion they add is `add`; one they drop is `remove`; a non-goal they name is 
 criterion the person rephrases or adds stays `designer` until `approve` promotes it. An owner
 author on `add` or `update` is a person's answer, as `approve` is, so a correction does not pass it.
 
-Answer a correction with the changed lines: the `UPDATED:`, `ADDED:` or `REMOVED:` line and the
-summary the call printed. Then the turn ends. Do not run `render`, do not show the page, and do
+Answer a correction with the changed line the call printed: the `UPDATED:`, `ADDED:` or `REMOVED:`
+line. Then the turn ends. Do not run `render`, do not show the page, and do
 not ask whether the contract is now right. The person says when it is, in their own words or
 with `/aida:scope approve <task-id>`; that is "Approval" below. Show the whole document only
 when they ask to see it again.

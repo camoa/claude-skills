@@ -57,7 +57,8 @@ work", in the order it names, case 3 being case 1 winning when both would otherw
 The exit code is the check's at cases 1 and 2, and 0 at case 4.
 
 **`CASE: 1` or `CASE: 2`.** A `project:` line follows, naming the project, its state, its code
-path and its folder, then the check's own report. Show the report as described in "Reading the check's report" below. Stop here; this
+path and its folder, then the check's own report. Show the lines it printed. The full record is at
+the `report:` path. Read them as "Reading the check's report" below says. Stop here; this
 already touched `lastAccessed` and, for case 2, this is the remembered choice winning because
 nothing else answers.
 
@@ -158,7 +159,8 @@ parent of the code path. Name it, and say `set-worktree-base` below moves later 
 ```
 It writes every file, makes the first commit, adds the registry row, records the projects-home
 base the first time only, and runs the check itself. It records the worktree base when one is
-given. A refused worktree base exits 3 before anything is written. Show the whole output.
+given. A refused worktree base exits 3 before anything is written. Show the lines it printed. The
+full record is at the `report:` path.
 
 Exit code 2 from the check here is normal, not a problem: the code path was just set from what
 was given, and a brand-new project can go without code for a while. Say so and move on.
@@ -347,7 +349,8 @@ Sets the stack by hand, for a project whose code path the detector did not recog
   set-frameworks "<target>" <fw1> [<fw2> ...]
 ```
 Looks the target up the same way `switch` does. Not found: say so and stop. Otherwise it writes
-the list into the project file, commits the change, and runs the check. Show the whole output.
+the list into the project file, commits the change, and runs the check. Show the lines it printed.
+The full record is at the `report:` path.
 
 ## `set-worktree-base <name-or-path> [<folder>]`
 
@@ -367,7 +370,7 @@ a folder inside another git repository. A repository at the home directory or ab
 count. It also refuses a system root and a folder above the home directory. The home directory
 itself is allowed. A refusal exits 3 and writes nothing. Otherwise it records the
 folder, commits the change, and runs the check. A tree that a task already records stays where it
-is. Show the whole output.
+is. Show the lines it printed. The full record is at the `report:` path.
 
 `read-worktree-base <name-or-path>` prints the recorded folder and exits 0. A project that records
 none prints the default and exits 1. The task skill reads it before a task is created.
@@ -382,7 +385,7 @@ because a mutation run can take hours. Run:
 ```
 Looks the target up the same way `switch` does. Not found: say so and stop. Otherwise it writes
 `review.mutation` into the project file, commits the change, and runs the check. Review reads it
-at `checks`. Show the whole output.
+at `checks`. Show the lines it printed. The full record is at the `report:` path.
 
 ## `add-source <name-or-path> <kind> <folder | catalog>`
 
@@ -401,7 +404,8 @@ folders. Run:
 Each new source for a kind takes the next rank, so the order they are declared in is the order
 a stage asks them. A second call for the same folder adds the kind to that entry rather than
 writing a second one. It commits the change and runs the check. Nothing is fetched; a stage
-reads the folder the first time it needs something. Show the whole output. For `playbooks`, a
+reads the folder the first time it needs something. Show the lines it printed. The full record is at
+the `report:` path. For `playbooks`, a
 catalog set is the other answer to the same question, and `subscribe-playbook` below declares one.
 
 For `processRecipes`, the folder holds `process-recipes/<framework>/<phase>.md`, where the phase
@@ -458,7 +462,7 @@ It writes the id under that framework, commits the change, and runs the check. A
 project never declared prints a `warning:` line beside the write: say so, and name
 `set-frameworks`.
 `unsubscribe-playbook` takes the same three arguments and removes the id, with no such check.
-Show the whole output.
+Show the lines it printed. The full record is at the `report:` path.
 
 ## `drop-retired <name-or-path>`
 
@@ -469,7 +473,8 @@ field and then retired it, so no producer can run again. Run:
 ```
 It removes each field the schema lists as retired, and nothing else. It commits the change and
 runs the check. `UNCHANGED` means the file held none. A field that is undeclared and not retired
-stays, and the check keeps naming it. Show the whole output. It changes only AIDA's own project
+stays, and the check keeps naming it. Show the lines it printed. The full record is at the `report:`
+path. It changes only AIDA's own project
 file, so it does the same thing in both modes.
 
 ## `unregister <name-or-path>`

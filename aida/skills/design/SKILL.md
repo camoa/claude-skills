@@ -49,9 +49,10 @@ when the list names `design`; otherwise this stage is interactive.
 
 ## Find the task
 
-Resolve the active project's own folder first, then the task, `<taskId>` when given or whichever
-task is already active in this conversation. Neither known: say so in one line and name the task
-skill. Stop; there is nowhere to write.
+Resolve the active project's own folder first, from the `project-folder:` line of the `## AIDA`
+block. Then resolve the task, `<taskId>` when given or whichever task is already active in this
+conversation. Neither known: say so in one line and name the task skill. Stop; there is nowhere to
+write.
 
 An invocation line whose first word is `close` is the person's yes on the design. The task is
 the word after it, or the active one. Go straight to "Close the design" below. When no

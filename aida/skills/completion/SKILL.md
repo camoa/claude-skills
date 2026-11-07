@@ -21,9 +21,10 @@ their own reviews between the two.
 
 ## Find the task
 
-Resolve the active project's own folder first. Then resolve the task, `<taskId>` when given, or
-whichever task is already active in this conversation. Neither known: say so in one line, name
-the task skill, and stop. There is nowhere to act.
+Resolve the active project's own folder first, from the `project-folder:` line of the `## AIDA`
+block. Then resolve the task, `<taskId>` when given, or whichever task is already active in this
+conversation. Neither known: say so in one line, name the task skill, and stop. There is nowhere to
+act.
 
 The task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that folder.
 
@@ -66,10 +67,10 @@ rules that may have changed.
 
 ## Three rules the step repeats
 
-**The conversation holds summaries and paths. The records hold the bodies.** Every action prints
-`key: value` lines and a path. Never read the review record, the contract or the pull request body
-into this conversation, and never paste one back. Name the path the script printed, and say the
-person can open it in an editor. A body pasted here costs context this skill does not need.
+**The records hold the bodies.** Every action prints `key: value` lines and a path. Never read the
+review record, the contract or the pull request body into this conversation, and never paste one
+back. Name the path the script printed, and say the person can open it in an editor. A body pasted
+here costs context this skill does not need.
 
 **Every task write goes through the task skill.** `follow-ups` creates a task through `task
 create`, and `close` moves the state through `task complete`. Completion writes no task field

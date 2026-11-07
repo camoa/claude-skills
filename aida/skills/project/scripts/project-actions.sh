@@ -332,9 +332,10 @@ write_project_field() {
   jq "$@" "$file" > "$tmp" && mv "$tmp" "$file" || { rm -f "$tmp"; die3 "$what"; }
 }
 
+# The check prints its findings and the path of its record. The record holds the full report.
 run_check() {
   local project_path="$1"
-  "$CHECK_SCRIPT" "$project_path" ${check_flags[@]+"${check_flags[@]}"}
+  "$CHECK_SCRIPT" "$project_path" --short ${check_flags[@]+"${check_flags[@]}"}
   return $?
 }
 

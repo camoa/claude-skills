@@ -14,12 +14,14 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # what this script finds belongs to the skill that calls it, never to this script.
 #
 # Usage:
-#   check-project.sh <path> [--autonomous]
+#   check-project.sh <path> [--autonomous] [--short]
 #
 # <path> is the project's own folder, the one holding project.json, never the code
 # folder. --autonomous marks this run as made with no person present; omit it for an
 # interactive run, the safe default (foundations.md, Run mode: a run that states no mode is
-# interactive).
+# interactive). --short prints only the lines a caller acts on: each finding with its repair, the
+# settings block, readiness, the autonomous line, and a `report:` line naming the record. The record
+# holds the rest, with the passing counts and the ran: notes in testsRan.
 #
 # Reads:
 #   <path>/project.json
@@ -128,10 +130,11 @@ set -u -o pipefail
 
 usage() {
   cat <<'EOF'
-usage: check-project.sh <path> [--autonomous]
+usage: check-project.sh <path> [--autonomous] [--short]
 
   <path>   the project's own folder (holds project.json), not the code folder
   --autonomous    mark this run as made with no person present (default: interactive)
+  --short         print only the findings, readiness and the record's path
 EOF
 }
 
@@ -147,6 +150,7 @@ die3() {
 # ---------------------------------------------------------------------------
 
 MODE="interactive"
+SHORT="false"
 PROJECT_PATH_ARG=""
 
 if [ "$#" -eq 0 ]; then
@@ -161,6 +165,9 @@ for arg in "$@"; do
       ;;
     --interactive)
       MODE="interactive"
+      ;;
+    --short)
+      SHORT="true"
       ;;
     -h|--help)
       usage
@@ -733,14 +740,17 @@ fi
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 # The name a repair line gives an action, which takes a project's name.
 REPAIR_NAME="$(echo "$NAME_VALUE_JSON" | jq -r 'if type == "string" then . else "<name>" end')"
+# A line only the full report prints: a passing result, a count, a ran: note or a blank line.
+full() { [ "$SHORT" = "false" ]; }
+sep() { full && echo; }
 
 echo "Project: $PROJECT_PATH"
-echo "Checked: $TIMESTAMP"
-echo
+full && echo "Checked: $TIMESTAMP"
+sep
 
 case "$CODEPATH_EXISTS_JSON" in
   true)
-    echo "Code path: $(echo "$CODEPATH_VALUE_JSON" | jq -r '.') (exists)"
+    full && echo "Code path: $(echo "$CODEPATH_VALUE_JSON" | jq -r '.') (exists)"
     ;;
   false)
     echo "Code path: $(echo "$CODEPATH_VALUE_JSON" | jq -r '.'). This folder does not exist."
@@ -748,40 +758,47 @@ case "$CODEPATH_EXISTS_JSON" in
     echo "  is not new, only its owner can say where the code went. Nothing here fixes either case."
     ;;
   null)
-    echo "Code path: not set. See the missing or unreadable fields below."
+    full && echo "Code path: not set. See the missing or unreadable fields below."
     ;;
 esac
 
-echo "Code path safety: $SAFETY_VERDICT"
-echo "  $SAFETY_DETAIL"
-echo
+if full || [ "$SAFETY_VERDICT" != "ok" ]; then
+  echo "Code path safety: $SAFETY_VERDICT"
+  echo "  $SAFETY_DETAIL"
+fi
+sep
 
-echo "Project file against its schema, declared fields carrying no fault at any depth: $WELL_FORMED_COUNT/$FIELD_COUNT"
-echo
+PROJECT_COUNT_LINE="Project file against its schema, declared fields carrying no fault at any depth: $WELL_FORMED_COUNT/$FIELD_COUNT"
+full && echo "$PROJECT_COUNT_LINE"
+sep
 
 if [ "$MISSING_COUNT" -gt 0 ]; then
   echo "Missing fields:"
   echo "$MISSING_JSON" | jq -r '.[] | "  - " + .field + ": not set.\n      " + .detail'
 else
-  echo "No missing fields."
+  full && echo "No missing fields."
 fi
-echo
+sep
 
 if [ "$UNREADABLE_COUNT" -gt 0 ]; then
   echo "Unreadable fields (present, wrong shape):"
   echo "$UNREADABLE_JSON" | jq -r '.[] | "  - " + .field + ": " + .reason + ".\n      " + .detail'
 else
-  echo "No unreadable fields."
+  full && echo "No unreadable fields."
 fi
-echo
+sep
 
 if [ "$RETIRED_COUNT" -gt 0 ]; then
   echo "Retired fields (the schema no longer declares them, and nothing reads them):"
   echo "$RETIRED_JSON" | jq -r --arg n "$REPAIR_NAME" '.[] | "  - " + .field + ": " + .detail + "\n      Repair: drop-retired " + $n + " removes it."'
-  echo
+  sep
 fi
 
-echo "Cross-field checks: $CROSS_FIELD_TEST_NOTE"
+if full; then
+  echo "Cross-field checks: $CROSS_FIELD_TEST_NOTE"
+elif [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
+  echo "Cross-field checks:"
+fi
 if [ "$CROSS_FIELD_COUNT" -gt 0 ]; then
   echo "$CROSS_FIELD_ISSUES_JSON" | jq -r '.[] | "  - " + .field + ": " + .reason + ".\n      " + .detail'
 fi
@@ -789,13 +806,22 @@ if [ "$WORKTREE_BASE_UNSET" = "true" ]; then
   echo "Note, not a fault: worktreeBase is not set, so task worktrees go beside the code path."
   echo "  Nothing asks for it. To move later trees, the producer is project-actions.sh set-worktree-base <name> [<folder>]."
 fi
-echo
+sep
 
-echo "Registry: $REGISTRY_PATH ($REGISTRY_FILE_STATE)"
+REGISTRY_FINDING="false"
+if [ "$REGISTRY_FILE_STATE" = "corrupt" ] || [ "$REG_MISSING_COUNT" -gt 0 ] || [ "$REG_UNREADABLE_COUNT" -gt 0 ] \
+   || [ "$DUPLICATE_NAME_COUNT" -gt 0 ] || [ "$DUPLICATE_CODEPATH_COUNT" -gt 0 ] \
+   || [ "$REGISTRY_ROW_FOUND" = "false" ] || [ "$REGISTRY_MISMATCH_COUNT" -gt 0 ]; then
+  REGISTRY_FINDING="true"
+fi
+REGISTRY_COUNT_LINE="Registry file against its schema, declared fields carrying no fault at any depth: $REG_WELL_FORMED_COUNT/$REG_FIELD_COUNT"
+if full || [ "$REGISTRY_FINDING" = "true" ]; then
+  echo "Registry: $REGISTRY_PATH ($REGISTRY_FILE_STATE)"
+fi
 if [ "$REGISTRY_FILE_STATE" = "corrupt" ]; then
   echo "  Exists but could not be read as JSON. Every registry test below was skipped."
 else
-  echo "  Registry file against its schema, declared fields carrying no fault at any depth: $REG_WELL_FORMED_COUNT/$REG_FIELD_COUNT"
+  full && echo "  $REGISTRY_COUNT_LINE"
   if [ "$REG_MISSING_COUNT" -gt 0 ]; then
     echo "  Missing top-level fields:"
     echo "$REG_MISSING_JSON" | jq -r '.[] | "    - " + .field + ": not set.\n        " + .detail'
@@ -804,31 +830,33 @@ else
     echo "  Unreadable top-level fields:"
     echo "$REG_UNREADABLE_JSON" | jq -r '.[] | "    - " + .field + ": " + .reason'
   fi
-  echo "  No two registry rows share a name. $DUPLICATE_NAME_TEST_NOTE"
+  full && echo "  No two registry rows share a name. $DUPLICATE_NAME_TEST_NOTE"
   if [ "$DUPLICATE_NAME_COUNT" -gt 0 ]; then
     echo "    Duplicate names found:"
     echo "$DUPLICATE_NAMES_JSON" | jq -r '.[] | "      - \"" + .name + "\" used by " + (.count|tostring) + " rows: " + (.paths | join(", "))'
   fi
-  echo "  No two registry rows share a code path. $DUPLICATE_CODEPATH_TEST_NOTE"
-  echo "    The test compares the spellings the registry holds, so two spellings of one directory are not seen as one."
+  if full; then
+    echo "  No two registry rows share a code path. $DUPLICATE_CODEPATH_TEST_NOTE"
+    echo "    The test compares the spellings the registry holds, so two spellings of one directory are not seen as one."
+  fi
   if [ "$DUPLICATE_CODEPATH_COUNT" -gt 0 ]; then
     echo "    Duplicate code paths found. The directory resolves to one of these rows and nothing says which:"
     echo "$DUPLICATE_CODEPATHS_JSON" | jq -r '.[] | "      - \"" + .codePath + "\" used by " + (.count|tostring) + " rows: " + (.paths | join(", "))'
   fi
-  echo "  Registry row for this project: $REGISTRY_ROW_NOTE"
+  { full || [ "$REGISTRY_ROW_FOUND" = "false" ]; } && echo "  Registry row for this project: $REGISTRY_ROW_NOTE"
   if [ "$REGISTRY_MISMATCH_COUNT" -gt 0 ]; then
     echo "  Mismatch between the project file and its registry row. The project file wins; nothing was changed:"
     echo "$REGISTRY_MISMATCHES_JSON" | jq -r '.[] | "    - " + .field + ": project file says " + (.projectValue|tostring) + ", registry says " + (.registryValue|tostring)'
   fi
 fi
-echo
+sep
 
 case "$GIT_IS_REPO" in
   true)    GIT_SUMMARY="is a repository" ;;
   false)   GIT_SUMMARY="not a repository" ;;
   unknown) GIT_SUMMARY="unknown ($GIT_NOTE)" ;;
 esac
-echo "Git: $GIT_SUMMARY"
+{ full || [ "$GIT_IS_REPO" != "true" ]; } && echo "Git: $GIT_SUMMARY"
 if [ "$GIT_IS_REPO" = "false" ]; then
   echo "  $GIT_NOTE"
 fi
@@ -837,16 +865,18 @@ if [ "$GIT_IS_REPO" = "true" ]; then
     echo "Uncommitted work:"
     printf '  %s\n' "${UNCOMMITTED_LIST[@]}"
   else
-    echo "No uncommitted work."
+    full && echo "No uncommitted work."
   fi
-  if [ "${#IGNORED_LIST[@]}" -gt 0 ]; then
+  if ! full; then
+    :
+  elif [ "${#IGNORED_LIST[@]}" -gt 0 ]; then
     echo "Ignored files in the project folder:"
     printf '  - %s\n' "${IGNORED_LIST[@]}"
   else
     echo "No ignored files."
   fi
 fi
-echo
+sep
 
 # Version 5 wrote a task rule into the code path's CLAUDE.md that names commands which no longer
 # exist. It is named on every run, so the rewrite stays offered until a person answers it. A
@@ -864,7 +894,7 @@ if [ -n "$TASK_RULE_V5" ] && [ "$TASK_RULE_V5" != "none" ]; then
   else
     echo "  Repair: task-rule $REPAIR_NAME rewrites it in place. task-rule $REPAIR_NAME --decline keeps it and records the answer."
   fi
-  echo
+  sep
 fi
 
 # A surface kind marked on whose surface file is missing was set up by half. Named here so it is
@@ -896,7 +926,7 @@ if [ -n "$SURFACE_KINDS_ON" ]; then
       done <<SURFACE_KINDS
 $SURFACE_KINDS_ON
 SURFACE_KINDS
-      echo
+      sep
       ;;
   esac
 fi
@@ -904,14 +934,14 @@ fi
 # Advisory, outside the exit code: a setting that stops AIDA's hooks or its web search.
 if [ "$CODEPATH_EXISTS_JSON" = "true" ]; then
   CLAUDE_SETTINGS_LINES="$(ccs_print "$CODEPATH_VALUE")"
-  [ -n "$CLAUDE_SETTINGS_LINES" ] && printf '%s\n\n' "$CLAUDE_SETTINGS_LINES"
+  [ -n "$CLAUDE_SETTINGS_LINES" ] && printf '%s\n' "$CLAUDE_SETTINGS_LINES" && sep
 fi
 
 echo "Ready for work: $READY_JSON"
 [ "$READY_JSON" = "false" ] && echo "  $READY_REASON"
 
 if [ "$AUTONOMOUS_NO_RESPONSE_JSON" = "true" ]; then
-  echo
+  sep
   echo "Autonomous run: this report has at least one finding above with nobody present to answer. Recorded, not performed."
 fi
 
@@ -952,6 +982,11 @@ jq -n \
   --argjson exitCode "$EXIT_CODE" \
   --argjson surfacesOnWithoutFile "$SURFACES_WITHOUT_FILE_JSON" \
   --argjson worktreeBaseUnset "$WORKTREE_BASE_UNSET" \
+  --arg crossFieldNote "$CROSS_FIELD_TEST_NOTE" \
+  --arg projectCount "$PROJECT_COUNT_LINE" \
+  --arg registryCount "$(if [ "$REGISTRY_FILE_STATE" = "corrupt" ]; then echo ""; else echo "$REGISTRY_COUNT_LINE"; fi)" \
+  --arg duplicateNameNote "$DUPLICATE_NAME_TEST_NOTE" \
+  --arg duplicateCodePathNote "$DUPLICATE_CODEPATH_TEST_NOTE" \
   '{
     timestamp: $timestamp,
     exitCode: $exitCode,
@@ -982,7 +1017,10 @@ jq -n \
     },
     ready: $ready,
     readyReason: $readyReason,
-    autonomousNoResponse: $autonomousNoResponse
+    autonomousNoResponse: $autonomousNoResponse,
+    testsRan: [$projectCount, ("cross-field checks: " + $crossFieldNote), $registryCount,
+      ("registry names: " + $duplicateNameNote), ("registry code paths: " + $duplicateCodePathNote)] | map(select(. != ""))
   }' > "$RECORD_FILE" 2>/dev/null || die3 "could not write $RECORD_FILE"
 
+full || echo "report: $RECORD_FILE"
 exit "$EXIT_CODE"

@@ -60,6 +60,8 @@ child's goal is one sentence, written the way the person writes in `task.md`.
 Write valid JSON only. Put no newline inside a string. Put no prose in your reply: the skill reads the
 file, never your words.
 
+**Reply cap:** 1 line.
+
 ## What you never do
 
 Split a task, or write any file but the sidecar. Edit a record. Read, request or infer the

@@ -116,6 +116,9 @@ if [ -n "$MATCH" ]; then
   registry_touch_last_accessed "$PROJECT_PATH"
 
   echo "This directory belongs to the **${PROJECT_NAME}** project."
+  # The stages take the project's folder from this line, so they need not load the project skill
+  # to find it (gap row 505).
+  echo "project-folder: ${PROJECT_PATH}"
   echo ""
 
   # Two findings of the project check that cannot wait for /aida:project. A stale version 5 task
@@ -177,6 +180,7 @@ if [ -n "$MATCH" ]; then
     TASK_NOTES="$(printf '%s' "$TASK" | jq -r '.notes // "none"')"
     STAGE="$(printf '%s' "$TASK" | jq -r '.stage')"
     echo "Task in progress: ${TASK_ID}"
+    echo "task-folder: ${TASK_PATH}"
     echo "Stage: ${STAGE}"
     # The newest saved note, read off the same task line. The window reads it before its first
     # turn; a note older than the record it overlaps was overtaken by that record's producer.
@@ -216,6 +220,7 @@ if [ -n "$MATCH" ]; then
   echo "but make it out loud in one line. Deciding silently that something is too small to"
   echo "track is the same as never having considered it, and whatever you learn doing"
   echo "untracked work is gone once this session closes."
+  echo ""
 else
   echo "This directory is not set up as a project, so nothing here is being tracked."
   echo ""
@@ -246,6 +251,10 @@ else
     echo ""
     echo "_(You have ${OTHERS} project(s) set up elsewhere; \`/aida:project\` lists them.)_"
   fi
+  echo ""
 fi
 
+# The reply rule, last, so it reaches the main conversation and returns after a compaction. The
+# reply hook gives every AIDA role the same file.
+cat "${PLUGIN_ROOT}/hooks/reply-rule.md" 2>/dev/null
 exit 0

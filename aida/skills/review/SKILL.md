@@ -29,9 +29,10 @@ complete, and review still runs on it and records its verdict.
 
 ## Find the task
 
-Resolve the active project's own folder first. Then resolve the task, `<taskId>` when given, or
-whichever task is already active in this conversation. Neither known: say so in one line, name the
-task skill, and stop. There is nowhere to act.
+Resolve the active project's own folder first, from the `project-folder:` line of the `## AIDA`
+block. Then resolve the task, `<taskId>` when given, or whichever task is already active in this
+conversation. Neither known: say so in one line, name the task skill, and stop. There is nowhere to
+act.
 
 The task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that folder.
 
@@ -95,11 +96,11 @@ earlier invocation is a step run against rules that may have changed.
 These hold for every step, and each step file names them rather than restating them. This file stays
 loaded; a step file is loaded only while its own step runs.
 
-**The conversation holds summaries and paths. The records hold the bodies.** Every action prints
-`key: value` lines and a path. Never read a record, a diff, a tool output or a research finding into
-this conversation, and never paste one back. Name the path the script printed, and say the person can
-open it in an editor. **Only the dispatched reviewer reads bodies**, and it opens them itself, from
-the paths its brief names. A body pasted here costs the review the context its own steps need.
+**The records hold the bodies.** Every action prints `key: value` lines and a path. Never read a
+record, a diff, a tool output or a research finding into this conversation, and never paste one
+back. Name the path the script printed, and say the person can open it in an editor. **Only the
+dispatched reviewer reads bodies**, and it opens them itself, from the paths its brief names. A body
+pasted here costs the review the context its own steps need.
 
 **Name the role on every dispatch.** A dispatch that names none runs as the general agent, with
 every tool and this session's own model. Review opens no dispatch record, so the role's own

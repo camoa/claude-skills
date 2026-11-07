@@ -95,6 +95,8 @@ A record that stands alone is the common case; say so plainly with an empty `gap
 only, no newline inside a string, and no prose in your reply: the skill reads the file, never
 your words.
 
+**Reply cap:** 1 line.
+
 A sidecar from an earlier pass may exist. Read it before you write it, because the Write tool
 refuses to replace a file you have not read. A refused write leaves the old sidecar, and the
 stage then reads it as stale. Never report a write the tool refused.

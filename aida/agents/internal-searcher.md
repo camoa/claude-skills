@@ -55,4 +55,7 @@ reader knows what ground is covered and what is not.
 
 Do not return an account of how you searched.
 
+**Reply cap:** in research mode, one block per finding, at most three lines: what, path, closeness.
+In interface mode, the whole text, because design records it word for word.
+
 Stop and say so when the code path does not exist, which is different from it holding nothing.
