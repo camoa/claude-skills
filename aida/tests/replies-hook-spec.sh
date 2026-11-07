@@ -49,4 +49,9 @@ expect "a role's start gets the reply rule as its context" \
   '0|SubagentStart|same'
 expect "the start case holds no decision" "$(blocked)" '0'
 
+# The log keeps its last 1000 lines, so it never grows without limit. The newest line stays.
+seq 1 1000 | sed 's/.*/{"old": &}/' >"$LOG"
+hook "$(stop aida:split-advisor 'written')"
+expect "the log keeps its last 1000 lines, the newest one included" "$(log_lines)|$(last_log '.agent_type')" '1000|aida:split-advisor'
+
 finish

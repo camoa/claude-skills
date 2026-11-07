@@ -14,11 +14,11 @@ do not run it.
 
 ## What the report says
 
-An action prints only the lines that need you: each fault with the action that repairs it, each
-warning and note, and `Ready for work: true` or `false`, with the reasons when false. Its last line,
-`report:`, names `records/check-project.json`, which holds the whole report, passing results
-included. The script `scripts/check-project.sh <project folder>`, run by hand, prints the whole
-report. In order, the whole report says:
+An action prints only the lines that need you. It prints each fault with the action that repairs
+it, and each warning and note. It also prints `Ready for work: true` or `false`, with the reasons
+when false. Its last line, `report:`, names `records/check-project.json`. That record holds the
+whole report, passing results included. The script `scripts/check-project.sh <project folder>`,
+run by hand, prints the whole report. In order, the whole report says:
 
 - the code path, and whether that folder exists
 - whether the code path is safe: a system root, your home directory and any folder above it are

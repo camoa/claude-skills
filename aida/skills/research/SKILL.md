@@ -78,7 +78,8 @@ Run:
 ```
 This prints summary lines. `contract:` says present or absent and `contract-file:` names the
 file. `criteria:` lists the ids. One `criterion:` line follows for each, with its id, `machine` or
-`person`, and its text. `criteria-by-designer:` lists the ids no person ever approved. `worktree:` names the task's own git worktree, where the code is read and the spike
+`person`, and its text. One `non-goal:` line gives each non-goal's id and text.
+`criteria-by-designer:` lists the ids no person ever approved. `worktree:` names the task's own git worktree, where the code is read and the spike
 runs. `none` means the code path, as for a task made before every task had one.
 `automated-tests:` is the contract's answer to whether this task has automated tests: `yes`, `no`
 or `not-asked`. `recipes-declined:` names each framework a person declined a recipe for, or

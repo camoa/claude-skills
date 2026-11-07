@@ -221,6 +221,10 @@ if [ -n "$MATCH" ]; then
   echo "track is the same as never having considered it, and whatever you learn doing"
   echo "untracked work is gone once this session closes."
   echo ""
+  # The reply rule, last, so it reaches the main conversation and returns after a compaction. It
+  # is AIDA's, so only a directory a project owns gets it. The reply hook gives every AIDA role the
+  # same file.
+  cat "${PLUGIN_ROOT}/hooks/reply-rule.md" 2>/dev/null
 else
   echo "This directory is not set up as a project, so nothing here is being tracked."
   echo ""
@@ -251,10 +255,6 @@ else
     echo ""
     echo "_(You have ${OTHERS} project(s) set up elsewhere; \`/aida:project\` lists them.)_"
   fi
-  echo ""
 fi
 
-# The reply rule, last, so it reaches the main conversation and returns after a compaction. The
-# reply hook gives every AIDA role the same file.
-cat "${PLUGIN_ROOT}/hooks/reply-rule.md" 2>/dev/null
 exit 0

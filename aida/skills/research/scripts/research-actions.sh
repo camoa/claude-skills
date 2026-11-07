@@ -233,6 +233,9 @@ do_read() {
   echo "criteria: $(printf '%s' "$criteria_json" | jq -r '[.[].id] | join(" ")')"
   # Each criterion's text, so the session needs no read of the contract file (gap row 505).
   printf '%s' "$criteria_json" | jq -r '.[] | "criterion: " + .id + " " + .verifiedBy + " " + ((.text // "") | gsub("\n"; " "))'
+  # Each non-goal's text, which the recipe fit is judged against.
+  [ "$contract_state" != present ] \
+    || jq -r '(.nonGoals // [])[] | "non-goal: " + .id + " " + ((.text // "") | gsub("\n"; " "))' "$ALIGNMENT_FILE" 2>/dev/null
   echo "criteria-by-designer: $(printf '%s' "$criteria_json" | jq -r '[.[] | select(.author == "designer") | .id] | join(" ")')"
   echo "decided-without-a-person: $decided"
   echo "automated-tests: $(automated_tests "$TASK_PATH")"

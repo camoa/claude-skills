@@ -3,7 +3,7 @@
 #
 # SubagentStart: returns hooks/reply-rule.md as the role's additional context.
 # SubagentStop, and PostToolUse on SubagentHandback: appends one JSON line to
-# ${CLAUDE_PLUGIN_DATA}/reply-sizes.jsonl with the reply's non-empty lines and bytes, and the cap
+# ${CLAUDE_PLUGIN_DATA}/reply-sizes.jsonl, which keeps its last 1000 lines, with the reply's non-empty lines and bytes, and the cap
 # the role's own file states as "**Reply cap:** <n> line". A role with several modes states its cap
 # as instruction, with no number first, so its cap is null.
 #
@@ -34,6 +34,7 @@ esac
 
 [ -n "${CLAUDE_PLUGIN_DATA:-}" ] || exit 0
 mkdir -p "$CLAUDE_PLUGIN_DATA" 2>/dev/null || exit 0
+LOG="$CLAUDE_PLUGIN_DATA/reply-sizes.jsonl"
 LINES="$(printf '%s\n' "$TEXT" | grep -c '[^[:space:]]')"
 BYTES="$(printf '%s' "$TEXT" | wc -c | tr -d ' ')"
 CAP="$(sed -n 's/^\*\*Reply cap:\*\* \([0-9][0-9]*\) lines\{0,1\}[ .,].*/\1/p' "$PLUGIN_ROOT/agents/${AGENT#aida:}.md" 2>/dev/null | head -1)"
@@ -43,5 +44,9 @@ jq -nc --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg e "$EVENT" --arg a "$AGEN
   '($cap | if . == "" then null else tonumber end) as $c
    | {at: $at, session_id: $s, event: $e, agent_type: $a, agent_id: $id, lines: $lines, bytes: $bytes,
       cap: $c, over: (if $c == null then null else $lines > $c end)}' \
-  >>"$CLAUDE_PLUGIN_DATA/reply-sizes.jsonl" 2>/dev/null
+  >>"$LOG" 2>/dev/null
+# The log keeps its last 1000 lines, enough for many runs, so it never grows without limit.
+if [ "$(wc -l <"$LOG" 2>/dev/null | tr -d ' ')" -gt 1000 ] 2>/dev/null; then
+  tail -n 1000 "$LOG" >"$LOG.new" 2>/dev/null && mv "$LOG.new" "$LOG"
+fi
 exit 0

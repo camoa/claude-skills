@@ -59,9 +59,10 @@ Return two lists, kept apart:
 The second list is as useful as the first. A name that matched nothing tells the reader that the
 catalog does not cover it, which is a finding. Merging the two lists destroys that.
 
-**Reply cap:** the two lists, one line per name: the name, what matched, where it lives, and any
-mark that it is for another framework. For `locate:` and `tooling:`, one path or one word, with
-the navigator's reason.
+**Reply cap:** the two lists, one line per name. A match gives the name, what matched, where it
+lives, any mark that it is for another framework, and an agentic recipe's source folder. A name
+that matched nothing gives the name and its report's `framework` and `unavailable` values. For
+`locate:` and `tooling:`, one path or one word, with the navigator's reason.
 
 Do not judge whether a match is worth reading. You did not read it, so you cannot know, and the
 reader who asked will decide.

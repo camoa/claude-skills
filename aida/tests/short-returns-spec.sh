@@ -41,6 +41,10 @@ rule_case() (
 )
 expect "the start block ends with the reply rule" "$(rule_case)" 'ends'
 
+# The reply rule is AIDA's, so a directory no project owns does not get it.
+expect "a directory no project owns gets no reply rule" \
+  "$(cd "$ROOT" && CLAUDE_PLUGIN_ROOT="$PLUGIN" bash "$PLUGIN/hooks/session-start.sh" </dev/null 2>/dev/null | grep -c 'Reply short')" '0'
+
 # scope_write_case: add's changed line, its rendered line and whether it printed the summary, then
 # whether read prints the summary.
 scope_write_case() (
@@ -59,12 +63,12 @@ expect "a scope write prints its changed line and rendered:, and read prints the
 research_read_case() (
   source "$HERE/records.bash"
   task_records branch wo2
-  edit "$TASK/alignment.json" '.criteria[1].verifiedBy = "person"'
+  edit "$TASK/alignment.json" '.criteria[1].verifiedBy = "person" | .nonGoals = [{id: "n1", text: "no new page"}]'
   run "$RESEARCH" read "$TASK"
-  printf '%s|%s|%s\n' "$(grep -c '^criterion: ' "$OUT")" "$(grep -c '^criterion: c1 machine a.php says b$' "$OUT")" \
-    "$(grep -c '^criterion: c2 person b.php exists$' "$OUT")"
+  printf '%s|%s|%s|%s\n' "$(grep -c '^criterion: ' "$OUT")" "$(grep -c '^criterion: c1 machine a.php says b$' "$OUT")" \
+    "$(grep -c '^criterion: c2 person b.php exists$' "$OUT")" "$(grep -c '^non-goal: n1 no new page$' "$OUT")"
 )
-expect "research read prints one criterion line per criterion, with its kind and text" "$(research_read_case)" '2|1|1'
+expect "research read prints each criterion with its kind and text, and each non-goal's text" "$(research_read_case)" '2|1|1|1'
 
 # Each stage manual's paragraph that names the project-folder: line also runs report, and names the
 # project skill for a non-zero exit.
