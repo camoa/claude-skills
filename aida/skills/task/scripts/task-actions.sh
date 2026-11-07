@@ -1719,32 +1719,39 @@ $files_dir"
   [ -n "$bring_up" ] || die3 "environment: $RECIPE has no block tagged sh under Bring up, so up refuses this recipe"
   [ -n "$address" ] || die3 "environment: $RECIPE has no block tagged sh under Address, so up would record no address"
   if [ "$sub" = "show" ]; then
+    local listing check_line
+    # The blocks are read before the check, because a passing check removes the token files. They
+    # print after it, so a failing check prints only its own lines and the remedy, and no offer
+    # (gap row 505). The x keeps the listing's last blank line through the command substitution.
+    listing="$(
     # The prose without its fenced lines, so the precondition line appears once, filled.
     printf 'PRECONDITIONS:\n'; recipe_prose_under "$RECIPE" Preconditions | awk '/^  ```/ { inFence = !inFence; next } !inFence'
     [ -z "$preconditions" ] || { fill_tokens "$preconditions" | sed 's/^/  precondition: /'; printf '\n'; }
-    printf 'TOKENS:\n'; while IFS="$tab" read -r n name; do [ -n "$n" ] && printf '  %s: %s\n' "$name" "$(fill_tokens "$(sed -n '/[^ ]/{p;q;}' "$tokens_dir/$n")")"; done <<TA_TOKEN_LIST
-$token_list
-TA_TOKEN_LIST
+    # A pipe, not a here-document: bash 3.2 misreads a here-document inside $( ).
+    printf 'TOKENS:\n'; printf '%s\n' "$token_list" | while IFS="$tab" read -r n name; do [ -n "$n" ] && printf '  %s: %s\n' "$name" "$(fill_tokens "$(sed -n '/[^ ]/{p;q;}' "$tokens_dir/$n")")"; done
     printf 'BRING UP:\n'; fill_tokens "$bring_up" | sed 's/^/  /'; printf '\n'
     printf 'ADDRESS:\n  %s\n' "$(fill_tokens "$address")"
     printf 'TEAR DOWN:\n'; fill_tokens "$tear_down" | sed 's/^/  /'; printf '\n'
     printf 'BUILD IN PLACE:\n'; recipe_prose_under "$RECIPE" "Build in place"
     printf 'FILES:\n'; printf '%s\n' "$file_list" | cut -f2 | sed 's/^./  &/'
+    printf x
+    )"
     rm -rf "$tokens_dir"
     # The check runs here too, so a site that cannot come up is never offered. The path is read
     # from the record, because task_worktree makes a missing tree again, and show writes nothing.
     wt="$(jq -r '.worktree.path // empty' "$task_json")"
     if [ -n "$adopt" ]; then
-      printf 'precondition check: not run, the site in %s is up and task.json records none, so up records it and runs no bring-up line\n' "$wt"
+      check_line="precondition check: not run, the site in $wt is up and task.json records none, so up records it and runs no bring-up line"
     elif [ -z "$preconditions" ]; then
-      printf 'precondition check: none, the recipe has no precondition line\n'
+      check_line='precondition check: none, the recipe has no precondition line'
     elif [ -z "$wt" ] || [ ! -d "$wt" ]; then
-      printf 'precondition check: not run, the worktree %s is not on disk. up makes it again and runs the check there\n' "${wt:-none recorded}"
+      check_line="precondition check: not run, the worktree ${wt:-none recorded} is not on disk. up makes it again and runs the check there"
     else
       cd "$wt" || die3 "environment: could not enter $wt"
       environment_check show "$wt" ""
-      printf 'precondition check: passed in %s\n' "$wt"
+      check_line="precondition check: passed in $wt"
     fi
+    printf '%s%s\n' "${listing%x}" "$check_line"
     environment_cleanup quiet || exit 3
     # The site's own state, from the recipe's `## Status` line, when it has one and the tree exists.
     # The EXIT trap still stands, so environment_cleanup removes its files on every exit.

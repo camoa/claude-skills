@@ -519,6 +519,7 @@ EOR
   printf '%s|%s|%s\n' "$RC" "$(grep -c '^RECIPE: ' "$OUT")" \
     "$(grep -E '^(PRECONDITIONS|TOKENS|BRING UP|ADDRESS|TEAR DOWN|BUILD IN PLACE|FILES):$|^precondition check: ' "$OUT" | cut -d: -f1 | paste -s -d, -)"
 )
+expect "show on a failing precondition prints the recipe line and the check, and no block" "$(show_case false)" '3|1|'
 expect "show on a passing precondition prints every block, then the check" "$(show_case true)" \
   '0|1|PRECONDITIONS,TOKENS,BRING UP,ADDRESS,TEAR DOWN,BUILD IN PLACE,FILES,precondition check'
 
