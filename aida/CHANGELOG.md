@@ -4,6 +4,87 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.5] - 2026-11-07
+
+Fixes from a live run, and shorter output. AIDA's replies and script
+returns are short, and a text order gets a test-first baseline.
+
+### Added
+
+- One reply rule reaches every AIDA role in any directory. The main
+  conversation gets it only where a project owns the directory.
+- Nine roles state a reply cap, per role or per mode. They are the
+  catalog identifier, the design critic, the distiller, the implementer,
+  both searchers, the playbook loader, the split advisor and the test
+  reader.
+- A hook logs the size of each role's reply to `reply-sizes.jsonl` in
+  the plugin data folder. The log keeps its last 1,000 lines. It needs
+  `jq`, and it never blocks.
+- `step` prints a file over 25,000 bytes in parts, because the Bash
+  tool returns only a preview past about 30,000 characters. Each part
+  names the `--part <n>` command for the next part.
+- At its first freeze, a text order's verify lines run once, before the
+  build, in a temporary worktree at HEAD. A line that fails prints
+  nothing. A line that passes before the build warns. A line that no
+  person approved does not run, and warns. The run adds no new stop. A
+  file that git ignores is absent from that worktree.
+- `completion close --leave <id>=task:<task>` sends a finding to another
+  task, so several findings can go to one task. That task must be open,
+  must not be this task, and its `task.md` must name the finding. A
+  deferred decision and a finding ruled `contract-wrong` are refused.
+
+### Changed
+
+- Returns are shorter. The session start block names the project
+  folder. The project check prints only its faults, its notes and a
+  report path. The contract and the scope state print once.
+- `environment show` prints only the failing check when the check fails.
+  When the check passes, it prints every block as before.
+- `what-a-test-is.md` gives one definition of a test: a test drives one
+  change. It also holds a table of what fails first for each kind of
+  work. `--locks-in` keeps a test that passes before the build only as
+  the one test of a part of a clause.
+- The design check no longer advises giving a person's criterion to an
+  order that builds code. It now says when a folder that a text order
+  owns reads as code. Files of type mdx, prompt, csv and jsonl read as
+  text.
+- `check-project.sh` takes a new `--short` flag. It prints only the
+  findings, the readiness and the record's path.
+- `tests-freeze` refuses at exit 3, before any commit, a test that no row
+  would hold. Such a test claims only a person-verified criterion, or
+  only a criterion the order does not hold. Claim the order id instead,
+  with `--test <path>::<name>=<order>` and `--row <order>=...`.
+- A stage looks up a process recipe with one script call,
+  `project-actions.sh recipe-point`, and needs no agent for it. It
+  replaces `recipe-source`. It runs the installed navigator. To run a
+  clone, set `AIDA_NAVIGATOR_LOOKUP` or pass `--navigator <path>`. A
+  recipe report with a missing field reads `fetch-failed`, not
+  `no-recipe`.
+- The row checker names every test that it rejects on a row, so the
+  test author repairs them all in one round.
+
+### Fixed
+
+- The pull request body copied the evidence of each finding, which can
+  name a private thing. It now holds each finding's id, severity, lens,
+  file, lines and ruling. Catalog notes become a count. The body names no
+  absolute worktree path, and says that the evidence stays in the task
+  record.
+- Review refused a criterion removed from the contract after the freeze,
+  and named routes that did not exist. When no remaining order or frozen
+  test holds the criterion, review now reads it `unanswered` and warns.
+  The review record and the pull request body name the drop, and
+  completion needs `--reason`. A removed criterion that an order or a
+  frozen test still holds is refused at exit 3, and the refusal names
+  the routes. A dispatched role cannot run `scope remove` at any stage.
+- `redo` printed "reverted: none" and left a builder's unrecorded commit
+  on the branch. `redo` and `drop` now also read the commits after the
+  order's last recorded head, on the branch's first-parent line. A
+  commit that changes only the order's files is reverted. A commit that
+  also changes other files is named and refused at exit 113. Run
+  `git revert` on it, commit again what must stay, and run the command
+  again.
+
 ## [6.1.4] - 2026-11-04
 
 Fixes from a live run. A person can take an order review's information
