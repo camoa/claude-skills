@@ -19,9 +19,10 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # Usage:
 #   completion-actions.sh read       <task_folder>
 #   completion-actions.sh follow-ups <task_folder> [--create <finding id>]...
-#   completion-actions.sh close      <task_folder> [--reason <text>] [--leave <finding id>=<reason>]...
+#   completion-actions.sh close      <task_folder> [--reason <text>]
+#                                                  [--leave <finding id>=<reason>|task:<task id>]...
 #                                                  [--captures-offered <n>] [-- <summary...>]
-#   completion-actions.sh step       <name>
+#   completion-actions.sh step       <name> [--part <n>]
 #
 # Every action prints a summary of `key: value` lines and paths, and nothing else: no record body,
 # no pull request body, no finding's evidence. A line a person may want in full names the path that
@@ -53,7 +54,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      resolved, a record that is present but unreadable, a record that does not match
 #      scripts/completed-schema.json, or a file that could not be written. A task name collision
 #      comes back from task-actions.sh at 3 too, and its own line is relayed as printed. So does
-#      a tear-down task-actions.sh refused, and a restore commit git refused.
+#      a tear-down task-actions.sh refused, and a restore commit git refused. A `--leave` value
+#      naming a task that cannot take the finding is refused here too, with nothing written.
 #  70  --reason, --leave or --captures-offered was passed on a run with nobody present. The number
 #      tests-freeze and review already give a person's answer arriving on an autonomous run.
 #  79  the action was run from outside the task's own worktree; every stage action but `read` runs there.
@@ -134,9 +136,10 @@ usage() {
   cat <<'EOF' >&2
 usage: completion-actions.sh read       <task_folder>
        completion-actions.sh follow-ups <task_folder> [--create <finding id>]...
-       completion-actions.sh close      <task_folder> [--reason <text>] [--leave <finding id>=<reason>]...
+       completion-actions.sh close      <task_folder> [--reason <text>]
+                                                      [--leave <finding id>=<reason>|task:<task id>]...
                                                       [--captures-offered <n>] [-- <summary...>]
-       completion-actions.sh step       <name>
+       completion-actions.sh step       <name> [--part <n>]
 EOF
 }
 
@@ -443,26 +446,32 @@ CP_WANTED
 
 # Renders the pull request body from the records only. Completion computes nothing: each section
 # reads one field, and a missing record is written in words, never left blank. The body is never
-# printed; its path is. $1 the record this close is about to write, $2 the lines the review
+# printed; its path is. The body is public and a role's words can name a private thing, so it holds
+# a finding's fields and the path to its evidence, never the text (gap row 495). $1 the record this close is about to write, $2 the lines the review
 # script's `audit` printed, empty when there is no review record.
 cp_render_body() {
   jq_files -nr --arg task "$CP_TASK_ID" --argjson alignment "$CP_ALIGNMENT_DOC" --argjson finished "$CP_FINISHED_DOC" \
     --argjson review "$CP_REVIEW_DOC" --argjson record "$1" --argjson taskDoc "$CP_TASK_DOC" --arg audit "$2" \
-    --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" '
+    --arg restore "$CP_RESTORE_COMMIT" --arg restorePaths "$CP_RESTORE_PATHS" --arg taskPath "$TASK_PATH/" '
     def section($title; $lines): ["## " + $title, ""] + $lines + [""];
     def none_when_empty($lines; $word): if ($lines | length) == 0 then [$word] else $lines end;
+    def owner_record: "in the task record (`review/review.json`), for the owner of the task";
+    # An absolute path names a folder on this machine, so a path a tool or a role printed keeps its
+    # last part. Contract text and a person'"'"'s words stay as written: there, /a/b can be a web route.
+    def no_abs: gsub("(?<![\\w.~:/-])/[^\\s:,;)\"]+/(?<last>[^/\\s:,;)\"]+)"; "\(.last)");
     # The rows the acceptance verifier wrote for a criterion, beside its verdict, each with the file it
     # was judged from, such as a screenshot.
     def evidence_note($id):
       ([ (($review // {}).evidence // [])[] | select(.criterion == $id)
-         | .verdict + " " + (if .path == "" then "(no file)" else .path end) ]) as $rows
+         | .verdict + " " + (if .path == "" then "(no file)" else .path | ltrimstr($taskPath) | no_abs end) ]) as $rows
       | if ($rows | length) == 0 then "" else "; evidence: " + ($rows | join(", ")) end;
     ["# " + $task, ""]
     + section("Goal";
         if $alignment == null then ["no contract; see task.md"] else [$alignment.goal // ""] end)
     + section("Success criteria";
         if $alignment == null then ["no contract"]
-        else none_when_empty([ ($alignment.criteria // [])[] | "- " + .id + ": " + .text + " (" + (.verdict // "unanswered") + evidence_note(.id) + ")" ]; "none") end)
+        else none_when_empty([ ($alignment.criteria // [])[] | "- " + .id + ": " + .text + " (" + (.verdict // "unanswered") + evidence_note(.id) + ")" ]
+          + [ (($review // {}).droppedCriteria // [])[] | "- " + .id + ": " + .text + " (dropped with " + ([ .orders[] | .id + ": " + .because ] | join("; ")) + ")" ]; "none") end)
     + section("Non-goals";
         if $alignment == null then ["no contract"]
         else none_when_empty([ ($alignment.nonGoals // [])[] | "- " + .id + ": " + .text ]; "none") end)
@@ -477,7 +486,7 @@ cp_render_body() {
                     then ["The code repository holds nothing from this task: both ends of this range are one commit. Every deliverable is committed in the project folder."]
                     else [] end))
               + [ ($finished.suite.notCaused // [])[]
-                  | "A test fails at the end of this range that passed at its start. A person recorded it as not caused by this task: " + .line + ". Their words: " + .because ] end)
+                  | "A test fails at the end of this range that passed at its start. A person recorded it as not caused by this task: " + (.line | no_abs) + ". Their words: " + .because ] end)
         + (if $review.hasUpstream == false then ["no upstream branch; push before opening"] else [] end)
         # A task page promises the tear-down here (live-run row 150). The old line printed for
         # every worktree. It told a task with no site to prune, and a task with a live site
@@ -485,7 +494,7 @@ cp_render_body() {
         # a site is up, and the marker holds one while a site is coming up. Both `not-applicable`
         # and an absent key name no recipe and no site.
         + (if ($taskDoc.worktree // null) == null then [] else
-            ["Branch " + $taskDoc.worktree.branch + ", in the worktree " + $taskDoc.worktree.path + ". Push from there."]
+            ["Branch " + $taskDoc.worktree.branch + ". Push from its worktree."]
             # So a reviewer sees why the files the site needed are absent from the diff (gap row 262).
             + (if $restore == "" then [] else
                 ($restore | split(" ")) as $ids
@@ -498,9 +507,7 @@ cp_render_body() {
                      "`task prune " + $task + "` refuses the tree until a person "
                      + (if ($taskDoc.environment.recipe // null) != null
                         then "runs `task environment " + $task + " down`, which lets go of the site and prints its tear-down lines, runs those lines in the worktree, and runs `task environment " + $task + " down` again."
-                        else "tears the site down in the worktree with "
-                          + (if ($taskDoc.environment.tearDown // null) != null then "these lines, which delete that database: `" + $taskDoc.environment.tearDown + "`," else "the recipe'"'"'s ## Tear down lines," end)
-                          + " and runs `task environment " + $task + " down`." end)]
+                        else "tears the site down in the worktree with the lines `task prune` prints, and runs `task environment " + $task + " down`." end)]
              elif ($taskDoc.environment.recipe // null) == null
                then ["After the merge: `task prune " + $task + "` from the main checkout removes the tree and the merged branch."]
                else [(if ($taskDoc.environment.address // null) == null
@@ -510,17 +517,20 @@ cp_render_body() {
                      "After the merge: `task prune " + $task + "` from the main checkout tears the site down when one is up, then removes the tree and the merged branch."] end) end))
     + section("Review audit";
         if $review == null then ["no review record; nothing was checked"]
-        else ($audit | split("\n") | map(select(length > 0) | "- " + .)) end)
+        # The detail of a decision row quotes what a role wrote, so its line stops at who answered.
+        else ($audit | split("\n") | map(select(length > 0)
+               | if startswith("check(decision-") then split(": ")[:2] | join(": ") else . end | "- " + no_abs)) end)
     + section("Review";
         if $review == null then ["no review record; nothing was checked"]
         elif ($review | has("verdict") | not) then ["review ran and did not close"]
         else ["Verdict: " + $review.verdict, ""]
+          + (if ($review.findings // []) == [] then [] else ["The evidence of each finding stays " + owner_record + ".", ""] end)
           + none_when_empty(([ ($review.findings // []) | group_by(.disposition)[]
               | ["### " + .[0].disposition, ""]
                 + [ .[] | "- " + .id + " (" + .severity + ", " + .lens
-                    + (if .file == "" then "" else ", " + .file + (if .lines == "" then "" else ":" + .lines end) end)
+                    + (if .file == "" then "" else ", " + (.file | no_abs) + (if .lines == "" then "" else ":" + .lines end) end)
                     + (if has("ruling") then ", ruled " + .ruling + " by the person" else "" end)
-                    + "): " + .evidence ] ]
+                    + ")" ] ]
               | map(. + [""]) | add // [] | .[:-1]); "no findings")
         end)
     + section("Grounds for closing";
@@ -531,7 +541,8 @@ cp_render_body() {
           | "- " + .finding + ": " + (if .task == null then "no task" + (if .reason == "" then "" else ", left because " + .reason end) else .task end) ]; "none"))
     + section("Catalog notes";
         if $review == null then ["none"]
-        else none_when_empty([ ($review.catalogNotes // [])[] | "- " + .seen + " (" + .where + ")" ]; "none") end)
+        else (($review.catalogNotes // []) | length) as $notes
+          | if $notes == 0 then ["none"] else ["Count: " + ($notes | tostring) + ". The notes stay " + owner_record + "."] end end)
     | .[]'
 }
 
@@ -658,6 +669,37 @@ CP_RESTORE_TODO
   CP_RESTORE_PATHS="${said#*"$tab"}"
 }
 
+# `--leave <finding id>=task:<task id>` sends the finding to one task a person made for several. The
+# row is written once and `close` never runs twice, so a wrong target stays a false row. Each one
+# is refused here, before anything is written. A deferred decision's text lives outside the review
+# record. A contract-wrong ruling's wording reaches scope only through the finding's own task. So
+# neither folds. $1 the --leave lines, `<finding id><tab><value>`.
+cp_refuse_bad_folds() {
+  local fid value target file why
+  while IFS="$(printf '\t')" read -r fid value; do
+    case "$value" in task:*) ;; *) continue ;; esac
+    target="${value#task:}"
+    file="$TASKS_DIR/$target/task.json"
+    why=""
+    if ! jq -e --arg id "$target" '.id == $id' "$file" >/dev/null 2>&1; then
+      why="no task under $TASKS_DIR has that id"
+    elif [ "$target" = "$CP_TASK_ID" ]; then
+      why="that is this task, which is closing"
+    elif jq -e '.state == "complete"' "$file" >/dev/null; then
+      why="that task is complete, so nobody picks the finding up there"
+    elif ! grep -qwF -- "$fid" "$TASKS_DIR/$target/task.md" 2>/dev/null; then
+      why="the task.md of that task does not name the finding"
+    elif printf '%s' "$CP_FOLLOW_UPS" | jq -e --arg id "$fid" 'any(.[]; .finding == $id and .lens == "decision")' >/dev/null; then
+      why="a deferred decision keeps its own task, through follow-ups --create"
+    elif printf '%s' "$CP_REVIEW_DOC" | jq -e --arg id "$fid" 'any((.findings // [])[]; .id == $id and .ruling == "contract-wrong")' >/dev/null; then
+      why="a finding ruled contract-wrong keeps its own task, through follow-ups --create"
+    fi
+    [ -z "$why" ] || die 3 "close: --leave $fid=$value is refused: $why. Nothing was written. A value that starts with task: names the task the finding goes to, so a reason cannot start with task:."
+  done <<CP_FOLDS
+$1
+CP_FOLDS
+}
+
 do_close() {
   local task_arg="" reason="" leaves="" captures_offered="" captures_skipped="" fid value
   local person_words=""
@@ -676,11 +718,11 @@ do_close() {
         is_blank "$2" && die 3 "close: --reason was given no text. A reason is a sentence the record keeps, so a later reader knows the grounds."
         reason="$2"; shift 2 ;;
       --leave)
-        [ "$#" -ge 2 ] || die 3 "close: --leave needs <finding id>=<reason>"
-        case "$2" in *=*) ;; *) die 3 "close: --leave takes <finding id>=<reason>, got: $2" ;; esac
+        [ "$#" -ge 2 ] || die 3 "close: --leave needs <finding id>=<reason> or <finding id>=task:<task id>"
+        case "$2" in *=*) ;; *) die 3 "close: --leave takes <finding id>=<reason> or <finding id>=task:<task id>, got: $2" ;; esac
         fid="${2%%=*}"; value="${2#*=}"
         [ -n "$fid" ] || die 3 "close: --leave was given no finding id: $2"
-        is_blank "$value" && die 3 "close: --leave $fid was given no reason. Say why the finding is left without a task."
+        is_blank "$value" && die 3 "close: --leave $fid was given no reason. Say why the finding is left without a task, or name its task with task:<task id>."
         leaves="$leaves$(printf '%s\t%s' "$fid" "$value")
 "
         shift 2 ;;
@@ -696,9 +738,10 @@ do_close() {
   cp_paths "close" "$task_arg"
   cp_load "close"
   cp_refuse_complete "close"
+  cp_refuse_bad_folds "$leaves"
   # One answer covers the whole call: its words are every person's flag, one "<flag> <value>" per line.
   [ -z "$reason" ] || task_require_person 70 close "--reason, a person's decision to close without a passed review," "$TASK_PATH" completion "completion close" "" "$person_words"
-  [ -z "$leaves" ] || task_require_person 70 close "--leave, a person's decision to leave a finding without a task," "$TASK_PATH" completion "completion close" "" "$person_words"
+  [ -z "$leaves" ] || task_require_person 70 close "--leave, a person's decision to leave a finding without a task or send it to one," "$TASK_PATH" completion "completion close" "" "$person_words"
   [ -z "$captures_offered" ] || task_require_person 70 close "--captures-offered, a person's word that the notes were offered as plays," "$TASK_PATH" completion "completion close" "" "$person_words"
   # Unattended with no answer record, nothing is offered and the record says why; a person names a
   # play, a script never does.
@@ -715,7 +758,7 @@ do_close() {
   # review, naming the verdict and the warnings, because a script inventing a reason would be a
   # bypass.
   if { [ "$CP_REVIEW_VERDICT" != "passed" ] || [ -n "$CP_REVIEW_WARNINGS" ]; } && [ -z "$reason" ]; then
-    # The catalog notes are reported here, since the body that would carry them is not written on
+    # The catalog notes are reported here, since the body that would count them is not written on
     # this halt, such as a project recipe copy behind the catalog (row 284). The decisions an
     # unattended build left wait for the person the same way (gap row 279).
     local notes undecided
@@ -733,7 +776,7 @@ do_close() {
   fi
 
   # Every --leave names a follow up finding that has no task. A high severity finding with no
-  # task and no reason refuses the close, because leaving a queued security fault ships it.
+  # task and no reason is a warning, because leaving a queued security fault ships it.
   local bad_leaves rows blocking
   bad_leaves="$(jq -Rrn --argjson f "$CP_FOLLOW_UPS" --rawfile given /dev/stdin '
     [ ($given | split("\n"))[] | split("\t")[0] | select(length > 0)
@@ -750,7 +793,10 @@ CP_LEAVES
     || task_warn "$TASK_PATH" "completion close" "" "--leave named $bad_leaves, which decided nothing. A finding is left only when the review record holds it as a follow up and no task exists for it."
   rows="$(jq -cn --argjson f "$CP_FOLLOW_UPS" --rawfile given /dev/stdin '
     ([ ($given | split("\n"))[] | select(length > 0) | split("\t") | {key: .[0], value: (.[1:] | join("\t"))} ] | from_entries) as $why
-    | [ $f[] | {finding: .finding, severity: .severity, task: .task, reason: ($why[.finding] // "")} ]' <<CP_LEAVES2
+    | [ $f[] | ($why[.finding] // "") as $w | ($w | startswith("task:")) as $fold
+        | {finding: .finding, severity: .severity,
+           task: (if $fold then .task // ($w | ltrimstr("task:") | sub("\t+$"; "")) else .task end),
+           reason: (if $fold then "" else $w end)} ]' <<CP_LEAVES2
 $leaves
 CP_LEAVES2
 )"
@@ -840,17 +886,22 @@ CP_LEAVES2
 # ------------------------------------------------------------------------------------------------
 
 do_step() {
-  local names
+  local names part=1
   names="$(md_basenames_in "$STEPS_DIR")"
   [ "$#" -ge 1 ] || die 3 "step: a step name is required. The steps are: $names"
+  if [ "$#" -eq 3 ] && [ "$2" = "--part" ]; then part="$3"; set -- "$1"; fi
   [ "$#" -le 1 ] || die 3 "step: unrecognized extra argument: $2"
   case "$1" in
     */*|.|..|'') die 3 "step: a step name is one name and never a path; got: $1. The steps are: $names" ;;
   esac
   [ -f "$STEPS_DIR/$1.md" ] \
     || die 3 "step: this skill ships no step file named $1. The steps are: $names"
-  cat "$STEPS_DIR/$1.md" || die 3 "step: $STEPS_DIR/$1.md could not be read."
-  exit 0
+  step_part "$STEPS_DIR" "$1" "$part" "$PLUGIN_ROOT/skills/completion/scripts/completion-actions.sh"
+  case "$?" in
+    0) exit 0 ;;
+    2) die 3 "step: $1 has no part $part. Run step $1 to see the first part and the count of parts." ;;
+    *) die 3 "step: $STEPS_DIR/$1.md could not be read." ;;
+  esac
 }
 
 # ------------------------------------------------------------------------------------------------

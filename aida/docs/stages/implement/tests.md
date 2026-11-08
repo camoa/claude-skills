@@ -71,7 +71,8 @@ selects nothing, so a mistyped test name looks like success.
 
 - The test was wrong: the author corrects it once.
 - It still passes, and the author names the existing code that makes it pass: it is frozen with
-  that reason.
+  that reason only as the one test of a part of a clause. The author deletes any other such test
+  and names it in the report.
 - It still passes, with nothing to name: the author reports it, and the step stops.
 
 A passing test is never deleted quietly and never weakened until it fails. A redo reverts the

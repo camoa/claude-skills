@@ -77,3 +77,5 @@ One file, `<run folder>/reports/<group id>.json`:
 
 Write valid JSON only. Put no newline inside a string. Put no prose in your reply: the skill reads
 the file, never your words.
+
+**Reply cap:** 1 line.

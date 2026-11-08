@@ -66,7 +66,9 @@ same to the person: nothing was compared yet, not that a check found nothing.
 A resumed run that finds the design changed mid-build is not a failure. Attended, each order the
 change touches goes on with its frozen copy, and the `changed:` line names it. A warning goes into
 the task record, naming the change, and naming any criterion no order serves now. Put each one to
-the person: go on with the frozen copy, keep the change with go-on `keep`, or redo the order.
+the person: go on with the frozen copy, keep the change with go-on `keep`, or redo the order. A
+criterion only unstarted orders served leaves the frozen contract, and one more warning names it.
+That warning needs no answer.
 Unattended, the change stops each order it touches, and the stop allows go-on `keep` and redo. In
 both modes, an order the design removed stops, and a person drops it. Say plainly which orders
 changed or stopped and why. This run removes a `design drift` reason about an order's own design

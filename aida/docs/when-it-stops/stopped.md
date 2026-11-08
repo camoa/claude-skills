@@ -45,6 +45,12 @@ going on before the raise brings the stop straight back. How the limit is set is
 - **`redo` and `drop`** have nothing to do on a closed order that is not stopped or changed, and on
   a dropped order. They refuse when the order's records list a commit the branch no longer holds, as after a
   rebase, and on a merge commit (exit 113). Revert that work yourself, then run it again.
+- **A commit after the order's last record** counts as the order's when it changes only the order's
+  files, so `redo` and `drop` revert it. One that changes no file of the order stays. One that also
+  changes other files refuses (exit 113), and the message names it. Run `git revert <commit>`,
+  commit again what must stay, and run the way out again. A file the order shares with another
+  order never makes a commit the order's, so that commit stays and the output names it. A commit
+  that a merge brought in is never the order's.
 
 ## Why it works this way
 

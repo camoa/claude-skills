@@ -185,7 +185,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                 recordOrdersOwningOutsideProjectFolder: [ {id, path, reason} ],
 #                 recordOrdersWithNoDoneWhen: [ {id, path, proof} ],   record, observe and confirm orders
 #                 observeOrdersWithNoSurface: [ {id, path} ],
-#                 confirmOrdersOnTaskWithTests: [ {id, path, machineOwned} ],
+#                 confirmOrdersOnTaskWithTests: [ {id, path, machineOwned, textFolders} ],
 #                 confirmOrdersOwningTestFiles: [ {id, path, glob} ],   path is the owned test file
 #                 testsOnlyRowsUnmatched: [ {id, item, problem} ],   item is an owned file or a row
 #                 unstampedRunProofs: [ {id, path, criterionId} ],
@@ -477,6 +477,8 @@ if [ "$DESIGN_STARTED" = "true" ]; then
             range: $f.range,
             ownsCode: $f.ownsCode,
             textOnly: textOnly,
+            textFolders: ([ (.ownedFiles // [])[] | select(endswith("/")) ] as $d
+              | if any((.ownedFiles // [])[]; (endswith("/") or textFile) | not) then [] else $d end),
             surfacesCount: ([ (.surfaces // [])[]? | select(type == "string" and length > 0) ] | length),
             doneWhen: [ (.doneWhen // [])[]? | select(type == "string" and length > 0) ],
             doneWhenCount: ([ (.doneWhen // [])[]? | select(type == "string" and length > 0) ] | length),
@@ -793,7 +795,7 @@ else
         | select(.id as $i | $testsOnly | index($i) == null)
         | . as $o | [ ($o.criteriaOwned // [])[] | select(($vbOf[.] // "") == "machine") ] as $machine
         | select(($machine | length) == 0 or any($machine[]; . as $c | ($o.criteriaByRun | index($c)) == null))
-        | {id: .id, path: .path, machineOwned: ($machine | length)} ]
+        | {id: .id, path: .path, machineOwned: ($machine | length), textFolders: .textFolders} ]
   ')"
   # The three lists above spare a machine criterion on a run line that names it. A research line runs
   # only when it is binding, a person stamped it at the close, or it equals a check command. One that
@@ -1134,10 +1136,12 @@ def open: {
     ((.coverage.recordOrdersWithNoDoneWhen // [])[] | "order " + .id + " is " + prover(.proof) + " and has no done-when row"),
     ((.coverage.observeOrdersWithNoSurface // [])[] | "order " + .id + " is proved by a model looking through a browser and names no surface"),
     ((.coverage.textOnlyTestOrders // [])[] | "order " + .id + " owns only documents or configuration and its proof is tests, so a test would only read the text back: update --proof confirm, or record for a document under the project folder"),
-    ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope, or give it to an order that builds code"),
+    ((.coverage.machineCriteriaOnTextOnlyOrders // [])[] | "order " + .id + " owns only documents or configuration and owns the machine-verified criterion " + .criterionId + ", which nothing there can test: make it person-verified in scope"),
     ((.coverage.machineCriteriaOnLookOrRecordOrders // [])[] | "order " + .id + " is " + prover(.proof) + " and owns the machine-verified criterion " + .criterionId + ", which neither a look nor a reading judges: make it person-verified in scope, add a run line that proves it, or give it to an order that builds code"),
-    ((.coverage.confirmOrdersOnTaskWithTests // [])[] | "order " + .id + " is confirmed by a person on a task with tests and owns code, "
-      + (if .machineOwned == 0 then "which gets tests even with no machine criterion" else "and run lines do not prove every machine criterion it owns" end) + ": update --proof tests"),
+    ((.coverage.confirmOrdersOnTaskWithTests // [])[] | if (.textFolders | length) > 0
+      then "order " + .id + " is confirmed by a person on a task with tests, and every file it names is text, but these folders read as code: " + (.textFolders | join(", ")) + ". Run remove-owned-file on each, and add-owned-file for each file it holds"
+      else "order " + .id + " is confirmed by a person on a task with tests and owns code, "
+      + (if .machineOwned == 0 then "which gets tests even with no machine criterion" else "and run lines do not prove every machine criterion it owns" end) + ": update --proof tests" end),
     ((.coverage.confirmOrdersOwningTestFiles // [])[] | "order " + .id + " is confirmed by a person and owns the test file " + .path + " (" + .glob + "), which no check runs: remove-owned-file, or answer the tests question yes in scope and update --proof tests"),
     ((.graph.dependencyCycles // [])[] | "dependency cycle includes " + .),
     ((.graph.unknownDependsOnIds // [])[] | "file " + .path + " depends on an unknown work order id " + .id),

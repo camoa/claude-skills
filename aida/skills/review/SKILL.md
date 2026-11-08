@@ -3,7 +3,7 @@ name: review
 description: This skill should be used when a task's implementation has finished and the whole task needs one pass against its contract and its code, for example "review this task", "run the review", "gate check", "check this task before completion", or "Phase 4". It runs sixteen checks over the frozen contract, the diff at the final commit, the coding-standards and analysis and security and suite results, the mutation survivors, the research records and the surfaces a person can see. It dispatches one architecture reviewer over eight lenses and one acceptance verifier that runs the product, asks the person the rows only a person can answer, and records one verdict a person acts on.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh record *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/review/scripts/review-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/completion/scripts/completion-actions.sh follow-ups *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh record *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-point *), Agent, EnterWorktree
 ---
 
 # Review
@@ -29,9 +29,10 @@ complete, and review still runs on it and records its verdict.
 
 ## Find the task
 
-Resolve the active project's own folder first. Then resolve the task, `<taskId>` when given, or
-whichever task is already active in this conversation. Neither known: say so in one line, name the
-task skill, and stop. There is nowhere to act.
+Resolve the active project's own folder first, from the `project-folder:` line of the `## AIDA`
+block. Then resolve the task, `<taskId>` when given, or whichever task is already active in this
+conversation. Neither known: say so in one line, name the task skill, and stop. There is nowhere to
+act.
 
 The task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that folder.
 
@@ -95,11 +96,11 @@ earlier invocation is a step run against rules that may have changed.
 These hold for every step, and each step file names them rather than restating them. This file stays
 loaded; a step file is loaded only while its own step runs.
 
-**The conversation holds summaries and paths. The records hold the bodies.** Every action prints
-`key: value` lines and a path. Never read a record, a diff, a tool output or a research finding into
-this conversation, and never paste one back. Name the path the script printed, and say the person can
-open it in an editor. **Only the dispatched reviewer reads bodies**, and it opens them itself, from
-the paths its brief names. A body pasted here costs the review the context its own steps need.
+**The records hold the bodies.** Every action prints `key: value` lines and a path. Never read a
+record, a diff, a tool output or a research finding into this conversation, and never paste one
+back. Name the path the script printed, and say the person can open it in an editor. **Only the
+dispatched reviewer reads bodies**, and it opens them itself, from the paths its brief names. A body
+pasted here costs the review the context its own steps need.
 
 **Name the role on every dispatch.** A dispatch that names none runs as the general agent, with
 every tool and this session's own model. Review opens no dispatch record, so the role's own

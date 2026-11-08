@@ -16,13 +16,16 @@ a diff through this conversation. It costs the review the context its own steps 
 
 ## Resolve one recipe per point, per framework
 
-Dispatch `catalog-identifier` with the lines `point: review`, each framework the project declares,
-and the project folder. Then dispatch it again with `point: test-execution` and each
-framework. **These are review's only two lookups.** Name the role, and pass the lookup's answer in
-its own word: SKILL.md holds both rules. The role identifies a path and never opens the body. Never
-fetch a catalog address yourself, and never read a cached copy behind the navigator's back. The
-role reads a folder source this project configured itself first, so it wins over the catalog.
-When a folder answers for `test-execution` or `review`, the role also returns the catalog's copy,
+Run this once, with one `--framework` flag per framework the project declares:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-point "<project folder>" \
+  --point review --point test-execution --framework <framework>
+```
+**These are review's only two lookups.** Pass each `answer=` in its own word: SKILL.md holds that
+rule. Do not open the body. Never
+fetch a catalog address yourself, and never read a cached copy behind the navigator's back. A
+folder source this project configured itself is read first, so it wins over the catalog.
+When a folder answers for `test-execution` or `review`, `catalog=` holds the catalog's copy,
 or the lookup's word. Pass the `test-execution` one as `--catalog-recipe` and the `review` one as
 `--catalog-check-recipe`. A project copy behind the catalog's copy becomes a catalog note, because
 the copy can fall behind after preconditions compared them.

@@ -208,7 +208,8 @@ write_signal() {
 # line names the person's forms alone, so a role may still run plain finish or fix-brief. go-on,
 # redo and drop are person-only in every form. tests-freeze is refused whole: its person form sits
 # inside a --row value, which can come from an @/<file> the command text never shows. No agent or
-# template runs tests-freeze. A step that can be undone is left out: environment up and
+# template runs tests-freeze. scope remove retires an id for good, and takes a criterion out of the
+# review's judgement (gap row 498). A step that can be undone is left out: environment up and
 # not-applicable, surfaces --viewport and --enable, tool install. prune's regex also reads its
 # operands, because only a task id or --all removes a tree; the form with --project alone only lists.
 PERSON_ACTIONS='task-actions.sh set-budget|decline-recipe|defer-surface|set-run-mode
@@ -219,7 +220,7 @@ implement-actions.sh fix-brief --allow --take
 implement-actions.sh verify-record --ruling
 implement-actions.sh finish --regression
 implement-actions.sh reopen --test
-scope-actions.sh approve|retire
+scope-actions.sh approve|retire|remove
 scope-actions.sh add|update --author
 design-actions.sh close --approve-runs
 review-actions.sh acceptance --accept-baseline

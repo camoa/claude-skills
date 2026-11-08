@@ -3,7 +3,7 @@ name: research
 description: This skill should be used when a task's scope contract is approved and its criteria need grounding before design starts, for example "research this task", "find prior art", "check for an existing library", "look for a guide", "check this assumption", or "Phase 1". It fans out one small search per subject, records each search's findings in its own file, and checks that every criterion has a finding and every finding cites a criterion.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh decline-recipe *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh set-tests *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh report), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/playbooks/scripts/playbook-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-point *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh decline-recipe *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/scope/scripts/scope-actions.sh set-tests *), Agent, EnterWorktree
 ---
 
 # Research
@@ -25,7 +25,7 @@ one search.
 Every write below goes through `research-actions.sh`, or `playbook-actions.sh` for the playbook
 load, or the task skill's `decline-recipe` for a declined recipe, or scope's `set-tests` for the
 automated tests answer. All four are named in this skill's own grant, so they run without asking,
-and so does the project skill's `recipe-source` lookup. Any other Bash command still asks for
+and so does the project skill's `recipe-point` lookup. Any other Bash command still asks for
 approval. Dispatching an agent needs no approval either; it is also named in this skill's own
 grant.
 
@@ -59,10 +59,13 @@ same way in both modes.
 
 ## Find the task
 
-Research runs against a task that already has an approved scope contract. Resolve the active
-project's own folder with the project skill first, then the task, `<taskId>` when given or
-whichever task is already active in this conversation. Neither known: say so in one line and
-name the task skill. Stop; there is nowhere to write.
+Research runs against a task that already has an approved scope contract. Take the project folder
+from the `project-folder:` line of the `## AIDA` block. Then run
+`"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh report` once, and show the lines
+it prints. When it exits non-zero, invoke the project skill, whose table reads that exit. With no
+`project-folder:` line, invoke the project skill. Then resolve the task, `<taskId>` when given or
+whichever task is already active in this conversation. Neither known: say so in one line and name
+the task skill. Stop; there is nowhere to write.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes
 that folder.
@@ -74,14 +77,14 @@ Run:
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh read "<task_folder>"
 ```
 This prints summary lines. `contract:` says present or absent and `contract-file:` names the
-file. `criteria:` lists the ids, and `criteria-by-designer:` lists the ids no person ever
-approved. `worktree:` names the task's own git worktree, where the code is read and the spike
+file. `criteria:` lists the ids. One `criterion:` line follows for each, with its id, `machine` or
+`person`, and its text. One `non-goal:` line gives each non-goal's id and text.
+`criteria-by-designer:` lists the ids no person ever approved. `worktree:` names the task's own git worktree, where the code is read and the spike
 runs. `none` means the code path, as for a task made before every task had one.
 `automated-tests:` is the contract's answer to whether this task has automated tests: `yes`, `no`
 or `not-asked`. `recipes-declined:` names each framework a person declined a recipe for, or
 `none`. One `search:`
 line names each research file already on disk with its finding count.
-Read the criteria's text from the contract file.
 
 `read` is the one call here that runs from anywhere. Every other call refuses at exit 79 when
 the task builds in its worktree and this window is elsewhere. The refusal names the tree and the
@@ -320,19 +323,17 @@ Everything published in the catalog is read through the navigator: guides, tooli
 process recipes, agentic recipes. Research never fetches a catalog address itself and never reads
 a cached copy directly.
 
-**A process recipe is looked up, never searched.** The project's own sources answer before the
-catalog, so ask them first, once per framework:
+**A process recipe is looked up, never searched.** Run this, with one `--framework` flag per
+framework:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<projectPath>" research <framework>
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-point "<projectPath>" --point research --framework <framework>
 ```
-It prints one line, or nothing. `RECIPE: <path> source=<folder>`: take that path and skip the
-navigator. `RECIPE: catalog`, with or without `searched=<folders>`, or no line: ask the
-navigator's process-recipe lookup for this project's framework at the research stage. A folder
+It asks the project's own sources, then the navigator, and prints one `POINT:` line per framework.
+`answer=` is a path to the body on disk, or a word. A folder
 that holds nothing is not an answer, so a folder miss never skips the navigator. When
-`searched=` is present, record those folders beside the navigator's answer. A later reader then
+`searched=` names folders, record them beside the answer. A later reader then
 tells a folder miss from a project with no folder. The no-recipe path below is reached only
-after the navigator answers that none exists. The navigator answers with whether
-one is available and, when it is, a path to the body on disk. Read the body from that path. The
+when `answer=` reads `no-recipe`. Read the body from the path. The
 body is never streamed into the conversation, which is what keeps a recipe affordable.
 Verdict words and a missing heading follow
 `${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
@@ -351,7 +352,7 @@ about the framework. Record which one happened, in those words. Treating the sec
 as "this framework has no recipe" writes a false finding that nothing later can tell from a true
 one.
 
-**A source this project configured itself is read through `recipe-source`.** The navigator serves
+**A source this project configured itself is read through `recipe-point`.** The navigator serves
 the published catalog. A project pointing at its own folder is a different source, and the command
 above is how research reads it.
 
@@ -412,10 +413,10 @@ to what can be checked.
 ## Check the automated tests answer
 
 Do this before the coverage check, so its commit carries any change. It applies only when
-`automated-tests:` reads `no`. The coverage check writes a warning until it has run. For each of
-the project's frameworks, dispatch `catalog-identifier` with `point: test-execution`, that
-framework, and the project folder. Pass each path it returns as `--recipe`. When the lookup
-answered no path, pass `--lookup-failed <framework>=<reason>` in its place. Run:
+`automated-tests:` reads `no`. The coverage check writes a warning until it has run. Run `recipe-point`
+with `--point test-execution` and one `--framework` flag per framework of the project. Pass each
+`answer=` path as `--recipe`. When `answer=` holds a word, pass
+`--lookup-failed <framework>=<word>` in its place. Run:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/research/scripts/research-actions.sh runner "<task_folder>" \
   --recipe <framework>=<path>

@@ -3,7 +3,7 @@ name: implement
 description: This skill should be used when a task's design has closed cleanly and it is time to begin building, for example "start implementing this task", "begin the build", or "Phase 3". It freezes the criteria and the work orders into a snapshot, opens the ledger that tracks each order's progress, refuses to land the build on the project's own trunk branch, establishes whether this repository can build and test at all, writes the tests for one work order and freezes them, writes the code for that order until it passes all three deciding checks, reviews the diff, repairs what the review finds, closes the order, and once every order is closed records the task's implementation as finished.
 argument-hint: "[<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh --run-mode interactive create *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/implement/scripts/implement-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh --run-mode interactive create *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-point *), Agent, EnterWorktree
 ---
 
 # Implement
@@ -21,9 +21,10 @@ Before step one, read what a test is in AIDA:
 
 ## Find the task
 
-Resolve the active project's own folder first, then the task, `<taskId>` when given or whichever
-task is already active in this conversation. Neither known: say so in one line and name the task
-skill. Stop; there is nowhere to act.
+Resolve the active project's own folder first, from the `project-folder:` line of the `## AIDA`
+block. Then resolve the task, `<taskId>` when given or whichever task is already active in this
+conversation. Neither known: say so in one line and name the task skill. Stop; there is nowhere to
+act.
 
 Once found, the task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that
 folder.
@@ -135,7 +136,8 @@ Open the step file through the script, not through the Read tool:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/implement/scripts/implement-actions.sh step <step name>
 ```
-This prints `references/<step name>.md`. A `Read` rule naming that folder does not reliably
+This prints `references/<step name>.md`. A file over the inline limit prints in parts, and the
+first line names the next part. A `Read` rule naming that folder does not reliably
 expand `${CLAUDE_PLUGIN_ROOT}`, which is why this skill grants only the one Bash rule above. Run
 `step` every time this table sends you to a file, even a file already read this turn. A step run
 from memory of an earlier invocation is a step run against rules that may have changed.
@@ -145,24 +147,23 @@ from memory of an earlier invocation is a step run against rules that may have c
 These hold for every step below, and each step file names them rather than restating them. This
 file is always loaded; a step file is loaded only while its own step runs.
 
-**The conversation holds summaries and paths. The records hold the bodies.** Every action prints
-`key: value` lines and a path, and each record action ends with `next:`. Never read a record, a
-brief, a diff, a tool output or a finding's evidence into this conversation, and never paste one
-back. Name the path the script printed, and say the person can open it in an editor. Each brief
-action writes its brief to a file and prints the path; the dispatch prompt names that path and
-carries no brief content. **Only the dispatched role reads bodies**, and it opens them itself, from
-the paths its brief names. The one exception is text a person must read to answer: a checklist row
-at `tests-freeze`, or a question a step asks. A body pasted here costs the build the context its own
-steps need.
+**The records hold the bodies.** Every action prints `key: value` lines and a path, and each record
+action ends with `next:`. Never read a record, a brief, a diff, a tool output or a finding's
+evidence into this conversation, and never paste one back. Name the path the script printed, and say
+the person can open it in an editor. Each brief action writes its brief to a file and prints the
+path; the dispatch prompt names that path and carries no brief content. **Only the dispatched role
+reads bodies**, and it opens them itself, from the paths its brief names. The one exception is text
+a person must read to answer: a checklist row at `tests-freeze`, or a question a step asks. A body
+pasted here costs the build the context its own steps need.
 
 **Every question a step puts to a person opens with one plain sentence.** It names the decision,
 says why it is the person's call, and says what each answer causes. Text a person reads uses
 plain words. A framework term such as row, freeze, done-when or order is replaced by a plain
 word, or defined in the sentence that uses it. Keep each sentence under twenty words. The person
 may have returned to the terminal days later, holding none of the order's context (live-run row
-89). The shape: "The checker doubts that one new test proves what its criterion asks. A model
-may not settle that alone. Confirm it and the test is kept as written; reject it and the test
-author rewrites it." Then show what the
+89). The shape: "The checker doubts that the new tests for one requirement prove what it asks. A
+model may not settle that alone. Confirm and the tests are kept as written; reject and the test
+author rewrites them." Then show what the
 step names. Each step file writes its own sentence out; this paragraph is the rule, stated once.
 
 **Name the role on every dispatch.** A dispatch that names none runs as the general agent, with
@@ -178,9 +179,7 @@ carry a label. The worktree line is written `worktree: <path>`, from the path `d
 prints and each brief carries. The role works there and starts each shell command with
 `cd <worktree> &&`. A role starts in this session's directory, and without the line it worked in
 the main checkout (gap row 230). The row checker's interface file carries no worktree, so only
-this line and the hooks keep it out of the main checkout. The identifier's process-recipe
-point is written `point: <phase>` and never a bare word. A bare
-`implement` reads as a task and not a phase (live-run row 138). Nothing else goes in. The
+this line and the hooks keep it out of the main checkout. Nothing else goes in. The
 role's rules and its return shape live in its agent definition, which reaches it on every
 dispatch.
 The data it needs lives in the brief the paths name. So the message restates neither, and two

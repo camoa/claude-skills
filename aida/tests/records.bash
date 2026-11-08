@@ -92,12 +92,17 @@ task_records() {
   [ "$second" = false ] \
     || jq '.id = "wo2" | .title = "add b" | .criteriaServed = ["c2"] | .criteriaOwned = ["c2"] | .dependsOn = ["wo1"] | .ownedFiles = ["b.php"]' \
       "$TASK/design/wo1.json" >"$TASK/design/wo2.json"
+  close_design
+  git -C "$PROJECT" init -q && git -C "$PROJECT" add -A && git -C "$PROJECT" commit -qm "task t1, design closed"
+}
+
+# close_design: the close record over the live contract and design, as design close writes it.
+close_design() {
   # shellcheck source=/dev/null
   source "$PLUGIN/scripts/lib/records-hash.sh" || exit 1
   jq -n --arg h "$(records_hash_for "$TASK")" \
     '{schemaVersion: 1, closedAt: "2026-10-28", runMode: "interactive", closedBy: "person", hash: $h}' \
     >"$TASK/design-closed.json"
-  git -C "$PROJECT" init -q && git -C "$PROJECT" add -A && git -C "$PROJECT" commit -qm "task t1, design closed"
 }
 
 # order_records <step> [<allows>]: the snapshot of the closed design and a ledger with every order

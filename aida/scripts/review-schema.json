@@ -96,6 +96,33 @@
       "items": { "$ref": "#/$defs/evidenceRow" },
       "description": "What the acceptance verifier saw, written by `acceptance --evidence` from the file the verifier wrote. One row per criterion of the frozen contract, and one per surface that ran at each viewport. Absent until the verifier's rows are recorded, and `close` refuses without it (exit 62). A row's verdict decides no check and no criterion on its own: `close` prints each criterion's rows beside it, and the person answers a person criterion from them. A surface row reading unmet or unknown makes its check wait for the person (audit/23, rule 10)."
     },
+    "droppedCriteria": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The criteria a person dropped with their orders after the freeze, written by `close` only when there is one. `scope remove` took each out of the live contract, a dropped order served or owned it, no other order does, and no frozen test names it. Each keeps its frozen text and the words from `drop`, and its row in `criteria` reads unanswered (gap row 498).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text", "orders"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 },
+          "orders": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "because"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "because": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
     "surfaceSetup": {
       "type": "string",
       "enum": ["not-applicable", "available", "not-offered-autonomous", "registered", "declined", "not-this-task", "file-on-another-branch"],

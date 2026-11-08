@@ -21,9 +21,10 @@ their own reviews between the two.
 
 ## Find the task
 
-Resolve the active project's own folder first. Then resolve the task, `<taskId>` when given, or
-whichever task is already active in this conversation. Neither known: say so in one line, name
-the task skill, and stop. There is nowhere to act.
+Resolve the active project's own folder first, from the `project-folder:` line of the `## AIDA`
+block. Then resolve the task, `<taskId>` when given, or whichever task is already active in this
+conversation. Neither known: say so in one line, name the task skill, and stop. There is nowhere to
+act.
 
 The task's own folder is `<projectPath>/tasks/<task-id>`. Every call below takes that folder.
 
@@ -66,10 +67,10 @@ rules that may have changed.
 
 ## Three rules the step repeats
 
-**The conversation holds summaries and paths. The records hold the bodies.** Every action prints
-`key: value` lines and a path. Never read the review record, the contract or the pull request body
-into this conversation, and never paste one back. Name the path the script printed, and say the
-person can open it in an editor. A body pasted here costs context this skill does not need.
+**The records hold the bodies.** Every action prints `key: value` lines and a path. Never read the
+review record, the contract or the pull request body into this conversation, and never paste one
+back. Name the path the script printed, and say the person can open it in an editor. A body pasted
+here costs context this skill does not need.
 
 **Every task write goes through the task skill.** `follow-ups` creates a task through `task
 create`, and `close` moves the state through `task complete`. Completion writes no task field
@@ -91,7 +92,7 @@ A person's answer is accepted only when a person is present.
 |---|---|---|
 | A follow up finding with no task | the person accepts or declines each one | every one is created and listed |
 | A review that did not pass, or passed with warnings | the person gives the reason | the close halts, naming the verdict and the warnings |
-| A high severity follow up with no task | the person creates it, or says why not | the close warns, since the tasks were created first |
+| A high severity follow up with no task | the person creates it, sends it to a shared task, or says why not | the close warns, since the tasks were created first |
 | The summary for `task complete` | the person gives one or two lines | one line naming the grounds |
 | A saved note offered as a play | the person says yes or no per note, and names the play | offers nothing; the record says `autonomous` |
 
@@ -108,7 +109,7 @@ One number never means two things, and none is new to this plugin.
 | Code | What it says |
 |---|---|
 | 1 | refused, with the reason on the first line. The path holds no `task.json`, or the task is already complete. Or the review did not pass, or passed with warnings, and no reason was given. Everything else `close` finds is a warning in the task record. Examples are an open child and a high severity follow up with no task. |
-| 3 | the script could not do its job. A missing argument, a record it could not read or that fails its schema, a file it could not write, or a task name the task script refused. |
+| 3 | the script could not do its job. A missing argument, a record it could not read or that fails its schema, a file it could not write, or a task name the task script refused. Or a `--leave` value `task:<task id>` names a task that cannot take the finding. |
 | 70 | `--reason` or `--leave` was passed on a run with nobody present |
 | 79 | the call ran outside the task's worktree. Enter the tree, the way `/aida:next` does, and run it again. `read` alone runs from anywhere |
 

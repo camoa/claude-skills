@@ -3,7 +3,7 @@ name: surfaces
 description: This skill should be used when end to end or visual regression has to be set up for the current project, for example "set up e2e", "set up visual regression", "register a surface", "remove a surface", "take the first baselines", "add a page to the visual review", or when a stage's offer, at scope, design or review, gets a yes on a kind. It installs the harness from the framework's recipe, writes the surface file review runs, and takes first baselines with a person present.
 argument-hint: "<read | show | install | register | unregister | baseline | decline> [<kind or id>]"
 arguments: [action, subject]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh *), Agent
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-point *), Agent
 ---
 
 # Surfaces
@@ -66,11 +66,15 @@ Review reads a command unknown when the range changed it, or deleted its files, 
 
 ## Resolve the recipes
 
-Dispatch `catalog-identifier`, naming the role, once per point. The points are `e2e-setup` for
+Run this once, with one `--point` flag per point and one `--framework` flag per framework the
+project records:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-point "<project folder>" --point <phase> --framework <framework>
+```
+The points are `e2e-setup` for
 the `e2e` kind, `visual-regression` for the `visual-regression` kind, and `review` when a baseline
-is taken. Each dispatch names the point as a line `point: <phase>`, then every framework the
-project records, then the project folder. A point
-is a point of AIDA's process, never a keyword search. Pass the answer in its own word, one flag per
+is taken. A point
+is a point of AIDA's process, never a keyword search. Pass each `answer=` in its own word, one flag per
 framework. A path on disk is `--recipe <framework>=<path>`. A failed lookup is
 `--lookup-failed <framework>=<word>`, with `no-recipe`, `listing-unreachable` or `fetch-failed`.
 Only the first word says anything about the framework. Never retype a command out of a recipe. The

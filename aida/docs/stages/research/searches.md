@@ -15,6 +15,7 @@ searches run. Three criteria that rest on the same library may need one search.
 - **The catalog.** Research asks which guides and recipes cover each criterion. It records each
   name, and whether it is a guide, a tooling recipe or an agentic recipe. It never opens them;
   design reads them. A catalog it could not reach is recorded as not reached, not as empty.
+  A process recipe needs no search: research looks it up with one script call.
 - **What reputable sources recommend.** A current, dated source. Research also records the command
   those sources run to verify the result, word for word, with its source. Design turns that
   command into the work order's proof.

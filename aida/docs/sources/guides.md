@@ -20,6 +20,9 @@ A name that matched nothing is a finding too. It says the catalog does not cover
 catalog that could not be reached is named as unavailable, never as a catalog that held nothing.
 Research does not decide whether a match is worth reading. Design decides.
 
+The agent that asks the catalog only names matches. A stage looks up a process recipe itself,
+with one script call, so that lookup costs no agent.
+
 ## At design
 
 Design is the first stage that reads a guide body. It opens each one research named, and records

@@ -26,6 +26,9 @@ claude --plugin-dir /path/to/claude-skills/dev-guides-navigator \
        --plugin-dir /path/to/claude-skills/aida
 ```
 
+When an installed copy of the navigator is also on the machine, AIDA's recipe lookup runs that
+copy. Set `AIDA_NAVIGATOR_LOOKUP` to the clone's `scripts/dev-guides-lookup.sh` to run the clone.
+
 To see what loaded, put the flags before the subcommand:
 
 ```bash

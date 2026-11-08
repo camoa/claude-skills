@@ -481,4 +481,82 @@ EOR
 )
 expect "a tear-down line fills a token value the bring-up recorded" "$(token_down_case)" '4|0|1'
 
+# show_case <precondition line>: environment show from a recipe whose one precondition line is
+# <precondition line>. The exit, how many RECIPE: lines, and the block headings in order (gap row 505).
+show_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  cat >"$ROOT/env.md" <<EOR
+# fake worktree environment
+
+## Preconditions
+
+The site needs a database.
+
+\`\`\`sh
+$1
+\`\`\`
+
+## Bring up
+
+\`\`\`sh
+true
+\`\`\`
+
+## Address
+
+\`\`\`sh
+echo address: http://t1.test
+\`\`\`
+
+## Tear down
+
+\`\`\`sh
+true
+\`\`\`
+EOR
+  run "$TASK_ACTIONS" environment --project "$PROJECT" t1 show --recipe "fake=$ROOT/env.md"
+  printf '%s|%s|%s\n' "$RC" "$(grep -c '^RECIPE: ' "$OUT")" \
+    "$(grep -E '^(PRECONDITIONS|TOKENS|BRING UP|ADDRESS|TEAR DOWN|BUILD IN PLACE|FILES):$|^precondition check: ' "$OUT" | cut -d: -f1 | paste -s -d, -)"
+)
+expect "show on a failing precondition prints the recipe line and the check, and no block" "$(show_case false)" '3|1|'
+expect "show on a passing precondition prints every block, then the check" "$(show_case true)" \
+  '0|1|PRECONDITIONS,TOKENS,BRING UP,ADDRESS,TEAR DOWN,BUILD IN PLACE,FILES,precondition check'
+
+# check_case <change> <line>: the project check, through report from the code path, after <change>, a
+# shell step. The exit, how many lines match the pattern <line>, how many ran: lines and report: lines
+# it printed, and whether the record holds the notes in testsRan (gap row 505).
+check_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  eval "$1"
+  (cd "$CODE" && bash "$PROJECT_ACTIONS" report) >"$OUT" 2>&1
+  printf '%s|%s|%s|%s|%s\n' "$?" "$(grep -c -E -- "$2" "$OUT")" "$(grep -c 'ran: ' "$OUT")" \
+    "$(grep -c "^report: $PROJECT/records/check-project.json\$" "$OUT")" \
+    "$(jq '(.testsRan | length) > 0' "$PROJECT/records/check-project.json")"
+)
+no_frameworks='edit "$PROJECT/project.json" "del(.frameworks)"'
+expect "the short check names a missing field" "$(check_case "$no_frameworks" '^  - frameworks: not set\.$')" '1|1|0|1|true'
+expect "the short check gives readiness and its reason" "$(check_case "$no_frameworks" '^Ready for work: false$|^  .*1 required field\(s\) missing$')" '1|2|0|1|true'
+expect "the short check keeps the autonomous line" \
+  "$(check_case "export AIDA_RUN_MODE=autonomous; $no_frameworks" '^Autonomous run: ')" '1|1|0|1|true'
+expect "the short check keeps a note that is not a fault" "$(check_case : '^Note, not a fault: worktreeBase')" '0|1|0|1|true'
+expect "the short check keeps the Claude Code setting block" \
+  "$(check_case 'mkdir -p "$CODE/.claude"; printf "{\"disableAllHooks\": true}" >"$CODE/.claude/settings.json"' '^Claude Code setting: disableAllHooks')" \
+  '0|1|0|1|true'
+expect "the short check says the code path is gone" \
+  "$(check_case 'edit "$PROJECT/project.json" ".codePath = \$c" --arg c "$ROOT/gone"' 'This folder does not exist\.$')" '2|1|0|1|true'
+expect "the short check says why the code path is refused" \
+  "$(check_case 'edit "$PROJECT/project.json" ".codePath = \"/\""' '^Code path safety: refused-system-root$')" '5|1|0|1|true'
+expect "the short check lists uncommitted work" "$(check_case 'printf x >"$PROJECT/notes.txt"' '^  \?\? notes\.txt$')" '6|1|0|1|true'
+
+# full_check_case: the check with no --short. How many Checked:, ran: and report: lines it prints.
+full_check_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  bash "$PLUGIN/scripts/check-project.sh" "$PROJECT" >"$OUT" 2>&1
+  printf '%s|%s|%s\n' "$(grep -c '^Checked: ' "$OUT")" "$(grep -c 'ran: ' "$OUT")" "$(grep -c '^report: ' "$OUT")"
+)
+expect "the check with no --short prints its full text" "$(full_check_case)" '1|3|0'
+
 finish

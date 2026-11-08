@@ -3,7 +3,7 @@ name: design
 description: This skill should be used when a task's criteria are grounded and it is time to decide how to build them, for example "design this task", "write work orders", "architect this feature", "plan the build", or "Phase 2". It writes one work order per unit of build, each naming the criteria it serves and the one it owns, and checks that every criterion is covered and every work order traces to something real.
 argument-hint: "[close] [<task-id>]"
 arguments: [taskId]
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh read), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-source *), Agent, EnterWorktree
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/design/scripts/design-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/research/scripts/research-actions.sh *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh decline *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/surfaces/scripts/surfaces-actions.sh read), Bash(${CLAUDE_PLUGIN_ROOT}/skills/task/scripts/task-actions.sh defer-surface *), Bash(${CLAUDE_PLUGIN_ROOT}/skills/project/scripts/project-actions.sh recipe-point *), Agent, EnterWorktree
 ---
 
 # Design
@@ -21,7 +21,7 @@ orders that build it.
 Design's own records go through `design-actions.sh`, named in this skill's own grant, so they run
 without asking. One write below goes elsewhere. A lookup is recorded through the research skill's
 `research-actions.sh`, because that script is the single producer of a research finding, and it is
-named in the grant too. So is the project skill's `recipe-source` lookup. Any other Bash command
+named in the grant too. So is the project skill's `recipe-point` lookup. Any other Bash command
 still asks for approval. Dispatching an agent needs no approval either; it is also named in this
 skill's own grant.
 
@@ -49,9 +49,10 @@ when the list names `design`; otherwise this stage is interactive.
 
 ## Find the task
 
-Resolve the active project's own folder first, then the task, `<taskId>` when given or whichever
-task is already active in this conversation. Neither known: say so in one line and name the task
-skill. Stop; there is nowhere to write.
+Resolve the active project's own folder first, from the `project-folder:` line of the `## AIDA`
+block. Then resolve the task, `<taskId>` when given or whichever task is already active in this
+conversation. Neither known: say so in one line and name the task skill. Stop; there is nowhere to
+write.
 
 An invocation line whose first word is `close` is the person's yes on the design. The task is
 the word after it, or the active one. Go straight to "Close the design" below. When no
@@ -165,18 +166,16 @@ entry at all means the first run recorded nothing, and every body is read.
 
 ## Read the process recipe for this project's framework
 
-The project's own sources answer before the catalog, so ask them first, once per framework:
+Run this, with one `--framework` flag per framework:
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-source "<projectPath>" design <framework>
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-point "<projectPath>" --point design --framework <framework>
 ```
-It prints one line, or nothing. `RECIPE: <path> source=<folder>`: take that path and skip the
-navigator. `RECIPE: catalog`, with or without `searched=<folders>`, or no line: ask the
-navigator's process-recipe lookup for this project's framework at the design stage. A folder
+It asks the project's own sources, then the navigator, and prints one `POINT:` line per framework.
+`answer=` is a path to the body on disk, or a word. A folder
 that holds nothing is not an answer, so a folder miss never skips the navigator. When
-`searched=` is present, record those folders beside the navigator's answer. A later reader then
+`searched=` names folders, record them beside the answer. A later reader then
 tells a folder miss from a project with no folder. The no-recipe path below is reached only
-after the navigator answers that none exists. The navigator answers whether one is
-available and, when it is, a path to the body on disk. Read the body from that path. Never fetch a
+when `answer=` reads `no-recipe`. Read the body from the path. Never fetch a
 catalog address yourself and never read a cached copy behind the navigator's back.
 Verdict words and a missing heading follow
 `${CLAUDE_PLUGIN_ROOT}/skills/tool/references/reading-a-recipe.md`.
@@ -236,7 +235,9 @@ and pick the kind from that answer:
 - A document, a recipe, a skill or agent file, or hand-written configuration in the code
   repository: `confirm`. It holds no logic for a test to prove. The reviewer reads it, and the
   person confirms each done-when row at review. `add-owned-file` sets this value itself when
-  every owned file is a document or configuration. A `gate` order is never this case.
+  every owned file is a document or configuration. A `gate` order is never this case. Own a skill
+  by its files: a folder reads as code, and `add-owned-file` prints `proof-note:` when it does.
+  When text has a behaviour of its own, put it in its own order, so that its lines run first.
 - Something only a person or a browser can see: `observe`.
 - Code, on a task whose contract says it has no automated tests: `confirm`. Nothing runs a
   test. The implementer builds it, one reviewer reads the diff, and the person confirms each
@@ -655,11 +656,21 @@ reviewer judges it as a check.
 Give `--criterion` when the command's output alone proves a machine criterion the order owns,
 such as a linter run. That criterion then needs no test. When run lines prove every machine
 criterion an order owns, give the order `--proof confirm`. The lines run in its check, and the
-person confirms its done-when rows at review. On a `tests` order, the freeze runs the line over
+person confirms its done-when rows at review. A text order rests no machine criterion on a line.
+Its line is evidence for the person. On a `tests` order, the freeze runs the line over
 the test author's files, and the row-checker judges whether the line proves the whole clause. A
 clause that names two tools needs a line for each.
 A line runs unattended when it equals, word for word, an `argv` in the project's check recipe
 `check_commands`. Any other research line needs the person's approval at the close.
+
+**A skill or prompt with an eval takes two orders.** The first owns the case files under `evals/`,
+each by name. Its proof is `confirm`, and its done-when rows name the scenario and the graders. It
+holds no `scaffold_script`, because a `.sh` file makes the order `tests`. The second owns the skill,
+`dependsOn` the first, and runs the eval as its run line. So the skill's author does not write the
+case, and the owned-files check stops that author from changing it. A `claude plugin eval` line
+names `--case`, `--runs 1`, `--ablation none`, `--trust-plugin`, `--no-publish` and an
+`--output-dir` outside the tree. Its graders call no judge. What fails first for each kind of work
+is in `${CLAUDE_PLUGIN_ROOT}/skills/implement/references/what-a-test-is.md`.
 `--clear` empties the list, and `--recipe` replaces it.
 
 A run line is argv, never a shell, so `--run` refuses a shell character. A recipe entry with one is
@@ -830,12 +841,12 @@ lines are not enough, and fix the specific order each line names. The same repai
     the task has tests after all. One with no done-when row needs an `add-done-when` call. Each
     row is a sentence the person confirms at review, so write it as one thing they can check. A
     `confirm` order on a task with tests that owns code needs `update --proof tests` and its
-    tests, unless run lines prove every machine criterion it owns;
+    tests, unless run lines prove every machine criterion it owns. When its other files are text,
+    a folder it owns needs `remove-owned-file`, and `add-owned-file` for each file the folder holds;
   - a `tests` order that owns only documents or configuration needs `update --proof confirm`,
     or `record` when its files lie under the project folder;
   - a machine-verified criterion on an order that owns only documents or configuration is a
-    person's. Change it to `person` with scope's `update --verified-by person`, or give it to an
-    order that builds code;
+    person's. Change it to `person` with scope's `update --verified-by person`;
   - a machine-verified criterion on an `observe` or `record` order is a person's too. Change it
     the same way, add a run line that proves it, or give it to an order that builds code;
   - a `confirm` order that owns a test file needs `remove-owned-file` for it. Nothing runs that

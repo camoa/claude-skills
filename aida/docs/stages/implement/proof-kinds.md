@@ -63,7 +63,11 @@ acceptance verifier looks at the page again, and you answer the criteria from it
 
 No test is written. The first check reads `deferred`, unless the order's own verify commands fail.
 They still run in that slot, and the worse answer stands. At finish, each done-when row becomes a
-checklist row, and you answer them at review. Three kinds of order take this proof:
+checklist row, and you answer them at review. On a text order, the freeze runs the verify commands
+once before the build. A command that fails is the failing first step, and prints nothing. A
+command that passes warns, because it cannot tell the work from its absence, so do not take its
+later pass as evidence. A command that could not run warns, and a research command with no approval
+warns and does not run. Three kinds of order take this proof:
 
 - **Text in the code repository**: a document, a recipe, a skill or agent file, or hand-written
   configuration. It holds no logic for a test to prove. The reviewer reads it.

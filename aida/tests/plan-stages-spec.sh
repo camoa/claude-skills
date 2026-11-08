@@ -236,4 +236,37 @@ stamped_case() (
 )
 expect "an attended close that stamps the line records no warning about it" "$(stamped_case)" "0|closed|0"
 
+# owned_case <path> [<proof>]: adds <path> to wo1, which owned nothing, with the design open. Prints
+# the proof it reads afterwards, and how many folder lines the step printed (gap row 504).
+owned_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  rm -f "$TASK/design-closed.json"
+  edit "$TASK/design/wo1.json" '.ownedFiles = [] | if $p == "" then . else .proof = $p end' --arg p "${2:-}"
+  run "$DESIGN" add-owned-file "$TASK" --id wo1 --path "$1"
+  printf '%s|%s\n' "$(jq -r '.proof // "none"' "$TASK/design/wo1.json")" "$(grep -c '^proof-note:' "$OUT")"
+)
+expect "an order that owns one .prompt file reads as text" "$(owned_case prompts/x.prompt)" "confirm|0"
+expect "a folder prints the line that says it reads as code" "$(owned_case skills/x/)" "none|1"
+expect "a folder on an order with a proof prints no such line" "$(owned_case skills/x/ gate)" "gate|0"
+
+# wo1 owns one text file, then a folder. Prints the proof, the folder lines, and how many times the
+# design check then advises tests. The second path of a code order keeps that advice.
+folder_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  rm -f "$TASK/design-closed.json"
+  edit "$TASK/design/wo1.json" '.ownedFiles = [] | .tests = [] | .criteriaOwned = [] | .verify = []'
+  edit "$TASK/alignment.json" '.criteria[0].verifiedBy = "person"'
+  run "$DESIGN" add-owned-file "$TASK" --id wo1 --path "$1"
+  run "$DESIGN" add-owned-file "$TASK" --id wo1 --path skills/x/references/
+  local notes
+  notes="$(grep -c '^proof-note:' "$OUT")"
+  edit "$TASK/design/wo1.json" '.proof = "confirm"'
+  run "$DESIGN" check "$TASK"
+  printf '%s|%s|%s\n' "$(jq -r '.proof' "$TASK/design/wo1.json")" "$notes" "$(grep -c 'update --proof tests' "$OUT")"
+)
+expect "a folder on a text order prints its line, and the check does not advise tests" "$(folder_case skills/x/SKILL.md)" "confirm|1|0"
+expect "a folder on an order that owns code keeps the advice to take tests" "$(folder_case a.php)" "confirm|1|1"
+
 finish

@@ -232,7 +232,8 @@ id_kind() {
 
 # The one summary printer: the contract's path, whether the goal is set, the ids in each space,
 # how many decisions an unattended run recorded, and whether the task has automated tests. Never a
-# text field.
+# text field. Only read and init print it. A write prints the line it changed and `rendered:`, and
+# read prints this again at any time (gap row 505).
 contract_summary() {
   echo "contract-file: $ALIGNMENT_FILE"
   jq -r "$DECIDED_JQ"'
@@ -379,7 +380,6 @@ do_set_goal() {
   write_contract set-goal "$updated"
 
   echo "GOAL SET"
-  contract_summary
   render_alignment
   exit 0
 }
@@ -429,7 +429,6 @@ do_set_tests() {
   fi
 
   echo "TESTS SET"
-  contract_summary
   render_alignment
   exit 0
 }
@@ -501,7 +500,6 @@ do_add() {
   echo "ADDED: $id"
   echo "verifiedBy: $verified_by"
   echo "author: $author"
-  contract_summary
   render_alignment
   exit 0
 }
@@ -542,7 +540,6 @@ do_add_non_goal() {
     || append_decision "Non-goal $id, $text: the recommended answer, out, taken" "$id"
 
   echo "ADDED: $id"
-  contract_summary
   render_alignment
   exit 0
 }
@@ -646,7 +643,6 @@ do_update() {
   [ "$set_verified_by" -eq 0 ] || fields_set="$fields_set verifiedBy"
   [ "$set_author" -eq 0 ] || fields_set="$fields_set author"
   echo "fields-set:${fields_set}"
-  contract_summary
   render_alignment
   exit 0
 }
@@ -690,7 +686,6 @@ do_remove() {
 
   echo "REMOVED: $id"
   echo "This id is retired. It is never minted again for this task."
-  contract_summary
   render_alignment
   exit 0
 }
@@ -812,7 +807,6 @@ do_record_decision() {
   fi
 
   echo "DECISION RECORDED"
-  contract_summary
   render_alignment
   exit 0
 }
@@ -889,7 +883,6 @@ do_approve() {
   echo "promoted: $count"
   echo "approved-decisions: $marked"
   [ -z "$ids" ] || echo "promoted-ids: $ids"
-  contract_summary
   # Rendered before the commit, so the committed folder carries the page as promoted.
   render_alignment
   close_scope "$stale"
@@ -940,7 +933,6 @@ do_retire() {
   task_answer_consume
 
   echo "RETIRED: $entry"
-  contract_summary
   render_alignment
   exit 0
 }

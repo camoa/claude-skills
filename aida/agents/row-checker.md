@@ -92,15 +92,19 @@ in `what-a-test-is.md`, and for no other:
 4. It reads a file's text back, or checks prose, configuration or metadata.
 
 Never ask for more cases than the behaviour needs. A variant, an extra input or a case the recipe
-lists is no reason to reject. A rejection names the one test it rejects and what that test misses.
-Leave the row's other tests out of the note, because the author repairs only the test you name. A
-confirmation's note says what you checked.
+lists is no reason to reject. Read every test on the row before you reject it. A rejection names
+every test on the row that you reject, and what each test misses. Tests that fail for one reason
+share one sentence. Leave the row's sound tests out of the note, because the author repairs only
+the tests you name. A test you hold back costs a second rejection of the row, and that stops an
+unattended order. A confirmation's note says what you checked.
 
 A rejected row also carries `repair`. Write `"repair": "tests"` when a rewrite of the tests alone,
 as your note names it, could earn a confirmation. Reasons 1 to 3 are `tests`. Write
 `"repair": "row"` when no test could: the clause is too vague, it cannot be observed, or it asks
 the wrong thing. Reason 4 is `row`, and so is a gap you cannot settle. An
-absence row a test could prove is `tests`. On an autonomous run, `tests` sends the row back to the
+absence row a test could prove is `tests`. When one row mixes reasons, give each test its own reason
+in the note. Write `row` when any test you name needs `row`, because `tests` would send back a row
+no rewrite can repair. On an autonomous run, `tests` sends the row back to the
 test author once, and `row` stops the order for a person.
 
 **A gap you cannot settle is a rejection whose note says so.** It looks like this: a test the

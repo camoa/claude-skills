@@ -39,6 +39,9 @@
 #     Prints each finding as up to five advisory lines, and nothing on a clean machine. A kind keeps
 #     the findings of that kind only: research names the web findings alone.
 #
+#   ccs_navigator_lookup
+#     Prints the navigator's lookup script from the install record, or nothing.
+#
 # Portability: bash 3.2+ and zsh. This file is a library. Source it; do not run it.
 if [ -n "${ZSH_VERSION:-}" ]; then
   case "${ZSH_EVAL_CONTEXT:-}" in
@@ -74,6 +77,16 @@ ccs__plugin_id() {
   jq -r --arg a "$root" --arg b "$real" \
     '[ (.plugins // {}) | to_entries[] | select(any(.value[]?; .installPath == $a or .installPath == $b)) | .key ][0] // ""' \
     "$record" 2>/dev/null
+}
+
+# The first entry the install record holds for the navigator. A path that does not run prints
+# nothing, so a moved script is a miss and never a failed lookup.
+ccs_navigator_lookup() {
+  local record path
+  record="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/installed_plugins.json"
+  path="$(jq -r '[ (.plugins // {}) | to_entries[] | select(.key | startswith("dev-guides-navigator@")) | .value[]?.installPath ][0] // ""' \
+    "$record" 2>/dev/null)/scripts/dev-guides-lookup.sh"
+  [ ! -x "$path" ] || printf '%s' "$path"
 }
 
 # One {file, scope, doc} line per readable settings file, highest-ranked managed source first, then

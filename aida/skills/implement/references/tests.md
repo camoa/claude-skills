@@ -28,21 +28,23 @@ and removes the list. Until then the build refuses the order (exit 120).
 
 ## Resolve the recipes for this step
 
-Dispatch `catalog-identifier` to ask the navigator's process-recipe lookup once per point in
-`lookups=`, for each framework the project declares. Each message names the point as
-`point: <phase>`, then each framework, then the project folder. Name the role, and pass the
-lookup's answer in its own word: SKILL.md holds both rules.
+Run this once, with one `--point` flag per point in `lookups=` and one `--framework` flag per
+framework the project declares:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/project-actions.sh recipe-point "<project folder>" --point <phase> --framework <framework>
+```
+Pass each `answer=` in its own word: SKILL.md holds that rule.
 
-**`point: test-authoring`, only when `lookups=` names it.** This answers where a test file goes,
+**`test-authoring`, only when `lookups=` names it.** This answers where a test file goes,
 which levels exist and when each is right, what a test may not do in this framework, and
 whether a test names its criterion. The test author and the row-checker read it, so an order
 whose roles hold neither skips it.
 
-**Light:** do not ask for `point: implement`. Preconditions resolved it, so read each path from
+**Light:** do not ask for `implement`. Preconditions resolved it, so read each path from
 `implementation/preconditions.json`, at `frameworks[].implementRecipePath`. A framework whose
 `implementLookup` reads `not-given` was never asked, so ask for it here.
 
-**`point: implement`, for its patterns and its path.** Take the file patterns from its `## Oracle files`
+**`implement`, for its patterns and its path.** Take the file patterns from its `## Oracle files`
 block, the same globs the `test_delete` row names. The catalog index designates that block for
 naming test files, so this is not a guess at what the block is for. Pass those globs and the path
 to the freeze below. This is the one recipe this step reads itself, because it needs the patterns as data rather
@@ -97,6 +99,14 @@ each criterion a verify run line names, and freeze with a `--row` for each, no `
 `--checklist` for each criterion a person verifies. The build's own check, `confirm-at-review`, reads deferred. `finish` turns each
 done-when row into a checklist row. The row sits under each criterion the order owns, or serves
 when it owns none, and the person answers those criteria at review.
+
+The first freeze runs a text order's verify lines once, before the build. They run in a worktree
+of their own at HEAD, so a write stays out of the build's tree. A file git ignores is absent
+there, so a line that needs one fails, and the build's own run decides. A line that fails is the
+failing first step, and it prints nothing. A line that passes warns, because it cannot tell the
+work from its absence. Do not take that line's later pass as evidence, and change the line with a
+redo when the order matters. A line that could not run warns, and a run line with no person's
+approval warns and does not run. Each warning reaches the person who answers the order at review.
 
 ## Assemble what the test author may see
 
@@ -246,8 +256,9 @@ order id, and no criterion id. The author writes a test for every machine-verifi
 criterion the order owns, and for its done-when where nothing it owns covers that.
 
 **A test green on its first run has four outcomes.** The test was wrong: it is corrected once.
-Still green, and the author can name the existing code that satisfies it: it locks that behaviour
-in, and the reason is recorded with `--locks-in`. Still green with no existing code to name: it is
+Still green, and the author can name the existing code that satisfies it: it stays only as the one
+test of a part of the clause. The reason is recorded with `--locks-in`. The author deletes any
+other such test and names it in the report. Still green with no existing code to name: it is
 reported by name and the step stops. Failed: it is frozen with its red run. A green test is never
 deleted quietly and never weakened into failing.
 
@@ -309,9 +320,11 @@ This is the one place the tests' own standards are judged. Review leaves the fro
 its tool rows, because no role after the freeze may write them.
 
 **The freeze runs the build's order-tests command when a test has no locks-in reason.** It is the command
-build-record runs over the frozen files whole, with no argument. Every test with no locks-in reason
-must fail. A run that passes refuses the freeze (exit 80): a test that does not fail now proves nothing a build could
-change. When the run fails and prints something, at least one red file must share a line with
+build-record runs over the frozen files whole, with no argument. A run that passes refuses the
+freeze (exit 80): a test that does not fail now proves nothing a build could change. The check
+reads the whole run. So a test that passes beside tests that fail freezes, and the freeze warns.
+The warning says the test has neither a `--red` nor a `--locks-in`, or was reported green on
+arrival. When the run fails and prints something, at least one red file must share a line with
 what it printed. Numbers in a line are not compared. Otherwise the freeze refuses (exit 80): the
 build would run something other than what the reds show, and read a correct build unmet. The
 message names the command and the output. Send it back to the author. A test file that runs a
@@ -383,8 +396,8 @@ Close the dispatch record as soon as it returns, per SKILL.md.
 (exit 64) a model's confirmed row that the verdict file rejects, because no model settles the
 checker's rejection (gap row 373). The done-when row is keyed
 by the order id in place of a criterion id: `--row wo1=confirmed::model::...`. Do not put a
-confirmed row to the person. The author edits only the rejected test, so a confirmed row stays as
-judged. The record says a model judged every confirmed row, so a person can list those rows later
+confirmed row to the person. The author edits only the tests a note names, so a confirmed row stays
+as judged. The record says a model judged every confirmed row, so a person can list those rows later
 and read any of them again.
 
 **Interactive, a rejected row goes to the person, one question per row.** Ask it in these words.
@@ -429,9 +442,10 @@ rewrites the tests and never answers the rejection. Only the checker's next verd
 Every other rejection stops the order, with the checker's note as the reason. That is a row
 marked `"repair": "row"`, a row in `rowsSentBack` already, or an order with no test author.
 A rejection that says the requirement is wrong needs design or a person, and no model may settle
-it. A second rejection of one row means the author could not meet the note. Report the stop, and
-take the next ready order instead. A person who judges the row at a second freeze then goes on
-with `build`. A person who changes the tests or the row redoes the order, under "Leave a stop" in
+it. The stop counts a second rejection of the row, not of a test. A fresh checker can reject a test
+the first note did not name, so the order can stop though the author met that note. Report the
+stop, and take the next ready order instead. A person who judges the row at a second freeze then
+goes on with `build`. A person who changes the tests or the row redoes the order, under "Leave a stop" in
 `references/finish.md`.
 
 **A person's row needs a person.** A row judged `person` on an autonomous run refuses, because
@@ -458,7 +472,9 @@ Run, with one flag per test, per failure output, per framework, per pattern, and
 ```
 
 A `--test` names its criteria or the order's own id, never both. The second form marks a test of
-the order's done-when. A `--test` path must be a file the
+the order's done-when. A test may claim no machine-verified criterion of this order. No row can
+hold that test, so the freeze refuses it (exit 3) and commits nothing. A test written for a
+criterion a person verifies claims the order id. A `--test` path must be a file the
 order owns. The freeze refuses any other (exit 27) and names the test file design chose. Do not
 move the tests yourself. Run `dispatch-open` with `--resume` and resume the test author, which
 writes the tests into that file and takes a new red run for each. Then freeze again.
@@ -578,8 +594,9 @@ noticed, and the hash is what notices one. The hook allows the write and says wh
 which order froze it.
 
 Report a test that passed on arrival with `--green-on-arrival <test name>=<reason>`. The freeze
-runs it with the others and refuses while it passes (exit 80): a test nobody watched fail is not a
-reference. A test that passes against existing code takes a `--locks-in` reason instead.
+runs it with the others. It refuses when the whole run passes (exit 80), and it warns when other
+tests fail: a test nobody watched fail is not a reference. A test that passes against existing code
+takes a `--locks-in` reason only as the one test of a part of the clause.
 
 A record is taken once. A second run with the same tests leaves it alone, whatever commit the
 tree is at now, because every freeze moves the tree. Different tests at a different commit

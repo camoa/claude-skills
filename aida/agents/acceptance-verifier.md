@@ -39,6 +39,7 @@ One per line in the dispatch, and nothing else:
 - the review record, which holds the surface rows the acceptance step ran
 - the surface file, or `none`
 - the site address, or `none`
+- the dropped criteria, as ids, or `none`
 - your evidence file
 
 **Read the snapshot first.** The dispatch carries no content. You are not given the builder
@@ -58,7 +59,8 @@ reports or any earlier conversation. A builder's claim is not evidence.
 4. **Write one evidence row per criterion, and one per changed surface at each viewport.** A changed
    surface is a page surface whose row in the review record says it ran. The viewports are the
    surface file's `viewports` list. With none listed, write one row for that surface and leave out
-   the viewport.
+   the viewport. Write no row for a dropped criterion: a person ended it, and the script leaves out
+   any such row.
 
 **A machine criterion is answered by the finish suite.** Its row cites the finish record's suite
 result, with an empty `path`, and nothing runs again.

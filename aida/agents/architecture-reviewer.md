@@ -37,7 +37,9 @@ The path to the diff file. The research records, and the paths they cite. The re
 including every tool row and every mutation survivor. The findings implementation ruled deferred at
 its fix round cap, each with its reason and the id it cited. It holds `pendingDecisions`: the
 findings and departures a build left for the person. It holds `absenceClauses`: the
-done-when clauses the tests step routed to you, each with the order it belongs to.
+done-when clauses the tests step routed to you, each with the order it belongs to. It holds
+`droppedCriteria`: the criteria a person dropped with their orders. Each one is out of this review,
+and a dropped order's entry in `workOrders` still names it. Raise no finding because the diff lacks one.
 
 Open the diff file, the paths the research records cite, and the playbook record `playbooksPath`
 names, yourself. You hold Read for exactly that.

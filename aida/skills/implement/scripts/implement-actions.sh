@@ -96,7 +96,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #                            [--allow-write <path relative to codePath>]...
 #                            [--test-glob <glob from the implement recipe>]... [--resume]
 #   implement-actions.sh dispatch-close <task_folder> [--no-report | --not-sent]
-#   implement-actions.sh step <name>
+#   implement-actions.sh step <name> [--part <n>]
 #
 # A value flag refuses no value, and an empty value where a value must have text. A flag that takes
 # a name or a path also refuses a value that is itself the next option, such as `--allow --leave`.
@@ -142,7 +142,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # action rather than with Read: the documentation mirror scopes ${CLAUDE_PLUGIN_ROOT} substitution
 # in `allowed-tools` to Bash rules, so a Read rule naming that variable never matches and every
 # step-file read raises a prompt an unattended run cannot answer. A name carrying a slash, and a
-# name no file matches, both refuse with exit 3 and name the steps that exist.
+# name no file matches, both refuse with exit 3 and name the steps that exist. A file over the
+# inline limit prints in parts (step_part in scripts/lib/recipes.sh), and --part <n> prints one.
 #
 # Every action prints a summary of `key: value` lines and nothing else: no record body, no diff, no
 # command output, no brief, no finding's evidence. Each line that a person may want in full names
@@ -158,9 +159,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # a row-checker it also writes and prints implementation/interfaces-<unit_id>.json, when a tests
 # brief exists.
 #
-# `preconditions` never resolves a recipe itself. The skill body asks the guides navigator for the
-# one belonging to this point and this framework, or reads a source the project configured itself,
-# and hands over a path. A framework whose lookup failed is passed with the reason it failed, and
+# `preconditions` never resolves a recipe itself. The skill body asks through `recipe-point` for
+# the one belonging to this point and this framework, and hands over a path. A framework whose lookup failed is passed with the reason it failed, and
 # the three reasons stay apart: no-recipe, listing-unreachable, fetch-failed. Only the first says
 # anything about the framework.
 #
@@ -251,7 +251,8 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #        option as its value, a path that does not exist or lies outside the code root, a test
 #        name no --test row carries, a --locks-in commit id that is not hexadecimal or is shorter
 #        than seven characters, a --row that names a person-verified criterion, a criterion no
-#        --test claims (a rejected order row goes to 65 instead), or one criterion twice, an
+#        --test claims (a rejected order row goes to 65 instead), or one criterion twice, a
+#        --test that claims no machine-verified criterion of the order, an
 #        --absence clause that is not verbatim a doneWhen entry, a --started-at that is not a commit or not an ancestor of HEAD.
 #      - The task: a folder that holds no task.json, no contract or one that cannot be used, a
 #        criterion whose verifiedBy is neither machine nor person, no work orders under design/,
@@ -671,9 +672,11 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #      above. A missing fix brief is such a fault.
 #      `fix-record` refuses a --report other than the one the fix brief pins (exit 3).
 # The code the reverting redo added (gap row 252).
-# 113  `redo` or `drop` found a merge commit among the order's own commits. A revert of a merge
-#      needs a person to choose its parent, so nothing is reverted, moved or written. The message
-#      names each such commit. A person reverts it by hand, then runs the way out again.
+# 113  `redo` or `drop` found a merge commit among the order's own commits, or a commit after its
+#      last record that changes its files and others too (gap row 497). A revert of a merge needs a
+#      person to choose its parent, and a revert of the other would take out what is not the order's,
+#      so nothing is reverted, moved or written. The message names each such commit. A person
+#      reverts it by hand, then runs the way out again.
 # The code the implementer's freeze check added (gap row 267).
 # 114  `dispatch-open` was given the implementer role for an order with no
 #      <task_folder>/implementation/tests-<unit_id>.json. `build-brief` refuses the same fact with
@@ -1933,7 +1936,7 @@ LO_OWED
   [ ! -f "$LEDGER_FILE" ] || dropped_ids_json="$(jq -c '[ (.orders // [])[] | select(.lastStep == "dropped") | .id ]' "$LEDGER_FILE" 2>/dev/null)"
   [ -n "$dropped_ids_json" ] || dropped_ids_json='[]'
   local widened_ids_json='[]' widened_json='[]' spared_json='{}'
-  local held_json='[]' held_hits_json='[]' kept_alignment_json=""
+  local held_json='[]' held_hits_json='[]' kept_alignment_json="" st_left=""
 
   if [ "$snapshot_present" = "false" ]; then
     # ---- new run: design must be formally closed on exactly these live files --------------------
@@ -2253,6 +2256,8 @@ REMOVED_PATHS
             '.workOrders = [ .workOrders[] | . as $o | select(($ids | index($o.id)) == null) ]')" "$resnapshot_ids_json" "$live_workorders_json" "$kept_alignment_json")" \
           || die3 "start: could not re-derive a hash for the snapshot with the live copies taken in (see stderr above)"
         resnapshot_hash="$(printf '%s' "$resnapshot_doc" | jq -r '.hash')"
+        st_left="$(jq_files -rn --argjson was "$snapshot_alignment_json" --argjson now "$(printf '%s' "$resnapshot_doc" | jq -c '.alignment')" '
+            [ ($was.criteria // [])[] | select(.id as $i | [ ($now.criteria // [])[].id ] | index($i) | not) | .id + ": " + .text ] | join("; ")')"
         snapshot_alignment_json="$(printf '%s' "$resnapshot_doc" | jq -c '.alignment')"
         snapshot_workorders_json="$(printf '%s' "$resnapshot_doc" | jq -c '.workOrders')"
         drifted_orders_json="$(jq -cn --argjson drifted "$drifted_orders_json" --argjson ids "$resnapshot_ids_json" --argjson gone "$removed_ids_json" \
@@ -2594,7 +2599,8 @@ LO_MOVE
   # A change mid-build that an attended run goes on past is a warning in the task record, one per
   # order it touches. The words name the live design's hash, so a later change is its own warning.
   # Either mode names a criterion no order serves now, because review would find it unmet with no
-  # order to answer it.
+  # order to answer it, and a criterion the refresh took out of the frozen contract. No started order
+  # stood on that one, so no answer is needed and review will not see it (gap row 498).
   local st_change st_unserved
   while IFS= read -r st_change; do
     [ -n "$st_change" ] || continue
@@ -2609,6 +2615,8 @@ ST_CHANGES
     [ -z "$st_unserved" ] \
       || task_warn "$TASK_PATH" start "" "no order that is not dropped serves criterion $st_unserved, so no build answers it"
   fi
+  [ -z "$st_left" ] \
+    || task_warn "$TASK_PATH" start "" "the frozen contract no longer holds these criteria, which no started order served, so review will not judge them: $st_left"
 
   # --- step 13: the report --------------------------------------------------------------------------
   local ready_ids_json stopped_orders_json in_flight_json
@@ -2730,8 +2738,7 @@ ST_CHANGES
 # ------------------------------------------------------------------------------------------------
 # Step two: preconditions. Can this repository build and test at all?
 #
-# The skill resolves each framework's recipe, through the guides navigator for anything the catalog
-# publishes and directly for a source the project configured itself, and hands the path here. This
+# The skill resolves each framework's recipe through `recipe-point`, and hands the path here. This
 # script never fetches a catalog address and never reads the navigator's cache behind its back
 # (foundations.md, "Everything published in the catalog is read through the guides navigator").
 # That split is also what keeps this action exercisable against a file on disk.
@@ -3791,7 +3798,7 @@ PC_FOLDER
   im_advice="none"
   rv_unresolved="$(printf '%s' "$record_json" | jq -r '[ .frameworks[] | select(.reviewLookup != "resolved") | .framework + "=" + .reviewLookup ] | join(", ")')"
   [ -n "$rv_unresolved" ] \
-    && rv_unresolved="no review recipe for $rv_unresolved, so preconditions and review run no check command there. Ask for point: review and pass --check-recipe, or --check-lookup-failed with the lookup's word" \
+    && rv_unresolved="no review recipe for $rv_unresolved, so preconditions and review run no check command there. Run recipe-point with --point review and pass --check-recipe, or --check-lookup-failed with the lookup's word" \
     || rv_unresolved="none"
   [ -z "$im_notgiven" ] || [ -z "$im_blocked" ] \
     || im_unlooked="nobody looked up $im_notgiven, so nothing here says whether these test-proved orders can freeze: $im_blocked"
@@ -3809,7 +3816,7 @@ PC_FOLDER
     [ -z "$im_blocked" ] \
       || im_advice="No record maps an order to a framework. Check that one of those frameworks carries the ## Oracle files globs for each of those orders"
   elif ! printf '%s' "$record_json" | jq -e '[ .frameworks[] | select(.implementLookup != "not-given") ] | length > 0' >/dev/null; then
-    im_freeze="the implement recipe lookup was not run. Ask the navigator for point: implement, once per framework, and pass --implement-lookup <framework>=<path or reason>. A test-proved order cannot freeze without that recipe's ## Oracle files globs"
+    im_freeze="the implement recipe lookup was not run. Run recipe-point with --point implement, once per framework, and pass --implement-lookup <framework>=<path or reason>. A test-proved order cannot freeze without that recipe's ## Oracle files globs"
   elif [ -z "$im_blocked" ]; then
     im_freeze="no implement recipe for any framework. No order in this snapshot is proved by tests, so none of them needs one"
   else
@@ -5058,8 +5065,21 @@ tf_coding_standards() {
 
 # The freeze's temporary files sit in the implementation folder, each named for this process. A
 # refusal exits through die, so the EXIT trap removes them. find, not a glob: zsh stops on a glob
-# with no match.
-tf_tmp_remove() { [ -z "${IMPL_DIR:-}" ] || find "$IMPL_DIR" -maxdepth 1 -name ".tests-freeze-*.$$" -exec rm -f {} + 2>/dev/null; }
+# with no match. A signal during a text order's first run exits here too, so this also takes out
+# that run's worktree. TF_TEXT_DIR and TF_TEXT_CODE are globals, because zsh runs the EXIT trap after
+# the locals are gone. A line that makes the tree read-only can leave the folder behind.
+TF_TEXT_DIR=""; TF_TEXT_CODE=""
+tf_text_tree_remove() {
+  [ -n "$TF_TEXT_DIR" ] || return 0
+  git -C "$TF_TEXT_CODE" worktree remove --force "$TF_TEXT_DIR/tree" >/dev/null 2>&1
+  rm -f "$TF_TEXT_DIR/result"
+  rmdir "$TF_TEXT_DIR" 2>/dev/null
+  TF_TEXT_DIR=""
+}
+tf_tmp_remove() {
+  tf_text_tree_remove
+  [ -z "${IMPL_DIR:-}" ] || find "$IMPL_DIR" -maxdepth 1 -name ".tests-freeze-*.$$" -exec rm -f {} + 2>/dev/null
+}
 do_tests_freeze() {
   local task_arg="" unit_id="" test_raw="" red_raw="" glob_raw="" checklist_raw="" goa_raw="" row_raw="" locks_raw=""
   local support_raw="" absence_raw="[]"
@@ -5285,7 +5305,6 @@ do_tests_freeze() {
     'map(if .criteria == [$unit] then (.criteria = [] | .provesDoneWhen = true) else . end)')"
   local has_done_when_tests
   has_done_when_tests="$(printf '%s' "$tests_json" | jq 'any(.[]; .provesDoneWhen == true)')"
-
   # --- the task's own project, resolved the same way start and preconditions already resolve it --
   local codepath
   rv_load_codepath "tests-freeze"
@@ -5918,6 +5937,18 @@ redAgain: $(printf '%s' "$rows_meta_json" | jq -c --argjson entries "$tf_red_ent
     [ .[] | select(.verdict == "rejected") | red_again($entries; .criterion)[] ] | unique')"
   fi
 
+  # Rows hold a test only under a machine criterion or the doneWhen, and the commit below takes every
+  # --test path. So a test on neither would be committed and recorded nowhere: nothing would run it
+  # or guard it (gap row 499). This comes after the rejected-row stop, so a rejected row still lands
+  # on the ledger.
+  local tf_unrecorded
+  tf_unrecorded="$(jq -nr --argjson criteria "$CRITERIA_JSON" --argjson tests "$tests_json" '
+      [ $criteria[] | select(.verifiedBy == "machine") | .id ] as $machine
+      | [ $tests[] | select(.provesDoneWhen != true) | select(.criteria - $machine == .criteria) | .name ]
+      | unique | join(", ")')"
+  [ -z "$tf_unrecorded" ] \
+    || die3 "tests-freeze: no row of $unit_id would hold these tests, because each claims no machine-verified criterion of the order: $tf_unrecorded. Nothing is committed. A test of the order's done-when claims the order id: --test <path>::<test name>=$unit_id, with --row $unit_id=<confirmed|rejected>::<person|model>::<note>. Write no test for a criterion a person verifies: it takes a --checklist."
+
   # --- a --red file must exist, hold something, and name a test that has a --test row -------------
   local bad_red_names
   bad_red_names="$(jq -nr --argjson tests "$tests_json" --argjson reds "$reds_json" --argjson locks "$locks_json" '
@@ -6313,6 +6344,42 @@ TF_EOF
     fi
   fi
 
+  # --- a text order's verify lines run once, before the build ---------------------------------------
+  # A person answers a text order, so no test author runs and these lines name no criterion. This
+  # run is the order's failing first step (gap row 504). A line that fails is what test-first wants,
+  # so it prints nothing. A line that passes before the build cannot tell the work from its absence.
+  # Only a first freeze runs them: a step already set means the text may exist, and redo clears it.
+  # They run in a worktree of their own at HEAD, so a write never dirties the build's tree. The
+  # subshell turns a refusal inside the run into a warning. A file git ignores is absent there, so
+  # a line that needs one fails, and the build's own run of the line decides.
+  if [ "$BR_ORDER_SLOT" = "confirm-at-review" ] && [ -z "${tf_prior_step:-}" ] \
+    && [ "$(printf '%s' "$UNIT_JSON" | jq -r "$BR_ORDER_FACTS_JQ textOnly")" = "true" ]; then
+    local tf_text_out tf_text_unapproved
+    tf_text_out="$IMPL_DIR/verify-$unit_id-freeze.txt"
+    BRC_WHO="tests-freeze"; BRC_UNIT_JSON="$UNIT_JSON"; BRC_CODEPATH="$codepath"
+    br_verify_runs
+    tf_text_unapproved="$(printf '%s' "$UNIT_JSON" | jq -r --argjson kept "$BRV_RUNS" '
+      ($kept | map(.run)) as $k | [ (.verify // [])[] | select(has("run")) | .run | select(. as $r | $k | index($r) | not) ] | join("; ")')"
+    [ -z "$tf_text_unapproved" ] \
+      || task_warn "$TASK_PATH" tests-freeze "$unit_id" "these verify lines of $unit_id have no person's approval, so they did not run before the build, and the reviewer reads each as a check: $tf_text_unapproved"
+    if [ "$BRV_RUNS" != "[]" ]; then
+      : >"$tf_text_out"
+      TF_TEXT_DIR="$(mktemp -d)" || die3 "tests-freeze: could not create a temporary folder"
+      TF_TEXT_CODE="$codepath"
+      git -C "$codepath" worktree add -q --detach "$TF_TEXT_DIR/tree" HEAD >>"$tf_text_out" 2>&1 \
+        && ( br_run_verify_lines "$TF_TEXT_DIR/tree" "$tf_text_out" >>"$tf_text_out" 2>&1
+             printf '%s\n%s\n' "$BRL_VERDICT" "$BRL_WHY" >"$TF_TEXT_DIR/result" )
+      BRL_VERDICT="unknown"; BRL_WHY="the run was refused"
+      [ ! -f "$TF_TEXT_DIR/result" ] || { BRL_VERDICT="$(sed -n 1p "$TF_TEXT_DIR/result")"; BRL_WHY="$(sed -n 2p "$TF_TEXT_DIR/result")"; }
+      tf_text_tree_remove
+      case "$BRL_VERDICT" in
+        unmet) ;;
+        "") task_warn "$TASK_PATH" tests-freeze "$unit_id" "the verify lines of $unit_id pass before the build, so they cannot tell the work from its absence. Their later pass is no evidence (references/tests.md). Their output is in $tf_text_out" ;;
+        *) task_warn "$TASK_PATH" tests-freeze "$unit_id" "the verify lines of $unit_id could not run before the build: $BRL_WHY. Their output is in $tf_text_out" ;;
+      esac
+    fi
+  fi
+
   # --- each verify line that proves a criterion runs now, over the files about to freeze ------------
   # The implementer may not edit a frozen test. So a line such as a coding-standards run over the
   # test file runs here, while the test author can still repair the file (gap row 370). A line that
@@ -6383,8 +6450,9 @@ TF_CS_EOF
   # shows only that red. A run that printed nothing or read unknown is left to the build. A line
   # that differs only in a random name, such as a temporary path, does not match; that is the limit.
   local tf_ot_paths tf_ot_json tf_ot_out tf_ot_keys tf_ot_red_keys tf_ot_names tf_ot_started tf_ot_argv
-  # A test with no locks-in reason must fail, whether it came with a red, a green-on-arrival or
-  # neither: a test seen passing before the code proves nothing (references/what-a-test-is.md).
+  # A test with no locks-in reason should fail, whether it came with a red, a green-on-arrival or
+  # neither: a test seen passing before the code proves nothing (references/what-a-test-is.md). This
+  # check reads the whole run, so a test that passes beside one that fails freezes on a warning.
   tf_ot_paths="$(br_frozen_test_paths "$rows_json")"
   tf_ot_names="$(jq -nr --argjson tests "$tests_json" --argjson locks "$locks_json" \
     '($locks | map(.name)) as $l | [ $tests[] | .name | select(($l | index(.)) == null) ] | unique | join(", ")')"
@@ -6399,7 +6467,7 @@ TF_CS_EOF
     test_weight_warn "$TASK_PATH" tests-freeze "$unit_id" "$(($(date +%s) - tf_ot_started))"
     tf_ot_argv="$(printf '%s' "$CR_DOC" | jq -r '[ (.frameworks // [])[] | (.orderTests.argv // []) | join(" ") ] | join("; ")')"
     [ "$(printf '%s' "$tf_ot_json" | jq -r '.verdict')" != "met" ] \
-      || die 80 "tests-freeze: the order-tests command build-record runs, $tf_ot_argv, over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), passes, so these tests with no locks-in reason do not fail when it runs them: $tf_ot_names. A frozen test fails before the build (references/what-a-test-is.md). The test author repairs the tests, or returns a locks-in reason for a test that passes against existing code, and this freeze runs again. Nothing is frozen."
+      || die 80 "tests-freeze: the order-tests command build-record runs, $tf_ot_argv, over $(printf '%s' "$tf_ot_paths" | jq -r 'join(" ")'), passes, so these tests with no locks-in reason do not fail when it runs them: $tf_ot_names. A frozen test fails before the build (references/what-a-test-is.md). The test author repairs the tests. A test that passes against existing code stays only as the one test of a part of a clause, with a locks-in reason. The author deletes any other and names it in the report. This freeze then runs again. Nothing is frozen."
     tf_ot_out="$(mktemp)" || die3 "tests-freeze: could not create a temporary file"
     tf_ot_keys="$(mktemp)" || { rm -f "$tf_ot_out"; die3 "tests-freeze: could not create a temporary file"; }
     tf_ot_red_keys="$(mktemp)" || { rm -f "$tf_ot_out" "$tf_ot_keys"; die3 "tests-freeze: could not create a temporary file"; }
@@ -9242,8 +9310,8 @@ IPC_OWNED
 # The commits the records of every order but $1 list, one per line: their build and fix lists, the
 # earlier attempts' lists, and their freezes, which are AIDA's own commits of that order's tests.
 # Every folder under the task folder a record can sit in is read, a redo's or a drop's included.
-# So is every commit a redo or a drop reverted, with its revert, which the ledger lists: neither is
-# code the tree holds, and both sit inside the range of an order built around them. And so are the
+# So is every commit a redo or a drop reverted or found reverted, with its revert, which the ledger
+# lists: neither is code the tree holds, and both sit inside the range of an order built around them. And so are the
 # commits another order's stopped builder made, which its ledger entry lists. A record written
 # before the lists (6.1.0 batch 2a) names its own range instead, read in the repository $2: the
 # lists are new, and that range is the one thing such a record knows. A repair's freeze record of
@@ -9265,7 +9333,7 @@ im_others_listed() {
         esac
       done
   jq -r --arg id "$1" '(.orders // [])[]
-    | (((.redos // []) + [ .dropped // empty ])[] | ((.reverted // [])[] | .commit, .revert), ((.skipped // [])[] | .revert // empty)),
+    | (((.redos // []) + [ .dropped // empty ])[] | ((.reverted // [])[] | .commit, .revert), ((.skipped // [])[] | select(.revert) | .commit, .revert)),
       (select(.id != $id) | (.unrecordedCommits // [])[])' "$IMPL_DIR/ledger.json" 2>/dev/null
 }
 
@@ -12823,11 +12891,13 @@ RO_ONE
 # (gap row 348). `reset --keep` refuses to touch a changed file, and it runs only when the commits
 # since the start are this run's reverts alone, so a commit a hook or a person made meanwhile is
 # never dropped. The commits are the ones im_own_listed reads from the records in the implementation
-# folder, so a redo before this one reads only the order's work since then. Two kinds are skipped
+# folder, so a redo before this one reads only the order's work since then, and the ones
+# im_after_records finds after them. Two kinds are skipped
 # and named, so a second run after a person's own repair has a defined end: a commit HEAD does not
 # hold, as after a rebase, and a commit a later commit on the branch already reverts, by a person
 # or an earlier run. A merge that remains refuses (exit 113), because its revert needs a person to
-# choose the parent. Sets WAY_REVERTED, a JSON array of {commit, revert}, and WAY_SKIPPED, one of
+# choose the parent. So does a commit that remains and also changes files outside the order, because
+# its revert would take those out too. Sets WAY_REVERTED, a JSON array of {commit, revert}, and WAY_SKIPPED, one of
 # {commit, why}, with revert naming the commit that already reverts it, so no order counts that
 # commit as its own.
 WAY_WHO=""; WAY_REVERTED='[]'; WAY_SKIPPED='[]'
@@ -12851,11 +12921,55 @@ IRT_REVERTS
   fi
   printf '%s\n' "$t"
 }
+# The commits after the last recorded head of order $1 in the repository $2 that change a file only
+# this order owns (gap row 497). A role can commit before its record runs, and no list holds that
+# commit. The head is the newest commit HEAD holds of $3, the commits the records list, and of the
+# commit each record stood at. Only the branch's own line is read: a commit a merge brought in is
+# trunk's or a side branch's, whether or not an upstream holds it. Left out too: every commit
+# im_role_commits leaves out, and every revert, which reverting would undo. A shared file is no file
+# of its own here, because a path alone never attributes a shared file (im_path_claim). Sets
+# IM_AFTER_COMMITS, one commit per line, IM_AFTER_MIXED, one line "<commit> <its other files>" for
+# each that changes its own files and others, and IM_AFTER_SHARED, one line "<commit> <shared
+# files>" for each that changes shared files and none of its own, which stays and is named.
+IM_AFTER_COMMITS=""; IM_AFTER_MIXED=""; IM_AFTER_SHARED=""
+im_after_records() {
+  local unit_id="$1" repo="$2" head unit_json c p own others shared
+  IM_AFTER_COMMITS=""; IM_AFTER_MIXED=""; IM_AFTER_SHARED=""
+  head="$(git -C "$repo" rev-list --topo-order HEAD 2>/dev/null | grep -Fx -f <(printf '%s\n' "$3"
+    find "$IMPL_DIR" -maxdepth 1 -type f \( -name "tests-$unit_id.json" -o -name "tests-$unit_id-repair-*.json" \
+      -o -name "build-$unit_id.json" -o -name "fix-$unit_id-*.json" \) -exec jq -r '.commit // empty' {} + 2>/dev/null) | head -n 1)"
+  [ -n "$head" ] || return 0
+  unit_json="$(printf '%s' "$RV_UNIT_JSON" | jq -c --argjson o "$(im_owns_of "$unit_id")" '.ownedFiles = (.ownedFiles // []) + $o')"
+  for c in $(im_role_commits "$repo" "$head" HEAD "$unit_id" | jq -r '.[]' \
+      | grep -Fx -f <(git -C "$repo" rev-list --first-parent "$head..HEAD" 2>/dev/null)); do
+    [ -z "$(im_revert_target "$repo" "$c")" ] || continue
+    own=""; others=""; shared=""
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      case "$(im_path_claim "${RV_RANGE_SCOPE:+$RV_RANGE_SCOPE/}$p" "$unit_json")" in
+        own) own=yes ;;
+        shared) shared="$shared${shared:+, }$p"; others="$others${others:+, }$p" ;;
+        *) others="$others${others:+, }$p" ;;
+      esac
+    done <<IAR_PATHS
+$(im_commits_paths "$repo" "[\"$c\"]" "$RV_RANGE_SCOPE")
+IAR_PATHS
+    [ -n "$own$shared" ] || continue
+    IM_AFTER_COMMITS="$IM_AFTER_COMMITS$c
+"
+    if [ -z "$own" ]; then IM_AFTER_SHARED="$IM_AFTER_SHARED$c $shared
+"
+    elif [ -n "$others" ]; then IM_AFTER_MIXED="$IM_AFTER_MIXED$c $others
+"
+    fi
+  done
+}
 im_revert_order() {
-  local unit_id="$1" repo="$2" listed commits="" c r said orig made failed by merges=""
+  local unit_id="$1" repo="$2" listed commits="" c r said orig made failed by merges="" mixed mixed_text="" shared
   WAY_REVERTED='[]'; WAY_SKIPPED='[]'
   listed="$(im_own_listed "$unit_id" "$repo")"
-  for c in $(printf '%s\n' "$listed"); do
+  im_after_records "$unit_id" "$repo" "$listed"
+  for c in $(printf '%s\n%s' "$listed" "$IM_AFTER_COMMITS"); do
     if ! git -C "$repo" merge-base --is-ancestor "$c" HEAD 2>/dev/null; then
       WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" '. + [{commit: $c, why: "HEAD does not hold it, as after a rebase"}]')"
       continue
@@ -12870,12 +12984,22 @@ IRO_REVERTS
       WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" --arg by "$by" '. + [{commit: $c, why: ("already reverted by " + $by), revert: $by}]')"
       continue
     fi
+    shared="$(printf '%s' "$IM_AFTER_SHARED" | sed -n "s/^$c //p")"
+    if [ -n "$shared" ]; then
+      WAY_SKIPPED="$(printf '%s' "$WAY_SKIPPED" | jq -c --arg c "$c" --arg f "$shared" \
+        '. + [{commit: $c, why: ("no record lists it, and it changes shared files and none of its own: " + $f + ". A shared file never makes a commit the order'"'"'s, so it stays")}]')"
+      continue
+    fi
     ! git -C "$repo" rev-parse --verify --quiet "$c^2" >/dev/null 2>&1 || merges="$merges ${c:0:7}"
+    mixed="$(printf '%s' "$IM_AFTER_MIXED" | sed -n "s/^$c //p")"
+    [ -z "$mixed" ] || mixed_text="$mixed_text ${c:0:7} ($mixed)"
     commits="$commits$c
 "
   done
   [ -z "$merges" ] \
-    || die 113 "$WAY_WHO: the records of $unit_id list merge commits:$merges. A revert of a merge needs a person to choose the parent. Nothing was reverted or moved. A person reverts each one with git revert -m 1 <commit>, then runs $WAY_WHO again: a commit the branch already reverts is skipped."
+    || die 113 "$WAY_WHO: the commits of $unit_id hold merge commits:$merges. A revert of a merge needs a person to choose the parent. Nothing was reverted or moved. A person reverts each one with git revert -m 1 <commit>, then runs $WAY_WHO again: a commit the branch already reverts is skipped."
+  [ -z "$mixed_text" ] \
+    || die 113 "$WAY_WHO: no record lists these commits after the last record of $unit_id, and each also changes files $unit_id does not own:$mixed_text. Reverting one would take those files out too. Nothing was reverted or moved. A person reverts each one with git revert <commit> and commits again what must stay, then runs $WAY_WHO again: a commit the branch already reverts is skipped."
   [ -n "$commits" ] || return 0
   commits="$(git -C "$repo" rev-list --topo-order HEAD 2>/dev/null | grep -Fx -f <(printf '%s' "$commits"))"
   orig="$(git -C "$repo" rev-parse HEAD)"
@@ -13202,8 +13326,8 @@ GO_OWNS
 }
 
 # redo: the order goes back to planned. A person changed its design or its tests first, through
-# design. Its own commits are reverted newest first, read from its records' commit lists, so the
-# tests frozen again fail first, as every freeze requires. Its records move to a dated folder with
+# design. Its own commits are reverted newest first, read from its records' commit lists and from
+# what follows them (im_after_records), so the tests frozen again fail first, as every freeze requires. Its records move to a dated folder with
 # the person's words, and the snapshot takes its live copy, which design must have closed on. The
 # snapshot keeps its frozen contract, and the next start refreshes it under start's own rules. A
 # new order design added enters at that next start, as before. Every other order keeps its work.
@@ -13283,7 +13407,8 @@ do_redo() {
 # a dated folder with the person's words, and the order stays in the snapshot as dropped. Nothing
 # that depends on it can start, because an order starts only once every order it depends on is
 # closed. finish passes over a dropped order and lists it, with the criteria it leaves unbuilt, and
-# the task review reads each such criterion unanswered.
+# the task review reads each such criterion unanswered. So a criterion no remaining order serves goes
+# back to not judged, as in redo, because its code is reverted. One another order serves keeps its state.
 do_drop() {
   im_way_plain_args "drop" "$@"
   fn_require_answer "drop" "dropping one order" "$WAY_UNIT" "$WAY_BECAUSE" implement
@@ -13299,12 +13424,19 @@ do_drop() {
 
   local new_ledger waiting
   new_ledger="$(im_clear_stop_in "$RV_LEDGER_DOC" "$WAY_UNIT" drop "$(jq -cn --arg f "$WAY_FOLDER" '{movedTo: $f}')" \
-    | jq -c --arg id "$WAY_UNIT" --arg at "$(date -u +%Y-%m-%d)" --arg because "$WAY_BECAUSE" --arg folder "$WAY_FOLDER" \
+    | jq_files -c --arg id "$WAY_UNIT" --argjson snap "$SNAPSHOT_DOC" --arg at "$(date -u +%Y-%m-%d)" --arg because "$WAY_BECAUSE" --arg folder "$WAY_FOLDER" \
       --argjson reverted "$WAY_REVERTED" --argjson skipped "$WAY_SKIPPED" '
+    def touched: (.criteriaServed // []) + (.criteriaOwned // []);
     .orders = (.orders | map(if .id == $id
       then .lastStep = "dropped" | .dropped = ({at: $at, because: $because, movedTo: $folder, reverted: $reverted}
         + (if $skipped == [] then {} else {skipped: $skipped} end))
-      else . end))')"
+      else . end))
+    | ([ .orders[] | select(.lastStep == "dropped") | .id ]) as $gone
+    | ([ ($snap.workOrders // [])[] | select(.id as $i | $gone | index($i) | not) | touched[] ]) as $served
+    | ([ ($snap.workOrders // [])[] | select(.id == $id) | touched[] | select(. as $c | $served | index($c) | not) ]) as $left
+    | .criteria = ((.criteria // []) | map(. as $c | if ($left | index($c.id)) == null then .
+        else .rowState = "not-judged"
+             | if has("judgements") then .judgements = [ .judgements[] | select(.unit != $id) ] else . end end))')"
   [ -n "$new_ledger" ] || die3 "drop: the ledger update for $WAY_UNIT failed. Its commits were reverted and its records moved to $WAY_FOLDER; repair the ledger by hand."
   write_atomic "$RV_LEDGER_FILE" "$new_ledger"
   waiting="$(printf '%s' "$SNAPSHOT_DOC" | jq -r --arg id "$WAY_UNIT" '
@@ -14128,17 +14260,22 @@ RA_ROWS
 # A name is one name and never a path. A slash would turn this into a reader for any file the
 # script can open, and it exists to hand over the six step files and nothing else.
 do_step() {
-  local names
+  local names part=1
   names="$(md_basenames_in "$STEPS_DIR")"
   [ "$#" -ge 1 ] || die3 "step: a step name is required. The steps are: $names"
+  if [ "$#" -eq 3 ] && [ "$2" = "--part" ]; then part="$3"; set -- "$1"; fi
   [ "$#" -le 1 ] || die3 "step: unrecognized extra argument: $2"
   case "$1" in
     */*|.|..|'') die3 "step: a step name is one name and never a path; got: $1. The steps are: $names" ;;
   esac
   [ -f "$STEPS_DIR/$1.md" ] \
     || die3 "step: this skill ships no step file named $1. The steps are: $names"
-  cat "$STEPS_DIR/$1.md" || die3 "step: $STEPS_DIR/$1.md could not be read."
-  exit 0
+  step_part "$STEPS_DIR" "$1" "$part" "$PLUGIN_ROOT/skills/implement/scripts/implement-actions.sh"
+  case "$?" in
+    0) exit 0 ;;
+    2) die3 "step: $1 has no part $part. Run step $1 to see the first part and the count of parts." ;;
+    *) die3 "step: $STEPS_DIR/$1.md could not be read." ;;
+  esac
 }
 
 do_dispatch_close() {

@@ -244,6 +244,101 @@ reason_case() (
 )
 expect "a close on --reason over a finding ruled fix leaves one warning in the task record" "$(reason_case)" "0|1"
 
+echo "--- close: the pull request body is public (row 495)"
+body_case() (
+  source "$HERE/records.bash"
+  review_records
+  reviewed_record
+  local two=$'first line\nPRIVATE-SECOND-LINE'
+  local decision='{"id": "decision-wo1-f9", "verdict": "met", "answeredBy": "person", "answer": "wrong"}'
+  edit "$TASK/review/review.json" '.verdict = "failed" | .warnings = [] | .checks += [$d + {detail: ("PRIVATE-DECISION " + $two)}]
+    | .findings = [$f + {evidence: ("PRIVATE-EVIDENCE " + $two)},
+                   $f + {id: "f2", file: ($root + "/wt/a.php"), disposition: "criterion", severity: "high", evidence: "PRIVATE-EVIDENCE"}]
+    | .catalogNotes = [{seen: ("PRIVATE-NOTE " + $two), where: "PRIVATE-WHERE"}]
+    | .evidence = [{criterion: "c1", verdict: "unmet", path: ($task + "/review/evidence/shot.png")}]
+    | .criteria = [{id: "c1", verifiedBy: "person", verdict: "unmet", answeredBy: "script"}]' \
+    --argjson f "$low_dry" --argjson d "$decision" --arg two "$two" --arg task "$TASK" --arg root "$ROOT"
+  edit "$IMPL/finished.json" '.suite.notCaused = [{line: ("FAIL " + $root + "/wt/tests/b_test.sh:3 expected 1"), because: "an old flake"}]' --arg root "$ROOT"
+  edit "$TASK/task.json" '.environment = {adopted: true, tearDown: ("rm -rf " + $root + "/site")}' --arg root "$ROOT"
+  run "$COMPLETION" close "$TASK" --reason "the owner closes it" --leave "f1=later" -- "done"
+  local body="$TASK/completion/pr-body.md"
+  printf '%s|%s|%s|%s|%s|%s|%s\n' "$RC" "$(grep -c PRIVATE "$body")" "$(grep -c "$ROOT" "$body")" \
+    "$(grep -c '^- f[12] (.*a\.php:1' "$body")" "$(grep -c 'review/review\.json' "$body")" \
+    "$(grep -c '^- check(decision-wo1-f9): met' "$body")" "$(grep -c 'review/evidence/shot\.png' "$body")"
+)
+expect "the body holds a finding's line, no text a role wrote, and no absolute path" "$(body_case)" "0|0|0|2|2|1|1"
+
+echo "--- close: findings folded into one task (row 496)"
+# fold_record: a passed review with follow-ups f1 and f2, and an open task `other` that names both.
+fold_record() {
+  review_records
+  passed_record
+  edit "$TASK/review/review.json" '.findings = [$f, $f + {id: "f2"}]' --argjson f "$low_dry"
+  mkdir -p "$PROJECT/tasks/other"
+  jq -n '{schemaVersion: 1, id: "other", state: "new", parent: null, children: []}' >"$PROJECT/tasks/other/task.json"
+  printf 'Fix f1, f2 and wo1-f9 of t1.\n' >"$PROJECT/tasks/other/task.md"
+}
+close_warnings() { jq -r '(.warnings // [])[] | select(.step == "completion close") | .words' "$TASK/task.json"; }
+
+fold_case() (
+  source "$HERE/records.bash"
+  fold_record
+  run "$COMPLETION" close "$TASK" --leave f1=task:other --leave f2=task:other -- "done"
+  printf '%s|%s|%s\n' "$RC" "$(jq -c '[ .followUps[] | [.task, .reason] ]' "$TASK/completion/completed.json")" \
+    "$(grep -c '^- f[12]: other$' "$TASK/completion/pr-body.md")"
+)
+expect "a fold writes the task on each row and in the body" "$(fold_case)" '0|[["other",""],["other",""]]|2'
+
+fold_tab_case() (
+  source "$HERE/records.bash"
+  fold_record
+  run "$COMPLETION" close "$TASK" --leave "f1=task:other"$'\t' -- "done"
+  jq -c '.followUps[0].task' "$TASK/completion/completed.json"
+)
+expect "a tab after the task id stays out of the record" "$(fold_tab_case)" '"other"'
+
+fold_high_case() (
+  source "$HERE/records.bash"
+  fold_record
+  edit "$TASK/review/review.json" '.findings[0].severity = "high"'
+  run "$COMPLETION" close "$TASK" --leave f1=task:other -- "done"
+  printf '%s|%s\n' "$(jq -r '.followUps[0].task' "$TASK/completion/completed.json")" "$(close_warnings | grep -c 'f1')"
+)
+expect "a folded high severity finding has its task, and no warning names it" "$(fold_high_case)" "other|0"
+
+# fold_refused <kind>: close refuses one bad fold of f1 or of a deferred decision, and writes nothing.
+fold_refused() (
+  source "$HERE/records.bash"
+  fold_record
+  local leave=f1=task:other
+  case "$1" in
+    no-task) leave=f1=task:gone ;;
+    complete) edit "$PROJECT/tasks/other/task.json" '.state = "complete"' ;;
+    this-task) leave=f1=task:t1; printf 'Fix f1.\n' >"$TASK/task.md" ;;
+    unnamed) printf 'Something else.\n' >"$PROJECT/tasks/other/task.md" ;;
+    other-id) edit "$PROJECT/tasks/other/task.json" '.id = "another"' ;;
+    contract-wrong) edit "$TASK/review/review.json" '.findings[0] += {ruling: "contract-wrong", correctedText: "x"}' ;;
+    decision) leave=wo1-f9=task:other
+      edit "$TASK/review/review.json" '.checks += [{id: "decision-wo1-f9", verdict: "met", detail: "d", answer: "deferred"}]'
+      edit "$IMPL/finished.json" '.pendingDecisions = [{unit: "wo1", finding: "f9", severity: "low", text: "t"}]' ;;
+  esac
+  run "$COMPLETION" close "$TASK" --leave "$leave" -- "done"
+  printf '%s|%s|%s\n' "$RC" "$([ -f "$TASK/completion/completed.json" ] && echo written || echo none)" "$(jq -r '.state' "$TASK/task.json")"
+)
+for kind in no-task complete this-task unnamed other-id contract-wrong decision; do
+  expect "a fold is refused with nothing written: $kind" "$(fold_refused "$kind")" "3|none|in_progress"
+done
+
+fold_own_task_case() (
+  source "$HERE/records.bash"
+  fold_record
+  mkdir -p "$PROJECT/tasks/t1-f1"
+  jq -n '{schemaVersion: 1, id: "t1-f1", state: "new", parent: null, children: []}' >"$PROJECT/tasks/t1-f1/task.json"
+  run "$COMPLETION" close "$TASK" --leave f1=task:other -- "done"
+  printf '%s|%s\n' "$(jq -c '.followUps[0] | [.task, .reason]' "$TASK/completion/completed.json")" "$(close_warnings | grep -c -e '--leave')"
+)
+expect "a finding with its own task keeps it, with no reason, and the --leave is named" "$(fold_own_task_case)" '["t1-f1",""]|1'
+
 echo "--- checks: the task's own change set (row 441)"
 merge_case() (
   source "$HERE/records.bash"
@@ -499,5 +594,183 @@ down_case() (
   printf '%s|%s|%s\n' "$RC" "$([ -f "$ROOT/down.txt" ] && echo down || echo up)" "$(jq -r '.environment.recipe // "none"' "$TASK/task.json")"
 )
 expect "completion takes the task's own site down when the task closes" "$(down_case)" "0|down|none"
+
+echo "--- a criterion dropped with its order after the freeze (row 498)"
+# frozen_c2 [<wo2 fields JSON>]: c2 in the frozen contract and not in the live one. With fields, wo2
+# also stands in the snapshot, and serves c2 alone unless the fields say otherwise.
+frozen_c2() {
+  edit "$IMPL/snapshot.json" '.alignment.criteria += [.alignment.criteria[0] + {id: "c2", text: "b.php exists", verifiedBy: "machine"}]'
+  [ -z "${1:-}" ] || edit "$IMPL/snapshot.json" '.workOrders += [.workOrders[0] + {id: "wo2", criteriaServed: ["c2"], criteriaOwned: ["c2"], ownedFiles: ["b.php"]} + $f]' --argjson f "$1"
+}
+# dropped_records: review_records with wo2 dropped, the one order that served c2.
+dropped_records() {
+  review_records
+  frozen_c2 '{}'
+  edit "$IMPL/finished.json" '.dropped = [{id: "wo2", because: "b.php is not wanted", at: "2026-11-06", criteria: ["c2"]}]
+    | .criteria += [{id: "c2", verifiedBy: "machine", rowState: "not-judged"}]'
+}
+# briefable: the record brief reads, with the check it needs.
+briefable() {
+  reviewed_record
+  edit "$TASK/review/review.json" '.checks += [{id: "serves-a-criterion", verdict: "met", detail: "x", scriptHalf: {verdict: "met", detail: "x"}},
+    {id: "test-and-mutation", verdict: "met", detail: "x", scriptHalf: {verdict: "met", detail: "x"}}]'
+}
+
+drop_brief_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  briefable
+  run "$REVIEW" brief "$TASK"
+  printf '%s|%s\n' "$RC" "$(jq -r '([ .criteria[].id ] | join(",")) + "|" + (.droppedCriteria[0] | .id + "|" + .text + "|" + .orders[0].id + "|" + .orders[0].because)' "$TASK/review/brief.json")"
+)
+expect "brief leaves a dropped criterion out of the criteria, and names it with the person's words" "$(drop_brief_case)" \
+  "0|c1|c2|b.php exists|wo2|b.php is not wanted"
+
+drop_close_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  reviewed_record
+  closed_with --row c1=met
+  jq -r '.verdict + "|" + ([ .warnings[].id ] | join(",")) + "|"
+    + (.criteria[] | select(.id == "c2") | .verdict + "|" + .answeredBy) + "|" + .droppedCriteria[0].id
+    + "|" + (.checks[] | select(.id == "every-criterion") | .detail | test("wo2") | tostring)' "$TASK/review/review.json"
+)
+expect "close reads a dropped criterion unanswered, as a warning, and records and names the drop" "$(drop_close_case)" \
+  "passed|c2|unanswered|script|c2|true"
+
+drop_person_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  edit "$IMPL/snapshot.json" '(.alignment.criteria[] | select(.id == "c2")).verifiedBy = "person"'
+  reviewed_record
+  closed_with --row c1=met
+  printf '%s|%s\n' "$(jq -r '.verdict' "$TASK/review/review.json")" "$(grep -c 'c2 takes' "$OUT")"
+)
+expect "a dropped person criterion is not asked" "$(drop_person_case)" "passed|0"
+
+drop_reset_case() (
+  source "$HERE/records.bash"
+  task_records branch wo2
+  edit "$TASK/alignment.json" '.criteria += [.criteria[0] + {id: "c3", text: "both changed"}]'
+  edit "$TASK/design/wo1.json" '.criteriaServed += ["c3"]'
+  edit "$TASK/design/wo2.json" '.criteriaServed += ["c3"]'
+  close_design
+  order_records closed
+  edit "$IMPL/ledger.json" '(.orders[] | select(.id == "wo2")).stopped = [{step: "start", reason: "a stop", allows: ["redo", "drop"]}]
+    | .criteria = [ .criteria[] | . + {rowState: "confirmed", judgements: [{unit: "wo2", verdict: "confirmed"}]} ]'
+  run "$IMPLEMENT" drop "$TASK" wo2 --because "b.php is not wanted"
+  jq -r '[ .criteria[] | .id + "=" + .rowState + ":" + (.judgements | length | tostring) ] | join(" ")' "$IMPL/ledger.json"
+)
+expect "drop resets a criterion no remaining order serves, and leaves one that another order serves" "$(drop_reset_case)" \
+  "c1=confirmed:1 c2=not-judged:0 c3=confirmed:1"
+
+drop_finding_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  briefable
+  jq -n '{findings: [{id: "f1", lens: "solid", severity: "high", file: "a.php", lines: "1", linkedTo: "c2", evidence: "no b.php"}]}' >"$ROOT/findings.json"
+  run "$REVIEW" findings "$TASK" --findings "$ROOT/findings.json"
+  local disposition
+  disposition="$(jq -r '.findings[0].disposition' "$TASK/review/review.json")"
+  closed_with --row c1=met
+  printf '%s|%s\n' "$disposition" "$(jq -r '.verdict' "$TASK/review/review.json")"
+)
+expect "a finding that cites a dropped criterion fails nothing" "$(drop_finding_case)" "follow-up|passed"
+
+live_order_case() (
+  source "$HERE/records.bash"
+  review_records
+  frozen_c2 '{}'
+  briefable
+  run "$REVIEW" brief "$TASK"
+  printf '%s|%s|%s|%s\n' "$RC" "$(grep -c 'design' "$OUT")" "$(grep -c '`start`' "$OUT")" "$(grep -c 'scope update' "$OUT")"
+)
+expect "a removed criterion a live order serves is refused, and the route starts at design" "$(live_order_case)" "3|1|1|0"
+
+no_order_case() (
+  source "$HERE/records.bash"
+  review_records
+  frozen_c2
+  briefable
+  run "$REVIEW" brief "$TASK"
+  printf '%s|%s\n' "$RC" "$(grep -c 'scope update' "$OUT")"
+)
+expect "a removed criterion no dropped order served is refused" "$(no_order_case)" "3|0"
+
+drop_test_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  tests_record
+  edit "$IMPL/tests-wo1.json" '.rows += [.rows[0] + {criterion: "c2"}]'
+  briefable
+  run "$REVIEW" brief "$TASK"
+  printf '%s|%s\n' "$RC" "$(grep -c 'tests/a_test.sh' "$OUT")"
+)
+expect "a frozen test that still names a dropped criterion keeps the refusal, and is named" "$(drop_test_case)" "3|1"
+
+drop_changed_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  edit "$TASK/alignment.json" '.criteria += [.criteria[0] + {id: "c2", text: "b.php says c"}]'
+  briefable
+  run "$REVIEW" brief "$TASK"
+  printf '%s|%s\n' "$RC" "$(grep -c 'scope update' "$OUT")"
+)
+expect "a changed text keeps its own refusal, though its order was dropped" "$(drop_changed_case)" "3|1"
+
+drop_completion_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  reviewed_record
+  closed_with --row c1=met
+  run "$COMPLETION" close "$TASK" -- "done"
+  printf '%s|%s|' "$RC" "$(grep -c 'c2' "$OUT")"
+  run "$COMPLETION" close "$TASK" --reason "the owner closes without b.php" -- "done"
+  printf '%s|%s\n' "$RC" "$(grep -c '^- c2: b.php exists (dropped with wo2: b.php is not wanted)$' "$TASK/completion/pr-body.md")"
+)
+expect "completion needs a reason over a dropped criterion, and the body keeps its frozen text" "$(drop_completion_case)" "1|1|0|1"
+
+drop_evidence_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  reviewed_record
+  run "$REVIEW" acceptance "$TASK"
+  printf '%s|' "$(grep -c '^droppedCriteria: c2$' "$OUT")"
+  evidence "$(c1_row)"
+  run "$REVIEW" acceptance "$TASK" --evidence
+  printf '%s|' "$RC"
+  evidence "$(c1_row)" '{"criterion": "c2", "sentence": "b.php is absent", "path": "", "verdict": "unmet", "note": "no file", "file": "a.php"}'
+  run "$REVIEW" acceptance "$TASK" --evidence
+  printf '%s|%s\n' "$RC" "$(jq '[ .findings[] | select(.linkedTo == "c2") ] | length' "$TASK/review/review.json")"
+)
+expect "the verifier owes no row for a dropped criterion, and a row for one makes no finding" "$(drop_evidence_case)" "1|0|0|0"
+
+drop_moved_case() (
+  source "$HERE/records.bash"
+  dropped_records
+  reviewed_record
+  edit "$TASK/review/review.json" '.verdict = "failed" | .evidence = [] | .warnings = []'
+  jq -n '{droppedCriteria: []}' >"$TASK/review/brief.json"
+  edit "$TASK/task.json" '.runMode = "autonomous"'
+  run "$REVIEW" close "$TASK"
+  printf '%s|%s\n' "$RC" "$(jq -r '.verdict' "$TASK/review/review.json")"
+)
+expect "unattended, a removal after the brief stops close, and the verdict stands" "$(drop_moved_case)" "51|failed"
+
+# unstarted_case <step>: start after c2 and wo2 leave the live contract and design, with every order
+# at <step>. Prints what the snapshot holds, then the task warnings that name c2.
+unstarted_case() (
+  source "$HERE/records.bash"
+  task_records branch wo2
+  order_records "$1"
+  edit "$TASK/alignment.json" '.criteria = [ .criteria[] | select(.id != "c2") ]'
+  rm "$TASK/design/wo2.json"
+  close_design
+  run "$IMPLEMENT" start "$TASK"
+  printf '%s|%s\n' "$(jq -r '[ .alignment.criteria[].id ] | join(",")' "$IMPL/snapshot.json")" \
+    "$(jq '[ (.warnings // [])[] | select(.step == "start" and (.words | test("c2: b.php exists"))) ] | length' "$TASK/task.json")"
+)
+expect "a criterion that leaves the snapshot at start records one task warning" "$(unstarted_case planned)" "c1|1"
+expect "a criterion a started order holds stays frozen, with no such warning" "$(unstarted_case code-written)" "c1,c2|0"
 
 finish

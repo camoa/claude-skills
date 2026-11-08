@@ -116,7 +116,7 @@ and, above it, one line per thing you compared, so a person can check the report
 Do not repeat the design check's own subjects: owners, unserved criteria, identical owned files,
 cycles, unknown ids. The check counted those already, and a repeat costs the person a decision.
 
-Reply with your `findings: N` line, nothing else. The skill opens the file at the path above.
+**Reply cap:** 1 line, your `findings: N` line, nothing else. The skill opens the file at the path above.
 The design close may move that file into the task's `design/` folder, so a path you report
 goes stale.
 

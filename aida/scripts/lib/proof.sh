@@ -92,7 +92,7 @@ br_order_facts() {
 BR_ORDER_FACTS_JQ='
   def textFile:
     (test("(^|/)CMakeLists\\.txt$") | not)
-    and (test("\\.(md|markdown|rst|adoc|txt|json|ya?ml|toml|ini|cfg|conf|xml|neon|dist)$"; "i")
+    and (test("\\.(md|markdown|rst|adoc|mdx|txt|prompt|csv|json|jsonl|ya?ml|toml|ini|cfg|conf|xml|neon|dist)$"; "i")
          or test("(^|/)\\.[A-Za-z0-9_-]+(\\.(example|sample|dist))?$"));
   def textOnly:
     (.proof // "") != "gate" and ((.ownedFiles // []) | length > 0 and all(textFile));
@@ -138,9 +138,9 @@ BR_HARNESS_JQ="$BR_ORDER_FACTS_JQ"'
 # fifth kind is still one edit above. `read` prints both on the order's line, the tests step reads
 # them there, and dispatch-open refuses a role in BR_KIND_ROLES that the order's list lacks.
 #
-# A fixer is not listed: an open finding decides it, not a kind. `point: implement` is on every
+# A fixer is not listed: an open finding decides it, not a kind. The `implement` point is on every
 # kind, because the tests step takes the oracle globs from it and a gate order runs its
-# `## Configuration gate`. The test author and the row-checker read `point: test-authoring`.
+# `## Configuration gate`. The test author and the row-checker read the `test-authoring` point.
 # The row-checker takes the recipe path only when it judges tests (agents/row-checker.md).
 #
 # Three rules keep roles on these lists. Do not cut them to save a dispatch.

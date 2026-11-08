@@ -25,7 +25,7 @@ give. A recipe entry with one is skipped, with a warning.
 
 A run line can prove a machine-verified criterion the order owns on its own output, such as a
 linter run. Design links the line to that criterion. The freeze in the build runs the line over
-the test author's files and refuses while it fails. A clause that names two tools needs a line
+the test author's files and warns when it fails. A clause that names two tools needs a line
 for each.
 
 The design check still counts declared tests. A `tests` order that owns a machine-verified

@@ -34,6 +34,12 @@ is affected:
   included, in both run modes. The build keeps the old text. Put the old text back word for word
   and the stops clear at the next start. With a person present, implementation offers to redo
   the stopped orders instead.
+- **When you remove a criterion that no started work order serves**, it leaves the frozen contract
+  with no answer from you. Start records one task warning with its text. Review does not see it.
+- **When you remove a criterion that a started work order serves**, the order stops. Take the
+  criterion out of the order with design, or remove the order. Close design and run start. Then
+  drop a removed order, or redo a changed one, and run finish. See
+  [The verdict](../review/verdict.md).
 - **A change to the verify clause alone** spares a started work order whose frozen tests and
   records do not name that criterion. On an unattended run, scope must first record the change as
   a decision for that criterion, or no order is spared. A recorded decision spares nothing when

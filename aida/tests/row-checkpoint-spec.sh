@@ -75,6 +75,38 @@ carry_case() (
 )
 expect "a confirmed row in a file only the repair edited is carried into the frozen record" "$(carry_case)" 'c2|c2'
 
+# No script reads a test's name out of a rejection. Unattended, a note naming both tests on c1 asks
+# for both reds again and goes back once. The second rejection of c1 stops the order, because the
+# count is per row.
+two_tests_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  jq '.runMode = "autonomous"' "$TASK/task.json" >"$ROOT/t.json" && mv "$ROOT/t.json" "$TASK/task.json"
+  order_records planned
+  suite_records ""
+  mkdir -p "$WT/tests"
+  printf 'echo a does not say b\nexit 1\n' >"$WT/tests/a_test.sh"
+  git -C "$WT" add tests/a_test.sh && git -C "$WT" commit -qm "tests of wo1"
+  printf 'a does not say b\n' >"$IMPL/red-one.txt"
+  printf 'a does not say b\n' >"$IMPL/red-two.txt"
+  jq -n '{rows: [{criterion: "c1", verdict: "rejected", repair: "tests", note: "one and two each hold two behaviours"}]}' \
+    >"$IMPL/row-check-wo1.json"
+  reject() {
+    run "$IMPLEMENT" tests-freeze "$TASK" wo1 --test-glob 'tests/*_test.sh' --test-recipe "fake=$RECIPE" \
+      --test "tests/a_test.sh::one=c1" --test "tests/a_test.sh::two=c1" \
+      --red "one=$IMPL/red-one.txt" --red "two=$IMPL/red-two.txt" \
+      --row "c1=rejected::model::one and two each hold two behaviours"
+  }
+  reject
+  printf '%s|%s|%s|%s\n' "$RC" "$(ledger '.rowsSentBack | join(",")')" \
+    "$(ledger '.rowsRejected[0].redAgain | join(",")')" "$(ledger '(.stopped // []) | length')"
+  reject
+  printf '%s|%s\n' "$RC" "$(ledger '(.stopped // []) | length')"
+)
+expect "the stop counts the row: its first rejection goes back, its second stops the order" \
+  "$(two_tests_case)" '65|c1|one,two|0
+65|1'
+
 # A record order has no checkpoint: it freezes with no --row, and no row is put to anyone.
 record_case() (
   source "$HERE/records.bash"

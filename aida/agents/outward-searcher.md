@@ -36,6 +36,9 @@ Return findings. Each carries what was found, the source, and the date you read 
 Do not return an account of how you searched, which tools you used, or how many pages you opened.
 That is not the job and nobody reads it.
 
+**Reply cap:** one block per finding, at most three lines: what, source, date. The same in every
+stage that dispatches you.
+
 Looking and finding nothing is a real answer. Report it as searched and empty, and say what you
 searched for, so the next reader knows the ground is covered.
 
