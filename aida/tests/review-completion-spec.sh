@@ -799,6 +799,19 @@ changed_accept_case() (
 expect "a changed criterion no frozen test names closes on the person's accept" "$(changed_accept_case)" \
   "0|passed|accept|person|a.php says b or c"
 
+changed_verified_case() (
+  source "$HERE/records.bash"
+  changed_c1
+  run "$REVIEW" acceptance "$TASK"
+  printf '%s|' "$(grep -c '^criterionChanges: c1$' "$OUT")"
+  run "$REVIEW" acceptance "$TASK" --evidence
+  printf '%s|' "$(jq -r '.evidence[] | select(.criterion == "c1") | .liveText' "$TASK/review/review.json")"
+  run "$REVIEW" close "$TASK" --row c1=met --row decision-c1-criterion=accept
+  grep -c '^evidence(c1): .*judged the live text: a.php says b or c$' "$OUT"
+)
+expect "the verifier is given a changed criterion, and its row carries the live text to close" \
+  "$(changed_verified_case)" "1|a.php says b or c|1"
+
 changed_test_case() (
   source "$HERE/records.bash"
   changed_c1 tests

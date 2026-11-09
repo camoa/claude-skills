@@ -644,7 +644,7 @@ rw_print_summary() {
   printf '%s' "$doc" | jq -r --arg who "$who" --arg record "$RECORD_FILE" '
     def line($k; $v): "\($k): \($v)";
     def short: (. // "") | gsub("\n"; " ") | .[0:160];
-    def evidence_line($k): line("evidence(\($k))"; "\(.verdict) \(if .path == "" then "(no file)" else .path end) | \(.note | short)");
+    def evidence_line($k): line("evidence(\($k))"; "\(.verdict) \(if .path == "" then "(no file)" else .path end) | \(.note | short)\(if has("liveText") then " | judged the live text: " + .liveText else "" end)");
     [ line("action"; $who),
       line("task"; .task),
       line("range"; .reviewedRange),
@@ -2777,7 +2777,8 @@ rw_surface_extra_rows() {
 # that names one is left out, so no finding comes from it. A row's path is joined to review/evidence/
 # when it is relative, and refused when it lies outside that folder, which is the one folder the
 # verifier writes files in. A row's `file` is the code file a bug it saw lives in, joined to the
-# code path. Reads SF_SURFACES and the viewports in $1.
+# code path. A row for a criterion changed after the freeze carries its live text, the text the
+# verifier judged and the person accepts (gap row 506). Reads SF_SURFACES and the viewports in $1.
 RW_EVIDENCE="[]"
 rw_load_evidence() {
   local viewports="$1" bad missing one abs i resolved='[]' evidence_dir="$REVIEW_DIR/evidence"
@@ -2828,6 +2829,9 @@ RW_EVIDENCE_FILES
   missing="$(rw_alignment | jq -r --argjson e "$RW_EVIDENCE" --argjson gone "$gone" '[ (.criteria // [])[].id | select(. as $c | ([ $e[].criterion ] + $gone) | index($c) | not) ] | join(", ")')"
   [ -z "$missing" ] \
     || die 52 "acceptance: $EVIDENCE_FILE holds no row for these criteria: $missing. The verifier writes one row per criterion. Nothing was written."
+  RW_EVIDENCE="$(printf '%s' "$RW_EVIDENCE" | jq -c --argjson c "$(rw_person_changes)" '[ .[] | . as $r
+    | ([ $c[] | select(.kind == "criterion" and .id == $r.criterion) | .live ][0]) as $l
+    | if $l == null then . else . + {liveText: $l} end ]')"
 }
 
 # The verifier's rows applied to a review record: which surfaces it looked at, what each surface
@@ -3064,6 +3068,7 @@ RW_SURFACE_VERDICTS
   rw_print_summary "$updated" "acceptance"
   printf 'surface-file: %s\n' "${registry_path:-none} ($SF_STATE)"
   printf 'droppedCriteria: %s\n' "$(printf '%s' "$RW_DROPPED" | jq -r '[ .[].id ] | if length == 0 then "none" else join(" ") end')"
+  printf 'criterionChanges: %s\n' "$(rw_person_changes | jq -r '[ .[] | select(.kind == "criterion") | .id ] | if length == 0 then "none" else join(" ") end')"
   echo "ACCEPTANCE: end to end is $e2e_on, visual regression is $vr_on, the surface file is $SF_STATE${registry_path:+ at $registry_path}, and the surface commands block reads $RW_SURFACE_BLOCK_STATE." >&2
   [ -z "$RW_SURFACE_BRANCH" ] \
     || echo "ACCEPTANCE: branch $RW_SURFACE_BRANCH holds the surface file. It reaches this task once that branch lands on the trunk. Until then a kind marked on reads as off here. Offer no setup, and do not tell the person to bring that branch into this task." >&2

@@ -525,6 +525,10 @@
         "note": {
           "type": "string",
           "description": "What the verifier saw, in one or two sentences, so a person reads what was judged without opening the file."
+        },
+        "liveText": {
+          "type": "string",
+          "description": "Written by `acceptance --evidence`, never by the verifier: on a row for a criterion the live contract changed after the freeze, and no frozen test names, the live text the verifier judged. The person accepts or rejects that text at close (gap row 506)."
         }
       }
     },
