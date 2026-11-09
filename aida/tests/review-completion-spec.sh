@@ -714,9 +714,10 @@ drop_changed_case() (
   edit "$TASK/alignment.json" '.criteria += [.criteria[0] + {id: "c2", text: "b.php says c"}]'
   briefable
   run "$REVIEW" brief "$TASK"
-  printf '%s|%s\n' "$RC" "$(grep -c 'scope update' "$OUT")"
+  printf '%s|%s\n' "$RC" "$(jq -r '[ .criterionChanges[] | .id + ":" + .live ] | join(",")' "$TASK/review/brief.json")"
 )
-expect "a changed text keeps its own refusal, though its order was dropped" "$(drop_changed_case)" "3|1"
+expect "a changed text no frozen test names goes to the person, though its order was dropped (row 506)" \
+  "$(drop_changed_case)" "0|c2:b.php says c"
 
 drop_completion_case() (
   source "$HERE/records.bash"
@@ -772,5 +773,47 @@ unstarted_case() (
 )
 expect "a criterion that leaves the snapshot at start records one task warning" "$(unstarted_case planned)" "c1|1"
 expect "a criterion a started order holds stays frozen, with no such warning" "$(unstarted_case code-written)" "c1,c2|0"
+
+echo "--- a criterion changed after the freeze (row 506)"
+# changed_c1 [tests]: review_records with c1's live text changed, then findings and acceptance, so
+# the record is ready for close. With tests, a frozen test names c1.
+changed_c1() {
+  review_records
+  [ "${1:-}" != tests ] || tests_record
+  edit "$TASK/alignment.json" '.criteria[0].text = "a.php says b or c"'
+  briefable
+  jq -n '{findings: []}' >"$ROOT/findings.json"
+  run "$REVIEW" findings "$TASK" --findings "$ROOT/findings.json"
+  evidence "$(c1_row)"
+  run "$REVIEW" acceptance "$TASK"
+  run "$REVIEW" acceptance "$TASK" --evidence
+}
+
+changed_accept_case() (
+  source "$HERE/records.bash"
+  changed_c1
+  run "$REVIEW" close "$TASK" --row c1=met --row decision-c1-criterion=accept
+  printf '%s|%s\n' "$RC" "$(jq -r '.verdict + "|" + (.checks[] | select(.id == "decision-c1-criterion")
+    | .answer + "|" + .answeredBy + "|" + .liveText)' "$TASK/review/review.json")"
+)
+expect "a changed criterion no frozen test names closes on the person's accept" "$(changed_accept_case)" \
+  "0|passed|accept|person|a.php says b or c"
+
+changed_test_case() (
+  source "$HERE/records.bash"
+  changed_c1 tests
+  run "$REVIEW" close "$TASK" --row c1=met --row decision-c1-criterion=accept
+  printf '%s|%s\n' "$RC" "$(grep -c 'tests/a_test.sh' "$OUT")"
+)
+expect "a changed criterion a frozen test names is still refused, and the test is named" "$(changed_test_case)" "3|1"
+
+changed_unattended_case() (
+  source "$HERE/records.bash"
+  changed_c1
+  unset CLAUDE_CODE_SESSION_ATTENDED
+  run "$REVIEW" close "$TASK" --row c1=met --row decision-c1-criterion=accept
+  printf '%s|%s\n' "$RC" "$(jq -r '.verdict // "none"' "$TASK/review/review.json")"
+)
+expect "unattended, accepting a changed criterion needs the person's recorded answer" "$(changed_unattended_case)" "70|none"
 
 finish

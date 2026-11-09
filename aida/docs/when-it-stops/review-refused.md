@@ -14,7 +14,7 @@ only when a criterion reads unmet.
 | 61 | the code repository has uncommitted work | commit it, then run the step again |
 | 51 | on an unattended run only: the code moved or went dirty since `checks` ran, or a non-goal or the practice search changed since the brief | run `checks` again; with you present this is a warning |
 | 3 | the code is not at the commit the build ended at | see "The code moved past the build" below |
-| 3 | a criterion changed after the build froze it | put the frozen text back with `/aida:scope`, or redo the orders that serve it |
+| 3 | a criterion that a frozen test names changed after the build froze it, or one was added | put the frozen text back with `/aida:scope`, or redo the orders that serve it |
 | 73 | the check recipe changed after the baseline | see [the build cannot start](cannot-test.md) |
 | 77 | the project records no stack | set it with `/aida:project set-frameworks` |
 | 124 | a frozen test changed after its freeze | put the file back as its freeze commit holds it and commit it, then run finish and review again; AIDA will not edit it for you |
@@ -49,7 +49,7 @@ answers each one, at the same commit, with no fresh review. See
   sends it to the test author.
 - **A finding you rule `fix`.** It fails the criterion it cites, whatever its severity, and
   `reopen` sends it to the fixer of the order that owns its file.
-- **A changed non-goal you reject.** Its check reads unmet, a warning.
+- **A changed non-goal or criterion you reject.** Its check reads unmet, a warning.
 
 A wrong or missing answer is corrected by running close again at the same commit. After a fix
 commit, close warns that the code moved, and the route is `checks`.

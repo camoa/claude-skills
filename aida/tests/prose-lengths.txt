@@ -33,8 +33,8 @@ skills/project/SKILL.md 635
 skills/research/SKILL.md 592
 skills/review/SKILL.md 252
 skills/review/references/checks.md 159
-skills/review/references/close.md 177
-skills/review/references/reviewer.md 181
+skills/review/references/close.md 178
+skills/review/references/reviewer.md 182
 skills/review/references/acceptance.md 126
 skills/scope/SKILL.md 496
 skills/surfaces/SKILL.md 172
