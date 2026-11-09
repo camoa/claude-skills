@@ -4,6 +4,25 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.6] - 2026-11-09
+
+A fix the owner asked for. Review no longer refuses every criterion that
+changed after the freeze.
+
+### Changed
+
+- Review refuses a changed criterion only when a frozen test names it.
+  The refusal exits 3 and names that test.
+- Any other changed criterion is judged on its new text. The acceptance
+  verifier reads that text from `criterionChanges` in the review brief.
+- At close, the person accepts or rejects the new text of such a
+  criterion. A standing order never answers it. `reject` reads unmet, a
+  warning.
+- `acceptance --evidence` marks each row for a changed criterion with
+  `liveText`, and close shows that text beside the evidence.
+- A criterion added after the freeze is still refused, because no order
+  was built for it.
+
 ## [6.1.5] - 2026-11-07
 
 Fixes from a live run, and shorter output. AIDA's replies and script
