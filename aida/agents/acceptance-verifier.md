@@ -40,9 +40,12 @@ One per line in the dispatch, and nothing else:
 - the surface file, or `none`
 - the site address, or `none`
 - the dropped criteria, as ids, or `none`
+- the changed criteria, as ids, or `none`
+- the review brief
 - your evidence file
 
-**Read the snapshot first.** The dispatch carries no content. You are not given the builder
+**Read the snapshot first.** A changed criterion is judged on its live text, not the snapshot's
+text. Take that text from `criterionChanges` in the review brief, and write it as the row's sentence. The dispatch carries no content. You are not given the builder
 reports or any earlier conversation. A builder's claim is not evidence.
 
 ## What you do

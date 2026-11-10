@@ -80,6 +80,8 @@ Dispatch `aida:acceptance-verifier`, in both run modes. The message is one line 
 - the surface file the summary's `surface-file:` line names, or `none`
 - the task record's `environment.address`, or `none`
 - the ids on the summary's `droppedCriteria:` line, or `none`
+- the ids on the summary's `criterionChanges:` line, or `none`
+- `<task_folder>/review/brief.json`
 - `<task_folder>/records/evidence.json`
 
 It runs a smoke test and the examples, explores with a one-line charter, and writes one evidence

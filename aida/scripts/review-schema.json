@@ -294,16 +294,16 @@
         "answeredBy": {
           "type": "string",
           "enum": ["person", "nobody"],
-          "description": "Present only on a check a person decides rather than the script: a lens check whose findings are all low (gap row 274), or a `decision-` check, one per decision a build left in finished.json `pendingDecisions` (gap row 279) and one per non-goal the live contract changed after the freeze (gap row 410). `nobody` before the person answers, when the check reads unknown. A low-findings lens check on a run with nobody present reads met with `nobody`. `person` once `close --row` took the answer."
+          "description": "Present only on a check a person decides rather than the script: a lens check whose findings are all low (gap row 274), or a `decision-` check, one per decision a build left in finished.json `pendingDecisions` (gap row 279) and one per non-goal the live contract changed after the freeze (gap row 410), and one per criterion it changed that no frozen test names (gap row 506). `nobody` before the person answers, when the check reads unknown. A low-findings lens check on a run with nobody present reads met with `nobody`. `person` once `close --row` took the answer."
         },
         "answer": {
           "type": "string",
           "enum": ["wrong", "deferred", "load-bearing", "test-wrong", "keep", "rebuild", "accept", "reject"],
-          "description": "Present only on a `decision-` check a person answered: the ruling word for a finding, keep or rebuild for a departure, or accept or reject for a changed non-goal. wrong, deferred, keep and accept read met; load-bearing, test-wrong, rebuild and reject read unmet. Completion offers a follow up task for each deferred one."
+          "description": "Present only on a `decision-` check a person answered: the ruling word for a finding, keep or rebuild for a departure, or accept or reject for a changed non-goal or criterion. wrong, deferred, keep and accept read met; load-bearing, test-wrong, rebuild and reject read unmet. Completion offers a follow up task for each deferred one."
         },
         "frozenText": {
           "type": ["string", "null"],
-          "description": "Present only on a `decision-<id>-non-goal` check: the non-goal's text in the snapshot, or null when the live contract added it after the freeze (gap row 410)."
+          "description": "Present only on a `decision-<id>-non-goal` or `decision-<id>-criterion` check: the text in the snapshot, or null when the live contract added the non-goal after the freeze (gap rows 410 and 506)."
         },
         "liveText": {
           "type": ["string", "null"],
@@ -525,6 +525,10 @@
         "note": {
           "type": "string",
           "description": "What the verifier saw, in one or two sentences, so a person reads what was judged without opening the file."
+        },
+        "liveText": {
+          "type": "string",
+          "description": "Written by `acceptance --evidence`, never by the verifier: on a row for a criterion the live contract changed after the freeze, and no frozen test names, the live text the verifier judged. The person accepts or rejects that text at close (gap row 506)."
         }
       }
     },

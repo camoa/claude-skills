@@ -70,9 +70,10 @@ in the implement skill, which builds the order again and sets the departure asid
 unanswered, review writes no verdict and prints "no verdict yet". Run the close again when you can
 answer.
 
-## A non-goal that changed after the freeze
+## A non-goal or criterion that changed after the freeze
 
-The reviewer judged the live text. Review shows you both texts and asks whether you approve the
+A criterion counts here only when no frozen test names it. A frozen test proves the frozen text, so
+review refuses such a change. The reviewer judged the live text. Review shows you both texts and asks whether you approve the
 live one. `accept` keeps both texts in the record. `reject` reads unmet, a warning. Put the frozen text
 back with `/aida:scope`, or remove an added non-goal there, then review again. A removed non-goal
 cannot come back that way, so the route is a redo of the orders it bounds. A standing order never answers

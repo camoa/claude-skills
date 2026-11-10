@@ -149,7 +149,7 @@ branch is recorded rather than assumed.
 unless the person's answer is recorded. A session that does not report itself attended, or a task
 that stands at an autonomous stage, counts as an autonomous run here. The task skill's `person-answer.sh` records it, step
 `review close`, after Claude Code asks the person.
-A standing order never answers a changed non-goal: ask the person, who accepts or rejects it.
+A standing order never answers a changed non-goal or criterion: ask the person, who accepts or rejects it.
 A command surface needs no look, because its exit status is the whole answer.
 A run with nobody present and no recorded answer cannot sign off a task carrying one person
 verified criterion. That is intended: a check that could not run has established nothing.

@@ -23,7 +23,7 @@ commands it. Otherwise it reads undeclared.
 
 A recipe may declare more tool rows, such as a duplication tool. Each row adds one check, so the
 list can run past sixteen. A build can also leave checks for you: a decision it could not take,
-or a non-goal that changed after the freeze. You answer those at the [close](close.md).
+or a non-goal or criterion that changed after the freeze. You answer those at the [close](close.md).
 
 ## What the tool checks read
 

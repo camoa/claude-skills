@@ -18,9 +18,10 @@ check names the verifier's rows that did not read met. Show its
 A check whose id begins `decision-` is a decision a build left. Ask it in the
 words of `references/review.md` under the implement skill, under Rulings for a finding and under
 the departure stop for a departure. A check whose id ends `-non-goal` is a non-goal the live
-contract changed, removed or added after the freeze. Show both texts from the summary's `nonGoal`
-line, verbatim, and ask whether the person approves the live text. A standing order never answers
-a non-goal `accept`: ask the person each time. On an unattended run the answer passes only through
+contract changed, removed or added after the freeze. A check whose id ends `-criterion` is a
+criterion the live contract changed, and no frozen test names it. Show both texts from the
+summary's `changedText` line, verbatim, and ask whether the person approves the live text. A
+standing order never answers `accept`: ask the person each time. On an unattended run the answer passes only through
 the record the main session writes, so this guard is no stronger than that record.
 The answer decides what happens next:
 
@@ -28,7 +29,7 @@ The answer decides what happens next:
 - `deferred`: the finding is real and waits. Completion offers it as a follow up task, the way
   it offers a follow-up finding (`skills/completion/scripts/completion-actions.sh`, `cp_load_follow_ups`).
 - `keep`: the departure stands as built.
-- `accept`: the person approves the live text of a changed non-goal. The record keeps both texts.
+- `accept`: the person approves the live text of a changed non-goal or criterion. The record keeps both texts.
 - `reject`: the reviewer judged a text the person did not approve, so the check reads unmet. Put the
   frozen text back with `scope update`, then archive the review and run it again. For an added
   non-goal, use `scope remove`. A removed one cannot come back that way, because `scope remove`

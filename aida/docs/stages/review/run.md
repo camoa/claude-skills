@@ -41,7 +41,8 @@ Review stops, writes nothing, and names the repair when:
 - the repository has moved past the commit the range ends at. A commit past it that only
   removes files `task environment up` added is allowed. A commit that puts back a file the branch
   started with is refused: revert it, review, and put the files back after the review;
-- a criterion changed after the freeze, because its frozen tests prove the frozen text;
+- a criterion changed after the freeze that a frozen test names, because the test proves the
+  frozen text. A criterion added after the freeze is refused too, because no order was built for it;
 - the catalog changed the check recipe after the build's baseline was taken.
 
 Each refusal is explained once, in [the task review refuses](../../when-it-stops/review-refused.md).

@@ -2088,8 +2088,8 @@ CRIT_HASHES
         # A changed criterion a started order stands on is held: the snapshot keeps its frozen
         # copy, and every order that serves or owns it stops, closed or not started included (gap
         # row 428). The frozen copy is the text those tests prove. So the stop clears when the live
-        # text equals it again, and review still refuses a criterion changed after the freeze
-        # (gap row 410). A closed order stops too: left out, it would keep tests on the old text,
+        # text equals it again, and review still refuses a changed criterion a frozen test names
+        # (gap rows 410 and 506). A closed order stops too: left out, it would keep tests on the old text,
         # and a person redoes it or puts the text back.
         # A criterion only unstarted orders serve is not held, and the snapshot takes its live text.
         held_json="$(jq_files -cn --argjson snap "$snapshot_workorders_json" --argjson changed "$changed_criteria_json" \
