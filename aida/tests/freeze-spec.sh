@@ -202,6 +202,28 @@ expect "a text order's run line with no approval warns and does not run" \
   "$(text_case '.verify[0].binding = false')" "0|1|not-run"
 expect "a confirm order that owns code does not run its line at the freeze" \
   "$(text_case '.ownedFiles = ["a.php"]')" "0|0|not-run"
+expect "a text order's line with an input token takes the order's value, runs and fails" \
+  "$(text_case '.verify[0].run += " {plugin_path}" | .values = {plugin_path: ["p"]}')" "0|0|ran"
+
+# wo1 stores plugin_path=stored, and its line writes its argument to $ROOT/arg. build-record is given
+# --value plugin_path=given. Prints its exit and the argument the line got.
+text_value_case() (
+  source "$HERE/records.bash"
+  text_records '.verify[0].run += " {plugin_path}" | .values = {plugin_path: ["stored"]}'
+  edit "$TASK/design/wo1.json" '.ownedFiles = ["skills/x/SKILL.md"]'
+  printf 'printf "%%s" "$1" >"%s/arg"\nexit 0\n' "$ROOT" >"$ROOT/line.sh"
+  text_freeze
+  local start
+  start="$(git -C "$WT" rev-parse HEAD)"
+  mkdir -p "$WT/skills/x" && printf 'a skill\n' >"$WT/skills/x/SKILL.md"
+  git -C "$WT" add skills && git -C "$WT" commit -qm "the text"
+  printf 'Stop: none\nDeviation: none\n' >"$IMPL/answers-wo1-attempt1.md"
+  printf 'none\n' >"$IMPL/interface-wo1.md"
+  run "$IMPLEMENT" build-record "$TASK" wo1 --report "$IMPL/answers-wo1-attempt1.md" --interface "$IMPL/interface-wo1.md" \
+    --started-at "$start" --value plugin_path=given
+  printf '%s|%s\n' "$RC" "$(cat "$ROOT/arg")"
+)
+expect "a --value at build-record wins over the order's value" "$(text_value_case)" "0|given"
 
 # The text is committed and the line now passes. A second freeze runs nothing and keeps the first
 # result. Prints the second freeze's exit, the warnings, whether the line ran, and the kept output.

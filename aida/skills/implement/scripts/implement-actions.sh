@@ -7532,9 +7532,9 @@ BRV_RECIPES
 # $5 the words a refusal ends on. A line that ran is logged with every token filled (gap row 264).
 # Each line is refused on a shell character, split on spaces and run as argv through
 # br_run_resolved, so `{paths}` expands to this order's owned files and every other token comes
-# from --value. A name given several --value rows runs its line once per value, in the order
-# given: each run puts that value's row first, where cr_lookup finds it, so the one filler fills
-# it. Only the first such name in a line multiplies it; any other token takes its first value.
+# from --value, or else from the values the order stores. A name given several --value rows, or
+# with no --value several stored values, runs its line once per value, in the order given: each
+# run puts that value's row first, where cr_lookup finds it, so the one filler fills it. Only the first such name in a line multiplies it; any other token takes its first value.
 # A line holding `{paths}`, `{file}` or `{dirs}` on an order that owns no file does not apply,
 # as a check row does not (gap row 203). A tool handed no path reads its own default scope. The
 # output names it and the list goes on. When no line applies, the list reads undeclared, which
@@ -7574,6 +7574,7 @@ br_run_lines() {
     while IFS= read -r tok; do
       case "$tok" in ''|paths|file|dirs) continue ;; esac
       values="$(printf '%s\n' "$BRC_VALUES" | awk -F "$tab" -v n="$tok" '$1 == n { sub(/^[^\t]*\t/, ""); print }')"
+      [ -n "$values" ] || values="$(br_order_values "$tok")"
       if [ "$(printf '%s\n' "$values" | grep -c .)" -gt 1 ]; then multi_name="$tok"; multi_values="$values"; break; fi
     done <<BR_RUN_TOKENS
 $(printf '%s' "$argv_json" | jq -r '.[] | scan("[{]([^{}]+)[}]") | .[0]')

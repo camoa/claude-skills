@@ -55,6 +55,7 @@
 #                                             within BR_RUN_LIMIT seconds when that is set
 #   br_token_value <values> <name>            a run line's value for that name, from every source
 #   br_fill_arg <values> <arg>                the argument with each {name} filled, or the unfilled name
+#   br_order_values <name>                    the values the order stores for that name, one per line
 #   br_recorded_token <name>                  the value preconditions recorded for a ## Tokens name
 #   br_filter_extensions <paths> <extensions>  the paths a row's own extensions list keeps
 #   br_argv_takes_paths <argv>                true when the argv expands a token from the file list
@@ -1295,13 +1296,15 @@ br_run_resolved() {
   printf 'RAN\t%s' "$rc"
 }
 
-# The value of the name $2 in a run line. The `--value` list $1 is read first, then the tokens
-# preconditions recorded, then the keys task.json keeps under `environment`, the keys the status
-# line reads. A name that ends in `:json` is a field's whole value as one JSON token, so an absent
-# field is JSON null. Prints nothing when no source has the name.
+# The value of the name $2 in a run line. The `--value` list $1 is read first, then the first
+# value the order stores, then the tokens preconditions recorded, then the keys task.json keeps
+# under `environment`, the keys the status line reads. A name that ends in `:json` is a field's
+# whole value as one JSON token, so an absent field is JSON null. Prints nothing when no source has
+# the name.
 br_token_value() {
   local tok
   tok="$(cr_lookup "$1" "$2")"
+  [ -n "$tok" ] || tok="$(br_order_values "$2" | sed -n 1p)"
   [ -n "$tok" ] || tok="$(br_recorded_token "$2")"
   [ -n "$tok" ] || [ -z "${TASK_PATH:-}" ] || tok="$(cr_lookup "$(task_environment_tokens "$TASK_PATH/task.json")" "$2")"
   case "$2" in *:json) tok="${tok:-null}" ;; esac
@@ -1322,6 +1325,14 @@ br_fill_arg() {
     out="$out$value"
   done
   printf '%s' "$out$rest"
+}
+
+# The values the order BRC_UNIT_JSON stores under `values` for the name $1, one per line, or
+# nothing outside an order. Design's `verify --recipe` writes them from the recipe's input contract,
+# so the freeze runs a line before the build with the values build-record runs it with.
+br_order_values() {
+  [ -n "${BRC_UNIT_JSON:-}" ] || return 0
+  printf '%s' "$BRC_UNIT_JSON" | jq -r --arg n "$1" '(.values[$n] // [])[]' 2>/dev/null
 }
 
 # The value the test recipe's `## Tokens` block gave the name $1 at preconditions, from the task's

@@ -387,8 +387,9 @@ Pass `--value <name>=<value>` for a placeholder a command carries, the same as
 - `{paths}`, `{file}` and `{dirs}` are the files the order owns. The script supplies them. On
   an order that owns no file, such a line does not apply, and it never passes the order alone.
 
-A name with no `--value` is read from the tokens preconditions recorded. It is then read from
-the keys of the task's environment record, such as `project`. A check that reads unknown for a
+A name with no `--value` is read from the values the order stores, which design wrote with
+`verify --value`. It is then read from the tokens preconditions recorded, and then from the keys
+of the task's environment record, such as `project`. A check that reads unknown for a
 placeholder with no value refuses at 3. `build-record`, `go-on --continue check` and `fix-record` then
 write nothing, and no attempt or round is spent. A `## Configuration gate` line of a `gate` order
 refuses at 3 before any check runs. The message names the token. Supply the value, then run the
