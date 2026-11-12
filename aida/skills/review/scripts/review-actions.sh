@@ -1162,10 +1162,10 @@ rw_check_coverage_verdict() {
 # number parsed out of it. No key in a recipe row declares the shape a score is printed in, and the
 # tools print different shapes. No tool prints the word "score", so the line is chosen by the tool
 # the row names, from the shapes the catalog observed in each recipe's own `trap:`. Infection
-# prints `Metrics:` lines, gremlins a `Test efficacy:` line, and mutmut a count per outcome on its
-# last line. A survivor is a line of that output naming one of the changed files, which is a
-# string comparison and not a guess. mutmut prints none, and its survivors are recorded as not
-# readable rather than as none.
+# prints `Metrics:` lines, gremlins a `Test efficacy:` line, and mutmut a count per outcome in the
+# last carriage-return segment that holds them (gap row 508). A survivor is a line of that output
+# naming one of the changed files, which is a string comparison and not a guess. mutmut prints none,
+# and its survivors are recorded as not readable rather than as none.
 # Sets RW_MUTATION.
 RW_MUTATION=""
 rw_run_mutation() {
@@ -1247,7 +1247,10 @@ rw_run_mutation() {
     case "$(printf '%s' "$row" | jq -r '.argv | join(" ")')" in
       *infection*) tool="infection"; score="$(printf '%s' "$output" | grep -E 'MSI|Mutation Code Coverage')" ;;
       *gremlins*)  tool="gremlins";  score="$(printf '%s' "$output" | grep 'Test efficacy:' | head -1)" ;;
-      *mutmut*)    tool="mutmut";    score="$(printf '%s' "$output" | grep -v '^[[:space:]]*$' | tail -1)" ;;
+      # A mutant's result line holds one outcome emoji, so the counts are the segment that holds both
+      # the killed and the survived one. Bytes in the C locale, so no locale setting decides a match.
+      *mutmut*)    tool="mutmut";    score="$(printf '%s\n' "$output" | tr '\r' '\n' \
+        | LC_ALL=C grep -F "$(printf '\360\237\216\211')" | LC_ALL=C grep -F "$(printf '\360\237\231\201')" | tail -1)" ;;
       *)           score="$(printf '%s' "$output" | grep -i 'score' | head -1)" ;;
     esac
     # Infection prints its score lines only once a mutant ran. Without them its last words, an error
