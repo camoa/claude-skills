@@ -1255,9 +1255,9 @@ rw_run_mutation() {
     esac
     # Infection prints its score lines only once a mutant ran. Without them its last words, an error
     # or the paths it found no source in, name the files it was handed, and those lines are not
-    # survivors (gap row 392).
+    # survivors (gap row 392). A mutmut run that draws no counts ran no mutant either (gap row 508).
     stopped=""
-    if [ "$tool" = "infection" ] && [ -z "$score" ]; then
+    if { [ "$tool" = "infection" ] || [ "$tool" = "mutmut" ]; } && [ -z "$score" ]; then
       stopped=" Its last line: $(pc_trim "$(printf '%s\n' "$output" | sed "s/$(printf '\033')\\[[0-9;]*m//g" | grep '[^[:space:]]' | tail -1)")"
     fi
     # The criterion a survivor belongs to, by exact path: the frozen test records say which test file
@@ -1288,7 +1288,7 @@ rw_run_mutation() {
     if [ "$(printf '%s' "$survivors" | jq 'length')" -gt 0 ]; then
       combined="$(rw_worse "$combined" "unmet")"
       detail="$detail $fw: the mutation command reported $(printf '%s' "$survivors" | jq 'length') line(s) naming a changed file, and a surviving mutant is a test nothing can fail."
-    elif [ "$rc" = "0" ] && [ "$tool" = "mutmut" ]; then
+    elif [ "$rc" = "0" ] && [ "$tool" = "mutmut" ] && [ -z "$stopped" ]; then
       combined="$(rw_worse "$combined" "met")"
       detail="$detail $fw: mutmut run exited 0 and prints no survivor by file. The survivors come from mutmut results as dotted mutant names, which nothing here maps to a path, so they are recorded as not readable. The outcome counts are in the score."
     elif [ "$rc" = "0" ] && [ -n "$stopped" ]; then
