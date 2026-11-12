@@ -1225,7 +1225,7 @@ rw_run_mutation() {
         detail="$detail $fw: no order in this task commits in the code repository, so the mutation command has no changed file to run over and the row does not apply to it."
       else
         combined="$(rw_worse "$combined" "unknown")"
-        detail="$detail $fw: the mutation command holds a path placeholder, and $RW_RANGE changed no file, so the command would run over the whole repository and answer about code this task did not touch."
+        detail="$detail $fw: the mutation command holds a path placeholder, and $RW_RANGE left no changed file in the tree, so the command would run over the whole repository and answer about code this task did not touch."
       fi
       fwi=$((fwi + 1))
       continue
@@ -1380,7 +1380,7 @@ rw_tool_row_check() {
     return 0
   fi
   if [ "$has_paths" = "true" ] && [ "$RW_PRESENT_COUNT" -eq 0 ]; then
-    rw_check_row "$row_id" "unknown" "the $row_id command holds a path placeholder, and $RW_RANGE changed no file, so the command would run over no path at all and answer about the whole repository." "" "" "$framework"
+    rw_check_row "$row_id" "unknown" "the $row_id command holds a path placeholder, and $RW_RANGE left no changed file in the tree, so the command would run over no path at all and answer about the whole repository." "" "" "$framework"
     return 0
   fi
   if [ "$has_paths" = "true" ] && [ -n "$exts" ] && [ "$scoped_count" -eq 0 ]; then
@@ -1676,7 +1676,7 @@ RW_TESTS_RECORDS
   done
   # Gap row 353. When no tool row read a file this change touched, every tool row reads undeclared,
   # and those words hide that no tool checked the change at all. One catalog note names the files.
-  unread="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$(br_frozen_test_paths "$RW_TEST_ROWS")" \
+  unread="$(jq -cn --argjson changed "$RW_PRESENT_JSON" --argjson frozen "$(br_frozen_test_paths "$RW_TEST_ROWS")" \
     '[ $changed[] | select(. as $p | $frozen | index($p) == null) ]')"
   if [ -z "$RW_TOOL_READ" ] && [ "$unread" != "[]" ]; then
     rw_catalog_note "no check commands row reads a file this change touched, so no tool checked $(printf '%s' "$unread" | jq -r '.[0:10] | join(", ")')$(printf '%s' "$unread" | jq -r 'if length > 10 then " and \(length - 10) more" else "" end'). A project adds a tool for these files as a row with its own id and extensions in its own copy of the review recipe, and a task past preconditions adopts that copy with implement-actions.sh recipe-refresh --check-recipe." \
@@ -3544,7 +3544,7 @@ do_audit() {
         elif $v == "not-needed" then "off"
         elif $v == "met" then "read"
         elif ($d | test("the project record says|holds no enabled surface|declares its suite row absent")) then "off"
-        elif ($d | test("does not apply to it|changed no file")) then "read"
+        elif ($d | test("does not apply to it|left no changed file")) then "read"
         else "could-not-look" end;
       # The two lists a surface check names in its detail, one id each, across every surface check.
       def named($lead): [ $r.checks[] | .detail | scan($lead + "[^.]*") | sub($lead; "") | split(", ") ] | add // [];
