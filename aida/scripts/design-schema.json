@@ -176,6 +176,17 @@
         "$ref": "#/$defs/verifyEntry"
       },
       "description": "How this order's own proof is verified, taken from the knowledge that covers it. Optional: an order no recipe and no research finding covers has none. design-actions.sh's `verify` is its one writer. `--recipe` replaces the list with the covering agentic recipe's `## Verifier`: one `run` entry per entry of its `verifier:` block, and one `check` entry per numbered item of its prose. `--run` and `--check` add one entry from a research finding, never binding. Such a run entry runs only once a person approved it at the design close; until then the reviewer judges it as a check. A `run` entry runs through the same runner as a `## Configuration gate` line: argv, never a shell, and a line carrying a shell character is refused. On a `gate` order the run entries run first, and the implement recipe's `## Configuration gate` lines after them, in one check. On every other order they run inside the order's first deciding check, after its own, from the code worktree, and the check is met only when both are. A `check` entry is judged by a model: by the reviewer on every order, and by the look as a row of its own on an `observe` order when its kind is `live-site`. The build brief and the review brief carry the list whole."
+    },
+    "values": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string"
+        }
+      },
+      "description": "The values of the input-contract tokens the `verify` run lines carry, such as `{plugin_path}`, keyed by token name. design-actions.sh's `verify --recipe` is its one writer, one `--value <name>=<value>` per item, and `--clear` removes it. The tests freeze and build-record fill a token from here when no `--value` names it, so a line runs before the build with the values the build uses. A list runs its line once per item."
     }
   },
   "$defs": {

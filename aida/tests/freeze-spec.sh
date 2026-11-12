@@ -32,6 +32,25 @@ expect "a test that passes before the build is refused, and nothing is frozen" "
 expect "a test the order does not own is refused, and nothing is frozen" "$(freeze_case tests/b_test.sh 1)" "27|none|"
 expect "a test that fails is frozen, and the commit holds the test alone" "$(freeze_case tests/a_test.sh 1)" "0|record|tests/a_test.sh "
 
+# A test that passes, and a file command that takes its runner from the value wo1 stores.
+# Prints the freeze's exit and whether the tests record exists.
+stored_runner_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records planned
+  test_recipe
+  sed -i.bak 's/argv: \["sh", "{paths}"\]/argv: ["{runner}", "{paths}"]/' "$RECIPE"
+  edit "$IMPL/snapshot.json" '(.workOrders[] | select(.id == "wo1")).values = {runner: ["sh"]}'
+  mkdir -p "$WT/tests"
+  printf 'echo a says b\nexit 0\n' >"$WT/tests/a_test.sh"
+  (cd "$WT" && sh tests/a_test.sh) >"$ROOT/red.txt" 2>&1
+  run "$IMPLEMENT" tests-freeze "$TASK" wo1 --test "tests/a_test.sh::a says b=c1" --red "a says b=$ROOT/red.txt" \
+    --test-glob 'tests/*_test.sh' --test-recipe "fake=$RECIPE" --row "c1=confirmed::model::it proves c1"
+  printf '%s|%s\n' "$RC" "$([ -f "$IMPL/tests-wo1.json" ] && echo record || echo none)"
+)
+expect "the freeze fills its test command from the order's stored value, so a passing test is refused" \
+  "$(stored_runner_case)" "80|none"
+
 # changed_records: wo1 also owns tests/c_test.sh, which holds no test of wo1, and tests/e_test.sh.
 # The test author changes c_test.sh, tests/d_test.sh that no order owns, and a.php, stages a new
 # e_test.sh, and writes a failing tests/a_test.sh (gap row 480). HEAD is read into $HEAD0.
@@ -202,6 +221,28 @@ expect "a text order's run line with no approval warns and does not run" \
   "$(text_case '.verify[0].binding = false')" "0|1|not-run"
 expect "a confirm order that owns code does not run its line at the freeze" \
   "$(text_case '.ownedFiles = ["a.php"]')" "0|0|not-run"
+expect "a text order's line with an input token takes the order's value, runs and fails" \
+  "$(text_case '.verify[0].run += " {plugin_path}" | .values = {plugin_path: ["p"]}')" "0|0|ran"
+
+# wo1 stores plugin_path=stored, and its line writes its argument to $ROOT/arg. build-record is given
+# --value plugin_path=given. Prints its exit and the argument the line got.
+text_value_case() (
+  source "$HERE/records.bash"
+  text_records '.verify[0].run += " {plugin_path}" | .values = {plugin_path: ["stored"]}'
+  edit "$TASK/design/wo1.json" '.ownedFiles = ["skills/x/SKILL.md"]'
+  printf 'printf "%%s" "$1" >"%s/arg"\nexit 0\n' "$ROOT" >"$ROOT/line.sh"
+  text_freeze
+  local start
+  start="$(git -C "$WT" rev-parse HEAD)"
+  mkdir -p "$WT/skills/x" && printf 'a skill\n' >"$WT/skills/x/SKILL.md"
+  git -C "$WT" add skills && git -C "$WT" commit -qm "the text"
+  printf 'Stop: none\nDeviation: none\n' >"$IMPL/answers-wo1-attempt1.md"
+  printf 'none\n' >"$IMPL/interface-wo1.md"
+  run "$IMPLEMENT" build-record "$TASK" wo1 --report "$IMPL/answers-wo1-attempt1.md" --interface "$IMPL/interface-wo1.md" \
+    --started-at "$start" --value plugin_path=given
+  printf '%s|%s\n' "$RC" "$(cat "$ROOT/arg")"
+)
+expect "a --value at build-record wins over the order's value" "$(text_value_case)" "0|given"
 
 # The text is committed and the line now passes. A second freeze runs nothing and keeps the first
 # result. Prints the second freeze's exit, the warnings, whether the line ran, and the kept output.

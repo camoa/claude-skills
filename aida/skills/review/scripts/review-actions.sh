@@ -863,6 +863,7 @@ rw_worse() {
 }
 
 RW_CHANGED_JSON="[]"; RW_CHANGED_COUNT=0; RW_RANGE=""
+RW_PRESENT_JSON="[]"; RW_PRESENT_COUNT=0
 RW_VALUES=""; RW_CATALOG_NOTES="[]"
 
 # The files the range $1..$2 changed, into RW_CHANGED_JSON and RW_CHANGED_COUNT. One producer:
@@ -874,6 +875,10 @@ RW_VALUES=""; RW_CATALOG_NOTES="[]"
 # owns them (gap row 441). So when the trunk's merge base with $2 is not an ancestor of $1, a file
 # counts only when it also differs from that merge base, and RW_DIFF_BASE names it for the diff.
 # Otherwise RW_DIFF_BASE is $1 and the range alone decides.
+#
+# RW_PRESENT_JSON and RW_PRESENT_COUNT hold the changed files that are still in the tree at $2. A
+# commanded row runs over those: a tool handed a path the range deleted fails on it, and review read
+# that failure as a finding (gap row 509). Every other reader keeps the deleted paths.
 RW_DIFF_BASE=""
 rw_load_changed() {
   local trunk_base
@@ -887,6 +892,10 @@ rw_load_changed() {
       'split("\n") | map(select(length > 0)) | group_by(.) | map(select(length == $both) | .[0])')"
   [ -n "$RW_CHANGED_JSON" ] || RW_CHANGED_JSON='[]'
   RW_CHANGED_COUNT="$(printf '%s' "$RW_CHANGED_JSON" | jq 'length')"
+  RW_PRESENT_JSON="$(git -C "$RV_CODEPATH" diff --no-renames --name-only --diff-filter=D "$1" "$2" 2>/dev/null \
+    | jq -Rsc --argjson changed "$RW_CHANGED_JSON" '(split("\n") | map(select(length > 0))) as $gone | $changed - $gone')"
+  [ -n "$RW_PRESENT_JSON" ] || RW_PRESENT_JSON='[]'
+  RW_PRESENT_COUNT="$(printf '%s' "$RW_PRESENT_JSON" | jq 'length')"
 }
 
 # One catalog note. Review writes nothing to the catalog: it records what it saw and names the count
@@ -1153,10 +1162,10 @@ rw_check_coverage_verdict() {
 # number parsed out of it. No key in a recipe row declares the shape a score is printed in, and the
 # tools print different shapes. No tool prints the word "score", so the line is chosen by the tool
 # the row names, from the shapes the catalog observed in each recipe's own `trap:`. Infection
-# prints `Metrics:` lines, gremlins a `Test efficacy:` line, and mutmut a count per outcome on its
-# last line. A survivor is a line of that output naming one of the changed files, which is a
-# string comparison and not a guess. mutmut prints none, and its survivors are recorded as not
-# readable rather than as none.
+# prints `Metrics:` lines, gremlins a `Test efficacy:` line, and mutmut a count per outcome in the
+# last carriage-return segment that holds them (gap row 508). A survivor is a line of that output
+# naming one of the changed files, which is a string comparison and not a guess. mutmut prints none,
+# and its survivors are recorded as not readable rather than as none.
 # Sets RW_MUTATION.
 RW_MUTATION=""
 rw_run_mutation() {
@@ -1210,18 +1219,18 @@ rw_run_mutation() {
       fwi=$((fwi + 1))
       continue
     fi
-    if [ "$RW_CHANGED_COUNT" -eq 0 ]; then
+    if [ "$RW_PRESENT_COUNT" -eq 0 ]; then
       if [ "$RW_COMMITS_IN_CODE" = "no" ]; then
         combined="$(rw_worse "$combined" "undeclared")"
         detail="$detail $fw: no order in this task commits in the code repository, so the mutation command has no changed file to run over and the row does not apply to it."
       else
         combined="$(rw_worse "$combined" "unknown")"
-        detail="$detail $fw: the mutation command holds a path placeholder, and $RW_RANGE changed no file, so the command would run over the whole repository and answer about code this task did not touch."
+        detail="$detail $fw: the mutation command holds a path placeholder, and $RW_RANGE left no changed file in the tree, so the command would run over the whole repository and answer about code this task did not touch."
       fi
       fwi=$((fwi + 1))
       continue
     fi
-    rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" "$RW_CHANGED_JSON" "$RW_VALUES" ""
+    rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" "$RW_PRESENT_JSON" "$RW_VALUES" ""
     rw_run_fault "mutation" "$fw"
     if [ -n "$RW_RUN_VERDICT" ]; then
       combined="$(rw_worse "$combined" "$RW_RUN_VERDICT")"
@@ -1238,14 +1247,17 @@ rw_run_mutation() {
     case "$(printf '%s' "$row" | jq -r '.argv | join(" ")')" in
       *infection*) tool="infection"; score="$(printf '%s' "$output" | grep -E 'MSI|Mutation Code Coverage')" ;;
       *gremlins*)  tool="gremlins";  score="$(printf '%s' "$output" | grep 'Test efficacy:' | head -1)" ;;
-      *mutmut*)    tool="mutmut";    score="$(printf '%s' "$output" | grep -v '^[[:space:]]*$' | tail -1)" ;;
+      # A mutant's result line holds one outcome emoji, so the counts are the segment that holds both
+      # the killed and the survived one. Bytes in the C locale, so no locale setting decides a match.
+      *mutmut*)    tool="mutmut";    score="$(printf '%s\n' "$output" | tr '\r' '\n' \
+        | LC_ALL=C grep -F "$(printf '\360\237\216\211')" | LC_ALL=C grep -F "$(printf '\360\237\231\201')" | tail -1)" ;;
       *)           score="$(printf '%s' "$output" | grep -i 'score' | head -1)" ;;
     esac
     # Infection prints its score lines only once a mutant ran. Without them its last words, an error
     # or the paths it found no source in, name the files it was handed, and those lines are not
-    # survivors (gap row 392).
+    # survivors (gap row 392). A mutmut run that draws no counts ran no mutant either (gap row 508).
     stopped=""
-    if [ "$tool" = "infection" ] && [ -z "$score" ]; then
+    if { [ "$tool" = "infection" ] || [ "$tool" = "mutmut" ]; } && [ -z "$score" ]; then
       stopped=" Its last line: $(pc_trim "$(printf '%s\n' "$output" | sed "s/$(printf '\033')\\[[0-9;]*m//g" | grep '[^[:space:]]' | tail -1)")"
     fi
     # The criterion a survivor belongs to, by exact path: the frozen test records say which test file
@@ -1276,7 +1288,7 @@ rw_run_mutation() {
     if [ "$(printf '%s' "$survivors" | jq 'length')" -gt 0 ]; then
       combined="$(rw_worse "$combined" "unmet")"
       detail="$detail $fw: the mutation command reported $(printf '%s' "$survivors" | jq 'length') line(s) naming a changed file, and a surviving mutant is a test nothing can fail."
-    elif [ "$rc" = "0" ] && [ "$tool" = "mutmut" ]; then
+    elif [ "$rc" = "0" ] && [ "$tool" = "mutmut" ] && [ -z "$stopped" ]; then
       combined="$(rw_worse "$combined" "met")"
       detail="$detail $fw: mutmut run exited 0 and prints no survivor by file. The survivors come from mutmut results as dotted mutant names, which nothing here maps to a path, so they are recorded as not readable. The outcome counts are in the score."
     elif [ "$rc" = "0" ] && [ -n "$stopped" ]; then
@@ -1346,9 +1358,9 @@ rw_tool_row_check() {
   # static analyser reads a test's guard as always true once the guarded code exists, and nobody
   # could repair that (gap row 270). The tests step ran the coding-standards row over them.
   frozen="$(br_frozen_test_paths "$RW_TEST_ROWS")"
-  left_out="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$frozen" \
+  left_out="$(jq -cn --argjson changed "$RW_PRESENT_JSON" --argjson frozen "$frozen" \
     '[ $changed[] | select(. as $p | $frozen | index($p) != null) ]')"
-  scoped="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$frozen" \
+  scoped="$(jq -cn --argjson changed "$RW_PRESENT_JSON" --argjson frozen "$frozen" \
     '[ $changed[] | select(. as $p | $frozen | index($p) == null) ]')"
   [ -z "$exts" ] || scoped="$(br_filter_extensions "$scoped" "$exts")"
   scoped_count="$(printf '%s' "$scoped" | jq 'length')"
@@ -1363,15 +1375,15 @@ rw_tool_row_check() {
     left_note=" This run read the frozen tests alone: $(printf '%s' "$scoped" | jq -r 'join(", ")')."
   fi
 
-  if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ] && [ "$RW_OWNS_IN_CODE" = "no" ]; then
+  if [ "$has_paths" = "true" ] && [ "$RW_PRESENT_COUNT" -eq 0 ] && [ "$RW_OWNS_IN_CODE" = "no" ]; then
     # No order owns a file in the code repository, so no file this tool reads was ever going to be
     # here. Undeclared, never unknown: unknown failed a task that legitimately touched no code
     # (live-run row 167).
     rw_check_row "$row_id" "undeclared" "no order in this task owns a file in the code repository, so the $row_id command would read no file this task wrote, and the row does not apply to it." "" "" "$framework"
     return 0
   fi
-  if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ]; then
-    rw_check_row "$row_id" "unknown" "the $row_id command holds a path placeholder, and $RW_RANGE changed no file, so the command would run over no path at all and answer about the whole repository." "" "" "$framework"
+  if [ "$has_paths" = "true" ] && [ "$RW_PRESENT_COUNT" -eq 0 ]; then
+    rw_check_row "$row_id" "unknown" "the $row_id command holds a path placeholder, and $RW_RANGE left no changed file in the tree, so the command would run over no path at all and answer about the whole repository." "" "" "$framework"
     return 0
   fi
   if [ "$has_paths" = "true" ] && [ -n "$exts" ] && [ "$scoped_count" -eq 0 ]; then
@@ -1667,7 +1679,7 @@ RW_TESTS_RECORDS
   done
   # Gap row 353. When no tool row read a file this change touched, every tool row reads undeclared,
   # and those words hide that no tool checked the change at all. One catalog note names the files.
-  unread="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$(br_frozen_test_paths "$RW_TEST_ROWS")" \
+  unread="$(jq -cn --argjson changed "$RW_PRESENT_JSON" --argjson frozen "$(br_frozen_test_paths "$RW_TEST_ROWS")" \
     '[ $changed[] | select(. as $p | $frozen | index($p) == null) ]')"
   if [ -z "$RW_TOOL_READ" ] && [ "$unread" != "[]" ]; then
     rw_catalog_note "no check commands row reads a file this change touched, so no tool checked $(printf '%s' "$unread" | jq -r '.[0:10] | join(", ")')$(printf '%s' "$unread" | jq -r 'if length > 10 then " and \(length - 10) more" else "" end'). A project adds a tool for these files as a row with its own id and extensions in its own copy of the review recipe, and a task past preconditions adopts that copy with implement-actions.sh recipe-refresh --check-recipe." \
@@ -3535,7 +3547,7 @@ do_audit() {
         elif $v == "not-needed" then "off"
         elif $v == "met" then "read"
         elif ($d | test("the project record says|holds no enabled surface|declares its suite row absent")) then "off"
-        elif ($d | test("does not apply to it|changed no file")) then "read"
+        elif ($d | test("does not apply to it|left no changed file")) then "read"
         else "could-not-look" end;
       # The two lists a surface check names in its detail, one id each, across every surface check.
       def named($lead): [ $r.checks[] | .detail | scan($lead + "[^.]*") | sub($lead; "") | split(", ") ] | add // [];

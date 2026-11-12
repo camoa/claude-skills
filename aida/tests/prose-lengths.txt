@@ -17,9 +17,9 @@ agents/test-author.md 183
 agents/test-reader.md 81
 skills/completion/SKILL.md 116
 skills/completion/references/close.md 148
-skills/design/SKILL.md 1008
+skills/design/SKILL.md 1012
 skills/implement/SKILL.md 296
-skills/implement/references/build.md 509
+skills/implement/references/build.md 512
 skills/implement/references/finish.md 352
 skills/implement/references/preconditions.md 317
 skills/implement/references/review.md 511

@@ -631,13 +631,17 @@ a model judges. Every entry cites its source and says whether it is binding.
 **An agentic recipe covers the order.** Copy its `## Verifier`:
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/design/scripts/design-actions.sh verify "<task_folder>" \
-  --id <woId> --recipe "<the recipe body's path on disk>" [--not-binding]
+  --id <woId> --recipe "<the recipe body's path on disk>" [--not-binding] [--value <name>=<value>]...
 ```
 The script copies each entry of the `verifier:` block as a run entry, with its `pass` and its
 `kind`. It copies
 each numbered item of the prose as a check entry, verbatim. It reads nothing else, and it never
 turns a sentence into a command. A recipe may carry a `verifier:` block, a prose list, or both.
 Pass `--not-binding` when research said the source is not one this project accepted.
+A run entry can carry a token of the recipe's `## Input contract`, such as `{plugin_path}`. Pass
+one `--value <name>=<value>` for each such token, with the value this order uses. For a list,
+pass one `--value` per item. The script stores the values on the order. The freeze then runs the
+line before the build, and the build runs it with the same values.
 
 **No recipe covers it, and research found how to verify it.** Add one entry per finding:
 ```

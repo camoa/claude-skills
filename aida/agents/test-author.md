@@ -161,8 +161,8 @@ Return each test with a `locks-in` reason that names the existing code it passes
 freeze warns on a red test when every owned file is a test file or a support file you pass to it.
 
 Write what you return to the report file the brief names under `reportPath`, and name that path
-in your reply. Return one row per test: the path, the test's name, and the criterion its name
-carries. The row also holds the path of the file holding its red run, or its `locks-in` reason. A
+in your reply. Return one row per test: the path, the test's name, and the criterion it
+proves. The row also holds the path of the file holding its red run, or its `locks-in` reason. A
 done-when test returns the order id in place of a criterion. Then each checklist line, each
 absence clause, the path of each support file you wrote or changed, and anything that passed on
 arrival.

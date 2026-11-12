@@ -53,7 +53,7 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 #   design-actions.sh merge          <task_folder> --into <woId> --from <woId> --reason <text>
 #   design-actions.sh remove         <task_folder> --id <woId> --reason <text> [--merged-into <woId>]
 #   design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
-#   design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
+#   design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding] [--value <name>=<value>]...
 #   design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] [--criterion <cN>] --cite <source>
 #   design-actions.sh verify         <task_folder> --id <woId> --check <text> [--kind <kind>] --cite <source>
 #   design-actions.sh verify         <task_folder> --id <woId> --clear
@@ -237,7 +237,7 @@ usage: design-actions.sh read           <task_folder>
        design-actions.sh merge          <task_folder> --into <woId> --from <woId> --reason <text>
        design-actions.sh remove         <task_folder> --id <woId> --reason <text> [--merged-into <woId>]
        design-actions.sh read-guide     <task_folder> --path <path on disk> [--name <guide name>]
-       design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding]
+       design-actions.sh verify         <task_folder> --id <woId> --recipe <path> [--not-binding] [--value <name>=<value>]...
        design-actions.sh verify         <task_folder> --id <woId> --run <command> [--pass <form>] [--kind <kind>] [--criterion <cN>] --cite <source>
        design-actions.sh verify         <task_folder> --id <woId> --check <text> [--kind <kind>] --cite <source>
        design-actions.sh verify         <task_folder> --id <woId> --clear
@@ -1342,9 +1342,12 @@ do_remove_owned_file() {
 # section's prose becomes a check entry, verbatim, wrapped lines joined. A recipe may carry either
 # form or both. A paragraph is not a check, and no command is ever made from prose. Every entry
 # cites the recipe and is binding, unless --not-binding says research marked the source as one
-# this project did not accept. `--run` or `--check` adds one entry from a research finding. It
-# cites its source and is never binding, and a second entry with the same text replaces the
-# first. `--clear` empties the list. A run line carrying a shell character, and a pass outside
+# this project did not accept. Each `--value` fills a token of the recipe's input contract. The
+# values are stored on the order under `values`, a repeated name as a list, and the freeze and the
+# build fill the recipe's lines from them. A name no run line carries is stored with a warning,
+# because a misspelt name leaves the token unfilled. `--run` or `--check` adds one entry from a research
+# finding. It cites its source and is never binding, and a second entry with the same text
+# replaces the first. `--clear` empties the list. A run line carrying a shell character, and a pass outside
 # the three forms, are refused here, before the gate would refuse them at build time.
 # ------------------------------------------------------------------------------------------------
 
@@ -1406,8 +1409,9 @@ verify_flush_entry() {
 }
 
 do_verify() {
-  local id="" recipe="" run="" check="" cite="" pass="" kind="" criterion="" binding=true clear=false modes=0
+  local id="" recipe="" run="" check="" cite="" pass="" kind="" criterion="" binding=true clear=false modes=0 values=""
   while [ "$#" -gt 0 ]; do
+    cr_take_flag "verify" "--value=values" "$@" || { shift "$?"; continue; }
     case "$1" in
       --id)     need_value "verify" "--id" "$#" "${2:-}"; id="$2"; shift 2 ;;
       --criterion) need_value "verify" "--criterion" "$#" "${2:-}"; criterion="$2"; shift 2 ;;
@@ -1429,6 +1433,7 @@ do_verify() {
   [ -z "$kind" ] || [ -n "$run$check" ] || die3 "verify: --kind belongs to --run and --check. A recipe's entries carry their own"
   verify_kind_ok "verify" "$kind"
   [ "$binding" = "true" ] || [ -n "$recipe" ] || die3 "verify: --not-binding belongs to --recipe. A research line is never binding"
+  [ -z "$values" ] || [ -n "$recipe" ] || die3 "verify: --value belongs to --recipe. It fills a token of the recipe's input contract"
   if [ -n "$run$check" ]; then
     is_blank "$cite" && die3 "verify: --cite is required with --run and --check: every line names the source it came from"
   else
@@ -1441,7 +1446,7 @@ do_verify() {
   before="$(printf '%s' "$doc" | jq '(.verify // []) | length')"
 
   if [ "$clear" = "true" ]; then
-    doc="$(printf '%s' "$doc" | jq 'del(.verify)')"
+    doc="$(printf '%s' "$doc" | jq 'del(.verify, .values)')"
     echo "cleared: $before"
   elif [ -n "$recipe" ]; then
     [ -f "$recipe" ] || die3 "verify: no file at $recipe. Give the path the navigator returned"
@@ -1477,8 +1482,16 @@ do_verify() {
     done < <(verifier_prose_items "$recipe")
     [ "$(printf '%s' "$entries_json" | jq 'length')" -gt 0 ] \
       || die3 "verify: the ## Verifier of $recipe holds no verifier: entry and no numbered check, so there is nothing to carry"
-    doc="$(printf '%s' "$doc" | jq --argjson e "$entries_json" --arg c "$recipe" --argjson b "$binding" \
-      '.verify = [ $e[] + {cites: $c, binding: $b} ]')"
+    doc="$(printf '%s' "$doc" | jq --argjson e "$entries_json" --arg c "$recipe" --argjson b "$binding" --arg v "$values" \
+      '.verify = [ $e[] + {cites: $c, binding: $b} ]
+       | ([ $v | split("\n")[] | select(. != "") | split("\t") | {key: .[0], value: .[1]} ]
+          | reduce .[] as $p ({}; .[$p.key] += [$p.value])) as $vals
+       | if $vals == {} then del(.values) else .values = $vals end')"
+    local uncarried
+    uncarried="$(printf '%s' "$doc" | jq -r '[ .verify[] | .run // empty | scan("[{]([^{}]+)[}]") | .[0] ] as $t
+      | [ (.values // {}) | keys[] | select(. as $n | $t | index($n) | not) ] | join(", ")')"
+    [ -z "$uncarried" ] \
+      || task_warn "$TASK_PATH" "design verify" "$id" "no verify line of $recipe carries these --value names, so nothing reads them: $uncarried"
     [ "$before" -eq 0 ] || echo "replaced: $before"
   else
     local entry

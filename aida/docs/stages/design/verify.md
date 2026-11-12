@@ -11,6 +11,11 @@ entry of its `verifier:` block becomes a run line, with what passing means: exit
 or output that holds a text. Each numbered item of its prose becomes a check line, word for word.
 Design never turns a sentence into a command.
 
+A run line can hold a token from the recipe's input contract, such as `{plugin_path}`. Design
+stores this order's value for each such token on the order. The freeze then runs the line before
+the build, and the build runs it with the same values. A value given when the build is recorded
+wins over the stored one.
+
 ## From research
 
 When no recipe covers the order, the findings on how reputable sources verify the work give the

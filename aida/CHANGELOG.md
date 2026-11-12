@@ -4,6 +4,45 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.7] - 2026-11-11
+
+Four defects found while the catalog recipes were checked against 6.1.6.
+
+### Added
+
+- `design verify --recipe` takes a repeatable `--value name=value` and
+  stores the values on the work order, in a new `values` field. The test
+  freeze and the build fill a verify line's tokens from them, so a text
+  order's verifier with an input token reads red at the freeze, not
+  unknown. A list value runs a verify line once per item.
+- The stored values also fill the order's test command, at the freeze and
+  at `build-record`. A test or check command reads the first item of a
+  list value.
+- `verify` warns about a `--value` name that no verify line of the recipe
+  carries. The warning prints and goes into the task's `warnings`.
+
+### Changed
+
+- A `--value` at `build-record` still wins over the stored value. Pass it
+  only for a name the order does not store.
+- `verify --clear` also removes the stored values.
+- `verify` refuses `--value` without `--recipe`, exit 3.
+- A range whose only change is a deletion reads as a range with no
+  changed file. Its `{paths}` rows and its mutation row read unknown, and
+  the note about unchecked files no longer names deleted files.
+- The detail text of such a row reads "left no changed file in the tree".
+  Before, it read "changed no file".
+
+### Fixed
+
+- Review reads the mutmut score from the counts, not from the last output
+  line. A run that prints no counts and exits non-zero says it printed no
+  score line. Before, it said the run named no changed file.
+- A file the task deleted no longer reaches a check row that takes
+  `{paths}`. The scope check and the written diff still see it.
+- The test author returns the criterion a test proves, not the one its
+  name carries.
+
 ## [6.1.6] - 2026-11-09
 
 A fix the owner asked for. Review no longer refuses every criterion that
