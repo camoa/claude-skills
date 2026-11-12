@@ -182,16 +182,20 @@ recipe_case() (
 )
 expect "a recipe entry with a shell character is skipped, with a warning" "$(recipe_case)" "0|ok|1"
 
-# values_case: verify --recipe's exit and the values it stored, given a repeated name and a single one.
+# values_case <flag>...: verify --recipe's exit, the values it stored and its warnings, from a recipe
+# whose line carries {plugin_path} and {eval_cases}.
 values_case() (
   source "$HERE/records.bash"
   task_records branch
-  printf '## Verifier\n\nverifier:\n  - id: ok\n    run: true {plugin_path}\n    pass: exit 0\n' >"$ROOT/recipe.md"
-  run "$DESIGN" verify "$TASK" --id wo1 --recipe "$ROOT/recipe.md" --value eval_cases=a --value plugin_path=. --value eval_cases=b
-  printf '%s|%s\n' "$RC" "$(jq -c '.values' "$TASK/design/wo1.json")"
+  printf '## Verifier\n\nverifier:\n  - id: ok\n    run: true {plugin_path} {eval_cases}\n    pass: exit 0\n' >"$ROOT/recipe.md"
+  run "$DESIGN" verify "$TASK" --id wo1 --recipe "$ROOT/recipe.md" "$@"
+  printf '%s|%s|%s\n' "$RC" "$(jq -c '.values' "$TASK/design/wo1.json")" "$(warned "design verify")"
 )
-expect "verify --recipe stores each --value on the order, a repeated name as a list" "$(values_case)" \
-  '0|{"eval_cases":["a","b"],"plugin_path":["."]}'
+expect "verify --recipe stores each --value on the order, a repeated name as a list" \
+  "$(values_case --value eval_cases=a --value plugin_path=. --value eval_cases=b)" \
+  '0|{"eval_cases":["a","b"],"plugin_path":["."]}|0'
+expect "a --value no verify line carries is stored with a warning" "$(values_case --value plugin_pth=.)" \
+  '0|{"plugin_pth":["."]}|1'
 
 # light_case <owner> [playwright]: the design check's status on a light task whose project registers
 # the command `bash tests/demo.sh` as the script that walks the demo path. <owner> is the order that

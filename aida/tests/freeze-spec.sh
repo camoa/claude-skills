@@ -32,6 +32,25 @@ expect "a test that passes before the build is refused, and nothing is frozen" "
 expect "a test the order does not own is refused, and nothing is frozen" "$(freeze_case tests/b_test.sh 1)" "27|none|"
 expect "a test that fails is frozen, and the commit holds the test alone" "$(freeze_case tests/a_test.sh 1)" "0|record|tests/a_test.sh "
 
+# A test that passes, and a file command that takes its runner from the value wo1 stores.
+# Prints the freeze's exit and whether the tests record exists.
+stored_runner_case() (
+  source "$HERE/records.bash"
+  task_records branch
+  order_records planned
+  test_recipe
+  sed -i.bak 's/argv: \["sh", "{paths}"\]/argv: ["{runner}", "{paths}"]/' "$RECIPE"
+  edit "$IMPL/snapshot.json" '(.workOrders[] | select(.id == "wo1")).values = {runner: ["sh"]}'
+  mkdir -p "$WT/tests"
+  printf 'echo a says b\nexit 0\n' >"$WT/tests/a_test.sh"
+  (cd "$WT" && sh tests/a_test.sh) >"$ROOT/red.txt" 2>&1
+  run "$IMPLEMENT" tests-freeze "$TASK" wo1 --test "tests/a_test.sh::a says b=c1" --red "a says b=$ROOT/red.txt" \
+    --test-glob 'tests/*_test.sh' --test-recipe "fake=$RECIPE" --row "c1=confirmed::model::it proves c1"
+  printf '%s|%s\n' "$RC" "$([ -f "$IMPL/tests-wo1.json" ] && echo record || echo none)"
+)
+expect "the freeze fills its test command from the order's stored value, so a passing test is refused" \
+  "$(stored_runner_case)" "80|none"
+
 # changed_records: wo1 also owns tests/c_test.sh, which holds no test of wo1, and tests/e_test.sh.
 # The test author changes c_test.sh, tests/d_test.sh that no order owns, and a.php, stages a new
 # e_test.sh, and writes a failing tests/a_test.sh (gap row 480). HEAD is read into $HEAD0.

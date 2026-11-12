@@ -1344,9 +1344,10 @@ do_remove_owned_file() {
 # cites the recipe and is binding, unless --not-binding says research marked the source as one
 # this project did not accept. Each `--value` fills a token of the recipe's input contract. The
 # values are stored on the order under `values`, a repeated name as a list, and the freeze and the
-# build fill the recipe's lines from them. `--run` or `--check` adds one entry from a research
-# finding. It cites its source and is never binding, and a second entry with the same text replaces the
-# first. `--clear` empties the list. A run line carrying a shell character, and a pass outside
+# build fill the recipe's lines from them. A name no run line carries is stored with a warning,
+# because a misspelt name leaves the token unfilled. `--run` or `--check` adds one entry from a research
+# finding. It cites its source and is never binding, and a second entry with the same text
+# replaces the first. `--clear` empties the list. A run line carrying a shell character, and a pass outside
 # the three forms, are refused here, before the gate would refuse them at build time.
 # ------------------------------------------------------------------------------------------------
 
@@ -1486,6 +1487,11 @@ do_verify() {
        | ([ $v | split("\n")[] | select(. != "") | split("\t") | {key: .[0], value: .[1]} ]
           | reduce .[] as $p ({}; .[$p.key] += [$p.value])) as $vals
        | if $vals == {} then del(.values) else .values = $vals end')"
+    local uncarried
+    uncarried="$(printf '%s' "$doc" | jq -r '[ .verify[] | .run // empty | scan("[{]([^{}]+)[}]") | .[0] ] as $t
+      | [ (.values // {}) | keys[] | select(. as $n | $t | index($n) | not) ] | join(", ")')"
+    [ -z "$uncarried" ] \
+      || task_warn "$TASK_PATH" "design verify" "$id" "no verify line of $recipe carries these --value names, so nothing reads them: $uncarried"
     [ "$before" -eq 0 ] || echo "replaced: $before"
   else
     local entry

@@ -6459,7 +6459,7 @@ TF_CS_EOF
   if [ -n "$tf_ot_names" ] && [ "$BR_ORDER_SLOT" = "order-tests" ] && [ "$tf_ot_paths" != "[]" ]; then
     CR_WHO="tests-freeze"; CR_TEST_RECIPES="$test_recipes"; CR_CHECK_RECIPES=""
     cr_resolve
-    BRC_WHO="tests-freeze"; BRC_CODEPATH="$codepath"; BRC_RECIPES="$CR_DOC"; BRC_VALUES=""
+    BRC_WHO="tests-freeze"; BRC_CODEPATH="$codepath"; BRC_RECIPES="$CR_DOC"; BRC_VALUES=""; BRC_UNIT_JSON="$UNIT_JSON"
     BRC_SELECTED_JSON="$tf_ot_paths"; BRC_TESTS_DOC="$(jq -cn --argjson rows "$rows_json" '{rows: $rows}')"
     tf_ot_started="$(date +%s)"
     tf_ot_json="$(br_test_check "order-tests" "orderTests" "order-tests")" || exit "$?"
@@ -7534,7 +7534,8 @@ BRV_RECIPES
 # br_run_resolved, so `{paths}` expands to this order's owned files and every other token comes
 # from --value, or else from the values the order stores. A name given several --value rows, or
 # with no --value several stored values, runs its line once per value, in the order given: each
-# run puts that value's row first, where cr_lookup finds it, so the one filler fills it. Only the first such name in a line multiplies it; any other token takes its first value.
+# run puts that value's row first, where cr_lookup finds it, so the one filler fills it. Only the
+# first such name in a line multiplies it; any other token takes its first value.
 # A line holding `{paths}`, `{file}` or `{dirs}` on an order that owns no file does not apply,
 # as a check row does not (gap row 203). A tool handed no path reads its own default scope. The
 # output names it and the list goes on. When no line applies, the list reads undeclared, which
