@@ -863,6 +863,7 @@ rw_worse() {
 }
 
 RW_CHANGED_JSON="[]"; RW_CHANGED_COUNT=0; RW_RANGE=""
+RW_PRESENT_JSON="[]"; RW_PRESENT_COUNT=0
 RW_VALUES=""; RW_CATALOG_NOTES="[]"
 
 # The files the range $1..$2 changed, into RW_CHANGED_JSON and RW_CHANGED_COUNT. One producer:
@@ -874,6 +875,10 @@ RW_VALUES=""; RW_CATALOG_NOTES="[]"
 # owns them (gap row 441). So when the trunk's merge base with $2 is not an ancestor of $1, a file
 # counts only when it also differs from that merge base, and RW_DIFF_BASE names it for the diff.
 # Otherwise RW_DIFF_BASE is $1 and the range alone decides.
+#
+# RW_PRESENT_JSON and RW_PRESENT_COUNT hold the changed files that are still in the tree at $2. A
+# commanded row runs over those: a tool handed a path the range deleted fails on it, and review read
+# that failure as a finding (gap row 509). Every other reader keeps the deleted paths.
 RW_DIFF_BASE=""
 rw_load_changed() {
   local trunk_base
@@ -887,6 +892,10 @@ rw_load_changed() {
       'split("\n") | map(select(length > 0)) | group_by(.) | map(select(length == $both) | .[0])')"
   [ -n "$RW_CHANGED_JSON" ] || RW_CHANGED_JSON='[]'
   RW_CHANGED_COUNT="$(printf '%s' "$RW_CHANGED_JSON" | jq 'length')"
+  RW_PRESENT_JSON="$(git -C "$RV_CODEPATH" diff --no-renames --name-only --diff-filter=D "$1" "$2" 2>/dev/null \
+    | jq -Rsc --argjson changed "$RW_CHANGED_JSON" '(split("\n") | map(select(length > 0))) as $gone | $changed - $gone')"
+  [ -n "$RW_PRESENT_JSON" ] || RW_PRESENT_JSON='[]'
+  RW_PRESENT_COUNT="$(printf '%s' "$RW_PRESENT_JSON" | jq 'length')"
 }
 
 # One catalog note. Review writes nothing to the catalog: it records what it saw and names the count
@@ -1210,7 +1219,7 @@ rw_run_mutation() {
       fwi=$((fwi + 1))
       continue
     fi
-    if [ "$RW_CHANGED_COUNT" -eq 0 ]; then
+    if [ "$RW_PRESENT_COUNT" -eq 0 ]; then
       if [ "$RW_COMMITS_IN_CODE" = "no" ]; then
         combined="$(rw_worse "$combined" "undeclared")"
         detail="$detail $fw: no order in this task commits in the code repository, so the mutation command has no changed file to run over and the row does not apply to it."
@@ -1221,7 +1230,7 @@ rw_run_mutation() {
       fwi=$((fwi + 1))
       continue
     fi
-    rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" "$RW_CHANGED_JSON" "$RW_VALUES" ""
+    rw_run_row "$(printf '%s' "$row" | jq -c '.argv')" "$RW_PRESENT_JSON" "$RW_VALUES" ""
     rw_run_fault "mutation" "$fw"
     if [ -n "$RW_RUN_VERDICT" ]; then
       combined="$(rw_worse "$combined" "$RW_RUN_VERDICT")"
@@ -1346,9 +1355,9 @@ rw_tool_row_check() {
   # static analyser reads a test's guard as always true once the guarded code exists, and nobody
   # could repair that (gap row 270). The tests step ran the coding-standards row over them.
   frozen="$(br_frozen_test_paths "$RW_TEST_ROWS")"
-  left_out="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$frozen" \
+  left_out="$(jq -cn --argjson changed "$RW_PRESENT_JSON" --argjson frozen "$frozen" \
     '[ $changed[] | select(. as $p | $frozen | index($p) != null) ]')"
-  scoped="$(jq -cn --argjson changed "$RW_CHANGED_JSON" --argjson frozen "$frozen" \
+  scoped="$(jq -cn --argjson changed "$RW_PRESENT_JSON" --argjson frozen "$frozen" \
     '[ $changed[] | select(. as $p | $frozen | index($p) == null) ]')"
   [ -z "$exts" ] || scoped="$(br_filter_extensions "$scoped" "$exts")"
   scoped_count="$(printf '%s' "$scoped" | jq 'length')"
@@ -1363,14 +1372,14 @@ rw_tool_row_check() {
     left_note=" This run read the frozen tests alone: $(printf '%s' "$scoped" | jq -r 'join(", ")')."
   fi
 
-  if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ] && [ "$RW_OWNS_IN_CODE" = "no" ]; then
+  if [ "$has_paths" = "true" ] && [ "$RW_PRESENT_COUNT" -eq 0 ] && [ "$RW_OWNS_IN_CODE" = "no" ]; then
     # No order owns a file in the code repository, so no file this tool reads was ever going to be
     # here. Undeclared, never unknown: unknown failed a task that legitimately touched no code
     # (live-run row 167).
     rw_check_row "$row_id" "undeclared" "no order in this task owns a file in the code repository, so the $row_id command would read no file this task wrote, and the row does not apply to it." "" "" "$framework"
     return 0
   fi
-  if [ "$has_paths" = "true" ] && [ "$RW_CHANGED_COUNT" -eq 0 ]; then
+  if [ "$has_paths" = "true" ] && [ "$RW_PRESENT_COUNT" -eq 0 ]; then
     rw_check_row "$row_id" "unknown" "the $row_id command holds a path placeholder, and $RW_RANGE changed no file, so the command would run over no path at all and answer about the whole repository." "" "" "$framework"
     return 0
   fi
